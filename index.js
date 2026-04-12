@@ -129,8 +129,7 @@ db.exec(`
   );
 
   CREATE VIRTUAL TABLE IF NOT EXISTS scenes_fts USING fts5(
-    scene_id, logline, title,
-    content='scenes', content_rowid='rowid'
+    scene_id, logline, title
   );
 `);
 
@@ -238,7 +237,7 @@ function syncAll() {
       `).run(
         meta.scene_id, project_id,
         meta.title ?? null, meta.part ?? null, meta.chapter ?? null,
-        meta.pov ?? null, meta.logline ?? null, meta.save_the_cat_beat ?? null,
+        meta.pov ?? null, meta.logline ?? null, meta.save_the_cat_beat ?? meta.save_the_cat ?? null,
         meta.timeline_position ?? null, meta.story_time ?? null,
         meta.word_count ?? prose.split(/\s+/).filter(Boolean).length,
         file, newChecksum,
