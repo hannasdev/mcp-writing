@@ -111,8 +111,18 @@ Then register in your OpenClaw config:
 
 ```sh
 npm install
-WRITING_SYNC_DIR=./my-manuscript DB_PATH=./writing.db node --experimental-sqlite index.js
+WRITING_SYNC_DIR=./my-manuscript DB_PATH=./writing.db npm start
 ```
+
+## Development
+
+```sh
+npm install
+npm test          # unit + integration (40 tests)
+npm run test:unit  # unit tests only (no server required)
+```
+
+Unit tests use an in-memory SQLite database and temporary directories — no server needed. Integration tests spawn a real server against `test-sync/` on port 3099 and verify all 10 MCP tools end-to-end.
 
 ## Environment variables
 

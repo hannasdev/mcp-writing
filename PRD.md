@@ -213,7 +213,11 @@ For structural experiments (e.g. reordering acts, trying an alternate ending), t
 
 ---
 
-## Ingestion ModesFiles have metadata headers. The service indexes what's there. Fast, no enrichment step needed.
+## Ingestion Modes
+
+### Mode A: Structured (metadata headers present)
+
+Files have metadata headers. The service indexes what's there. Fast, no enrichment step needed.
 
 ### Mode B: Enrichment pass (no or sparse metadata)
 
@@ -340,14 +344,14 @@ The AI can never write prose in a single step. All prose edits require an explic
 
 **Goal:** You can open the Writing World agent and ask meaningful questions about your manuscript — who is in a scene, what happens in a chapter, what the arc of a character looks like — and get reliable answers without the AI having to read the whole book. Read-only. No edits yet.
 
-- [ ] Scaffold `openclaw/writing-mcp/`: Dockerfile, `package.json`, `index.js`
-- [ ] Implement SQLite index with full schema above
-- [ ] Implement `sync()` — walk sync folder, parse metadata headers, build index, detect stale scenes
-- [ ] Implement `find_scenes`, `get_arc`, `get_character_sheet`, `list_characters`
-- [ ] Implement `get_scene_prose`, `search_metadata`
-- [ ] Implement `list_threads`, `get_thread_arc`
-- [ ] Add to `docker-compose.yml` with healthcheck and named volume
-- [ ] Register in `openclaw.json` `mcp.servers`
+- [x] Scaffold `mcp-writing/`: Dockerfile, `package.json`, `index.js`
+- [x] Implement SQLite index with full schema above
+- [x] Implement `sync()` — walk sync folder, parse metadata headers, build index, detect stale scenes
+- [x] Implement `find_scenes`, `get_arc`, `get_character_sheet`, `list_characters`
+- [x] Implement `get_scene_prose`, `search_metadata`
+- [x] Implement `list_threads`, `get_thread_arc`
+- [ ] Add to OpenClaw `docker-compose.yml` with healthcheck and named volume
+- [ ] Register in OpenClaw `mcp.servers` config
 - [ ] Add `writing__*` to Writing World agent `tools.allow`
 
 ### Phase 2 — Answers stay accurate as the manuscript evolves
