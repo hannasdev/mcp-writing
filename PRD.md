@@ -16,6 +16,41 @@ This avoids coupling to Scrivener's internal `.scriv` format (XML/RTF bundle, ve
 
 ---
 
+## Design Decision: Metadata Ownership
+
+### The problem with YAML frontmatter
+
+The initial implementation stores metadata in a YAML header block inside each `.md` file (frontmatter). This is a well-established pattern (Jekyll, Hugo, Obsidian), but it creates a shared-ownership problem: Scrivener owns the prose below the `---` delimiter, and the MCP service owns the metadata above it — but they live in the same file.
+
+This causes two issues:
+
+1. **Fragile co-ownership.** Scrivener could corrupt the header accidentally (e.g. if its sync behaviour changes). There is nothing enforcing that the two sections stay separate.
+2. **Implicit position mismatch.** `part` and `chapter` live in metadata and must be manually maintained. Nothing prevents a file from being stored in `Part 2/Chapter 3/` while its header still says `part: 1, chapter: 1`. The mismatch is silent.
+
+### Decision: sidecar files for metadata (Phase 2)
+
+From Phase 2 onward, metadata lives in a `.meta.yaml` sidecar file alongside each scene:
+
+```
+scenes/
+  sc-001.md           ← Scrivener owns (prose only, no header)
+  sc-001.meta.yaml    ← MCP service owns (metadata only)
+```
+
+Scrivener's External Folder Sync only touches `.md`/`.txt` files — it will never read or write a `.meta.yaml`. This gives clean, enforced ownership: Scrivener manages prose; the service manages metadata. Metadata changes require explicitly running a tool or editing the sidecar, so they are always intentional, never coincidental.
+
+`part` and `chapter` are derived from the file path at sidecar creation time and stored explicitly. If a scene file is moved and the sidecar no longer matches the path, sync detects and warns. No silent drift.
+
+### Migration path (Phase 1 → Phase 2)
+
+Phase 1 continues using frontmatter as the bootstrap format. On the first Phase 2 sync, if no sidecar exists but the `.md` file has frontmatter, the service auto-generates the sidecar from the frontmatter and strips the header from the `.md`. This is a one-time migration per project. Frontmatter is supported read-only after that point for any files not yet migrated.
+
+### Orphaned sidecars
+
+If a scene file is deleted (in Scrivener), the sidecar is orphaned. On sync, the service detects `.meta.yaml` files with no corresponding `.md` and logs a warning. It does not auto-delete them — that is an explicit user action.
+
+---
+
 ## Content Structure
 
 ### Scope: Universes and Projects
@@ -328,7 +363,7 @@ The AI can never write prose in a single step. All prose edits require an explic
 
 **A. Enrichment model** — Which model runs the enrichment pass? Should be cheap/fast — a small model is fine for logline extraction and character tagging. Could be a separate call with a lighter model than the reasoning agent.
 
-**B. Write-back safety for metadata** — When the AI calls `update_scene_metadata`, it modifies the sync file. Scrivener will pick up that change on next sync. Is that acceptable, or should metadata writes go to a separate sidecar file to keep Scrivener-managed files read-only?
+**B. Write-back safety for metadata** — ~~When the AI calls `update_scene_metadata`, it modifies the sync file. Scrivener will pick up that change on next sync. Is that acceptable, or should metadata writes go to a separate sidecar file to keep Scrivener-managed files read-only?~~ **Resolved:** sidecar files (see Design Decision: Metadata Ownership). The service writes only to `.meta.yaml` files; Scrivener-managed `.md` files are never touched by the service except during `commit_edit` prose writes.
 
 **C. Proposal storage** — Where do pending `propose_edit` proposals live? In-memory (lost on restart) or persisted in SQLite? In-memory is simpler but means a restart between propose and commit loses the proposal.
 
@@ -358,12 +393,14 @@ The AI can never write prose in a single step. All prose edits require an explic
 
 **Goal:** The analysis doesn't go stale. When you edit scenes in Scrivener, the AI knows which conclusions might no longer hold and tells you before reasoning against outdated information. You can update metadata and character notes directly from a conversation rather than switching tools.
 
-- [ ] Implement `update_scene_metadata`, `update_character_sheet`, `flag_scene`
-- [ ] Implement Mode B enrichment pass for scenes missing metadata headers
+- [ ] Migrate metadata storage to sidecar files (`.meta.yaml`); auto-generate sidecars from frontmatter on first sync; strip frontmatter from `.md` files
+- [ ] Detect orphaned sidecars (`.meta.yaml` with no corresponding `.md`) and warn on sync
+- [ ] Derive and store `part`/`chapter` from file path at sidecar creation time; detect path/metadata mismatch and warn
+- [ ] Implement `update_scene_metadata`, `update_character_sheet`, `flag_scene` (write to sidecar only)
+- [ ] Implement Mode B enrichment pass for scenes missing sidecar files
 - [ ] Implement stale-scene detection and staleness warnings in retrieval tools
 - [ ] Implement `enrich_scene` for re-deriving metadata from updated prose
 - [ ] Implement `get_relationship_arc` (temporal character relationship graph)
-- [ ] Decide on write-back safety model (Open Question B)
 
 ### Phase 3 — The AI can help you edit prose
 
