@@ -156,7 +156,7 @@ describe("syncAll", () => {
     writeCharacter(dir, "elena");
     writePlace(dir, "harbor");
 
-    const result = syncAll(db, dir);
+    const result = syncAll(db, dir, { quiet: true });
     assert.equal(result.indexed, 2);
     assert.equal(result.staleMarked, 0);
 
@@ -174,7 +174,7 @@ describe("syncAll", () => {
     writePlace(dir, "harbor");
     writeScene(dir, "sc-001");
 
-    syncAll(db, dir);
+    syncAll(db, dir, { quiet: true });
 
     const chars = db.prepare("SELECT * FROM characters").all();
     assert.equal(chars.length, 1);
@@ -192,12 +192,12 @@ describe("syncAll", () => {
     const dir = makeTempSync();
     const db = openDb(":memory:");
     writeScene(dir, "sc-001");
-    syncAll(db, dir);
+    syncAll(db, dir, { quiet: true });
 
     // Overwrite with different prose
     const scenePath = path.join(dir, "projects", "test-novel", "scenes", "sc-001.md");
     fs.appendFileSync(scenePath, "\n\nExtra prose added.");
-    const result2 = syncAll(db, dir);
+    const result2 = syncAll(db, dir, { quiet: true });
     assert.equal(result2.staleMarked, 1);
 
     const scene = db.prepare("SELECT metadata_stale FROM scenes WHERE scene_id = ?").get("sc-001");
@@ -215,7 +215,7 @@ describe("syncAll", () => {
       path.join(dir, "projects", "test-novel", "scenes", "notes.md"),
       "---\ntitle: Just a note\n---\nSome text."
     );
-    const result = syncAll(db, dir);
+    const result = syncAll(db, dir, { quiet: true });
     assert.equal(result.indexed, 0);
 
     db.close();
@@ -227,7 +227,7 @@ describe("syncAll", () => {
     const db = openDb(":memory:");
     writeScene(dir, "sc-001", { characters: ["elena", "marcus"] });
 
-    syncAll(db, dir);
+    syncAll(db, dir, { quiet: true });
 
     const rows = db.prepare("SELECT * FROM scene_characters WHERE scene_id = 'sc-001'").all();
     assert.equal(rows.length, 2);
@@ -243,7 +243,7 @@ describe("syncAll", () => {
     const db = openDb(":memory:");
     writeScene(dir, "sc-001", { logline: "The ship enters the envelope." });
 
-    syncAll(db, dir);
+    syncAll(db, dir, { quiet: true });
 
     const rows = db.prepare("SELECT scene_id FROM scenes_fts WHERE scenes_fts MATCH 'envelope'").all();
     assert.equal(rows.length, 1);

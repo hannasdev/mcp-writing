@@ -168,7 +168,7 @@ export function indexSceneFile(db, syncDir, file, meta, prose) {
   return { isStale };
 }
 
-export function syncAll(db, syncDir) {
+export function syncAll(db, syncDir, { quiet = false } = {}) {
   const files = walkFiles(syncDir);
   let indexed = 0;
   let staleMarked = 0;
@@ -192,8 +192,10 @@ export function syncAll(db, syncDir) {
     }
   }
 
-  process.stderr.write(
-    `[mcp-writing] Sync complete: ${indexed} scenes indexed, ${staleMarked} marked stale\n`
-  );
+  if (!quiet) {
+    process.stderr.write(
+      `[mcp-writing] Sync complete: ${indexed} scenes indexed, ${staleMarked} marked stale\n`
+    );
+  }
   return { indexed, staleMarked };
 }
