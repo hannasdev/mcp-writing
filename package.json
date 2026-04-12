@@ -1,0 +1,17 @@
+{
+  "name": "mcp-writing",
+  "version": "0.1.0",
+  "description": "MCP service for AI-assisted reasoning and editing on long-form fiction projects",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "keywords": ["mcp", "writing", "fiction", "ai", "scrivener"],
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "gray-matter": "^4.0.3",
+    "zod": "^3.25.0"
+  }
+}
