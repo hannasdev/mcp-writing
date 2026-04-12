@@ -5,7 +5,10 @@
   "type": "module",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node --experimental-sqlite index.js",
+    "test:unit": "node --experimental-sqlite --test test/unit.test.mjs",
+    "test:integration": "node --experimental-sqlite --test test/integration.test.mjs",
+    "test": "node --experimental-sqlite --test test/unit.test.mjs test/integration.test.mjs"
   },
   "keywords": ["mcp", "writing", "fiction", "ai", "scrivener"],
   "license": "MIT",
