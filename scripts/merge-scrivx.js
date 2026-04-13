@@ -216,10 +216,11 @@ function buildMergeData(uuid) {
 
   const causality = Number(customFields?.["causality"] ?? 0);
   const stakes    = Number(customFields?.["stakes"]    ?? 0);
-  const change    = Number(customFields?.["change"]    ?? 0);
   if (causality) out.causality = causality;
   if (stakes)    out.stakes    = stakes;
-  if (change)    out.change    = change;
+
+  const change = customFields?.["change"];
+  if (change && String(change).trim()) out.scene_change = String(change).trim();
 
   // Boolean function flags — collect the active ones into an array
   const fnFlags = [];

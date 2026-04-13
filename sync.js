@@ -182,16 +182,17 @@ export function indexSceneFile(db, syncDir, file, meta, prose) {
 
   db.prepare(`
     INSERT INTO scenes (
-      scene_id, project_id, title, part, chapter, pov, logline,
+      scene_id, project_id, title, part, chapter, pov, logline, scene_change,
       save_the_cat_beat, timeline_position, story_time, word_count,
       file_path, prose_checksum, metadata_stale, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT (scene_id, project_id) DO UPDATE SET
       title = excluded.title,
       part = excluded.part,
       chapter = excluded.chapter,
       pov = excluded.pov,
       logline = excluded.logline,
+      scene_change = excluded.scene_change,
       save_the_cat_beat = excluded.save_the_cat_beat,
       timeline_position = excluded.timeline_position,
       story_time = excluded.story_time,
@@ -204,6 +205,7 @@ export function indexSceneFile(db, syncDir, file, meta, prose) {
     meta.scene_id, project_id,
     meta.title ?? null, meta.part ?? null, meta.chapter ?? null,
     meta.pov ?? null, meta.logline ?? meta.synopsis ?? null,
+    meta.scene_change ?? meta.change ?? null,
     meta.save_the_cat_beat ?? meta.save_the_cat ?? null,
     meta.timeline_position ?? null, meta.story_time ?? null,
     meta.word_count ?? prose.split(/\s+/).filter(Boolean).length,

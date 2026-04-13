@@ -20,6 +20,7 @@ export const SCHEMA = `
     chapter           INTEGER,
     pov               TEXT,
     logline           TEXT,
+    scene_change      TEXT,
     save_the_cat_beat TEXT,
     timeline_position INTEGER,
     story_time        TEXT,
