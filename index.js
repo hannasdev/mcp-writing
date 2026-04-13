@@ -6,7 +6,7 @@ import path from "node:path";
 import matter from "gray-matter";
 import { z } from "zod";
 import { openDb } from "./db.js";
-import { syncAll, isSyncDirWritable } from "./sync.js";
+import { syncAll, isSyncDirWritable, writeMeta, readMeta, indexSceneFile } from "./sync.js";
 
 const SYNC_DIR = process.env.WRITING_SYNC_DIR ?? "./sync";
 const DB_PATH = process.env.DB_PATH ?? "./writing.db";
@@ -358,6 +358,150 @@ function createMcpServer() {
           text: `Thread: ${thread.name} (${thread.status})\n\n` + JSON.stringify(rows, null, 2) + warning,
         }],
       };
+    }
+  );
+
+  // ---- update_scene_metadata -----------------------------------------------
+  s.tool(
+    "update_scene_metadata",
+    "Update metadata fields for a scene. Writes to the sidecar file — never touches prose. Only available when the sync dir is writable.",
+    {
+      scene_id:   z.string().describe("The scene to update."),
+      project_id: z.string().describe("Project the scene belongs to."),
+      fields: z.object({
+        title:             z.string().optional(),
+        logline:           z.string().optional(),
+        save_the_cat_beat: z.string().optional(),
+        pov:               z.string().optional(),
+        part:              z.number().int().optional(),
+        chapter:           z.number().int().optional(),
+        timeline_position: z.number().int().optional(),
+        story_time:        z.string().optional(),
+        tags:              z.array(z.string()).optional(),
+        characters:        z.array(z.string()).optional(),
+        places:            z.array(z.string()).optional(),
+      }).describe("Fields to update. Only supplied keys are changed."),
+    },
+    async ({ scene_id, project_id, fields }) => {
+      if (!SYNC_DIR_WRITABLE) {
+        return { content: [{ type: "text", text: "Cannot update metadata: sync dir is read-only." }] };
+      }
+      const scene = db.prepare(`SELECT file_path FROM scenes WHERE scene_id = ? AND project_id = ?`)
+        .get(scene_id, project_id);
+      if (!scene) {
+        return { content: [{ type: "text", text: `Scene '${scene_id}' not found in project '${project_id}'.` }] };
+      }
+      const { meta } = readMeta(scene.file_path, SYNC_DIR, { writable: true });
+      const updated = { ...meta, ...fields };
+      writeMeta(scene.file_path, updated);
+
+      // Re-index the scene immediately so the DB reflects the new metadata
+      const { content: prose } = matter(fs.readFileSync(scene.file_path, "utf8"));
+      indexSceneFile(db, SYNC_DIR, scene.file_path, updated, prose);
+
+      return { content: [{ type: "text", text: `Updated metadata for scene '${scene_id}'.` }] };
+    }
+  );
+
+  // ---- update_character_sheet ----------------------------------------------
+  s.tool(
+    "update_character_sheet",
+    "Update metadata fields for a character. Writes to the sidecar file — never touches prose notes. Only available when the sync dir is writable.",
+    {
+      character_id: z.string().describe("The character to update."),
+      fields: z.object({
+        name:             z.string().optional(),
+        role:             z.string().optional(),
+        arc_summary:      z.string().optional(),
+        first_appearance: z.string().optional(),
+        traits:           z.array(z.string()).optional(),
+      }).describe("Fields to update. Only supplied keys are changed."),
+    },
+    async ({ character_id, fields }) => {
+      if (!SYNC_DIR_WRITABLE) {
+        return { content: [{ type: "text", text: "Cannot update character: sync dir is read-only." }] };
+      }
+      const char = db.prepare(`SELECT file_path FROM characters WHERE character_id = ?`).get(character_id);
+      if (!char) {
+        return { content: [{ type: "text", text: `Character '${character_id}' not found.` }] };
+      }
+      const { meta } = readMeta(char.file_path, SYNC_DIR, { writable: true });
+      const updated = { ...meta, ...fields };
+      writeMeta(char.file_path, updated);
+
+      // Update DB directly
+      db.prepare(`
+        UPDATE characters SET name = ?, role = ?, arc_summary = ?, first_appearance = ?
+        WHERE character_id = ?
+      `).run(
+        updated.name ?? meta.name, updated.role ?? null,
+        updated.arc_summary ?? null, updated.first_appearance ?? null,
+        character_id
+      );
+      if (fields.traits) {
+        db.prepare(`DELETE FROM character_traits WHERE character_id = ?`).run(character_id);
+        for (const t of fields.traits) {
+          db.prepare(`INSERT OR IGNORE INTO character_traits (character_id, trait) VALUES (?, ?)`).run(character_id, t);
+        }
+      }
+
+      return { content: [{ type: "text", text: `Updated character sheet for '${character_id}'.` }] };
+    }
+  );
+
+  // ---- flag_scene ----------------------------------------------------------
+  s.tool(
+    "flag_scene",
+    "Attach a continuity or review flag to a scene. Stored in the sidecar. Flags accumulate — each call adds a new entry.",
+    {
+      scene_id:   z.string().describe("Scene to flag."),
+      project_id: z.string().describe("Project the scene belongs to."),
+      note:       z.string().describe("The flag note, e.g. 'Elena cannot know about the letter yet — contradicts sc-004'."),
+    },
+    async ({ scene_id, project_id, note }) => {
+      if (!SYNC_DIR_WRITABLE) {
+        return { content: [{ type: "text", text: "Cannot flag scene: sync dir is read-only." }] };
+      }
+      const scene = db.prepare(`SELECT file_path FROM scenes WHERE scene_id = ? AND project_id = ?`)
+        .get(scene_id, project_id);
+      if (!scene) {
+        return { content: [{ type: "text", text: `Scene '${scene_id}' not found in project '${project_id}'.` }] };
+      }
+      const { meta } = readMeta(scene.file_path, SYNC_DIR, { writable: true });
+      const flags = meta.flags ?? [];
+      flags.push({ note, flagged_at: new Date().toISOString() });
+      writeMeta(scene.file_path, { ...meta, flags });
+      return { content: [{ type: "text", text: `Flagged scene '${scene_id}': ${note}` }] };
+    }
+  );
+
+  // ---- get_relationship_arc ------------------------------------------------
+  s.tool(
+    "get_relationship_arc",
+    "Trace how the relationship between two characters evolves across scenes, using the character_relationships table.",
+    {
+      from_character: z.string().describe("Character ID to trace from."),
+      to_character:   z.string().describe("Character ID to trace to."),
+      project_id:     z.string().optional().describe("Limit to a specific project."),
+    },
+    async ({ from_character, to_character, project_id }) => {
+      let query = `
+        SELECT r.from_character, r.to_character, r.relationship_type, r.strength,
+               r.scene_id, r.note,
+               s.part, s.chapter, s.timeline_position, s.title AS scene_title
+        FROM character_relationships r
+        LEFT JOIN scenes s ON s.scene_id = r.scene_id
+        WHERE r.from_character = ? AND r.to_character = ?
+      `;
+      const params = [from_character, to_character];
+      if (project_id) { query += ` AND (s.project_id = ? OR r.scene_id IS NULL)`; params.push(project_id); }
+      query += ` ORDER BY s.part, s.chapter, s.timeline_position`;
+
+      const rows = db.prepare(query).all(...params);
+      if (rows.length === 0) {
+        return { content: [{ type: "text", text: `No relationship data found between '${from_character}' and '${to_character}'.` }] };
+      }
+      return { content: [{ type: "text", text: JSON.stringify(rows, null, 2) }] };
     }
   );
 
