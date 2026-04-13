@@ -112,7 +112,7 @@ export const SCHEMA = `
   );
 
   CREATE VIRTUAL TABLE IF NOT EXISTS scenes_fts USING fts5(
-    scene_id, logline, title
+    scene_id, project_id, logline, title
   );
 `;
 

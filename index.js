@@ -6,20 +6,26 @@ import path from "node:path";
 import matter from "gray-matter";
 import { z } from "zod";
 import { openDb } from "./db.js";
-import { syncAll } from "./sync.js";
+import { syncAll, isSyncDirWritable } from "./sync.js";
 
 const SYNC_DIR = process.env.WRITING_SYNC_DIR ?? "./sync";
 const DB_PATH = process.env.DB_PATH ?? "./writing.db";
 const HTTP_PORT = parseInt(process.env.HTTP_PORT ?? "3000", 10);
+const MAX_CHAPTER_SCENES = parseInt(process.env.MAX_CHAPTER_SCENES ?? "10", 10);
 
 // ---------------------------------------------------------------------------
 // Database setup
 // ---------------------------------------------------------------------------
 const db = openDb(DB_PATH);
 
+// Check sync dir writability once at startup (needed for Phase 2 sidecar writes)
+const SYNC_DIR_WRITABLE = isSyncDirWritable(SYNC_DIR);
+if (!SYNC_DIR_WRITABLE) {
+  process.stderr.write(`[mcp-writing] WARNING: sync dir is not writable — sidecar auto-migration and metadata write-back will be unavailable\n`);
+}
 
 // Run sync on startup
-syncAll(db, SYNC_DIR);
+syncAll(db, SYNC_DIR, { writable: SYNC_DIR_WRITABLE });
 
 // ---------------------------------------------------------------------------
 // MCP server factory
@@ -29,13 +35,12 @@ function createMcpServer() {
 
   // ---- sync ----------------------------------------------------------------
   s.tool("sync", "Re-scan the sync folder and update the index from changed files.", {}, async () => {
-    const result = syncAll(db, SYNC_DIR);
-    return {
-      content: [{
-        type: "text",
-        text: `Sync complete. ${result.indexed} scenes indexed. ${result.staleMarked} scenes marked stale (prose changed since last sync).`,
-      }],
-    };
+    const result = syncAll(db, SYNC_DIR, { writable: SYNC_DIR_WRITABLE });
+    const parts = [`Sync complete. ${result.indexed} scenes indexed. ${result.staleMarked} scenes marked stale.`];
+    if (result.sidecarsMigrated) parts.push(`${result.sidecarsMigrated} sidecar(s) auto-generated from frontmatter.`);
+    if (result.skipped) parts.push(`${result.skipped} file(s) skipped (no scene_id).`);
+    if (result.warnings.length) parts.push(`\n⚠️ Warnings:\n` + result.warnings.map(w => `- ${w}`).join("\n"));
+    return { content: [{ type: "text", text: parts.join(" ") }] };
   });
 
   // ---- find_scenes ---------------------------------------------------------
@@ -127,22 +132,25 @@ function createMcpServer() {
   // ---- get_chapter_prose ---------------------------------------------------
   s.tool(
     "get_chapter_prose",
-    "Load prose for all scenes in a chapter, in order. Use sparingly — loads all scene files.",
+    `Load prose for all scenes in a chapter, in order. Capped at ${MAX_CHAPTER_SCENES} scenes to avoid context overflow.`,
     {
       project_id: z.string().describe("Project ID."),
       part:       z.number().int().describe("Part number."),
       chapter:    z.number().int().describe("Chapter number."),
     },
     async ({ project_id, part, chapter }) => {
-      const scenes = db.prepare(`
+      const allScenes = db.prepare(`
         SELECT scene_id, title, file_path FROM scenes
         WHERE project_id = ? AND part = ? AND chapter = ?
         ORDER BY timeline_position
       `).all(project_id, part, chapter);
 
-      if (scenes.length === 0) {
+      if (allScenes.length === 0) {
         return { content: [{ type: "text", text: `No scenes found for Part ${part}, Chapter ${chapter}.` }] };
       }
+
+      const truncated = allScenes.length > MAX_CHAPTER_SCENES;
+      const scenes = truncated ? allScenes.slice(0, MAX_CHAPTER_SCENES) : allScenes;
 
       const parts = [];
       for (const scene of scenes) {
@@ -155,7 +163,10 @@ function createMcpServer() {
         }
       }
 
-      return { content: [{ type: "text", text: parts.join("\n\n---\n\n") }] };
+      const warning = truncated
+        ? `\n\n⚠️ Chapter has ${allScenes.length} scenes — only the first ${MAX_CHAPTER_SCENES} were loaded. Set MAX_CHAPTER_SCENES to increase this limit.`
+        : "";
+      return { content: [{ type: "text", text: parts.join("\n\n---\n\n") + warning }] };
     }
   );
 
@@ -282,9 +293,9 @@ function createMcpServer() {
     },
     async ({ query }) => {
       const rows = db.prepare(`
-        SELECT f.scene_id, s.project_id, s.title, s.logline, s.part, s.chapter, s.metadata_stale
+        SELECT f.scene_id, f.project_id, s.title, s.logline, s.part, s.chapter, s.metadata_stale
         FROM scenes_fts f
-        JOIN scenes s ON s.scene_id = f.scene_id
+        JOIN scenes s ON s.scene_id = f.scene_id AND s.project_id = f.project_id
         WHERE scenes_fts MATCH ?
         ORDER BY rank
         LIMIT 20

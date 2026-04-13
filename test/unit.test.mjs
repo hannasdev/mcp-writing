@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import os from "node:os";
 import fs from "node:fs";
 import path from "node:path";
-import { checksumProse, walkFiles, inferProjectAndUniverse, isWorldFile, syncAll } from "../sync.js";
+import { checksumProse, walkFiles, walkSidecars, sidecarPath, inferProjectAndUniverse, isWorldFile, readMeta, isSyncDirWritable, syncAll } from "../sync.js";
 import { openDb } from "../db.js";
 
 // ---------------------------------------------------------------------------
@@ -52,6 +52,96 @@ describe("walkFiles", () => {
     assert.equal(files.length, 1);
     assert.ok(files[0].endsWith("notes.txt"));
     fs.rmSync(dir, { recursive: true });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// walkSidecars / sidecarPath
+// ---------------------------------------------------------------------------
+describe("walkSidecars", () => {
+  test("finds .meta.yaml files recursively", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sidecars-"));
+    fs.mkdirSync(path.join(dir, "sub"));
+    fs.writeFileSync(path.join(dir, "sc-001.meta.yaml"), "");
+    fs.writeFileSync(path.join(dir, "sub", "sc-002.meta.yaml"), "");
+    fs.writeFileSync(path.join(dir, "sc-001.md"), "");   // should not be returned
+    const files = walkSidecars(dir);
+    assert.equal(files.length, 2);
+    fs.rmSync(dir, { recursive: true });
+  });
+});
+
+describe("sidecarPath", () => {
+  test("replaces .md extension", () => {
+    assert.equal(sidecarPath("/sync/sc-001.md"), "/sync/sc-001.meta.yaml");
+  });
+
+  test("replaces .txt extension", () => {
+    assert.equal(sidecarPath("/sync/sc-001.txt"), "/sync/sc-001.meta.yaml");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// readMeta
+// ---------------------------------------------------------------------------
+describe("readMeta", () => {
+  test("reads from sidecar when present", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "meta-"));
+    fs.writeFileSync(path.join(dir, "sc-001.md"), "some prose");
+    fs.writeFileSync(path.join(dir, "sc-001.meta.yaml"), "scene_id: sc-001\ntitle: Test\n");
+    const { meta, sidecarGenerated } = readMeta(path.join(dir, "sc-001.md"), dir);
+    assert.equal(meta.scene_id, "sc-001");
+    assert.equal(sidecarGenerated, false);
+    fs.rmSync(dir, { recursive: true });
+  });
+
+  test("falls back to frontmatter when no sidecar", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "meta-"));
+    fs.writeFileSync(path.join(dir, "sc-001.md"), "---\nscene_id: sc-001\n---\nsome prose");
+    const { meta } = readMeta(path.join(dir, "sc-001.md"), dir);
+    assert.equal(meta.scene_id, "sc-001");
+    fs.rmSync(dir, { recursive: true });
+  });
+
+  test("auto-generates sidecar from frontmatter when writable=true", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "meta-"));
+    fs.writeFileSync(path.join(dir, "sc-001.md"), "---\nscene_id: sc-001\n---\nsome prose");
+    const { sidecarGenerated } = readMeta(path.join(dir, "sc-001.md"), dir, { writable: true });
+    assert.equal(sidecarGenerated, true);
+    assert.ok(fs.existsSync(path.join(dir, "sc-001.meta.yaml")));
+    fs.rmSync(dir, { recursive: true });
+  });
+
+  test("does not auto-generate sidecar when writable=false", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "meta-"));
+    fs.writeFileSync(path.join(dir, "sc-001.md"), "---\nscene_id: sc-001\n---\nsome prose");
+    readMeta(path.join(dir, "sc-001.md"), dir, { writable: false });
+    assert.ok(!fs.existsSync(path.join(dir, "sc-001.meta.yaml")));
+    fs.rmSync(dir, { recursive: true });
+  });
+
+  test("sidecar wins over frontmatter when both exist", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "meta-"));
+    fs.writeFileSync(path.join(dir, "sc-001.md"), "---\nscene_id: old-id\n---\nsome prose");
+    fs.writeFileSync(path.join(dir, "sc-001.meta.yaml"), "scene_id: new-id\n");
+    const { meta } = readMeta(path.join(dir, "sc-001.md"), dir);
+    assert.equal(meta.scene_id, "new-id");
+    fs.rmSync(dir, { recursive: true });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// isSyncDirWritable
+// ---------------------------------------------------------------------------
+describe("isSyncDirWritable", () => {
+  test("returns true for writable directory", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "write-"));
+    assert.ok(isSyncDirWritable(dir));
+    fs.rmSync(dir, { recursive: true });
+  });
+
+  test("returns false for non-existent directory", () => {
+    assert.ok(!isSyncDirWritable("/tmp/__nonexistent_dir_xyz__/subdir"));
   });
 });
 
@@ -248,6 +338,75 @@ describe("syncAll", () => {
     const rows = db.prepare("SELECT scene_id FROM scenes_fts WHERE scenes_fts MATCH 'envelope'").all();
     assert.equal(rows.length, 1);
     assert.equal(rows[0].scene_id, "sc-001");
+
+    db.close();
+    fs.rmSync(dir, { recursive: true });
+  });
+
+  test("warns on duplicate scene_id within same project", () => {
+    const dir = makeTempSync();
+    const db = openDb(":memory:");
+    writeScene(dir, "sc-001");
+    // Write a second file with same scene_id
+    const header = "---\nscene_id: sc-001\ntitle: Duplicate\npart: 1\nchapter: 2\npov: elena\n---\n";
+    fs.writeFileSync(
+      path.join(dir, "projects", "test-novel", "scenes", "sc-001-copy.md"),
+      header + "Duplicate prose."
+    );
+    const result = syncAll(db, dir, { quiet: true });
+    assert.ok(result.warnings.some(w => w.includes("Duplicate scene_id")));
+
+    db.close();
+    fs.rmSync(dir, { recursive: true });
+  });
+
+  test("warns on orphaned sidecar", () => {
+    const dir = makeTempSync();
+    const db = openDb(":memory:");
+    // Write sidecar with no matching .md
+    fs.writeFileSync(
+      path.join(dir, "projects", "test-novel", "scenes", "deleted.meta.yaml"),
+      "scene_id: deleted\n"
+    );
+    const result = syncAll(db, dir, { quiet: true });
+    assert.ok(result.warnings.some(w => w.includes("Orphaned sidecar")));
+
+    db.close();
+    fs.rmSync(dir, { recursive: true });
+  });
+
+  test("reads metadata from sidecar when present", () => {
+    const dir = makeTempSync();
+    const db = openDb(":memory:");
+    // Write prose file without frontmatter
+    fs.writeFileSync(
+      path.join(dir, "projects", "test-novel", "scenes", "sc-001.md"),
+      "Prose only, no frontmatter."
+    );
+    // Write sidecar separately
+    fs.writeFileSync(
+      path.join(dir, "projects", "test-novel", "scenes", "sc-001.meta.yaml"),
+      "scene_id: sc-001\ntitle: Sidecar Scene\npart: 1\nchapter: 1\npov: elena\nlogline: A sidecar test.\n"
+    );
+    const result = syncAll(db, dir, { quiet: true });
+    assert.equal(result.indexed, 1);
+    const scene = db.prepare("SELECT title FROM scenes WHERE scene_id = 'sc-001'").get();
+    assert.equal(scene.title, "Sidecar Scene");
+
+    db.close();
+    fs.rmSync(dir, { recursive: true });
+  });
+
+  test("auto-migrates frontmatter to sidecar when writable", () => {
+    const dir = makeTempSync();
+    const db = openDb(":memory:");
+    writeScene(dir, "sc-001");
+    const sidecar = path.join(dir, "projects", "test-novel", "scenes", "sc-001.meta.yaml");
+    assert.ok(!fs.existsSync(sidecar));
+
+    const result = syncAll(db, dir, { quiet: true, writable: true });
+    assert.equal(result.sidecarsMigrated, 1);
+    assert.ok(fs.existsSync(sidecar));
 
     db.close();
     fs.rmSync(dir, { recursive: true });

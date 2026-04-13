@@ -1,0 +1,19 @@
+scene_id: sc-003
+title: The Offer
+part: 1
+chapter: 2
+characters:
+  - elena
+places:
+  - harbor-district
+logline: >-
+  Elena receives an envelope at her old address — an offer she doesn't
+  understand yet, but can't ignore.
+save_the_cat: Catalyst
+pov: elena
+timeline_position: 3
+story_time: 'Day 2, morning'
+tags:
+  - mystery
+  - catalyst
+  - solo

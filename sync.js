@@ -1,6 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import matter from "gray-matter";
+import yaml from "js-yaml";
+const { load: parseYaml, dump: stringifyYaml } = yaml;
 
 // ---------------------------------------------------------------------------
 // Pure utilities (no DB dependency — easy to unit test)
@@ -28,6 +30,23 @@ export function walkFiles(dir, fileList = []) {
   return fileList;
 }
 
+export function walkSidecars(dir, fileList = []) {
+  if (!fs.existsSync(dir)) return fileList;
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      walkSidecars(full, fileList);
+    } else if (entry.name.endsWith(".meta.yaml")) {
+      fileList.push(full);
+    }
+  }
+  return fileList;
+}
+
+export function sidecarPath(filePath) {
+  return filePath.replace(/\.(md|txt)$/, ".meta.yaml");
+}
+
 export function inferProjectAndUniverse(syncDir, filePath) {
   const rel = path.relative(syncDir, filePath);
   const parts = rel.split(path.sep);
@@ -49,6 +68,57 @@ export function isWorldFile(syncDir, filePath) {
 export function parseFile(filePath) {
   const raw = fs.readFileSync(filePath, "utf8");
   return matter(raw);
+}
+
+/**
+ * Read metadata for a scene file. Priority: sidecar > frontmatter.
+ * If sidecar doesn't exist but frontmatter does, auto-generates the sidecar.
+ * Returns { meta, sidecarGenerated }.
+ */
+export function readMeta(filePath, syncDir, { writable = false } = {}) {
+  const sidecar = sidecarPath(filePath);
+
+  if (fs.existsSync(sidecar)) {
+    const raw = fs.readFileSync(sidecar, "utf8");
+    return { meta: parseYaml(raw) ?? {}, sidecarGenerated: false };
+  }
+
+  // Fall back to frontmatter
+  const { data: frontmatter } = parseFile(filePath);
+  if (!Object.keys(frontmatter).length) {
+    return { meta: {}, sidecarGenerated: false };
+  }
+
+  // Auto-migrate: write sidecar from frontmatter (only if writable)
+  if (writable) {
+    try {
+      fs.writeFileSync(sidecar, stringifyYaml(frontmatter), "utf8");
+      return { meta: frontmatter, sidecarGenerated: true };
+    } catch {}
+  }
+
+  return { meta: frontmatter, sidecarGenerated: false };
+}
+
+/**
+ * Write metadata back to the sidecar file for a scene.
+ */
+export function writeMeta(filePath, meta) {
+  fs.writeFileSync(sidecarPath(filePath), stringifyYaml(meta), "utf8");
+}
+
+/**
+ * Check whether the sync dir is writable.
+ */
+export function isSyncDirWritable(syncDir) {
+  try {
+    const probe = path.join(syncDir, ".mcp-write-check");
+    fs.writeFileSync(probe, "");
+    fs.unlinkSync(probe);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -161,29 +231,59 @@ export function indexSceneFile(db, syncDir, file, meta, prose) {
     );
   }
 
-  db.prepare(`INSERT OR REPLACE INTO scenes_fts (scene_id, logline, title) VALUES (?, ?, ?)`).run(
-    meta.scene_id, meta.logline ?? "", meta.title ?? ""
+  db.prepare(`INSERT OR REPLACE INTO scenes_fts (scene_id, project_id, logline, title) VALUES (?, ?, ?, ?)`).run(
+    meta.scene_id, project_id, meta.logline ?? "", meta.title ?? ""
   );
 
   return { isStale };
 }
 
-export function syncAll(db, syncDir, { quiet = false } = {}) {
+export function syncAll(db, syncDir, { quiet = false, writable = false } = {}) {
   const files = walkFiles(syncDir);
   let indexed = 0;
   let staleMarked = 0;
+  let skipped = 0;
+  let sidecarsMigrated = 0;
+  const seenSceneIds = new Map(); // scene_id+project_id → file path, for duplicate detection
+  const warnings = [];
 
+  // --- Scene and world files ---
   for (const file of files) {
     try {
-      const { data: meta, content: prose } = parseFile(file);
-
       if (isWorldFile(syncDir, file)) {
-        indexWorldFile(db, syncDir, file, meta);
+        const { meta } = readMeta(file, syncDir, { writable });
+        if (!Object.keys(meta).length) {
+          const { data } = parseFile(file);
+          indexWorldFile(db, syncDir, file, data);
+        } else {
+          indexWorldFile(db, syncDir, file, meta);
+        }
         continue;
       }
 
-      if (!meta.scene_id) continue;
+      const { meta, sidecarGenerated } = readMeta(file, syncDir, { writable });
+      if (sidecarGenerated) sidecarsMigrated++;
 
+      if (!meta.scene_id) {
+        skipped++;
+        if (!quiet) warnings.push(`Skipped (no scene_id): ${path.relative(syncDir, file)}`);
+        continue;
+      }
+
+      // Duplicate scene_id detection
+      const { project_id } = inferProjectAndUniverse(syncDir, file);
+      const key = `${meta.scene_id}::${project_id}`;
+      if (seenSceneIds.has(key)) {
+        warnings.push(
+          `Duplicate scene_id "${meta.scene_id}" in project "${project_id}":\n` +
+          `  ${path.relative(syncDir, seenSceneIds.get(key))}\n` +
+          `  ${path.relative(syncDir, file)}`
+        );
+      } else {
+        seenSceneIds.set(key, file);
+      }
+
+      const { data: _frontmatter, content: prose } = parseFile(file);
       const { isStale } = indexSceneFile(db, syncDir, file, meta, prose);
       if (isStale) staleMarked++;
       indexed++;
@@ -192,10 +292,25 @@ export function syncAll(db, syncDir, { quiet = false } = {}) {
     }
   }
 
+  // --- Orphaned sidecar detection ---
+  const sidecars = walkSidecars(syncDir);
+  for (const sidecar of sidecars) {
+    const prose = sidecar.replace(/\.meta\.yaml$/, ".md");
+    const proseTxt = sidecar.replace(/\.meta\.yaml$/, ".txt");
+    if (!fs.existsSync(prose) && !fs.existsSync(proseTxt)) {
+      warnings.push(`Orphaned sidecar (no matching .md/.txt): ${path.relative(syncDir, sidecar)}`);
+    }
+  }
+
   if (!quiet) {
     process.stderr.write(
-      `[mcp-writing] Sync complete: ${indexed} scenes indexed, ${staleMarked} marked stale\n`
+      `[mcp-writing] Sync complete: ${indexed} scenes indexed, ${staleMarked} marked stale` +
+      (sidecarsMigrated ? `, ${sidecarsMigrated} sidecars auto-generated` : "") +
+      (skipped ? `, ${skipped} files skipped` : "") + "\n"
     );
+    for (const w of warnings) {
+      process.stderr.write(`[mcp-writing] WARNING: ${w}\n`);
+    }
   }
-  return { indexed, staleMarked };
+  return { indexed, staleMarked, skipped, sidecarsMigrated, warnings };
 }
