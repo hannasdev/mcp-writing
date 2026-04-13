@@ -10,10 +10,18 @@
     "test:integration": "node --experimental-sqlite --test test/integration.test.mjs",
     "test": "node --experimental-sqlite --test test/unit.test.mjs test/integration.test.mjs"
   },
-  "keywords": ["mcp", "writing", "fiction", "ai", "scrivener"],
+  "keywords": [
+    "mcp",
+    "writing",
+    "fiction",
+    "ai",
+    "scrivener"
+  ],
   "license": "MIT",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "@xmldom/xmldom": "^0.9.9",
+    "fast-xml-parser": "^5.5.12",
     "gray-matter": "^4.0.3",
     "js-yaml": "^4.1.0",
     "zod": "^3.25.0"
