@@ -6,19 +6,26 @@
  *   node scripts/import.js <scrivener-sync-dir> <mcp-sync-dir> [options]
  *
  *   <scrivener-sync-dir>  The folder Scrivener syncs into (e.g. ./txt)
+ *                         If it contains Draft/ and Notes/ subdirs, both are processed.
  *   <mcp-sync-dir>        The WRITING_SYNC_DIR root (e.g. ./my-project-sync)
  *
  * Options:
  *   --project <id>    Project ID to assign (default: derived from mcp-sync-dir name)
  *   --dry-run         Show what would be created without writing anything
  *
- * What it does:
- *   - Walks the Scrivener sync dir in filename order (NNN prefix = binder sequence)
+ * What it does (Draft folder):
+ *   - Walks the Draft dir in filename order (NNN prefix = binder sequence)
  *   - Skips empty files (non-compilation title cards) and Epigraphs
  *   - Detects Save the Cat beat markers ("-Beat Name-" empty files) and carries
  *     the beat name forward to the next prose scene's sidecar
- *   - Creates the mcp-sync-dir/projects/<project>/scenes/ structure
+ *   - Creates mcp-sync-dir/projects/<project>/scenes/ structure
  *   - Writes a .meta.yaml sidecar for each scene (skips files that already have one)
+ *
+ * What it does (Notes folder):
+ *   - Tracks section mode via empty top-level folder markers (Characters, Places, World...)
+ *   - Routes character sheets → world/characters/ with character_id sidecar
+ *   - Routes place sheets    → world/places/     with place_id sidecar
+ *   - Skips World, misc, Writing, Publishing, and other non-character/place sections
  */
 
 import fs from "node:fs";
@@ -48,6 +55,8 @@ if (!fs.existsSync(scrivenerDir)) {
 }
 
 const scenesDir = path.join(mcpSyncDir, "projects", projectId, "scenes");
+const charsDir  = path.join(mcpSyncDir, "projects", projectId, "world", "characters");
+const placesDir = path.join(mcpSyncDir, "projects", projectId, "world", "places");
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -76,24 +85,54 @@ function cleanTitle(rawTitle) {
   return rawTitle.replace(/^Scene\s+/i, "").trim();
 }
 
-function makeSceneId(seq, title) {
-  const slug = title
+function slugify(str) {
+  return str
     .toLowerCase()
+    .replace(/[\u{1F000}-\u{1FFFF}\u{2600}-\u{27FF}]/gu, "") // strip emoji
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
-    .slice(0, 40);
-  return `sc-${String(seq).padStart(3, "0")}-${slug}`;
+    .slice(0, 50);
+}
+
+function makeSceneId(seq, title) {
+  return `sc-${String(seq).padStart(3, "0")}-${slugify(title).slice(0, 40)}`;
+}
+
+function makeCharacterId(rawTitle) {
+  return "char-" + slugify(rawTitle);
+}
+
+function makePlaceId(rawTitle) {
+  return "place-" + slugify(rawTitle);
+}
+
+// Section mode detection for Notes folder.
+// Returns the new mode string, or null if the title doesn't trigger a mode change.
+const SECTION_MODES = {
+  "characters":      "characters",
+  "places":          "places",
+  "world":           "skip",
+  "misc":            "skip",
+  "writing":         "skip",
+  "publishing":      "skip",
+  "novel format":    "skip",
+  "template sheets": "skip",
+};
+
+function notesSection(title) {
+  return SECTION_MODES[title.toLowerCase().trim()] ?? null;
 }
 
 // ---------------------------------------------------------------------------
-// Walk Scrivener sync dir (sorted by filename = binder order)
+// Walk a directory (sorted by filename = binder order, non-recursive)
 // ---------------------------------------------------------------------------
 function walkSorted(dir) {
   const files = [];
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) walkSorted(full).forEach(f => files.push(f));
-    else if (entry.name.endsWith(".txt") || entry.name.endsWith(".md")) files.push(full);
+    if (entry.isFile() && (entry.name.endsWith(".txt") || entry.name.endsWith(".md"))) {
+      files.push(full);
+    }
   }
   return files.sort((a, b) => path.basename(a).localeCompare(path.basename(b)));
 }
@@ -101,7 +140,15 @@ function walkSorted(dir) {
 // ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
-const files = walkSorted(scrivenerDir);
+const draftDir = path.join(scrivenerDir, "Draft");
+const notesDir = path.join(scrivenerDir, "Notes");
+const hasDraft = fs.existsSync(draftDir);
+const hasNotes = fs.existsSync(notesDir);
+
+// If there's a Draft/ subdir use that; otherwise treat scrivenerDir as Draft directly
+const draftRoot = hasDraft ? draftDir : scrivenerDir;
+
+const files = walkSorted(draftRoot);
 let created = 0;
 let skipped = 0;
 let alreadyDone = 0;
@@ -197,6 +244,112 @@ console.log(`\n${"─".repeat(50)}`);
 console.log(`Created:  ${created} sidecars${dryRun ? " (dry run)" : ""}`);
 console.log(`Skipped:  ${skipped} (empty / epigraph / pattern)`);
 if (alreadyDone) console.log(`Existing: ${alreadyDone} already had sidecars`);
+
+// ---------------------------------------------------------------------------
+// Notes pass — characters and places
+// ---------------------------------------------------------------------------
+if (hasNotes) {
+  const noteFiles = walkSorted(notesDir);
+  let mode = "skip";       // current routing mode
+  let currentGroup = null; // current subsection name (last empty file title)
+  let worldCreated = 0;
+  let worldSkipped = 0;
+  let worldExisting = 0;
+
+  if (!dryRun) {
+    fs.mkdirSync(charsDir,  { recursive: true });
+    fs.mkdirSync(placesDir, { recursive: true });
+  }
+
+  console.log(`\nNotes:    ${notesDir}`);
+  console.log(`Files:    ${noteFiles.length}\n`);
+
+  for (const file of noteFiles) {
+    const filename = path.basename(file);
+    const parsed = parseFilename(filename);
+
+    if (!parsed) {
+      console.log(`  SKIP  (pattern) ${filename}`);
+      worldSkipped++;
+      continue;
+    }
+
+    const { rawTitle } = parsed;
+    const isEmpty = fs.statSync(file).size === 0;
+
+    // Check if this title is a top-level section marker
+    const newMode = notesSection(rawTitle);
+    if (newMode !== null) {
+      mode = newMode;
+      currentGroup = null;
+      if (mode !== "skip") {
+        console.log(`  MODE  → ${mode} ("${rawTitle}")`);
+      } else {
+        console.log(`  SKIP  (section) "${rawTitle}"`);
+      }
+      continue; // skip the section marker file itself
+    }
+
+    // Empty file within a mode = subsection header, just update group tracking
+    if (isEmpty) {
+      if (mode !== "skip") {
+        currentGroup = rawTitle;
+        console.log(`  GROUP "${rawTitle}" [${mode}]`);
+      }
+      worldSkipped++;
+      continue;
+    }
+
+    if (mode === "skip") {
+      worldSkipped++;
+      continue;
+    }
+
+    const targetDir = mode === "characters" ? charsDir : placesDir;
+    const destFile  = path.join(targetDir, filename);
+    const sidecar   = destFile.replace(/\.(txt|md)$/, ".meta.yaml");
+
+    if (fs.existsSync(sidecar)) {
+      console.log(`  SKIP  (exists) ${filename}`);
+      worldExisting++;
+      continue;
+    }
+
+    if (mode === "characters") {
+      const meta = {
+        character_id: makeCharacterId(rawTitle),
+        name: rawTitle,
+        ...(currentGroup ? { group: currentGroup } : {}),
+      };
+      if (dryRun) {
+        console.log(`  DRY   [char]  "${rawTitle}"  → ${meta.character_id}`);
+      } else {
+        if (!fs.existsSync(destFile)) fs.copyFileSync(file, destFile);
+        fs.writeFileSync(sidecar, yaml.dump(meta, { lineWidth: 120 }), "utf8");
+        console.log(`  OK    [char]  "${rawTitle}"`);
+      }
+    } else {
+      const meta = {
+        place_id: makePlaceId(rawTitle),
+        name: rawTitle,
+        ...(currentGroup ? { group: currentGroup } : {}),
+      };
+      if (dryRun) {
+        console.log(`  DRY   [place] "${rawTitle}"  → ${meta.place_id}`);
+      } else {
+        if (!fs.existsSync(destFile)) fs.copyFileSync(file, destFile);
+        fs.writeFileSync(sidecar, yaml.dump(meta, { lineWidth: 120 }), "utf8");
+        console.log(`  OK    [place] "${rawTitle}"`);
+      }
+    }
+    worldCreated++;
+  }
+
+  console.log(`\n${"─".repeat(50)}`);
+  console.log(`World:    ${worldCreated} created${dryRun ? " (dry run)" : ""}`);
+  console.log(`Skipped:  ${worldSkipped}`);
+  if (worldExisting) console.log(`Existing: ${worldExisting} already had sidecars`);
+}
 
 if (!dryRun && created > 0) {
   console.log(`\nNext steps:`);
