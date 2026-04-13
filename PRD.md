@@ -43,7 +43,7 @@ Scrivener's External Folder Sync only touches `.md`/`.txt` files — it will nev
 
 ### Migration path (Phase 1 → Phase 2)
 
-Phase 1 continues using frontmatter as the bootstrap format. On the first Phase 2 sync, if no sidecar exists but the `.md` file has frontmatter, the service auto-generates the sidecar from the frontmatter and strips the header from the `.md`. This is a one-time migration per project. Frontmatter is supported read-only after that point for any files not yet migrated.
+Phase 1 continues using frontmatter as the bootstrap format. On the first Phase 2 sync, if no sidecar exists but the `.md` file has frontmatter, the service auto-generates the sidecar from the frontmatter. **The frontmatter header is not stripped from the `.md` file.** Stripping it would silently remove the `scene_id` from files that Scrivener may later move or duplicate — the scene would then have no identifier and disappear from the index on next sync. Frontmatter is treated as read-only legacy; the sidecar always wins when both exist.
 
 ### Orphaned sidecars
 
@@ -373,6 +373,30 @@ The AI can never write prose in a single step. All prose edits require an explic
 
 ---
 
+## Known Edge Cases
+
+These are identified failure modes. Priority indicated: **must fix before Phase 2 ships**, *capture now, fix later*.
+
+**#1 — Scene moved in Scrivener after sidecar migration (must fix)**
+Scrivener restructures freely by moving `.md` files. If the `.md` file has been moved but its sidecar has not, sync detects the mismatch via path/metadata check and warns. The scene is not silently dropped — it falls back to the sidecar's last known `file_path` for prose retrieval and logs a warning that the path is stale. This is why frontmatter is never stripped (see Migration Path above).
+
+**#2 — FTS ambiguity across projects (must fix)**
+The `scenes_fts` table indexes `scene_id` without `project_id`. If two projects both contain a `sc-001`, `search_metadata` returns ambiguous results and the join back to `scenes` is incorrect. Fix: include `project_id` in the FTS table and in the `MATCH` query. Tracked as a Phase 1 bug to resolve before Phase 2 begins.
+
+**#3 — Sync dir not writable (important)**
+If `WRITING_SYNC_DIR` is a read-only Docker mount or network share, Phase 2 sidecar writes fail at runtime. The service should detect and warn at startup if the sync dir is not writable, and degrade gracefully: Phase 1 read-only tools continue to work; Phase 2 write tools return a clear error rather than crashing.
+
+**#4 — `get_chapter_prose` unbounded load (important)**
+A large chapter (e.g. 30 scenes × 3000 words) produces ~90k words in a single tool response — guaranteed context overflow for any model. Add a configurable `MAX_CHAPTER_SCENES` limit (default: 10) with an explicit warning in the response when the limit is hit.
+
+**#5 — Duplicate `scene_id` from copy-paste templates (minor)**
+A user duplicates a scene file as a starting point and forgets to change the `scene_id`. On next sync, the second file silently overwrites the first in SQLite. Mitigation: detect duplicate `scene_id` values during sync and log a warning with both file paths.
+
+**#6 — Blank scenes silently skipped (minor)**
+Scrivener creates empty documents frequently. Files with no `scene_id` are skipped without any feedback. Currently logged at `stderr` only. Should surface via a sync summary that counts and names skipped files.
+
+---
+
 ## Phases
 
 ### Phase 1 — Ask questions about your project
@@ -393,7 +417,8 @@ The AI can never write prose in a single step. All prose edits require an explic
 
 **Goal:** The analysis doesn't go stale. When you edit scenes in Scrivener, the AI knows which conclusions might no longer hold and tells you before reasoning against outdated information. You can update metadata and character notes directly from a conversation rather than switching tools.
 
-- [ ] Migrate metadata storage to sidecar files (`.meta.yaml`); auto-generate sidecars from frontmatter on first sync; strip frontmatter from `.md` files
+- [ ] Fix FTS ambiguity bug: include `project_id` in `scenes_fts` table and queries (Edge Case #2)
+- [ ] Migrate metadata storage to sidecar files (`.meta.yaml`); auto-generate sidecars from frontmatter on first sync; do not strip frontmatter from `.md` files (see Edge Case #1)
 - [ ] Detect orphaned sidecars (`.meta.yaml` with no corresponding `.md`) and warn on sync
 - [ ] Derive and store `part`/`chapter` from file path at sidecar creation time; detect path/metadata mismatch and warn
 - [ ] Implement `update_scene_metadata`, `update_character_sheet`, `flag_scene` (write to sidecar only)
