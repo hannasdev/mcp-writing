@@ -216,8 +216,14 @@ export function indexSceneFile(db, syncDir, file, meta, prose) {
   db.prepare(`DELETE FROM scene_tags WHERE scene_id = ?`).run(meta.scene_id);
 
   for (const c of (meta.characters ?? [])) {
+    let cid = c;
+    // If the value looks like a name rather than an ID, try to resolve it
+    if (!/^char-/.test(c)) {
+      const row = db.prepare(`SELECT character_id FROM characters WHERE name = ?`).get(c);
+      if (row) cid = row.character_id;
+    }
     db.prepare(`INSERT OR IGNORE INTO scene_characters (scene_id, character_id) VALUES (?, ?)`).run(
-      meta.scene_id, c
+      meta.scene_id, cid
     );
   }
   for (const p of (meta.places ?? [])) {
@@ -247,20 +253,27 @@ export function syncAll(db, syncDir, { quiet = false, writable = false } = {}) {
   const seenSceneIds = new Map(); // scene_id+project_id → file path, for duplicate detection
   const warnings = [];
 
-  // --- Scene and world files ---
+  // --- Pass 1: world files (characters/places must be indexed before scenes
+  // so that character name → ID resolution in scene_characters works) ---
   for (const file of files) {
+    if (!isWorldFile(syncDir, file)) continue;
     try {
-      if (isWorldFile(syncDir, file)) {
-        const { meta } = readMeta(file, syncDir, { writable });
-        if (!Object.keys(meta).length) {
-          const { data } = parseFile(file);
-          indexWorldFile(db, syncDir, file, data);
-        } else {
-          indexWorldFile(db, syncDir, file, meta);
-        }
-        continue;
+      const { meta } = readMeta(file, syncDir, { writable });
+      if (!Object.keys(meta).length) {
+        const { data } = parseFile(file);
+        indexWorldFile(db, syncDir, file, data);
+      } else {
+        indexWorldFile(db, syncDir, file, meta);
       }
+    } catch (err) {
+      process.stderr.write(`[mcp-writing] Failed to index ${file}: ${err.message}\n`);
+    }
+  }
 
+  // --- Pass 2: scene files ---
+  for (const file of files) {
+    if (isWorldFile(syncDir, file)) continue;
+    try {
       const { meta, sidecarGenerated } = readMeta(file, syncDir, { writable });
       if (sidecarGenerated) sidecarsMigrated++;
 

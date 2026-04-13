@@ -141,15 +141,69 @@ for (const item of dom.getElementsByTagName("BinderItem")) {
 console.log(`Binder items collected: ${Object.keys(metaByUUID).length}`);
 
 // ---------------------------------------------------------------------------
+// Walk binder hierarchy to assign part / chapter numbers to each UUID.
+// Structure: DraftFolder → Part Folders → Chapter Folders → Scene Text items
+// Chapters are numbered globally (don't reset per part).
+// ---------------------------------------------------------------------------
+const partByUUID    = {};
+const chapterByUUID = {};
+let partNum    = 0;
+let chapterNum = 0;
+
+function walkHierarchy(containerEl, currentPart, currentChapter) {
+  for (const child of children(containerEl, "BinderItem")) {
+    const uuid     = attr(child, "UUID");
+    const type     = attr(child, "Type");
+    const childrenEl = children(child, "Children")[0];
+
+    if (type === "Folder" && currentPart === null) {
+      // Top-level folder under DraftFolder = Part
+      partNum++;
+      if (childrenEl) walkHierarchy(childrenEl, partNum, null);
+    } else if (type === "Folder") {
+      // Folder inside a Part = Chapter
+      chapterNum++;
+      if (uuid) { partByUUID[uuid]    = currentPart;   chapterByUUID[uuid] = chapterNum; }
+      if (childrenEl) walkHierarchy(childrenEl, currentPart, chapterNum);
+    } else if (type === "Text") {
+      // Scene or beat marker
+      if (uuid && currentChapter !== null) {
+        partByUUID[uuid]    = currentPart;
+        chapterByUUID[uuid] = currentChapter;
+      }
+    }
+  }
+}
+
+// Locate the DraftFolder as a direct child of Binder
+const binderEl = dom.getElementsByTagName("Binder")[0];
+if (binderEl) {
+  for (const el of children(binderEl, "BinderItem")) {
+    if (attr(el, "Type") === "DraftFolder") {
+      const draftChildrenEl = children(el, "Children")[0];
+      if (draftChildrenEl) walkHierarchy(draftChildrenEl, null, null);
+      break;
+    }
+  }
+}
+
+console.log(`Part/chapter map: ${Object.keys(chapterByUUID).length} items assigned`);
+
+// ---------------------------------------------------------------------------
 // Build final lookup: syncNum (string) → enriched metadata
 // ---------------------------------------------------------------------------
 function buildMergeData(uuid) {
   const { customFields, characters, synopsis } = metaByUUID[uuid] ?? {};
-  if (!customFields && !characters && !synopsis) return null;
+  const part    = partByUUID[uuid]    ?? null;
+  const chapter = chapterByUUID[uuid] ?? null;
+
+  if (!customFields && !characters && !synopsis && part === null && chapter === null) return null;
 
   const out = {};
 
-  if (synopsis) out.synopsis = synopsis;
+  if (part !== null)      out.part    = part;
+  if (chapter !== null)   out.chapter = chapter;
+  if (synopsis)           out.synopsis = synopsis;
   if (characters?.length) out.characters = characters;
 
   const stcBeat = customFields?.["savethecat!"];
