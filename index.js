@@ -59,7 +59,8 @@ function createMcpServer() {
     async ({ project_id, character, beat, tag, part, chapter, pov }) => {
       let query = `
         SELECT DISTINCT s.scene_id, s.project_id, s.title, s.part, s.chapter, s.pov,
-               s.logline, s.scene_change, s.save_the_cat_beat, s.timeline_position, s.story_time,
+               s.logline, s.scene_change, s.causality, s.stakes, s.scene_functions,
+               s.save_the_cat_beat, s.timeline_position, s.story_time,
                s.word_count, s.metadata_stale
         FROM scenes s
       `;
@@ -181,7 +182,8 @@ function createMcpServer() {
     async ({ character_id, project_id }) => {
       let query = `
         SELECT s.scene_id, s.project_id, s.part, s.chapter, s.title, s.logline,
-               s.scene_change, s.save_the_cat_beat, s.timeline_position, s.story_time, s.pov, s.metadata_stale
+               s.scene_change, s.causality, s.stakes, s.scene_functions,
+               s.save_the_cat_beat, s.timeline_position, s.story_time, s.pov, s.metadata_stale
         FROM scenes s
         JOIN scene_characters sc ON sc.scene_id = s.scene_id
         WHERE sc.character_id = ?
