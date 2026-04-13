@@ -116,14 +116,16 @@ for (const item of dom.getElementsByTagName("BinderItem")) {
     if (fieldId !== null) customFields[fieldId] = value;
   }
 
-  // Keywords → character names
+  // Keywords → character names vs version tags
   const characters = [];
-  // Keywords are directly on this BinderItem, not child items
+  const versions   = [];
   const kwEl = children(item, "Keywords")[0];
   if (kwEl) {
     for (const kwId of children(kwEl, "KeywordID")) {
       const name = keywordMap[text(kwId)];
-      if (name) characters.push(name);
+      if (!name) continue;
+      if (/^v\d[\d.a-z]*$/i.test(name)) versions.push(name);
+      else characters.push(name);
     }
   }
 
@@ -135,7 +137,7 @@ for (const item of dom.getElementsByTagName("BinderItem")) {
     if (t) synopsis = t;
   }
 
-  metaByUUID[uuid] = { customFields, characters, synopsis };
+  metaByUUID[uuid] = { customFields, characters, versions, synopsis };
 }
 
 console.log(`Binder items collected: ${Object.keys(metaByUUID).length}`);
@@ -193,11 +195,11 @@ console.log(`Part/chapter map: ${Object.keys(chapterByUUID).length} items assign
 // Build final lookup: syncNum (string) → enriched metadata
 // ---------------------------------------------------------------------------
 function buildMergeData(uuid) {
-  const { customFields, characters, synopsis } = metaByUUID[uuid] ?? {};
+  const { customFields, characters, versions, synopsis } = metaByUUID[uuid] ?? {};
   const part    = partByUUID[uuid]    ?? null;
   const chapter = chapterByUUID[uuid] ?? null;
 
-  if (!customFields && !characters && !synopsis && part === null && chapter === null) return null;
+  if (!customFields && !characters && !versions && !synopsis && part === null && chapter === null) return null;
 
   const out = {};
 
@@ -205,6 +207,7 @@ function buildMergeData(uuid) {
   if (chapter !== null)   out.chapter = chapter;
   if (synopsis)           out.synopsis = synopsis;
   if (characters?.length) out.characters = characters;
+  if (versions?.length)   out.versions   = versions;
 
   const stcBeat = customFields?.["savethecat!"];
   if (stcBeat && typeof stcBeat === "string" && stcBeat.trim()) {

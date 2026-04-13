@@ -216,10 +216,26 @@ export function indexSceneFile(db, syncDir, file, meta, prose) {
   db.prepare(`DELETE FROM scene_tags WHERE scene_id = ?`).run(meta.scene_id);
 
   for (const c of (meta.characters ?? [])) {
+    // Version continuity markers (e.g. v7.3, v3.3b) are tracked as tags, not characters
+    if (/^v\d[\d.a-z]*$/i.test(c)) {
+      db.prepare(`INSERT OR IGNORE INTO scene_tags (scene_id, tag) VALUES (?, ?)`).run(meta.scene_id, c);
+      continue;
+    }
     let cid = c;
     // If the value looks like a name rather than an ID, try to resolve it
     if (!/^char-/.test(c)) {
-      const row = db.prepare(`SELECT character_id FROM characters WHERE name = ?`).get(c);
+      // 1. Exact name match (case-insensitive)
+      let row = db.prepare(`SELECT character_id FROM characters WHERE lower(name) = lower(?)`).get(c);
+      // 2. Word-overlap: all words in the keyword appear in the stored name
+      //    Handles "Victor Sidorin" → "Victor Alexeyvich Sidorin"
+      if (!row) {
+        const words = c.toLowerCase().split(/\s+/).filter(Boolean);
+        const all = db.prepare(`SELECT character_id, name FROM characters`).all();
+        const match = all.find(r =>
+          words.every(w => r.name.toLowerCase().includes(w))
+        );
+        if (match) row = match;
+      }
       if (row) cid = row.character_id;
     }
     db.prepare(`INSERT OR IGNORE INTO scene_characters (scene_id, character_id) VALUES (?, ?)`).run(
@@ -234,6 +250,11 @@ export function indexSceneFile(db, syncDir, file, meta, prose) {
   for (const t of (meta.tags ?? [])) {
     db.prepare(`INSERT OR IGNORE INTO scene_tags (scene_id, tag) VALUES (?, ?)`).run(
       meta.scene_id, t
+    );
+  }
+  for (const v of (meta.versions ?? [])) {
+    db.prepare(`INSERT OR IGNORE INTO scene_tags (scene_id, tag) VALUES (?, ?)`).run(
+      meta.scene_id, v
     );
   }
 

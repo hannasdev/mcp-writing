@@ -34,7 +34,7 @@ function createMcpServer() {
   const s = new McpServer({ name: "mcp-writing", version: "0.1.0" });
 
   // ---- sync ----------------------------------------------------------------
-  s.tool("sync", "Re-scan the sync folder and update the index from changed files.", {}, async () => {
+  s.tool("sync", "Re-scan the sync folder and update the scene/character/place index from disk. Call this after making edits in Scrivener or updating sidecar files outside the MCP.", {}, async () => {
     const result = syncAll(db, SYNC_DIR, { writable: SYNC_DIR_WRITABLE });
     const parts = [`Sync complete. ${result.indexed} scenes indexed. ${result.staleMarked} scenes marked stale.`];
     if (result.sidecarsMigrated) parts.push(`${result.sidecarsMigrated} sidecar(s) auto-generated from frontmatter.`);
@@ -46,15 +46,15 @@ function createMcpServer() {
   // ---- find_scenes ---------------------------------------------------------
   s.tool(
     "find_scenes",
-    "Find scenes by filtering on character, Save the Cat beat, tags, part, chapter, or POV. Returns metadata only — no prose. Warns if any matching scenes have stale metadata.",
+    "Find scenes by filtering on character, Save the Cat beat, tags, part, chapter, or POV. Returns ordered scene metadata only — no prose. All filters are optional and combinable. Warns if any matching scenes have stale metadata.",
     {
-      project_id: z.string().optional().describe("Filter to a specific project."),
-      character:  z.string().optional().describe("Character ID who appears in the scene."),
-      beat:       z.string().optional().describe("Save the Cat beat name."),
-      tag:        z.string().optional().describe("Tag to filter by."),
-      part:       z.number().int().optional().describe("Part number."),
-      chapter:    z.number().int().optional().describe("Chapter number."),
-      pov:        z.string().optional().describe("POV character ID."),
+      project_id: z.string().optional().describe("Project ID (e.g. 'the-lamb'). Use to scope results to one project."),
+      character:  z.string().optional().describe("A character_id (e.g. 'char-mira-nystrom'). Returns only scenes that character appears in. Use list_characters first to find valid IDs."),
+      beat:       z.string().optional().describe("Save the Cat beat name (e.g. 'Opening Image'). Exact match."),
+      tag:        z.string().optional().describe("Scene tag to filter by. Exact match."),
+      part:       z.number().int().optional().describe("Part number (integer, e.g. 1). Chapters are numbered globally across the whole project."),
+      chapter:    z.number().int().optional().describe("Chapter number (integer, e.g. 3). Chapters are numbered globally across the whole project — do not reset per part."),
+      pov:        z.string().optional().describe("POV character_id. Use list_characters first to find valid IDs."),
     },
     async ({ project_id, character, beat, tag, part, chapter, pov }) => {
       let query = `
@@ -107,9 +107,9 @@ function createMcpServer() {
   // ---- get_scene_prose -----------------------------------------------------
   s.tool(
     "get_scene_prose",
-    "Load the full prose text for a specific scene. Use targeted — prefer find_scenes for overview queries.",
+    "Load the full prose text of a single scene. Use this for close reading, continuity checks, or when you need the actual writing. For overview or filtering, use find_scenes instead — it is much cheaper.",
     {
-      scene_id: z.string().describe("The scene_id to retrieve prose for."),
+      scene_id: z.string().describe("The scene_id to retrieve (e.g. 'sc-001-prologue'). Get this from find_scenes or get_arc."),
     },
     async ({ scene_id }) => {
       const scene = db.prepare(`SELECT file_path, metadata_stale FROM scenes WHERE scene_id = ?`).get(scene_id);
@@ -132,11 +132,11 @@ function createMcpServer() {
   // ---- get_chapter_prose ---------------------------------------------------
   s.tool(
     "get_chapter_prose",
-    `Load prose for all scenes in a chapter, in order. Capped at ${MAX_CHAPTER_SCENES} scenes to avoid context overflow.`,
+    `Load the full prose for every scene in a chapter, concatenated in order. Expensive — only use when you need to read an entire chapter. Capped at ${MAX_CHAPTER_SCENES} scenes. Use find_scenes first to confirm the chapter exists.`,
     {
-      project_id: z.string().describe("Project ID."),
-      part:       z.number().int().describe("Part number."),
-      chapter:    z.number().int().describe("Chapter number."),
+      project_id: z.string().describe("Project ID (e.g. 'the-lamb')."),
+      part:       z.number().int().describe("Part number (integer)."),
+      chapter:    z.number().int().describe("Chapter number (integer, globally numbered across the whole project)."),
     },
     async ({ project_id, part, chapter }) => {
       const allScenes = db.prepare(`
@@ -173,10 +173,10 @@ function createMcpServer() {
   // ---- get_arc -------------------------------------------------------------
   s.tool(
     "get_arc",
-    "Get ordered scene metadata for all scenes involving a character. Returns metadata only — no prose.",
+    "Get every scene a character appears in, ordered by part/chapter/position. Returns scene metadata only — no prose. Use this to trace a character's arc through the story. Call list_characters first to get the character_id.",
     {
-      character_id: z.string().describe("The character ID to trace."),
-      project_id:   z.string().optional().describe("Limit to a specific project."),
+      character_id: z.string().describe("The character_id to trace (e.g. 'char-mira-nystrom'). Use list_characters to find valid IDs."),
+      project_id:   z.string().optional().describe("Limit to a specific project (e.g. 'the-lamb')."),
     },
     async ({ character_id, project_id }) => {
       let query = `
@@ -207,10 +207,10 @@ function createMcpServer() {
   // ---- list_characters -----------------------------------------------------
   s.tool(
     "list_characters",
-    "List all characters, optionally filtered to a project or universe.",
+    "List all indexed characters with their character_id, name, role, and arc_summary. Call this first whenever you need to filter scenes by character or look up a character sheet — it gives you the character_id values required by other tools.",
     {
-      project_id:  z.string().optional(),
-      universe_id: z.string().optional(),
+      project_id:  z.string().optional().describe("Limit to a specific project (e.g. 'the-lamb')."),
+      universe_id: z.string().optional().describe("Limit to a specific universe (if using cross-project world-building)."),
     },
     async ({ project_id, universe_id }) => {
       let query = `SELECT character_id, name, role, arc_summary, project_id, universe_id FROM characters`;
@@ -232,9 +232,9 @@ function createMcpServer() {
   // ---- get_character_sheet -------------------------------------------------
   s.tool(
     "get_character_sheet",
-    "Get full character metadata including traits and extended notes from the character file.",
+    "Get full character details: role, arc_summary, traits, and the full content of the character notes file. Use list_characters first to get the character_id.",
     {
-      character_id: z.string().describe("The character ID to look up."),
+      character_id: z.string().describe("The character_id to look up (e.g. 'char-sebastian'). Use list_characters to find valid IDs."),
     },
     async ({ character_id }) => {
       const character = db.prepare(`SELECT * FROM characters WHERE character_id = ?`).get(character_id);
@@ -262,10 +262,10 @@ function createMcpServer() {
   // ---- list_places ---------------------------------------------------------
   s.tool(
     "list_places",
-    "List all places, optionally filtered to a project or universe.",
+    "List all indexed places with their place_id and name. Use this to find place_id values for scene filtering or to get an overview of the story's locations.",
     {
-      project_id:  z.string().optional(),
-      universe_id: z.string().optional(),
+      project_id:  z.string().optional().describe("Limit to a specific project (e.g. 'the-lamb')."),
+      universe_id: z.string().optional().describe("Limit to a specific universe."),
     },
     async ({ project_id, universe_id }) => {
       let query = `SELECT place_id, name, project_id, universe_id FROM places`;
@@ -287,9 +287,9 @@ function createMcpServer() {
   // ---- search_metadata -----------------------------------------------------
   s.tool(
     "search_metadata",
-    "Full-text search across scene titles and loglines.",
+    "Full-text search across scene titles and loglines (synopsis/logline text fields). Use this when you don't know the exact scene_id or chapter but want to find scenes by topic, theme, or keywords in the description. Not a prose search — use get_scene_prose to read actual text.",
     {
-      query: z.string().describe("Search query."),
+      query: z.string().describe("Search terms (e.g. 'hospital' or 'Sebastian feeding'). FTS5 syntax supported."),
     },
     async ({ query }) => {
       const rows = db.prepare(`
@@ -364,10 +364,10 @@ function createMcpServer() {
   // ---- update_scene_metadata -----------------------------------------------
   s.tool(
     "update_scene_metadata",
-    "Update metadata fields for a scene. Writes to the sidecar file — never touches prose. Only available when the sync dir is writable.",
+    "Update one or more metadata fields for a scene. Writes to the .meta.yaml sidecar — never modifies prose. Changes are immediately reflected in the index. Only available when the sync dir is writable.",
     {
-      scene_id:   z.string().describe("The scene to update."),
-      project_id: z.string().describe("Project the scene belongs to."),
+      scene_id:   z.string().describe("The scene_id to update (e.g. 'sc-011-sebastian')."),
+      project_id: z.string().describe("Project the scene belongs to (e.g. 'the-lamb')."),
       fields: z.object({
         title:             z.string().optional(),
         logline:           z.string().optional(),
@@ -406,9 +406,9 @@ function createMcpServer() {
   // ---- update_character_sheet ----------------------------------------------
   s.tool(
     "update_character_sheet",
-    "Update metadata fields for a character. Writes to the sidecar file — never touches prose notes. Only available when the sync dir is writable.",
+    "Update structured metadata fields for a character (role, arc_summary, traits, etc). Writes to the .meta.yaml sidecar — never modifies the prose notes file. Changes are immediately reflected in the index. Only available when the sync dir is writable.",
     {
-      character_id: z.string().describe("The character to update."),
+      character_id: z.string().describe("The character_id to update (e.g. 'char-mira-nystrom'). Use list_characters to find valid IDs."),
       fields: z.object({
         name:             z.string().optional(),
         role:             z.string().optional(),
@@ -452,11 +452,11 @@ function createMcpServer() {
   // ---- flag_scene ----------------------------------------------------------
   s.tool(
     "flag_scene",
-    "Attach a continuity or review flag to a scene. Stored in the sidecar. Flags accumulate — each call adds a new entry.",
+    "Attach a continuity or review note to a scene. Flags are appended to the sidecar file and accumulate over time — they are never overwritten. Use this to record continuity problems, revision notes, or questions you want to revisit.",
     {
-      scene_id:   z.string().describe("Scene to flag."),
-      project_id: z.string().describe("Project the scene belongs to."),
-      note:       z.string().describe("The flag note, e.g. 'Elena cannot know about the letter yet — contradicts sc-004'."),
+      scene_id:   z.string().describe("The scene_id to flag (e.g. 'sc-012-open-to-anyone')."),
+      project_id: z.string().describe("Project the scene belongs to (e.g. 'the-lamb')."),
+      note:       z.string().describe("The flag note (e.g. 'Victor knows Mira\'s name here, but they haven\'t been introduced yet — contradicts sc-006')."),
     },
     async ({ scene_id, project_id, note }) => {
       if (!SYNC_DIR_WRITABLE) {
@@ -478,11 +478,11 @@ function createMcpServer() {
   // ---- get_relationship_arc ------------------------------------------------
   s.tool(
     "get_relationship_arc",
-    "Trace how the relationship between two characters evolves across scenes, using the character_relationships table.",
+    "Show how the relationship between two characters evolves across scenes, in order. Uses explicitly recorded relationship entries — returns nothing if no entries exist yet. Use list_characters to get character_id values.",
     {
-      from_character: z.string().describe("Character ID to trace from."),
-      to_character:   z.string().describe("Character ID to trace to."),
-      project_id:     z.string().optional().describe("Limit to a specific project."),
+      from_character: z.string().describe("character_id of the first character (e.g. 'char-sebastian')."),
+      to_character:   z.string().describe("character_id of the second character (e.g. 'char-mira-nystrom')."),
+      project_id:     z.string().optional().describe("Limit to a specific project (e.g. 'the-lamb')."),
     },
     async ({ from_character, to_character, project_id }) => {
       let query = `
