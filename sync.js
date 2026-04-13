@@ -203,7 +203,7 @@ export function indexSceneFile(db, syncDir, file, meta, prose) {
   `).run(
     meta.scene_id, project_id,
     meta.title ?? null, meta.part ?? null, meta.chapter ?? null,
-    meta.pov ?? null, meta.logline ?? null,
+    meta.pov ?? null, meta.logline ?? meta.synopsis ?? null,
     meta.save_the_cat_beat ?? meta.save_the_cat ?? null,
     meta.timeline_position ?? null, meta.story_time ?? null,
     meta.word_count ?? prose.split(/\s+/).filter(Boolean).length,
@@ -259,7 +259,7 @@ export function indexSceneFile(db, syncDir, file, meta, prose) {
   }
 
   db.prepare(`INSERT OR REPLACE INTO scenes_fts (scene_id, project_id, logline, title) VALUES (?, ?, ?, ?)`).run(
-    meta.scene_id, project_id, meta.logline ?? "", meta.title ?? ""
+    meta.scene_id, project_id, meta.logline ?? meta.synopsis ?? "", meta.title ?? ""
   );
 
   return { isStale };
