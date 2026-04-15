@@ -6,6 +6,8 @@
   "main": "index.js",
   "scripts": {
     "start": "node --experimental-sqlite index.js",
+    "lint:metadata": "node scripts/lint-metadata.mjs",
+    "lint:metadata:test": "node scripts/lint-metadata.mjs --sync-dir ./test-sync",
     "test:unit": "node --experimental-sqlite --test test/unit.test.mjs",
     "test:integration": "node --experimental-sqlite --test test/integration.test.mjs",
     "test": "node --experimental-sqlite --test test/unit.test.mjs test/integration.test.mjs"
