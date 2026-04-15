@@ -74,6 +74,7 @@ Universe-level characters and places are shared across all books in that univers
 | `list_threads` | All subplot threads for a project (structured JSON with `results` + `total_count`; supports `page`/`page_size`) |
 | `get_thread_arc` | Scenes belonging to a thread, with per-thread beat (structured JSON with `thread`, `results`, `total_count`; supports `page`/`page_size`) |
 | `upsert_thread_link` | Create/update a thread and link it to a scene (idempotent link upsert; writable sync dir required) |
+| `enrich_scene` | Re-derive lightweight metadata from current prose and clear `metadata_stale` for a scene |
 
 ## Running with Docker
 
