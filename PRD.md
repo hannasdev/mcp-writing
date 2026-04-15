@@ -27,7 +27,7 @@ Tier 1 is intended to work immediately for existing manuscripts. Tier 2 is progr
 
 The service should automate what is deterministic and mechanical, and avoid automating what is editorial and interpretive.
 
-- **Automate deterministic inference:** file/path-derived structure, word counts, stable IDs when missing, checksum/staleness detection, sync reconciliation warnings.
+- **Automate deterministic inference:** file/path-derived project scope, word counts, checksum/staleness detection, sync reconciliation warnings.
 - **Do not force editorial decisions:** scene meaning, thematic role, arc membership, causality, stakes, beat interpretation, and similar creative judgments remain user-owned.
 
 When uncertain, the service should prefer **advisory suggestions** over automatic write-back.
@@ -57,13 +57,13 @@ scenes/
 
 Scrivener's External Folder Sync only touches `.md`/`.txt` files — it will never read or write a `.meta.yaml`. This gives clean, enforced ownership: Scrivener manages prose; the service manages metadata. Metadata changes require explicitly running a tool or editing the sidecar, so they are always intentional, never coincidental.
 
-`part` and `chapter` are derived from the file path at sidecar creation time and stored explicitly. If a scene file is moved and the sidecar no longer matches the path, sync detects and warns. No silent drift.
+`part` and `chapter` are currently read from metadata values (frontmatter/sidecar). Path-derived normalization and mismatch warnings are planned work (see Phase 2).
 
 ### Migration path (Phase 1 → Phase 2)
 
 Phase 1 continues using frontmatter as a bootstrap source when present. On the first Phase 2 sync, if no sidecar exists but the `.md` file has frontmatter, the service auto-generates the sidecar from that data. **The frontmatter header is not stripped from the `.md` file.** Frontmatter is treated as read-only legacy; the sidecar always wins when both exist.
 
-`scene_id` is generated deterministically when missing (derived from project + normalized relative path). This removes the requirement that existing manuscripts provide IDs up front.
+`scene_id` must currently be present in frontmatter or sidecar metadata for a scene to be indexed. Files without `scene_id` are skipped and reported in sync summaries.
 
 ### Orphaned sidecars
 
@@ -162,7 +162,7 @@ Description, atmosphere, history...
 
 ## Index Layer
 
-On ingest (first run and on sync), the service builds a SQLite index from sidecars/frontmatter plus structural inference from file paths. All queries hit the index. Prose is never loaded unless a tool explicitly requests a specific scene.
+On ingest (first run and on sync), the service builds a SQLite index from sidecars/frontmatter plus path-derived project/universe scope. All queries hit the index. Prose is never loaded unless a tool explicitly requests a specific scene.
 
 **Schema:**
 
@@ -270,7 +270,7 @@ Every scene contributes Tier 1 structural data from path/content. If frontmatter
 
 ### Missing metadata
 
-A scene without frontmatter/sidecar metadata is not an error — it is simply not yet described at Tier 2. The service still indexes structural data (file path, word count, position), and the author can add metadata in the source tool or sidecar as desired.
+A scene without frontmatter/sidecar metadata is not a hard failure for sync, but it is currently skipped from scene indexing because `scene_id` is required. The sync summary reports skipped files so the author can add metadata in the source tool or sidecar.
 
 **Degradation:** Full-text search (`search_metadata`) falls back to scanning prose when no structured metadata is available for a scene, but this is slower and less precise. It should be treated as a prompt to fill in metadata, not a permanent mode.
 
@@ -395,11 +395,11 @@ If `WRITING_SYNC_DIR` is a read-only Docker mount or network share, Phase 2 side
 **#4 — `get_chapter_prose` unbounded load (important)**
 A large chapter (e.g. 30 scenes × 3000 words) produces ~90k words in a single tool response — guaranteed context overflow for any model. Add a configurable `MAX_CHAPTER_SCENES` limit (default: 10) with an explicit warning in the response when the limit is hit.
 
-**#5 — `scene_id` churn on file move/rename (minor)**
-If `scene_id` is path-derived, moving or renaming files can change IDs and break historical links (threads, relationships, flags). Mitigation: persist generated IDs in sidecars once created and treat path changes as updates to `file_path`, not identity changes.
+**#5 — Duplicate `scene_id` from copy/paste templates (minor)**
+If two scene files in the same project share a `scene_id`, sync warns and later inserts can overwrite earlier row state. Mitigation: keep duplicate detection warnings and add a stricter lint mode that fails on duplicates.
 
-**#6 — Low-signal scenes clutter retrieval (minor)**
-Scrivener often contains blank or placeholder scenes. With structural indexing, these may appear in broad retrieval without useful metadata. Mitigation: surface sync summaries with counts of low-signal scenes (blank prose, missing Tier 2 metadata) and provide filters/exclusions in retrieval tools.
+**#6 — Blank scenes or notes skipped due to missing `scene_id` (minor)**
+Scrivener often contains empty placeholders or notes that do not carry scene metadata. These are skipped in scene indexing. Mitigation: keep sync summaries explicit and provide lint warnings so users can decide which files should become indexed scenes.
 
 ---
 
@@ -420,14 +420,14 @@ Scrivener often contains blank or placeholder scenes. With structural indexing, 
 
 **Goal:** The analysis doesn't go stale. When you edit scenes in Scrivener, the AI knows which conclusions might no longer hold and tells you before reasoning against outdated information. You can update metadata and character notes directly from a conversation rather than switching tools.
 
-- [ ] Fix FTS ambiguity bug: include `project_id` in `scenes_fts` table and queries (Edge Case #2)
-- [ ] Migrate metadata storage to sidecar files (`.meta.yaml`); auto-generate sidecars from frontmatter on first sync; do not strip frontmatter from `.md` files (see Edge Case #1)
-- [ ] Detect orphaned sidecars (`.meta.yaml` with no corresponding `.md`) and warn on sync
+- [x] Fix FTS ambiguity bug: include `project_id` in `scenes_fts` table and queries (Edge Case #2)
+- [x] Migrate metadata storage to sidecar files (`.meta.yaml`); auto-generate sidecars from frontmatter on first sync; do not strip frontmatter from `.md` files (see Edge Case #1)
+- [x] Detect orphaned sidecars (`.meta.yaml` with no corresponding `.md`) and warn on sync
 - [ ] Derive and store `part`/`chapter` from file path at sidecar creation time; detect path/metadata mismatch and warn
-- [ ] Implement `update_scene_metadata`, `update_character_sheet`, `flag_scene` (write to sidecar only)
-- [ ] Implement stale-scene detection and staleness warnings in retrieval tools
-- [ ] Implement `enrich_scene` for re-deriving metadata from updated prose
-- [ ] Implement `get_relationship_arc` (temporal character relationship graph)
+- [x] Implement `update_scene_metadata`, `update_character_sheet`, `flag_scene` (write to sidecar only)
+- [x] Implement stale-scene detection and staleness warnings in retrieval tools
+- [x] Implement `enrich_scene` for re-deriving metadata from updated prose
+- [x] Implement `get_relationship_arc` (temporal character relationship graph)
 
 ### Phase 3 — The AI can help you edit prose
 
