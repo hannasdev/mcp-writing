@@ -4,6 +4,7 @@ import os from "node:os";
 import fs from "node:fs";
 import path from "node:path";
 import { checksumProse, walkFiles, walkSidecars, sidecarPath, inferProjectAndUniverse, isWorldFile, readMeta, isSyncDirWritable, syncAll } from "../sync.js";
+import { lintMetadataInSyncDir, validateMetadataObject } from "../metadata-lint.js";
 import { openDb } from "../db.js";
 
 // ---------------------------------------------------------------------------
@@ -410,5 +411,73 @@ describe("syncAll", () => {
 
     db.close();
     fs.rmSync(dir, { recursive: true });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// metadata-lint
+// ---------------------------------------------------------------------------
+describe("metadata lint", () => {
+  test("validates scene metadata object schema", () => {
+    const result = validateMetadataObject({
+      scene_id: "sc-001",
+      title: "Arrival",
+      part: 1,
+      chapter: 1,
+      characters: ["char-elena"],
+      tags: ["setup"],
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.kind, "scene");
+    assert.equal(result.issues.length, 0);
+  });
+
+  test("flags schema errors and legacy keys", () => {
+    const result = validateMetadataObject({
+      scene_id: "sc-001",
+      part: "one",
+      synopsis: "Legacy field",
+    });
+
+    assert.equal(result.ok, false);
+    assert.ok(result.issues.some(i => i.code === "SCHEMA_VALIDATION_ERROR"));
+    assert.ok(result.issues.some(i => i.code === "LEGACY_SCENE_KEY"));
+  });
+
+  test("detects sidecar/frontmatter scene_id mismatch", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "lint-meta-"));
+    const scenePath = path.join(dir, "projects", "novel", "part-1", "chapter-1", "scene.md");
+    fs.mkdirSync(path.dirname(scenePath), { recursive: true });
+
+    fs.writeFileSync(
+      scenePath,
+      "---\nscene_id: sc-frontmatter\ntitle: Scene\npart: 1\nchapter: 1\n---\nProse"
+    );
+    fs.writeFileSync(
+      scenePath.replace(/\.md$/, ".meta.yaml"),
+      "scene_id: sc-sidecar\ntitle: Scene\npart: 1\nchapter: 1\n"
+    );
+
+    const result = lintMetadataInSyncDir(dir);
+    assert.equal(result.ok, true);
+    assert.ok(result.warnings.some(w => w.code === "SCENE_ID_MISMATCH"));
+
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  test("fails lint when sidecar misses required scene_id", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "lint-meta-"));
+    const sidecarPath = path.join(dir, "projects", "novel", "part-1", "chapter-1", "scene.meta.yaml");
+    const prosePath = sidecarPath.replace(/\.meta\.yaml$/, ".md");
+    fs.mkdirSync(path.dirname(sidecarPath), { recursive: true });
+    fs.writeFileSync(prosePath, "Plain prose");
+    fs.writeFileSync(sidecarPath, "title: Missing id\npart: 1\nchapter: 1\n");
+
+    const result = lintMetadataInSyncDir(dir);
+    assert.equal(result.ok, false);
+    assert.ok(result.errors.some(e => e.code === "MISSING_SCENE_ID"));
+
+    fs.rmSync(dir, { recursive: true, force: true });
   });
 });
