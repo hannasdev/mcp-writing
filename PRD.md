@@ -31,7 +31,7 @@ This causes two issues:
 
 From Phase 2 onward, metadata lives in a `.meta.yaml` sidecar file alongside each scene:
 
-```
+```sh
 scenes/
   sc-001.md           ← Scrivener owns (prose only, no header)
   sc-001.meta.yaml    ← MCP service owns (metadata only)
@@ -409,9 +409,6 @@ Scrivener creates empty documents frequently. Files with no `scene_id` are skipp
 - [x] Implement `find_scenes`, `get_arc`, `get_character_sheet`, `list_characters`
 - [x] Implement `get_scene_prose`, `search_metadata`
 - [x] Implement `list_threads`, `get_thread_arc`
-- [ ] Add to OpenClaw `docker-compose.yml` with healthcheck and named volume
-- [ ] Register in OpenClaw `mcp.servers` config
-- [ ] Add `writing__*` to Writing World agent `tools.allow`
 
 ### Phase 2 — Answers stay accurate as the manuscript evolves
 
@@ -443,3 +440,11 @@ Scrivener creates empty documents frequently. Files with no `scene_id` are skipp
 
 - [ ] Embedding-based search — if structured metadata queries can't find what you're looking for (e.g. "scenes with a confrontation near water")
 - [ ] Reference document querying — if world-building notes and research need to be searchable alongside scenes
+
+### Phase 5 — OpenClaw Integration (Optional Deployment)
+
+**Goal:** Integrate with OpenClaw runtime and agent policy once core MCP functionality is tested and usable standalone.
+
+- [ ] Add to OpenClaw `docker-compose.yml` with healthcheck and named volume
+- [ ] Register in OpenClaw `mcp.servers` config
+- [ ] Add `writing__*` to Writing World agent `tools.allow`
