@@ -4,15 +4,33 @@
 
 A purpose-built MCP service for AI-assisted reasoning and editing on long-form fiction projects. Optimized for the context window problem: a two-phase retrieval pattern where metadata is scanned first (cheap, fast, fits in context) and prose is loaded only for the specific scenes that are relevant.
 
-The writing environment stays Scrivener. This service is for **reasoning and editing**, not writing or compiling. The AI works on the content; Scrivener stays the authoring tool.
+The writing environment is a plain-text sync folder. Scrivener is the primary integration path (via External Folder Sync), but not a hard dependency. This service is for **reasoning and editing**, not writing or compiling. The AI works on content in files, regardless of editor.
 
 ---
 
-## Source of Truth: Scrivener External Folder Sync
+## Source of Truth: Plain-Text Sync Folder (Scrivener-Compatible)
 
 Scrivener's built-in External Folder Sync (File → Sync → With External Folder) mirrors each document as a plain `.txt` or `.md` file in a controlled directory. One file per scene/chapter. Scrivener manages the prose; the MCP service reads from and writes to the sync folder.
 
 This avoids coupling to Scrivener's internal `.scriv` format (XML/RTF bundle, version-sensitive). The sync folder is the stable interface.
+
+### Metadata tiers
+
+To balance adoption and flexibility, metadata is split into two tiers:
+
+1. **Tier 1 (structural, low-friction):** file path hierarchy, scene ordering, and word count inferred directly from files. Optional Scrivener standard fields can be mapped when present: Synopsis → `logline`, Labels → `pov`, Keywords → `tags`.
+2. **Tier 2 (editorial, explicit convention):** custom analysis metadata (`characters`, `save_the_cat_beat`, `scene_change`, `causality`, `stakes`, `scene_functions`, `threads`, relationship state, continuity notes) stored in sidecars and maintained deliberately.
+
+Tier 1 is intended to work immediately for existing manuscripts. Tier 2 is progressively authored and refined over time.
+
+### Guiding principle: automate structure, preserve authorship
+
+The service should automate what is deterministic and mechanical, and avoid automating what is editorial and interpretive.
+
+- **Automate deterministic inference:** file/path-derived structure, word counts, stable IDs when missing, checksum/staleness detection, sync reconciliation warnings.
+- **Do not force editorial decisions:** scene meaning, thematic role, arc membership, causality, stakes, beat interpretation, and similar creative judgments remain user-owned.
+
+When uncertain, the service should prefer **advisory suggestions** over automatic write-back.
 
 ---
 
@@ -43,7 +61,9 @@ Scrivener's External Folder Sync only touches `.md`/`.txt` files — it will nev
 
 ### Migration path (Phase 1 → Phase 2)
 
-Phase 1 continues using frontmatter as the bootstrap format. On the first Phase 2 sync, if no sidecar exists but the `.md` file has frontmatter, the service auto-generates the sidecar from the frontmatter. **The frontmatter header is not stripped from the `.md` file.** Stripping it would silently remove the `scene_id` from files that Scrivener may later move or duplicate — the scene would then have no identifier and disappear from the index on next sync. Frontmatter is treated as read-only legacy; the sidecar always wins when both exist.
+Phase 1 continues using frontmatter as a bootstrap source when present. On the first Phase 2 sync, if no sidecar exists but the `.md` file has frontmatter, the service auto-generates the sidecar from that data. **The frontmatter header is not stripped from the `.md` file.** Frontmatter is treated as read-only legacy; the sidecar always wins when both exist.
+
+`scene_id` is generated deterministically when missing (derived from project + normalized relative path). This removes the requirement that existing manuscripts provide IDs up front.
 
 ### Orphaned sidecars
 
@@ -94,28 +114,20 @@ This gives clean isolation: standalone projects don't see each other's character
           scene-001.md
 ```
 
-### Scene file format — YAML metadata header + prose
+### Scene file format — prose-first with optional legacy frontmatter
 
 ```markdown
 ---
-scene_id: p1-ch2-sc3
 title: The Arrival
-part: 1
-chapter: 2
-characters: [elena, marcus]
-places: [harbor-district]
 logline: Elena arrives at the harbor and meets Marcus for the first time.
-save_the_cat_beat: Setup
 pov: elena
-timeline_position: 4
 tags: [first-meeting, tension, harbor]
-word_count: 1240
 ---
 
 Prose starts here...
 ```
 
-Scrivener's sync does not touch the metadata header — it only updates prose below the `---` delimiter. Metadata is maintained in the header block; the two don't conflict.
+Frontmatter is optional and treated as bootstrap/legacy input. In Phase 2+, canonical editorial metadata lives in `.meta.yaml` sidecars.
 
 ### Character file format
 
@@ -150,7 +162,7 @@ Description, atmosphere, history...
 
 ## Index Layer
 
-On ingest (first run and on sync), the service builds a SQLite index from the metadata headers across all files. All queries hit the index. Prose is never loaded unless a tool explicitly requests a specific scene.
+On ingest (first run and on sync), the service builds a SQLite index from sidecars/frontmatter plus structural inference from file paths. All queries hit the index. Prose is never loaded unless a tool explicitly requests a specific scene.
 
 **Schema:**
 
@@ -189,7 +201,7 @@ character_relationships(
 )
 ```
 
-`prose_checksum` is a hash of the prose content below the metadata header. `metadata_stale` is set when sync detects the checksum has changed since last ingest.
+`prose_checksum` is a hash of prose content for a scene file. `metadata_stale` is set when sync detects the checksum has changed since last ingest.
 
 Characters and places with a `universe_id` are shared across all projects in that universe. Characters with only a `project_id` are local to that book. Queries automatically include both universe-level and project-level entities when a project belongs to a universe.
 
@@ -209,17 +221,19 @@ Tools that reason against metadata (`find_scenes`, `get_arc`, `get_relationship_
 
 ### Re-enrichment on demand
 
-`enrich_scene(scene_id)` re-runs the enrichment pass for a specific scene, regenerating logline, tags, and beat suggestion from the current prose and clearing the stale flag. This is also the mechanism used after an AI-assisted editing session — the agent calls it for each scene that was modified.
+`enrich_scene(scene_id)` is an advisory tool — it re-runs lightweight prose analysis (logline extraction, character name matching) and clears the stale flag. Output is a best-effort draft; the user reviews and applies what is useful. It does not run automatically and does not overwrite manually-authored metadata without the user explicitly calling it.
+
+**Design principle:** Tier 1 structural metadata is inferred from files and optional standard fields from the source tool (for Scrivener users: Synopsis/Labels/Keywords). Tier 2 editorial metadata is an explicit MCP convention in sidecars. The service never auto-generates custom metadata for scenes that do not already have it.
 
 ### After an editing session
 
 At the end of any session where prose was reviewed or changed, the agent should:
 
 1. Call `sync()` to pick up any changes written back
-2. Call `enrich_scene(scene_id)` for each scene that was substantively edited
+2. For scenes that changed substantially, optionally call `enrich_scene(scene_id)` to refresh derived fields — review the output before accepting
 3. Review and update relationship state via `update_scene_metadata` if character dynamics shifted
 
-This keeps the index a reliable source of truth rather than a snapshot that drifts.
+This keeps the index accurate without automating editorial decisions.
 
 ---
 
@@ -250,23 +264,15 @@ For structural experiments (e.g. reordering acts, trying an alternate ending), t
 
 ## Ingestion Modes
 
-### Mode A: Structured (metadata headers present)
+### Structured (Tier 1 always, Tier 2 when available)
 
-Files have metadata headers. The service indexes what's there. Fast, no enrichment step needed.
+Every scene contributes Tier 1 structural data from path/content. If frontmatter or sidecar metadata is present, the service indexes those fields too.
 
-### Mode B: Enrichment pass (no or sparse metadata)
+### Missing metadata
 
-Files exist but metadata headers are missing or incomplete. On ingest, the service detects missing metadata and runs an enrichment step:
+A scene without frontmatter/sidecar metadata is not an error — it is simply not yet described at Tier 2. The service still indexes structural data (file path, word count, position), and the author can add metadata in the source tool or sidecar as desired.
 
-1. Reads the prose
-2. Generates a logline
-3. Extracts character name mentions (matched against known character files)
-4. Suggests a Save the Cat beat
-5. Writes the metadata header back to the file
-
-**Degradation:** A scene without a metadata header is not an error. It degrades to full-text search for that scene only. The system never hard-fails on missing metadata.
-
-**Incremental migration:** You can enrich scenes progressively — prioritize scenes relevant to current work, leave others as full-text fallback. The index fills in over time.
+**Degradation:** Full-text search (`search_metadata`) falls back to scanning prose when no structured metadata is available for a scene, but this is slower and less precise. It should be treated as a prompt to fill in metadata, not a permanent mode.
 
 ---
 
@@ -313,7 +319,7 @@ The AI can never write prose in a single step. All prose edits require an explic
 
 | Tool | Description |
 | --- | --- |
-| `update_scene_metadata(scene_id, fields)` | Update metadata header fields (logline, tags, beat, etc.) |
+| `update_scene_metadata(scene_id, fields)` | Update Tier 2 scene metadata in sidecar fields (logline, tags, beat, etc.) |
 | `update_character_sheet(character_id, fields)` | Update character metadata or notes |
 | `flag_scene(scene_id, note)` | Attach a continuity/review flag to a scene |
 
@@ -361,7 +367,7 @@ The AI can never write prose in a single step. All prose edits require an explic
 
 ## Open Questions
 
-**A. Enrichment model** — Which model runs the enrichment pass? Should be cheap/fast — a small model is fine for logline extraction and character tagging. Could be a separate call with a lighter model than the reasoning agent.
+**A. Enrichment model** — ~~Which model runs the enrichment pass?~~ **Resolved:** `enrich_scene` uses deterministic heuristics only (first-sentence logline, character name matching). No model call. Advisory output; user reviews before accepting. Tier 2 metadata for new scenes is authored deliberately by the user (source tool or sidecar), not generated automatically by the service.
 
 **B. Write-back safety for metadata** — ~~When the AI calls `update_scene_metadata`, it modifies the sync file. Scrivener will pick up that change on next sync. Is that acceptable, or should metadata writes go to a separate sidecar file to keep Scrivener-managed files read-only?~~ **Resolved:** sidecar files (see Design Decision: Metadata Ownership). The service writes only to `.meta.yaml` files; Scrivener-managed `.md` files are never touched by the service except during `commit_edit` prose writes.
 
@@ -389,11 +395,11 @@ If `WRITING_SYNC_DIR` is a read-only Docker mount or network share, Phase 2 side
 **#4 — `get_chapter_prose` unbounded load (important)**
 A large chapter (e.g. 30 scenes × 3000 words) produces ~90k words in a single tool response — guaranteed context overflow for any model. Add a configurable `MAX_CHAPTER_SCENES` limit (default: 10) with an explicit warning in the response when the limit is hit.
 
-**#5 — Duplicate `scene_id` from copy-paste templates (minor)**
-A user duplicates a scene file as a starting point and forgets to change the `scene_id`. On next sync, the second file silently overwrites the first in SQLite. Mitigation: detect duplicate `scene_id` values during sync and log a warning with both file paths.
+**#5 — `scene_id` churn on file move/rename (minor)**
+If `scene_id` is path-derived, moving or renaming files can change IDs and break historical links (threads, relationships, flags). Mitigation: persist generated IDs in sidecars once created and treat path changes as updates to `file_path`, not identity changes.
 
-**#6 — Blank scenes silently skipped (minor)**
-Scrivener creates empty documents frequently. Files with no `scene_id` are skipped without any feedback. Currently logged at `stderr` only. Should surface via a sync summary that counts and names skipped files.
+**#6 — Low-signal scenes clutter retrieval (minor)**
+Scrivener often contains blank or placeholder scenes. With structural indexing, these may appear in broad retrieval without useful metadata. Mitigation: surface sync summaries with counts of low-signal scenes (blank prose, missing Tier 2 metadata) and provide filters/exclusions in retrieval tools.
 
 ---
 
@@ -405,7 +411,7 @@ Scrivener creates empty documents frequently. Files with no `scene_id` are skipp
 
 - [x] Scaffold `mcp-writing/`: Dockerfile, `package.json`, `index.js`
 - [x] Implement SQLite index with full schema above
-- [x] Implement `sync()` — walk sync folder, parse metadata headers, build index, detect stale scenes
+- [x] Implement `sync()` — walk sync folder, parse metadata/frontmatter, build index, detect stale scenes
 - [x] Implement `find_scenes`, `get_arc`, `get_character_sheet`, `list_characters`
 - [x] Implement `get_scene_prose`, `search_metadata`
 - [x] Implement `list_threads`, `get_thread_arc`
@@ -419,7 +425,6 @@ Scrivener creates empty documents frequently. Files with no `scene_id` are skipp
 - [ ] Detect orphaned sidecars (`.meta.yaml` with no corresponding `.md`) and warn on sync
 - [ ] Derive and store `part`/`chapter` from file path at sidecar creation time; detect path/metadata mismatch and warn
 - [ ] Implement `update_scene_metadata`, `update_character_sheet`, `flag_scene` (write to sidecar only)
-- [ ] Implement Mode B enrichment pass for scenes missing sidecar files
 - [ ] Implement stale-scene detection and staleness warnings in retrieval tools
 - [ ] Implement `enrich_scene` for re-deriving metadata from updated prose
 - [ ] Implement `get_relationship_arc` (temporal character relationship graph)
