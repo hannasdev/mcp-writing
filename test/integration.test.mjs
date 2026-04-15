@@ -408,6 +408,36 @@ describe("upsert_thread_link tool", () => {
   });
 });
 
+describe("enrich_scene tool", () => {
+  test("returns not-found envelope for unknown scene", async () => {
+    const text = await callWriteTool("enrich_scene", { scene_id: "sc-999", project_id: "test-novel" });
+    const parsed = JSON.parse(text);
+    assert.equal(parsed.ok, false);
+    assert.equal(parsed.error.code, "NOT_FOUND");
+  });
+
+  test("clears stale warning after re-enrichment", async () => {
+    const scenePath = path.join(writeSyncDir, "projects", "test-novel", "part-1", "chapter-1", "sc-001.md");
+    const before = fs.readFileSync(scenePath, "utf8");
+    fs.writeFileSync(scenePath, `${before}\n\nFresh prose delta for enrich_scene test.\n`, "utf8");
+
+    await callWriteTool("sync");
+    const staleArcText = await callWriteTool("get_arc", { character_id: "elena" });
+    const staleArc = JSON.parse(staleArcText);
+    assert.ok(staleArc.warning);
+
+    const enrichText = await callWriteTool("enrich_scene", { scene_id: "sc-001", project_id: "test-novel" });
+    const enrich = JSON.parse(enrichText);
+    assert.equal(enrich.ok, true);
+    assert.equal(enrich.action, "enriched");
+    assert.equal(enrich.scene_id, "sc-001");
+
+    const freshArcText = await callWriteTool("get_arc", { character_id: "elena" });
+    const freshArc = JSON.parse(freshArcText);
+    assert.equal(freshArc.warning, undefined);
+  });
+});
+
 describe("api contract resilience", () => {
   test("returns envelope with results + total_count across paginated tools", async () => {
     const fsText = await callTool("find_scenes", { page_size: 1, page: 1 });
