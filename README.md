@@ -39,7 +39,7 @@ Prose starts here...
 
 ### Project structure
 
-```
+```bash
 /sync-root/
   /universes/
     /my-series/
@@ -61,18 +61,19 @@ Universe-level characters and places are shared across all books in that univers
 ## Available tools (Phase 1)
 
 | Tool | Description |
-|---|---|
+| --- | --- |
 | `sync` | Re-scan the sync folder and update the index |
-| `find_scenes` | Filter scenes by character, beat, tag, part, chapter, or POV |
+| `find_scenes` | Filter scenes by character, beat, tag, part, chapter, or POV (supports `page`/`page_size`, includes `total_count` on paginated responses) |
 | `get_scene_prose` | Load the full prose for a specific scene |
 | `get_chapter_prose` | Load all prose for a chapter |
-| `get_arc` | Ordered scene metadata for all scenes involving a character |
+| `get_arc` | Ordered scene metadata for all scenes involving a character (supports `page`/`page_size`, includes `total_count` on paginated responses) |
 | `list_characters` | All characters, optionally filtered by project or universe |
 | `get_character_sheet` | Full character metadata, traits, and notes |
 | `list_places` | All places |
-| `search_metadata` | Full-text search across scene titles and loglines |
-| `list_threads` | All subplot threads for a project |
-| `get_thread_arc` | Scenes belonging to a thread, with per-thread beat |
+| `search_metadata` | Full-text search across scene titles and loglines (supports `page`/`page_size`, includes `total_count` on paginated responses) |
+| `list_threads` | All subplot threads for a project (structured JSON with `results` + `total_count`; supports `page`/`page_size`) |
+| `get_thread_arc` | Scenes belonging to a thread, with per-thread beat (structured JSON with `thread`, `results`, `total_count`; supports `page`/`page_size`) |
+| `upsert_thread_link` | Create/update a thread and link it to a scene (idempotent link upsert; writable sync dir required) |
 
 ## Running with Docker
 
@@ -118,7 +119,7 @@ WRITING_SYNC_DIR=./my-manuscript DB_PATH=./writing.db npm start
 
 ```sh
 npm install
-npm test          # unit + integration (40 tests)
+npm test          # unit + integration (77 tests)
 npm run test:unit  # unit tests only (no server required)
 ```
 
@@ -127,10 +128,11 @@ Unit tests use an in-memory SQLite database and temporary directories — no ser
 ## Environment variables
 
 | Variable | Default | Description |
-|---|---|---|
+| --- | --- | --- |
 | `WRITING_SYNC_DIR` | `./sync` | Path to the Scrivener sync folder |
 | `DB_PATH` | `./writing.db` | Path to the SQLite index database |
 | `HTTP_PORT` | `3000` | Port for the MCP SSE endpoint |
+| `DEFAULT_METADATA_PAGE_SIZE` | `20` | Default page size used by `find_scenes` and `get_arc` pagination |
 
 ## License
 

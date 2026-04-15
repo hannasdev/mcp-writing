@@ -12,6 +12,56 @@ const SYNC_DIR = process.env.WRITING_SYNC_DIR ?? "./sync";
 const DB_PATH = process.env.DB_PATH ?? "./writing.db";
 const HTTP_PORT = parseInt(process.env.HTTP_PORT ?? "3000", 10);
 const MAX_CHAPTER_SCENES = parseInt(process.env.MAX_CHAPTER_SCENES ?? "10", 10);
+const DEFAULT_METADATA_PAGE_SIZE = parseInt(process.env.DEFAULT_METADATA_PAGE_SIZE ?? "20", 10);
+
+function paginateRows(rows, { page, pageSize, forcePagination = false }) {
+  const totalCount = rows.length;
+  const shouldPaginate = forcePagination || page !== undefined || pageSize !== undefined;
+
+  if (!shouldPaginate) {
+    return {
+      paginated: false,
+      rows,
+      meta: null,
+    };
+  }
+
+  const safePageSize = Math.max(1, pageSize ?? DEFAULT_METADATA_PAGE_SIZE);
+  const safePage = Math.max(1, page ?? 1);
+  const totalPages = Math.max(1, Math.ceil(totalCount / safePageSize));
+  const normalizedPage = Math.min(safePage, totalPages);
+  const offset = (normalizedPage - 1) * safePageSize;
+  const pageRows = rows.slice(offset, offset + safePageSize);
+
+  return {
+    paginated: true,
+    rows: pageRows,
+    meta: {
+      total_count: totalCount,
+      page: normalizedPage,
+      page_size: safePageSize,
+      total_pages: totalPages,
+      has_next_page: normalizedPage < totalPages,
+      has_prev_page: normalizedPage > 1,
+    },
+  };
+}
+
+function jsonResponse(payload) {
+  return { content: [{ type: "text", text: JSON.stringify(payload, null, 2) }] };
+}
+
+function errorResponse(code, message, details) {
+  const payload = {
+    ok: false,
+    error: {
+      code,
+      message,
+      ...(details ? { details } : {}),
+    },
+  };
+  return jsonResponse(payload);
+}
 
 // ---------------------------------------------------------------------------
 // Database setup
@@ -46,7 +96,7 @@ function createMcpServer() {
   // ---- find_scenes ---------------------------------------------------------
   s.tool(
     "find_scenes",
-    "Find scenes by filtering on character, Save the Cat beat, tags, part, chapter, or POV. Returns ordered scene metadata only — no prose. All filters are optional and combinable. Warns if any matching scenes have stale metadata.",
+    "Find scenes by filtering on character, Save the Cat beat, tags, part, chapter, or POV. Returns ordered scene metadata only — no prose. All filters are optional and combinable. Supports pagination via page/page_size and auto-paginates large result sets with total_count. Warns if any matching scenes have stale metadata.",
     {
       project_id: z.string().optional().describe("Project ID (e.g. 'the-lamb'). Use to scope results to one project."),
       character:  z.string().optional().describe("A character_id (e.g. 'char-mira-nystrom'). Returns only scenes that character appears in. Use list_characters first to find valid IDs."),
@@ -55,8 +105,10 @@ function createMcpServer() {
       part:       z.number().int().optional().describe("Part number (integer, e.g. 1). Chapters are numbered globally across the whole project."),
       chapter:    z.number().int().optional().describe("Chapter number (integer, e.g. 3). Chapters are numbered globally across the whole project — do not reset per part."),
       pov:        z.string().optional().describe("POV character_id. Use list_characters first to find valid IDs."),
+      page:       z.number().int().min(1).optional().describe("Optional page number for paginated responses (1-based)."),
+      page_size:  z.number().int().min(1).max(200).optional().describe("Optional page size for paginated responses (default: 20, max: 200)."),
     },
-    async ({ project_id, character, beat, tag, part, chapter, pov }) => {
+    async ({ project_id, character, beat, tag, part, chapter, pov, page, page_size }) => {
       let query = `
         SELECT DISTINCT s.scene_id, s.project_id, s.title, s.part, s.chapter, s.pov,
                s.logline, s.scene_change, s.causality, s.stakes, s.scene_functions,
@@ -88,18 +140,32 @@ function createMcpServer() {
 
       const rows = db.prepare(query).all(...params);
       if (rows.length === 0) {
-        return { content: [{ type: "text", text: "No scenes match the given filters." }] };
+        return errorResponse("NO_RESULTS", "No scenes match the given filters.");
       }
 
       const staleCount = rows.filter(r => r.metadata_stale).length;
       const warning = staleCount > 0
-        ? `\n\n⚠️ ${staleCount} scene(s) have stale metadata — prose has changed since last enrichment. Consider running enrich_scene() before relying on this data for analysis.`
-        : "";
+        ? `${staleCount} scene(s) have stale metadata — prose has changed since last enrichment. Consider running enrich_scene() before relying on this data for analysis.`
+        : undefined;
+
+      const paged = paginateRows(rows, {
+        page,
+        pageSize: page_size,
+        forcePagination: rows.length > DEFAULT_METADATA_PAGE_SIZE,
+      });
+
+      const payload = paged.paginated
+        ? {
+            results: paged.rows,
+            ...paged.meta,
+            warning,
+          }
+        : rows;
 
       return {
         content: [{
           type: "text",
-          text: JSON.stringify(rows, null, 2) + warning,
+          text: JSON.stringify(payload, null, 2),
         }],
       };
     }
@@ -115,7 +181,7 @@ function createMcpServer() {
     async ({ scene_id }) => {
       const scene = db.prepare(`SELECT file_path, metadata_stale FROM scenes WHERE scene_id = ?`).get(scene_id);
       if (!scene) {
-        return { content: [{ type: "text", text: `Scene '${scene_id}' not found. Run sync() if you just added it.` }] };
+        return errorResponse("NOT_FOUND", `Scene '${scene_id}' not found. Run sync() if you just added it.`);
       }
       try {
         const raw = fs.readFileSync(scene.file_path, "utf8");
@@ -125,7 +191,7 @@ function createMcpServer() {
           : "";
         return { content: [{ type: "text", text: prose.trim() + warning }] };
       } catch (err) {
-        return { content: [{ type: "text", text: `Failed to read scene file: ${err.message}` }] };
+        return errorResponse("IO_ERROR", `Failed to read scene file: ${err.message}`);
       }
     }
   );
@@ -147,7 +213,7 @@ function createMcpServer() {
       `).all(project_id, part, chapter);
 
       if (allScenes.length === 0) {
-        return { content: [{ type: "text", text: `No scenes found for Part ${part}, Chapter ${chapter}.` }] };
+        return errorResponse("NO_RESULTS", `No scenes found for Part ${part}, Chapter ${chapter}.`);
       }
 
       const truncated = allScenes.length > MAX_CHAPTER_SCENES;
@@ -174,12 +240,14 @@ function createMcpServer() {
   // ---- get_arc -------------------------------------------------------------
   s.tool(
     "get_arc",
-    "Get every scene a character appears in, ordered by part/chapter/position. Returns scene metadata only — no prose. Use this to trace a character's arc through the story. Call list_characters first to get the character_id.",
+    "Get every scene a character appears in, ordered by part/chapter/position. Returns scene metadata only — no prose. Use this to trace a character's arc through the story. Supports pagination via page/page_size and auto-paginates large result sets with total_count. Call list_characters first to get the character_id.",
     {
       character_id: z.string().describe("The character_id to trace (e.g. 'char-mira-nystrom'). Use list_characters to find valid IDs."),
       project_id:   z.string().optional().describe("Limit to a specific project (e.g. 'the-lamb')."),
+      page:         z.number().int().min(1).optional().describe("Optional page number for paginated responses (1-based)."),
+      page_size:    z.number().int().min(1).max(200).optional().describe("Optional page size for paginated responses (default: 20, max: 200)."),
     },
-    async ({ character_id, project_id }) => {
+    async ({ character_id, project_id, page, page_size }) => {
       let query = `
         SELECT s.scene_id, s.project_id, s.part, s.chapter, s.title, s.logline,
                s.scene_change, s.causality, s.stakes, s.scene_functions,
@@ -194,15 +262,29 @@ function createMcpServer() {
 
       const rows = db.prepare(query).all(...params);
       if (rows.length === 0) {
-        return { content: [{ type: "text", text: `No scenes found for character '${character_id}'.` }] };
+        return errorResponse("NO_RESULTS", `No scenes found for character '${character_id}'.`);
       }
 
       const staleCount = rows.filter(r => r.metadata_stale).length;
       const warning = staleCount > 0
-        ? `\n\n⚠️ ${staleCount} scene(s) have stale metadata.`
-        : "";
+        ? `${staleCount} scene(s) have stale metadata.`
+        : undefined;
 
-      return { content: [{ type: "text", text: JSON.stringify(rows, null, 2) + warning }] };
+      const paged = paginateRows(rows, {
+        page,
+        pageSize: page_size,
+        forcePagination: rows.length > DEFAULT_METADATA_PAGE_SIZE,
+      });
+
+      const payload = paged.paginated
+        ? {
+            results: paged.rows,
+            ...paged.meta,
+            warning,
+          }
+        : rows;
+
+      return { content: [{ type: "text", text: JSON.stringify(payload, null, 2) }] };
     }
   );
 
@@ -225,7 +307,7 @@ function createMcpServer() {
 
       const rows = db.prepare(query).all(...params);
       if (rows.length === 0) {
-        return { content: [{ type: "text", text: "No characters found." }] };
+        return errorResponse("NO_RESULTS", "No characters found.");
       }
       return { content: [{ type: "text", text: JSON.stringify(rows, null, 2) }] };
     }
@@ -241,7 +323,7 @@ function createMcpServer() {
     async ({ character_id }) => {
       const character = db.prepare(`SELECT * FROM characters WHERE character_id = ?`).get(character_id);
       if (!character) {
-        return { content: [{ type: "text", text: `Character '${character_id}' not found.` }] };
+        return errorResponse("NOT_FOUND", `Character '${character_id}' not found.`);
       }
 
       const traits = db.prepare(`SELECT trait FROM character_traits WHERE character_id = ?`)
@@ -280,7 +362,7 @@ function createMcpServer() {
 
       const rows = db.prepare(query).all(...params);
       if (rows.length === 0) {
-        return { content: [{ type: "text", text: "No places found." }] };
+        return errorResponse("NO_RESULTS", "No places found.");
       }
       return { content: [{ type: "text", text: JSON.stringify(rows, null, 2) }] };
     }
@@ -289,54 +371,108 @@ function createMcpServer() {
   // ---- search_metadata -----------------------------------------------------
   s.tool(
     "search_metadata",
-    "Full-text search across scene titles and loglines (synopsis/logline text fields). Use this when you don't know the exact scene_id or chapter but want to find scenes by topic, theme, or keywords in the description. Not a prose search — use get_scene_prose to read actual text.",
+    "Full-text search across scene titles and loglines (synopsis/logline text fields). Use this when you don't know the exact scene_id or chapter but want to find scenes by topic, theme, or keywords in the description. Not a prose search — use get_scene_prose to read actual text. Supports pagination via page/page_size and auto-paginates large result sets with total_count.",
     {
       query: z.string().describe("Search terms (e.g. 'hospital' or 'Sebastian feeding'). FTS5 syntax supported."),
+      page: z.number().int().min(1).optional().describe("Optional page number for paginated responses (1-based)."),
+      page_size: z.number().int().min(1).max(200).optional().describe("Optional page size for paginated responses (default: 20, max: 200)."),
     },
-    async ({ query }) => {
+    async ({ query, page, page_size }) => {
+      const totalCount = db.prepare(`
+        SELECT COUNT(*) AS count
+        FROM scenes_fts f
+        JOIN scenes s ON s.scene_id = f.scene_id AND s.project_id = f.project_id
+        WHERE scenes_fts MATCH ?
+      `).get(query)?.count ?? 0;
+
+      if (totalCount === 0) {
+        return errorResponse("NO_RESULTS", "No scenes matched the search query.");
+      }
+
+      const shouldPaginate = totalCount > DEFAULT_METADATA_PAGE_SIZE || page !== undefined || page_size !== undefined;
+
+      if (!shouldPaginate) {
+        const rows = db.prepare(`
+          SELECT f.scene_id, f.project_id, s.title, s.logline, s.part, s.chapter, s.metadata_stale
+          FROM scenes_fts f
+          JOIN scenes s ON s.scene_id = f.scene_id AND s.project_id = f.project_id
+          WHERE scenes_fts MATCH ?
+          ORDER BY rank
+        `).all(query);
+
+        return { content: [{ type: "text", text: JSON.stringify(rows, null, 2) }] };
+      }
+
+      const safePageSize = Math.max(1, page_size ?? DEFAULT_METADATA_PAGE_SIZE);
+      const safePage = Math.max(1, page ?? 1);
+      const totalPages = Math.max(1, Math.ceil(totalCount / safePageSize));
+      const normalizedPage = Math.min(safePage, totalPages);
+      const offset = (normalizedPage - 1) * safePageSize;
+
       const rows = db.prepare(`
         SELECT f.scene_id, f.project_id, s.title, s.logline, s.part, s.chapter, s.metadata_stale
         FROM scenes_fts f
         JOIN scenes s ON s.scene_id = f.scene_id AND s.project_id = f.project_id
         WHERE scenes_fts MATCH ?
         ORDER BY rank
-        LIMIT 20
-      `).all(query);
+        LIMIT ? OFFSET ?
+      `).all(query, safePageSize, offset);
 
-      if (rows.length === 0) {
-        return { content: [{ type: "text", text: "No scenes matched the search query." }] };
-      }
-      return { content: [{ type: "text", text: JSON.stringify(rows, null, 2) }] };
+      const payload = {
+        results: rows,
+        total_count: totalCount,
+        page: normalizedPage,
+        page_size: safePageSize,
+        total_pages: totalPages,
+        has_next_page: normalizedPage < totalPages,
+        has_prev_page: normalizedPage > 1,
+      };
+
+      return { content: [{ type: "text", text: JSON.stringify(payload, null, 2) }] };
     }
   );
 
   // ---- list_threads --------------------------------------------------------
   s.tool(
     "list_threads",
-    "List all subplot/storyline threads for a project.",
+    "List all subplot/storyline threads for a project. Returns a structured JSON envelope with results and total_count. Supports pagination via page/page_size.",
     {
       project_id: z.string().describe("Project ID."),
+      page: z.number().int().min(1).optional().describe("Optional page number for paginated responses (1-based)."),
+      page_size: z.number().int().min(1).max(200).optional().describe("Optional page size for paginated responses (default: 20, max: 200)."),
     },
-    async ({ project_id }) => {
+    async ({ project_id, page, page_size }) => {
       const rows = db.prepare(`SELECT * FROM threads WHERE project_id = ? ORDER BY name`).all(project_id);
-      if (rows.length === 0) {
-        return { content: [{ type: "text", text: `No threads found for project '${project_id}'.` }] };
-      }
-      return { content: [{ type: "text", text: JSON.stringify(rows, null, 2) }] };
+      const paged = paginateRows(rows, { page, pageSize: page_size, forcePagination: false });
+      const payload = paged.paginated
+        ? {
+            project_id,
+            results: paged.rows,
+            ...paged.meta,
+          }
+        : {
+            project_id,
+            results: rows,
+            total_count: rows.length,
+          };
+
+      return { content: [{ type: "text", text: JSON.stringify(payload, null, 2) }] };
     }
   );
 
   // ---- get_thread_arc ------------------------------------------------------
   s.tool(
     "get_thread_arc",
-    "Get ordered scene metadata for all scenes belonging to a thread, including the per-thread beat.",
+    "Get ordered scene metadata for all scenes belonging to a thread, including the per-thread beat. Returns a structured JSON envelope with thread metadata, results, and total_count. Supports pagination via page/page_size.",
     {
       thread_id: z.string().describe("Thread ID."),
+      page: z.number().int().min(1).optional().describe("Optional page number for paginated responses (1-based)."),
+      page_size: z.number().int().min(1).max(200).optional().describe("Optional page size for paginated responses (default: 20, max: 200)."),
     },
-    async ({ thread_id }) => {
+    async ({ thread_id, page, page_size }) => {
       const thread = db.prepare(`SELECT * FROM threads WHERE thread_id = ?`).get(thread_id);
       if (!thread) {
-        return { content: [{ type: "text", text: `Thread '${thread_id}' not found.` }] };
+        return errorResponse("NOT_FOUND", `Thread '${thread_id}' not found.`);
       }
 
       const rows = db.prepare(`
@@ -346,20 +482,83 @@ function createMcpServer() {
         JOIN scene_threads st ON st.scene_id = s.scene_id AND st.thread_id = ?
         ORDER BY s.part, s.chapter, s.timeline_position
       `).all(thread_id);
+      const staleCount = rows.filter(r => r.metadata_stale).length;
+      const warning = staleCount > 0 ? `${staleCount} scene(s) have stale metadata.` : undefined;
+      const paged = paginateRows(rows, { page, pageSize: page_size, forcePagination: false });
 
-      if (rows.length === 0) {
-        return { content: [{ type: "text", text: `No scenes assigned to thread '${thread_id}'.` }] };
+      const payload = paged.paginated
+        ? {
+            thread,
+            results: paged.rows,
+            ...paged.meta,
+            warning,
+          }
+        : {
+            thread,
+            results: rows,
+            total_count: rows.length,
+            warning,
+          };
+
+      return { content: [{ type: "text", text: JSON.stringify(payload, null, 2) }] };
+    }
+  );
+
+  // ---- upsert_thread_link ---------------------------------------------------
+  s.tool(
+    "upsert_thread_link",
+    "Create or update a thread and link it to a scene. Idempotent: if the link already exists, updates its beat. Only available when the sync dir is writable.",
+    {
+      project_id: z.string().describe("Project the thread belongs to (e.g. 'the-lamb')."),
+      thread_id: z.string().describe("Thread ID (e.g. 'thread-reconciliation')."),
+      thread_name: z.string().describe("Thread display name."),
+      scene_id: z.string().describe("Scene to link to the thread (e.g. 'sc-011-sebastian')."),
+      beat: z.string().optional().describe("Optional thread-specific beat label for this scene."),
+      status: z.string().optional().describe("Thread status (e.g. 'active', 'resolved'). Defaults to 'active'."),
+    },
+    async ({ project_id, thread_id, thread_name, scene_id, beat, status }) => {
+      if (!SYNC_DIR_WRITABLE) {
+        return errorResponse("READ_ONLY", "Cannot write thread links: sync dir is read-only.");
       }
 
-      const staleCount = rows.filter(r => r.metadata_stale).length;
-      const warning = staleCount > 0 ? `\n\n⚠️ ${staleCount} scene(s) have stale metadata.` : "";
+      const existingThread = db.prepare(`SELECT thread_id, project_id FROM threads WHERE thread_id = ?`).get(thread_id);
+      if (existingThread && existingThread.project_id !== project_id) {
+        return errorResponse(
+          "CONFLICT",
+          `Thread '${thread_id}' already exists in project '${existingThread.project_id}', cannot reuse it for project '${project_id}'.`
+        );
+      }
 
-      return {
-        content: [{
-          type: "text",
-          text: `Thread: ${thread.name} (${thread.status})\n\n` + JSON.stringify(rows, null, 2) + warning,
-        }],
-      };
+      const scene = db.prepare(`SELECT scene_id FROM scenes WHERE scene_id = ? AND project_id = ?`).get(scene_id, project_id);
+      if (!scene) {
+        return errorResponse("NOT_FOUND", `Scene '${scene_id}' not found in project '${project_id}'.`);
+      }
+
+      db.prepare(`
+        INSERT INTO threads (thread_id, project_id, name, status)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT (thread_id) DO UPDATE SET
+          name = excluded.name,
+          status = excluded.status
+      `).run(thread_id, project_id, thread_name, status ?? "active");
+
+      db.prepare(`
+        INSERT INTO scene_threads (scene_id, thread_id, beat)
+        VALUES (?, ?, ?)
+        ON CONFLICT (scene_id, thread_id) DO UPDATE SET
+          beat = excluded.beat
+      `).run(scene_id, thread_id, beat ?? null);
+
+      const thread = db.prepare(`SELECT * FROM threads WHERE thread_id = ?`).get(thread_id);
+      const link = db.prepare(`SELECT scene_id, thread_id, beat FROM scene_threads WHERE scene_id = ? AND thread_id = ?`)
+        .get(scene_id, thread_id);
+
+      return jsonResponse({
+        ok: true,
+        action: "upserted",
+        thread,
+        link,
+      });
     }
   );
 
@@ -386,12 +585,12 @@ function createMcpServer() {
     },
     async ({ scene_id, project_id, fields }) => {
       if (!SYNC_DIR_WRITABLE) {
-        return { content: [{ type: "text", text: "Cannot update metadata: sync dir is read-only." }] };
+        return errorResponse("READ_ONLY", "Cannot update metadata: sync dir is read-only.");
       }
       const scene = db.prepare(`SELECT file_path FROM scenes WHERE scene_id = ? AND project_id = ?`)
         .get(scene_id, project_id);
       if (!scene) {
-        return { content: [{ type: "text", text: `Scene '${scene_id}' not found in project '${project_id}'.` }] };
+        return errorResponse("NOT_FOUND", `Scene '${scene_id}' not found in project '${project_id}'.`);
       }
       const { meta } = readMeta(scene.file_path, SYNC_DIR, { writable: true });
       const updated = { ...meta, ...fields };
@@ -421,11 +620,11 @@ function createMcpServer() {
     },
     async ({ character_id, fields }) => {
       if (!SYNC_DIR_WRITABLE) {
-        return { content: [{ type: "text", text: "Cannot update character: sync dir is read-only." }] };
+        return errorResponse("READ_ONLY", "Cannot update character: sync dir is read-only.");
       }
       const char = db.prepare(`SELECT file_path FROM characters WHERE character_id = ?`).get(character_id);
       if (!char) {
-        return { content: [{ type: "text", text: `Character '${character_id}' not found.` }] };
+        return errorResponse("NOT_FOUND", `Character '${character_id}' not found.`);
       }
       const { meta } = readMeta(char.file_path, SYNC_DIR, { writable: true });
       const updated = { ...meta, ...fields };
@@ -462,12 +661,12 @@ function createMcpServer() {
     },
     async ({ scene_id, project_id, note }) => {
       if (!SYNC_DIR_WRITABLE) {
-        return { content: [{ type: "text", text: "Cannot flag scene: sync dir is read-only." }] };
+        return errorResponse("READ_ONLY", "Cannot flag scene: sync dir is read-only.");
       }
       const scene = db.prepare(`SELECT file_path FROM scenes WHERE scene_id = ? AND project_id = ?`)
         .get(scene_id, project_id);
       if (!scene) {
-        return { content: [{ type: "text", text: `Scene '${scene_id}' not found in project '${project_id}'.` }] };
+        return errorResponse("NOT_FOUND", `Scene '${scene_id}' not found in project '${project_id}'.`);
       }
       const { meta } = readMeta(scene.file_path, SYNC_DIR, { writable: true });
       const flags = meta.flags ?? [];
@@ -501,7 +700,7 @@ function createMcpServer() {
 
       const rows = db.prepare(query).all(...params);
       if (rows.length === 0) {
-        return { content: [{ type: "text", text: `No relationship data found between '${from_character}' and '${to_character}'.` }] };
+        return errorResponse("NO_RESULTS", `No relationship data found between '${from_character}' and '${to_character}'.`);
       }
       return { content: [{ type: "text", text: JSON.stringify(rows, null, 2) }] };
     }
