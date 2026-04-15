@@ -63,6 +63,35 @@ function errorResponse(code, message, details) {
   return jsonResponse(payload);
 }
 
+function deriveLoglineFromProse(prose) {
+  const compact = prose.replace(/\s+/g, " ").trim();
+  if (!compact) return null;
+  const sentence = compact.match(/^(.+?[.!?])(?:\s|$)/);
+  const candidate = (sentence?.[1] ?? compact).trim();
+  if (candidate.length <= 220) return candidate;
+  return `${candidate.slice(0, 217).trimEnd()}...`;
+}
+
+function inferCharacterIdsFromProse(dbHandle, prose, projectId) {
+  const lower = prose.toLowerCase();
+  const rows = dbHandle.prepare(`
+    SELECT character_id, name
+    FROM characters
+    WHERE project_id = ? OR universe_id = (SELECT universe_id FROM projects WHERE project_id = ?)
+    ORDER BY length(name) DESC
+  `).all(projectId, projectId);
+
+  const found = [];
+  for (const row of rows) {
+    if (!row.name) continue;
+    const words = row.name.toLowerCase().split(/\s+/).filter(Boolean);
+    if (words.length && words.every(w => lower.includes(w))) {
+      found.push(row.character_id);
+    }
+  }
+  return [...new Set(found)].slice(0, 12);
+}
+
 // ---------------------------------------------------------------------------
 // Database setup
 // ---------------------------------------------------------------------------
@@ -559,6 +588,73 @@ function createMcpServer() {
         thread,
         link,
       });
+    }
+  );
+
+  // ---- enrich_scene --------------------------------------------------------
+  s.tool(
+    "enrich_scene",
+    "Re-derive lightweight scene metadata from current prose (logline and character mentions) and clear metadata_stale for that scene. Only available when the sync dir is writable.",
+    {
+      scene_id: z.string().describe("Scene to enrich (e.g. 'sc-011-sebastian')."),
+      project_id: z.string().optional().describe("Project ID. Required when scene_id is duplicated across projects."),
+    },
+    async ({ scene_id, project_id }) => {
+      if (!SYNC_DIR_WRITABLE) {
+        return errorResponse("READ_ONLY", "Cannot enrich scene: sync dir is read-only.");
+      }
+
+      let scene;
+      if (project_id) {
+        scene = db.prepare(`SELECT scene_id, project_id, file_path FROM scenes WHERE scene_id = ? AND project_id = ?`)
+          .get(scene_id, project_id);
+      } else {
+        const matches = db.prepare(`SELECT scene_id, project_id, file_path FROM scenes WHERE scene_id = ?`).all(scene_id);
+        if (matches.length > 1) {
+          return errorResponse("VALIDATION_ERROR", `Scene '${scene_id}' exists in multiple projects. Provide project_id.`);
+        }
+        scene = matches[0];
+      }
+
+      if (!scene) {
+        return errorResponse("NOT_FOUND", `Scene '${scene_id}' not found${project_id ? ` in project '${project_id}'` : ""}.`);
+      }
+
+      try {
+        const raw = fs.readFileSync(scene.file_path, "utf8");
+        const { content: prose } = matter(raw);
+        const { meta } = readMeta(scene.file_path, SYNC_DIR, { writable: true });
+
+        const inferredLogline = deriveLoglineFromProse(prose);
+        const inferredCharacters = inferCharacterIdsFromProse(db, prose, scene.project_id);
+
+        const updatedMeta = {
+          ...meta,
+          ...(inferredLogline ? { logline: inferredLogline } : {}),
+          ...((inferredCharacters.length > 0 || (meta.characters?.length ?? 0) > 0)
+            ? { characters: inferredCharacters.length > 0 ? inferredCharacters : meta.characters }
+            : {}),
+        };
+
+        writeMeta(scene.file_path, updatedMeta);
+        indexSceneFile(db, SYNC_DIR, scene.file_path, updatedMeta, prose);
+        db.prepare(`UPDATE scenes SET metadata_stale = 0 WHERE scene_id = ? AND project_id = ?`)
+          .run(scene.scene_id, scene.project_id);
+
+        return jsonResponse({
+          ok: true,
+          action: "enriched",
+          scene_id: scene.scene_id,
+          project_id: scene.project_id,
+          updated_fields: {
+            logline: Boolean(inferredLogline),
+            characters: inferredCharacters.length,
+          },
+          metadata_stale: false,
+        });
+      } catch (err) {
+        return errorResponse("IO_ERROR", `Failed to enrich scene '${scene.scene_id}': ${err.message}`);
+      }
     }
   );
 
