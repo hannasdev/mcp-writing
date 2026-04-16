@@ -2,7 +2,6 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import http from "node:http";
 import fs from "node:fs";
-import path from "node:path";
 import matter from "gray-matter";
 import { z } from "zod";
 import { openDb } from "./db.js";
@@ -371,7 +370,7 @@ function createMcpServer() {
           const raw = fs.readFileSync(character.file_path, "utf8");
           const { content } = matter(raw);
           notes = content.trim();
-        } catch {}
+        } catch { /* empty */ }
       }
 
       const result = { ...character, traits, notes: notes || undefined };
@@ -779,7 +778,7 @@ function createMcpServer() {
     {
       scene_id:   z.string().describe("The scene_id to flag (e.g. 'sc-012-open-to-anyone')."),
       project_id: z.string().describe("Project the scene belongs to (e.g. 'the-lamb')."),
-      note:       z.string().describe("The flag note (e.g. 'Victor knows Mira\'s name here, but they haven\'t been introduced yet — contradicts sc-006')."),
+      note:       z.string().describe("The flag note (e.g. 'Victor knows Mira\u2019s name here, but they haven\u2019t been introduced yet \u2014 contradicts sc-006')."),
     },
     async ({ scene_id, project_id, note }) => {
       if (!SYNC_DIR_WRITABLE) {
@@ -850,8 +849,8 @@ const httpServer = http.createServer(async (req, res) => {
 
     const existing = activeSessions.get(sessionId);
     if (existing) {
-      try { await existing.transport.close(); } catch {}
-      try { await existing.server.close(); } catch {}
+      try { await existing.transport.close(); } catch { /* empty */ }
+      try { await existing.server.close(); } catch { /* empty */ }
       activeSessions.delete(sessionId);
     }
 

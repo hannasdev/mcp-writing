@@ -284,7 +284,7 @@ export function lintMetadataInSyncDir(syncDir) {
         arr.push(sidecar);
         sceneIdToFiles.set(meta.scene_id, arr);
       }
-    } catch {}
+    } catch { /* empty */ }
   }
   for (const file of files) {
     if (fs.existsSync(sidecarPath(file))) continue; // already counted via sidecar
@@ -295,7 +295,7 @@ export function lintMetadataInSyncDir(syncDir) {
         arr.push(file);
         sceneIdToFiles.set(data.scene_id, arr);
       }
-    } catch {}
+    } catch { /* empty */ }
   }
 
   for (const [sceneId, dupeFiles] of sceneIdToFiles) {
