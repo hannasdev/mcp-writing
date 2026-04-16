@@ -4,6 +4,10 @@ on:
   release:
     types: [published]
 
+permissions:
+  contents: read
+  id-token: write
+
 jobs:
   publish:
     name: npm publish
@@ -26,6 +30,4 @@ jobs:
         run: node --experimental-sqlite --test test/unit.test.mjs test/integration.test.mjs
 
       - name: Publish
-        run: npm publish
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --provenance --access public
