@@ -386,8 +386,8 @@ These are identified failure modes. Priority indicated: **must fix before Phase 
 **#1 — Scene moved in Scrivener after sidecar migration (must fix)**
 Scrivener restructures freely by moving `.md` files. If the `.md` file has been moved but its sidecar has not, sync detects the mismatch via path/metadata check and warns. The scene is not silently dropped — it falls back to the sidecar's last known `file_path` for prose retrieval and logs a warning that the path is stale. This is why frontmatter is never stripped (see Migration Path above).
 
-**#2 — FTS ambiguity across projects (must fix)**
-The `scenes_fts` table indexes `scene_id` without `project_id`. If two projects both contain a `sc-001`, `search_metadata` returns ambiguous results and the join back to `scenes` is incorrect. Fix: include `project_id` in the FTS table and in the `MATCH` query. Tracked as a Phase 1 bug to resolve before Phase 2 begins.
+**#2 — FTS ambiguity across projects (resolved)**
+Previously, indexing `scenes_fts` by `scene_id` alone could produce ambiguous joins when different projects shared IDs (for example, `sc-001`). This is now fixed by including `project_id` in FTS indexing and query joins.
 
 **#3 — Sync dir not writable (important)**
 If `WRITING_SYNC_DIR` is a read-only Docker mount or network share, Phase 2 sidecar writes fail at runtime. The service should detect and warn at startup if the sync dir is not writable, and degrade gracefully: Phase 1 read-only tools continue to work; Phase 2 write tools return a clear error rather than crashing.
