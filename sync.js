@@ -141,7 +141,7 @@ export function readMeta(filePath, syncDir, { writable = false } = {}) {
     try {
       fs.writeFileSync(sidecar, stringifyYaml(normalized.meta), "utf8");
       return { ...normalized, sourceMeta: frontmatter, sidecarGenerated: true };
-    } catch {}
+    } catch { /* empty */ }
   }
 
   return { ...normalized, sourceMeta: frontmatter, sidecarGenerated: false };
@@ -402,7 +402,7 @@ export function syncAll(db, syncDir, { quiet = false, writable = false } = {}) {
       try {
         const raw = fs.readFileSync(sidecar, "utf8");
         orphanedSceneId = (parseYaml(raw) ?? {}).scene_id ?? null;
-      } catch {}
+      } catch { /* empty */ }
 
       if (orphanedSceneId && indexedSceneIds.has(orphanedSceneId)) {
         warnings.push(
