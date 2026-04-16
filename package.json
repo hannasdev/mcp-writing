@@ -1,10 +1,20 @@
 {
-  "name": "mcp-writing",
+  "name": "@hanna84/mcp-writing",
   "version": "1.0.0",
-  "private": true,
   "description": "MCP service for AI-assisted reasoning and editing on long-form fiction projects",
   "type": "module",
   "main": "index.js",
+  "files": [
+    "index.js",
+    "db.js",
+    "sync.js",
+    "metadata-lint.js",
+    "scripts/",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "start": "node --experimental-sqlite index.js",
     "lint:metadata": "node scripts/lint-metadata.mjs",
