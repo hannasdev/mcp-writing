@@ -14,12 +14,13 @@
  *   --dry-run         Show what would be created without writing anything
  *
  * What it does (Draft folder):
- *   - Walks the Draft dir in filename order (NNN prefix = binder sequence)
+ *   - Walks the Draft dir in filename order (NNN prefix = current binder sequence)
  *   - Skips empty files (non-compilation title cards) and Epigraphs
  *   - Detects Save the Cat beat markers ("-Beat Name-" empty files) and carries
  *     the beat name forward to the next prose scene's sidecar
  *   - Creates mcp-sync-dir/projects/<project>/scenes/ structure
- *   - Writes a .meta.yaml sidecar for each scene (skips files that already have one)
+ *   - Reconciles existing imports by stable Scrivener binder ID (`[123]` in the filename)
+ *   - Writes a .meta.yaml sidecar for each scene while preserving existing editorial metadata
  *
  * What it does (Notes folder):
  *   - Tracks section mode via empty top-level folder markers (Characters, Places, World...)
@@ -62,11 +63,16 @@ const placesDir = path.join(mcpSyncDir, "projects", projectId, "world", "places"
 // Helpers
 // ---------------------------------------------------------------------------
 
-// Parse "NNN Title [binder_id].txt" → { seq, rawTitle } or null
+// Parse "NNN Title [binder_id].txt" → { seq, rawTitle, binderId, ext } or null
 function parseFilename(filename) {
-  const m = filename.match(/^(\d+)\s+(.+?)\s*\[\d+\]\.(txt|md)$/);
+  const m = filename.match(/^(\d+)\s+(.+?)\s*\[(\d+)\]\.(txt|md)$/);
   if (!m) return null;
-  return { seq: parseInt(m[1], 10), rawTitle: m[2].trim() };
+  return {
+    seq: parseInt(m[1], 10),
+    rawTitle: m[2].trim(),
+    binderId: m[3],
+    ext: m[4],
+  };
 }
 
 function isBeatMarker(rawTitle) {
@@ -94,8 +100,8 @@ function slugify(str) {
     .slice(0, 50);
 }
 
-function makeSceneId(seq, title) {
-  return `sc-${String(seq).padStart(3, "0")}-${slugify(title).slice(0, 40)}`;
+function makeSceneId(binderId, title) {
+  return `sc-${String(binderId).padStart(3, "0")}-${slugify(title).slice(0, 40)}`;
 }
 
 function makeCharacterId(rawTitle) {
@@ -137,6 +143,51 @@ function walkSorted(dir) {
   return files.sort((a, b) => path.basename(a).localeCompare(path.basename(b)));
 }
 
+function loadYamlFile(filePath) {
+  try {
+    return yaml.load(fs.readFileSync(filePath, "utf8")) ?? {};
+  } catch {
+    return {};
+  }
+}
+
+function buildExistingSceneIndex(dir) {
+  const byBinderId = new Map();
+  if (!fs.existsSync(dir)) return byBinderId;
+
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (!entry.isFile() || !entry.name.endsWith(".meta.yaml")) continue;
+
+    const sidecarPath = path.join(dir, entry.name);
+    const proseCandidates = [
+      sidecarPath.replace(/\.meta\.yaml$/, ".txt"),
+      sidecarPath.replace(/\.meta\.yaml$/, ".md"),
+    ];
+    const prosePath = proseCandidates.find(candidate => fs.existsSync(candidate)) ?? null;
+    const proseName = prosePath ? path.basename(prosePath) : entry.name.replace(/\.meta\.yaml$/, ".txt");
+    const parsedName = parseFilename(proseName);
+    const meta = loadYamlFile(sidecarPath);
+    const binderId = meta.external_source === "scrivener" && meta.external_id
+      ? String(meta.external_id)
+      : parsedName?.binderId ?? null;
+
+    if (!binderId) continue;
+
+    byBinderId.set(String(binderId), {
+      binderId: String(binderId),
+      prosePath,
+      sidecarPath,
+      meta,
+    });
+  }
+
+  return byBinderId;
+}
+
+function removeIfExists(filePath) {
+  if (filePath && fs.existsSync(filePath)) fs.unlinkSync(filePath);
+}
+
 // ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
@@ -149,6 +200,7 @@ const hasNotes = fs.existsSync(notesDir);
 const draftRoot = hasDraft ? draftDir : scrivenerDir;
 
 const files = walkSorted(draftRoot);
+const existingScenes = buildExistingSceneIndex(scenesDir);
 let created = 0;
 let skipped = 0;
 let alreadyDone = 0;
@@ -172,7 +224,7 @@ for (const file of files) {
     continue;
   }
 
-  const { seq, rawTitle } = parsed;
+  const { seq, rawTitle, binderId, ext } = parsed;
   const isEmpty = fs.statSync(file).size === 0;
 
   // Beat markers: always empty, carry beat name forward
@@ -197,20 +249,17 @@ for (const file of files) {
   }
 
   // Scene file — create sidecar
-  const title    = cleanTitle(rawTitle);
-  const sceneId  = makeSceneId(seq, title);
-  const destFile = path.join(scenesDir, filename);
-  const sidecar  = destFile.replace(/\.(txt|md)$/, ".meta.yaml");
-
-  if (fs.existsSync(sidecar)) {
-    console.log(`  SKIP  (sidecar exists) ${filename}`);
-    alreadyDone++;
-    beatCarry = null; // beat was consumed by an existing scene
-    continue;
-  }
+  const title = cleanTitle(rawTitle);
+  const existing = existingScenes.get(String(binderId)) ?? null;
+  const sceneId = existing?.meta?.scene_id ?? makeSceneId(binderId, title);
+  const destFile = path.join(scenesDir, `${seq.toString().padStart(3, "0")} ${rawTitle} [${binderId}].${ext}`);
+  const sidecar = destFile.replace(/\.(txt|md)$/, ".meta.yaml");
 
   const meta = {
+    ...(existing?.meta ?? {}),
     scene_id: sceneId,
+    external_source: "scrivener",
+    external_id: String(binderId),
     title,
     timeline_position: seq,
     ...(beatCarry ? { save_the_cat_beat: beatCarry } : {}),
@@ -224,20 +273,34 @@ for (const file of files) {
     // tags: [],
   };
 
+  if (!beatCarry && existing?.meta && Object.hasOwn(existing.meta, "save_the_cat_beat")) {
+    delete meta.save_the_cat_beat;
+  }
+
   if (dryRun) {
     console.log(`  DRY   ${path.basename(sidecar)}`);
+    if (existing) {
+      console.log(`        reconcile: binder ${binderId} -> existing scene_id ${sceneId}`);
+    }
     console.log(`        scene_id: ${sceneId}, beat: ${beatCarry ?? "(none)"}`);
   } else {
-    // Copy prose file into mcp-sync-dir scenes folder
-    if (!fs.existsSync(destFile)) {
-      fs.copyFileSync(file, destFile);
-    }
+    // Copy/update prose file in mcp-sync-dir scenes folder
+    fs.copyFileSync(file, destFile);
     fs.writeFileSync(sidecar, yaml.dump(meta, { lineWidth: 120 }), "utf8");
-    console.log(`  OK    ${path.basename(sidecar)}  [beat: ${beatCarry ?? "—"}]`);
+
+    if (existing) {
+      if (existing.prosePath && existing.prosePath !== destFile) removeIfExists(existing.prosePath);
+      if (existing.sidecarPath && existing.sidecarPath !== sidecar) removeIfExists(existing.sidecarPath);
+      console.log(`  OK    ${path.basename(sidecar)}  [reconciled binder ${binderId}, beat: ${beatCarry ?? "—"}]`);
+    } else {
+      console.log(`  OK    ${path.basename(sidecar)}  [beat: ${beatCarry ?? "—"}]`);
+    }
+    existingScenes.set(String(binderId), { binderId: String(binderId), prosePath: destFile, sidecarPath: sidecar, meta });
   }
 
   beatCarry = null; // consumed
-  created++;
+  if (existing) alreadyDone++;
+  else created++;
 }
 
 console.log(`\n${"─".repeat(50)}`);

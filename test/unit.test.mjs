@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import os from "node:os";
 import fs from "node:fs";
 import path from "node:path";
+import { spawnSync } from "node:child_process";
+import yaml from "js-yaml";
 import { checksumProse, walkFiles, walkSidecars, sidecarPath, inferProjectAndUniverse, inferScenePositionFromPath, isWorldFile, readMeta, isSyncDirWritable, syncAll } from "../sync.js";
 import { lintMetadataInSyncDir, validateMetadataObject } from "../metadata-lint.js";
 import { openDb } from "../db.js";
@@ -502,12 +504,103 @@ describe("syncAll", () => {
 });
 
 // ---------------------------------------------------------------------------
+// scripts/import.js
+// ---------------------------------------------------------------------------
+describe("Scrivener importer", () => {
+  function makeScrivenerExport() {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "scrivener-export-"));
+    fs.mkdirSync(path.join(dir, "Draft"), { recursive: true });
+    fs.mkdirSync(path.join(dir, "Notes"), { recursive: true });
+    return dir;
+  }
+
+  function writeDraftFile(dir, filename, content = "Scene prose.") {
+    fs.writeFileSync(path.join(dir, "Draft", filename), content);
+  }
+
+  function runImporter(scrivenerDir, targetDir) {
+    const result = spawnSync(
+      process.execPath,
+      [path.join(process.cwd(), "scripts", "import.js"), scrivenerDir, targetDir, "--project", "test-import"],
+      { encoding: "utf8" }
+    );
+
+    if (result.status !== 0) {
+      throw new Error(`Importer failed: ${result.stderr || result.stdout}`);
+    }
+
+    return result.stdout;
+  }
+
+  test("writes stable external identity fields for imported scenes", () => {
+    const scrivenerDir = makeScrivenerExport();
+    const targetDir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-import-"));
+
+    writeDraftFile(scrivenerDir, "011 Scene Sebastian [10].txt", "Sebastian scene prose.");
+    runImporter(scrivenerDir, targetDir);
+
+    const sidecarPath = path.join(
+      targetDir,
+      "projects",
+      "test-import",
+      "scenes",
+      "011 Scene Sebastian [10].meta.yaml"
+    );
+    const meta = yaml.load(fs.readFileSync(sidecarPath, "utf8"));
+
+    assert.equal(meta.scene_id, "sc-010-sebastian");
+    assert.equal(meta.external_source, "scrivener");
+    assert.equal(meta.external_id, "10");
+    assert.equal(meta.timeline_position, 11);
+
+    fs.rmSync(scrivenerDir, { recursive: true, force: true });
+    fs.rmSync(targetDir, { recursive: true, force: true });
+  });
+
+  test("re-import after Scrivener reorder preserves scene identity and editorial metadata", () => {
+    const scrivenerDir = makeScrivenerExport();
+    const targetDir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-import-"));
+
+    writeDraftFile(scrivenerDir, "011 Scene Sebastian [10].txt", "First export prose.");
+    runImporter(scrivenerDir, targetDir);
+
+    const scenesDir = path.join(targetDir, "projects", "test-import", "scenes");
+    const originalSidecar = path.join(scenesDir, "011 Scene Sebastian [10].meta.yaml");
+    const originalMeta = yaml.load(fs.readFileSync(originalSidecar, "utf8"));
+    originalMeta.synopsis = "Keep this editorial synopsis.";
+    fs.writeFileSync(originalSidecar, yaml.dump(originalMeta, { lineWidth: 120 }), "utf8");
+
+    fs.rmSync(path.join(scrivenerDir, "Draft", "011 Scene Sebastian [10].txt"));
+    writeDraftFile(scrivenerDir, "015 Scene Sebastian [10].txt", "Reordered export prose.");
+
+    runImporter(scrivenerDir, targetDir);
+
+    const sceneFiles = fs.readdirSync(scenesDir).sort();
+    assert.deepEqual(sceneFiles, ["015 Scene Sebastian [10].meta.yaml", "015 Scene Sebastian [10].txt"]);
+
+    const reconciledMeta = yaml.load(
+      fs.readFileSync(path.join(scenesDir, "015 Scene Sebastian [10].meta.yaml"), "utf8")
+    );
+    assert.equal(reconciledMeta.scene_id, "sc-010-sebastian");
+    assert.equal(reconciledMeta.external_source, "scrivener");
+    assert.equal(reconciledMeta.external_id, "10");
+    assert.equal(reconciledMeta.timeline_position, 15);
+    assert.equal(reconciledMeta.synopsis, "Keep this editorial synopsis.");
+
+    fs.rmSync(scrivenerDir, { recursive: true, force: true });
+    fs.rmSync(targetDir, { recursive: true, force: true });
+  });
+});
+
+// ---------------------------------------------------------------------------
 // metadata-lint
 // ---------------------------------------------------------------------------
 describe("metadata lint", () => {
   test("validates scene metadata object schema", () => {
     const result = validateMetadataObject({
       scene_id: "sc-001",
+      external_source: "scrivener",
+      external_id: "10",
       title: "Arrival",
       part: 1,
       chapter: 1,
