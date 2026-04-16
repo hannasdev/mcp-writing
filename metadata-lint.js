@@ -17,6 +17,8 @@ const threadLinkSchema = z.object({
 
 const sceneSchema = z.object({
   scene_id: z.string().min(1),
+  external_source: z.string().min(1).optional(),
+  external_id: z.string().min(1).optional(),
   title: z.string().min(1).optional(),
   part: z.number().int().positive().optional(),
   chapter: z.number().int().positive().optional(),

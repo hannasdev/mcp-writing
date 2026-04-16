@@ -69,6 +69,35 @@ Phase 1 continues using frontmatter as a bootstrap source when present. On the f
 
 If a scene file is deleted (in Scrivener), the sidecar is orphaned. On sync, the service detects `.meta.yaml` files with no corresponding `.md` and logs a warning. It does not auto-delete them — that is an explicit user action.
 
+### Design Decision: Stable Identity vs Mutable Order
+
+When Scrivener is the source of truth, binder order is mutable. Reordering scenes, moving a scene to another chapter, or restructuring acts should not create a new logical scene in `mcp-writing`.
+
+The service therefore needs to treat identity and position as separate concepts:
+
+- **External source identity:** a stable identifier supplied by the source tool. For Scrivener external sync, this should be the binder ID from the exported filename (the `[10]` portion of `011 Scene Sebastian [10].txt`), not the visible sequence prefix (`011`).
+- **Internal MCP identity:** a stable `scene_id` used by the index, sidecars, references, and tools.
+- **Mutable structural fields:** filename, path, `timeline_position`, `part`, `chapter`, and adjacent beat carry can all change over time without implying a new scene.
+
+This means a reorder in Scrivener should normally reconcile as an update, not an insertion:
+
+- same Scrivener binder ID
+- same internal `scene_id`
+- updated filename/path
+- updated `timeline_position`
+- possibly updated path-derived `part` / `chapter`
+
+Only ambiguous lifecycle events should require user review, for example:
+
+- a previously known external ID disappears entirely
+- an external ID remains but the prose/title changes so radically that a split/merge/replacement is plausible
+- two imported records claim the same external ID
+- a new scene appears with no known external ID match and no deterministic mapping
+
+**Design principle:** the service should reconcile simple reorder/move operations automatically, and escalate only when the source-of-truth change is ambiguous.
+
+For non-Scrivener projects, `scene_id` may still be user-authored and primary. The external/internal split is required specifically for importer-backed workflows where exported ordering is not stable.
+
 ---
 
 ## Content Structure
@@ -409,6 +438,9 @@ Passing an invalid FTS5 expression (e.g. an unmatched `"`) to `search_metadata` 
 
 **#9 — Unguarded IO errors in write tools when prose/character file has moved (resolved)**
 `update_scene_metadata`, `update_character_sheet`, and `flag_scene` previously let ENOENT and other IO errors throw as unhandled exceptions when the indexed file path was stale. All three now return a `STALE_PATH` error (with `indexed_path` detail) on ENOENT, and `IO_ERROR` for other failures, consistent with `get_scene_prose`.
+
+**#10 — Re-import after Scrivener reorder creates duplicate logical scenes (must fix)**
+The importer currently derives `scene_id` from the exported sequence prefix plus title (for example `011 Scene Sebastian [10].txt` → `sc-011-sebastian`). If the scene is later reordered in Scrivener and exported as `015 Scene Sebastian [10].txt`, the importer treats it as a new scene rather than the same scene at a new position. Re-importing into the same sync target can therefore leave both the old and new imported scenes on disk and in the index. The importer must reconcile by stable external source ID (Scrivener binder ID), not by current visible ordering.
 
 ---
 
