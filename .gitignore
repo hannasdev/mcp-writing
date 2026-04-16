@@ -2,7 +2,6 @@ node_modules/
 *.db
 *.db-shm
 *.db-wal
-package-lock.json
 .env
 .DS_Store
 # Local project sync dirs (real manuscript data, not for version control here)
