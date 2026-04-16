@@ -10,7 +10,7 @@ async function waitForServer(url, retries = 30, delayMs = 300) {
     try {
       const res = await fetch(`${url}/healthz`);
       if (res.ok) return true;
-    } catch {}
+    } catch { /* empty */ }
     await new Promise(r => setTimeout(r, delayMs));
   }
   throw new Error(`Server did not become ready`);
