@@ -1,6 +1,6 @@
 {
   "name": "mcp-writing",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "MCP service for AI-assisted reasoning and editing on long-form fiction projects",
   "type": "module",
   "main": "index.js",
