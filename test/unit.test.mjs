@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import os from "node:os";
 import fs from "node:fs";
 import path from "node:path";
-import { checksumProse, walkFiles, walkSidecars, sidecarPath, inferProjectAndUniverse, isWorldFile, readMeta, isSyncDirWritable, syncAll } from "../sync.js";
+import { checksumProse, walkFiles, walkSidecars, sidecarPath, inferProjectAndUniverse, inferScenePositionFromPath, isWorldFile, readMeta, isSyncDirWritable, syncAll } from "../sync.js";
 import { lintMetadataInSyncDir, validateMetadataObject } from "../metadata-lint.js";
 import { openDb } from "../db.js";
 
@@ -143,6 +143,23 @@ describe("isSyncDirWritable", () => {
 
   test("returns false for non-existent directory", () => {
     assert.ok(!isSyncDirWritable("/tmp/__nonexistent_dir_xyz__/subdir"));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// inferScenePositionFromPath
+// ---------------------------------------------------------------------------
+describe("inferScenePositionFromPath", () => {
+  const syncDir = "/sync";
+
+  test("extracts part and chapter numbers from the path", () => {
+    const result = inferScenePositionFromPath(syncDir, "/sync/projects/novel/part-2/chapter-7/scene.md");
+    assert.deepEqual(result, { part: 2, chapter: 7 });
+  });
+
+  test("returns nulls when the path has no part/chapter segments", () => {
+    const result = inferScenePositionFromPath(syncDir, "/sync/projects/novel/scenes/scene.md");
+    assert.deepEqual(result, { part: null, chapter: null });
   });
 });
 
@@ -361,16 +378,42 @@ describe("syncAll", () => {
     fs.rmSync(dir, { recursive: true });
   });
 
-  test("warns on orphaned sidecar", () => {
+  test("warns on orphaned sidecar (true orphan — not indexed)", () => {
     const dir = makeTempSync();
     const db = openDb(":memory:");
-    // Write sidecar with no matching .md
+    // Write sidecar with no matching .md and scene_id not indexed elsewhere
     fs.writeFileSync(
       path.join(dir, "projects", "test-novel", "scenes", "deleted.meta.yaml"),
-      "scene_id: deleted\n"
+      "scene_id: sc-deleted\n"
     );
     const result = syncAll(db, dir, { quiet: true });
     assert.ok(result.warnings.some(w => w.includes("Orphaned sidecar")));
+    assert.ok(result.warnings.some(w => w.includes("sc-deleted")));
+
+    db.close();
+    fs.rmSync(dir, { recursive: true });
+  });
+
+  test("warns 'move detected' when orphaned sidecar scene_id was indexed at a new path", () => {
+    const dir = makeTempSync();
+    const db = openDb(":memory:");
+
+    // Prose at new location (no sidecar there, but has frontmatter with scene_id)
+    fs.writeFileSync(
+      path.join(dir, "projects", "test-novel", "scenes", "sc-001-new.md"),
+      "---\nscene_id: sc-001\ntitle: Moved Scene\npart: 1\nchapter: 1\npov: elena\n---\nProse at new path."
+    );
+    // Sidecar left behind at old path (no matching .md beside it)
+    fs.writeFileSync(
+      path.join(dir, "projects", "test-novel", "scenes", "sc-001-old.meta.yaml"),
+      "scene_id: sc-001\ntitle: Old Sidecar\npart: 1\nchapter: 1\npov: elena\n"
+    );
+
+    const result = syncAll(db, dir, { quiet: true });
+    assert.ok(result.warnings.some(w => w.includes("Moved scene detected")));
+    assert.ok(result.warnings.some(w => w.includes("sc-001")));
+    // Scene is still indexed (from the new prose file)
+    assert.equal(result.indexed, 1);
 
     db.close();
     fs.rmSync(dir, { recursive: true });
@@ -408,6 +451,50 @@ describe("syncAll", () => {
     const result = syncAll(db, dir, { quiet: true, writable: true });
     assert.equal(result.sidecarsMigrated, 1);
     assert.ok(fs.existsSync(sidecar));
+
+    db.close();
+    fs.rmSync(dir, { recursive: true });
+  });
+
+  test("stores path-derived part/chapter when auto-generating a sidecar", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sync-"));
+    const sceneDir = path.join(dir, "projects", "test-novel", "part-1", "chapter-1");
+    const scenePath = path.join(sceneDir, "sc-001.md");
+    fs.mkdirSync(sceneDir, { recursive: true });
+    fs.writeFileSync(
+      scenePath,
+      "---\nscene_id: sc-001\npart: 9\nchapter: 8\n---\nProse content."
+    );
+
+    const { meta, sidecarGenerated } = readMeta(scenePath, dir, { writable: true });
+    const migratedSidecar = scenePath.replace(/\.md$/, ".meta.yaml");
+    const sidecarText = fs.readFileSync(migratedSidecar, "utf8");
+
+    assert.equal(sidecarGenerated, true);
+    assert.equal(meta.part, 1);
+    assert.equal(meta.chapter, 1);
+    assert.match(sidecarText, /part: 1/);
+    assert.match(sidecarText, /chapter: 1/);
+
+    fs.rmSync(dir, { recursive: true });
+  });
+
+  test("warns when scene metadata part/chapter do not match the file path", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sync-"));
+    const db = openDb(":memory:");
+    const sceneDir = path.join(dir, "projects", "test-novel", "part-1", "chapter-1");
+    const scenePath = path.join(sceneDir, "sc-001.md");
+    const sidecar = scenePath.replace(/\.md$/, ".meta.yaml");
+    fs.mkdirSync(sceneDir, { recursive: true });
+    fs.writeFileSync(scenePath, "Prose only.");
+    fs.writeFileSync(sidecar, "scene_id: sc-001\ntitle: Mismatch\npart: 9\nchapter: 8\npov: elena\n");
+
+    const result = syncAll(db, dir, { quiet: true });
+    const scene = db.prepare("SELECT part, chapter FROM scenes WHERE scene_id = 'sc-001'").get();
+
+    assert.ok(result.warnings.some(w => w.includes("Path/metadata mismatch")));
+    assert.equal(scene.part, 1);
+    assert.equal(scene.chapter, 1);
 
     db.close();
     fs.rmSync(dir, { recursive: true });

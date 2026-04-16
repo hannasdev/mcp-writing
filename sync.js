@@ -47,6 +47,40 @@ export function sidecarPath(filePath) {
   return filePath.replace(/\.(md|txt)$/, ".meta.yaml");
 }
 
+export function inferScenePositionFromPath(syncDir, filePath) {
+  const rel = path.relative(syncDir, filePath);
+  const parts = rel.split(path.sep);
+  let part = null;
+  let chapter = null;
+
+  for (const segment of parts) {
+    const partMatch = segment.match(/^part-(\d+)$/i);
+    if (partMatch) part = parseInt(partMatch[1], 10);
+
+    const chapterMatch = segment.match(/^chapter-(\d+)$/i);
+    if (chapterMatch) chapter = parseInt(chapterMatch[1], 10);
+  }
+
+  return { part, chapter };
+}
+
+export function normalizeSceneMetaForPath(syncDir, filePath, meta = {}) {
+  const derived = inferScenePositionFromPath(syncDir, filePath);
+  const normalized = { ...meta };
+
+  if (derived.part !== null) normalized.part = derived.part;
+  if (derived.chapter !== null) normalized.chapter = derived.chapter;
+
+  return {
+    meta: normalized,
+    derived,
+    mismatches: {
+      part: derived.part !== null && meta.part != null && meta.part !== derived.part,
+      chapter: derived.chapter !== null && meta.chapter != null && meta.chapter !== derived.chapter,
+    },
+  };
+}
+
 export function inferProjectAndUniverse(syncDir, filePath) {
   const rel = path.relative(syncDir, filePath);
   const parts = rel.split(path.sep);
@@ -80,24 +114,27 @@ export function readMeta(filePath, syncDir, { writable = false } = {}) {
 
   if (fs.existsSync(sidecar)) {
     const raw = fs.readFileSync(sidecar, "utf8");
-    return { meta: parseYaml(raw) ?? {}, sidecarGenerated: false };
+    const parsed = parseYaml(raw) ?? {};
+    return { ...normalizeSceneMetaForPath(syncDir, filePath, parsed), sourceMeta: parsed, sidecarGenerated: false };
   }
 
   // Fall back to frontmatter
   const { data: frontmatter } = parseFile(filePath);
   if (!Object.keys(frontmatter).length) {
-    return { meta: {}, sidecarGenerated: false };
+    return { ...normalizeSceneMetaForPath(syncDir, filePath, {}), sourceMeta: {}, sidecarGenerated: false };
   }
+
+  const normalized = normalizeSceneMetaForPath(syncDir, filePath, frontmatter);
 
   // Auto-migrate: write sidecar from frontmatter (only if writable)
   if (writable) {
     try {
-      fs.writeFileSync(sidecar, stringifyYaml(frontmatter), "utf8");
-      return { meta: frontmatter, sidecarGenerated: true };
+      fs.writeFileSync(sidecar, stringifyYaml(normalized.meta), "utf8");
+      return { ...normalized, sourceMeta: frontmatter, sidecarGenerated: true };
     } catch {}
   }
 
-  return { meta: frontmatter, sidecarGenerated: false };
+  return { ...normalized, sourceMeta: frontmatter, sidecarGenerated: false };
 }
 
 /**
@@ -280,6 +317,7 @@ export function syncAll(db, syncDir, { quiet = false, writable = false } = {}) {
   let skipped = 0;
   let sidecarsMigrated = 0;
   const seenSceneIds = new Map(); // scene_id+project_id → file path, for duplicate detection
+  const indexedSceneIds = new Set(); // scene_id only — for orphaned sidecar move detection
   const warnings = [];
 
   // --- Pass 1: world files (characters/places must be indexed before scenes
@@ -303,7 +341,7 @@ export function syncAll(db, syncDir, { quiet = false, writable = false } = {}) {
   for (const file of files) {
     if (isWorldFile(syncDir, file)) continue;
     try {
-      const { meta, sidecarGenerated } = readMeta(file, syncDir, { writable });
+      const { meta, sourceMeta, sidecarGenerated, derived, mismatches } = readMeta(file, syncDir, { writable });
       if (sidecarGenerated) sidecarsMigrated++;
 
       if (!meta.scene_id) {
@@ -325,8 +363,18 @@ export function syncAll(db, syncDir, { quiet = false, writable = false } = {}) {
         seenSceneIds.set(key, file);
       }
 
+      if (mismatches.part || mismatches.chapter) {
+        const details = [];
+        if (mismatches.part) details.push(`part metadata ${sourceMeta.part} != path part ${derived.part}`);
+        if (mismatches.chapter) details.push(`chapter metadata ${sourceMeta.chapter} != path chapter ${derived.chapter}`);
+        warnings.push(
+          `Path/metadata mismatch for scene "${meta.scene_id}": ${path.relative(syncDir, file)} (${details.join(", ")}). Using path-derived values.`
+        );
+      }
+
       const { data: _frontmatter, content: prose } = parseFile(file);
       const { isStale } = indexSceneFile(db, syncDir, file, meta, prose);
+      indexedSceneIds.add(meta.scene_id);
       if (isStale) staleMarked++;
       indexed++;
     } catch (err) {
@@ -340,7 +388,22 @@ export function syncAll(db, syncDir, { quiet = false, writable = false } = {}) {
     const prose = sidecar.replace(/\.meta\.yaml$/, ".md");
     const proseTxt = sidecar.replace(/\.meta\.yaml$/, ".txt");
     if (!fs.existsSync(prose) && !fs.existsSync(proseTxt)) {
-      warnings.push(`Orphaned sidecar (no matching .md/.txt): ${path.relative(syncDir, sidecar)}`);
+      let orphanedSceneId = null;
+      try {
+        const raw = fs.readFileSync(sidecar, "utf8");
+        orphanedSceneId = (parseYaml(raw) ?? {}).scene_id ?? null;
+      } catch {}
+
+      if (orphanedSceneId && indexedSceneIds.has(orphanedSceneId)) {
+        warnings.push(
+          `Moved scene detected: sidecar for "${orphanedSceneId}" is at stale path ${path.relative(syncDir, sidecar)} — prose file has moved. Consider relocating the sidecar alongside the prose file.`
+        );
+      } else {
+        const label = orphanedSceneId ? `scene "${orphanedSceneId}"` : "unknown scene";
+        warnings.push(
+          `Orphaned sidecar (${label}, no matching .md/.txt and not indexed): ${path.relative(syncDir, sidecar)}`
+        );
+      }
     }
   }
 

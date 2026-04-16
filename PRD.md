@@ -423,7 +423,7 @@ Scrivener often contains empty placeholders or notes that do not carry scene met
 - [x] Fix FTS ambiguity bug: include `project_id` in `scenes_fts` table and queries (Edge Case #2)
 - [x] Migrate metadata storage to sidecar files (`.meta.yaml`); auto-generate sidecars from frontmatter on first sync; do not strip frontmatter from `.md` files (see Edge Case #1)
 - [x] Detect orphaned sidecars (`.meta.yaml` with no corresponding `.md`) and warn on sync
-- [ ] Derive and store `part`/`chapter` from file path at sidecar creation time; detect path/metadata mismatch and warn
+- [x] Derive and store `part`/`chapter` from file path at sidecar creation time; detect path/metadata mismatch and warn
 - [x] Implement `update_scene_metadata`, `update_character_sheet`, `flag_scene` (write to sidecar only)
 - [x] Implement stale-scene detection and staleness warnings in retrieval tools
 - [x] Implement `enrich_scene` for re-deriving metadata from updated prose

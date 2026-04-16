@@ -6,7 +6,7 @@ import path from "node:path";
 import matter from "gray-matter";
 import { z } from "zod";
 import { openDb } from "./db.js";
-import { syncAll, isSyncDirWritable, writeMeta, readMeta, indexSceneFile } from "./sync.js";
+import { syncAll, isSyncDirWritable, writeMeta, readMeta, indexSceneFile, normalizeSceneMetaForPath } from "./sync.js";
 
 const SYNC_DIR = process.env.WRITING_SYNC_DIR ?? "./sync";
 const DB_PATH = process.env.DB_PATH ?? "./writing.db";
@@ -220,6 +220,13 @@ function createMcpServer() {
           : "";
         return { content: [{ type: "text", text: prose.trim() + warning }] };
       } catch (err) {
+        if (err.code === "ENOENT") {
+          return errorResponse(
+            "STALE_PATH",
+            `Prose file for scene '${scene_id}' not found at indexed path — the file may have moved since the last sync. Run sync() to refresh the index.`,
+            { indexed_path: scene.file_path }
+          );
+        }
         return errorResponse("IO_ERROR", `Failed to read scene file: ${err.message}`);
       }
     }
@@ -628,13 +635,13 @@ function createMcpServer() {
         const inferredLogline = deriveLoglineFromProse(prose);
         const inferredCharacters = inferCharacterIdsFromProse(db, prose, scene.project_id);
 
-        const updatedMeta = {
+        const updatedMeta = normalizeSceneMetaForPath(SYNC_DIR, scene.file_path, {
           ...meta,
           ...(inferredLogline ? { logline: inferredLogline } : {}),
           ...((inferredCharacters.length > 0 || (meta.characters?.length ?? 0) > 0)
             ? { characters: inferredCharacters.length > 0 ? inferredCharacters : meta.characters }
             : {}),
-        };
+        }).meta;
 
         writeMeta(scene.file_path, updatedMeta);
         indexSceneFile(db, SYNC_DIR, scene.file_path, updatedMeta, prose);
@@ -689,7 +696,7 @@ function createMcpServer() {
         return errorResponse("NOT_FOUND", `Scene '${scene_id}' not found in project '${project_id}'.`);
       }
       const { meta } = readMeta(scene.file_path, SYNC_DIR, { writable: true });
-      const updated = { ...meta, ...fields };
+      const updated = normalizeSceneMetaForPath(SYNC_DIR, scene.file_path, { ...meta, ...fields }).meta;
       writeMeta(scene.file_path, updated);
 
       // Re-index the scene immediately so the DB reflects the new metadata
