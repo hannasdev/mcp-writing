@@ -41,6 +41,7 @@ const characterSchema = z.object({
   character_id: z.string().min(1),
   name: z.string().min(1).optional(),
   role: z.string().min(1).optional(),
+  group: z.string().min(1).optional(),
   arc_summary: z.string().min(1).optional(),
   first_appearance: z.string().min(1).optional(),
   traits: z.array(z.string().min(1)).optional(),
