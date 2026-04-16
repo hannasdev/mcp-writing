@@ -567,4 +567,73 @@ describe("metadata lint", () => {
 
     fs.rmSync(dir, { recursive: true, force: true });
   });
+
+  test("warns on .md files with no sidecar and no frontmatter", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "lint-meta-"));
+    const scenePath = path.join(dir, "projects", "novel", "scenes", "blank.md");
+    fs.mkdirSync(path.dirname(scenePath), { recursive: true });
+    fs.writeFileSync(scenePath, "Just plain prose, no metadata at all.");
+
+    const result = lintMetadataInSyncDir(dir);
+    assert.ok(result.warnings.some(w => w.code === "NO_METADATA"));
+    assert.ok(result.warnings.some(w => w.file === scenePath));
+
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  test("errors on duplicate scene_id across two files", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "lint-meta-"));
+    const sceneDir = path.join(dir, "projects", "novel", "scenes");
+    fs.mkdirSync(sceneDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(sceneDir, "sc-001.meta.yaml"),
+      "scene_id: sc-001\ntitle: First\npart: 1\nchapter: 1\n"
+    );
+    fs.writeFileSync(path.join(sceneDir, "sc-001.md"), "Prose A.");
+    fs.writeFileSync(
+      path.join(sceneDir, "sc-001-copy.meta.yaml"),
+      "scene_id: sc-001\ntitle: Copy\npart: 1\nchapter: 2\n"
+    );
+    fs.writeFileSync(path.join(sceneDir, "sc-001-copy.md"), "Prose B.");
+
+    const result = lintMetadataInSyncDir(dir);
+    assert.equal(result.ok, false);
+    assert.ok(result.errors.some(e => e.code === "DUPLICATE_SCENE_ID"));
+    assert.ok(result.errors.some(e => e.message.includes("sc-001")));
+
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// walkFiles / walkSidecars — symlink support
+// ---------------------------------------------------------------------------
+describe("walkFiles symlink support", () => {
+  test("follows symlinked subdirectories", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "walk-sym-"));
+    const real = path.join(dir, "real-subdir");
+    const link = path.join(dir, "linked-subdir");
+    fs.mkdirSync(real);
+    fs.writeFileSync(path.join(real, "sc-001.md"), "");
+    fs.symlinkSync(real, link, "dir");
+
+    const files = walkFiles(dir);
+    // Should find sc-001.md via both real and linked paths
+    assert.equal(files.length, 2);
+
+    fs.rmSync(dir, { recursive: true });
+  });
+
+  test("skips broken symlinks without throwing", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "walk-broken-"));
+    const link = path.join(dir, "broken-link");
+    fs.symlinkSync("/nonexistent/path", link, "dir");
+    fs.writeFileSync(path.join(dir, "sc-001.md"), "");
+
+    assert.doesNotThrow(() => walkFiles(dir));
+    const files = walkFiles(dir);
+    assert.equal(files.length, 1); // only the real file, broken link silently skipped
+
+    fs.rmSync(dir, { recursive: true });
+  });
 });

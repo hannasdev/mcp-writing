@@ -395,11 +395,20 @@ If `WRITING_SYNC_DIR` is a read-only Docker mount or network share, Phase 2 side
 **#4 — `get_chapter_prose` unbounded load (important)**
 A large chapter (e.g. 30 scenes × 3000 words) produces ~90k words in a single tool response — guaranteed context overflow for any model. Add a configurable `MAX_CHAPTER_SCENES` limit (default: 10) with an explicit warning in the response when the limit is hit.
 
-**#5 — Duplicate `scene_id` from copy/paste templates (minor)**
-If two scene files in the same project share a `scene_id`, sync warns and later inserts can overwrite earlier row state. Mitigation: keep duplicate detection warnings and add a stricter lint mode that fails on duplicates.
+**#5 — Duplicate `scene_id` from copy/paste templates (resolved)**
+If two scene files in the same project share a `scene_id`, sync warns and later inserts can overwrite earlier row state. Lint now errors on duplicate `scene_id` across files, making it easy to catch before syncing. Sync continues to warn at runtime.
 
-**#6 — Blank scenes or notes skipped due to missing `scene_id` (minor)**
-Scrivener often contains empty placeholders or notes that do not carry scene metadata. These are skipped in scene indexing. Mitigation: keep sync summaries explicit and provide lint warnings so users can decide which files should become indexed scenes.
+**#6 — Blank scenes or notes skipped due to missing `scene_id` (resolved)**
+Scrivener often contains empty placeholders or notes that do not carry scene metadata. These are skipped in scene indexing. Sync summaries report skipped files; lint now emits a `NO_METADATA` warning for `.md`/`.txt` files with no sidecar and no frontmatter, so users can decide which files should become indexed scenes.
+
+**#7 — `search_metadata` crash on malformed FTS5 query syntax (resolved)**
+Passing an invalid FTS5 expression (e.g. an unmatched `"`) to `search_metadata` previously caused an unhandled SQLite exception. The tool now catches this and returns an `INVALID_QUERY` error envelope.
+
+**#8 — Symlinked subdirectories silently skipped during sync folder walk (resolved)**
+`walkFiles` and `walkSidecars` previously skipped symlinks to directories (`entry.isDirectory()` is false for symlinks). Both functions now follow directory symlinks. Broken symlinks are skipped silently.
+
+**#9 — Unguarded IO errors in write tools when prose/character file has moved (resolved)**
+`update_scene_metadata`, `update_character_sheet`, and `flag_scene` previously let ENOENT and other IO errors throw as unhandled exceptions when the indexed file path was stale. All three now return a `STALE_PATH` error (with `indexed_path` detail) on ENOENT, and `IO_ERROR` for other failures, consistent with `get_scene_prose`.
 
 ---
 
@@ -428,6 +437,10 @@ Scrivener often contains empty placeholders or notes that do not carry scene met
 - [x] Implement stale-scene detection and staleness warnings in retrieval tools
 - [x] Implement `enrich_scene` for re-deriving metadata from updated prose
 - [x] Implement `get_relationship_arc` (temporal character relationship graph)
+- [x] Lint: `DUPLICATE_SCENE_ID` error for cross-file duplicates; `NO_METADATA` warning for bare files (Edge Cases #5, #6)
+- [x] Fix `search_metadata` crash on invalid FTS5 syntax; return `INVALID_QUERY` envelope (Edge Case #7)
+- [x] Follow symlinked subdirectories in sync folder walk (Edge Case #8)
+- [x] Guard write tools against ENOENT/IO errors; return `STALE_PATH` envelope (Edge Case #9)
 
 ### Phase 3 — The AI can help you edit prose
 

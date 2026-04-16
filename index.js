@@ -414,12 +414,17 @@ function createMcpServer() {
       page_size: z.number().int().min(1).max(200).optional().describe("Optional page size for paginated responses (default: 20, max: 200)."),
     },
     async ({ query, page, page_size }) => {
-      const totalCount = db.prepare(`
-        SELECT COUNT(*) AS count
-        FROM scenes_fts f
-        JOIN scenes s ON s.scene_id = f.scene_id AND s.project_id = f.project_id
-        WHERE scenes_fts MATCH ?
-      `).get(query)?.count ?? 0;
+      let totalCount;
+      try {
+        totalCount = db.prepare(`
+          SELECT COUNT(*) AS count
+          FROM scenes_fts f
+          JOIN scenes s ON s.scene_id = f.scene_id AND s.project_id = f.project_id
+          WHERE scenes_fts MATCH ?
+        `).get(query)?.count ?? 0;
+      } catch (err) {
+        return errorResponse("INVALID_QUERY", "Invalid search query syntax. Use plain keywords or quoted phrases.", { detail: err.message });
+      }
 
       if (totalCount === 0) {
         return errorResponse("NO_RESULTS", "No scenes matched the search query.");
@@ -695,15 +700,22 @@ function createMcpServer() {
       if (!scene) {
         return errorResponse("NOT_FOUND", `Scene '${scene_id}' not found in project '${project_id}'.`);
       }
-      const { meta } = readMeta(scene.file_path, SYNC_DIR, { writable: true });
-      const updated = normalizeSceneMetaForPath(SYNC_DIR, scene.file_path, { ...meta, ...fields }).meta;
-      writeMeta(scene.file_path, updated);
+      try {
+        const { meta } = readMeta(scene.file_path, SYNC_DIR, { writable: true });
+        const updated = normalizeSceneMetaForPath(SYNC_DIR, scene.file_path, { ...meta, ...fields }).meta;
+        writeMeta(scene.file_path, updated);
 
-      // Re-index the scene immediately so the DB reflects the new metadata
-      const { content: prose } = matter(fs.readFileSync(scene.file_path, "utf8"));
-      indexSceneFile(db, SYNC_DIR, scene.file_path, updated, prose);
+        // Re-index the scene immediately so the DB reflects the new metadata
+        const { content: prose } = matter(fs.readFileSync(scene.file_path, "utf8"));
+        indexSceneFile(db, SYNC_DIR, scene.file_path, updated, prose);
 
-      return { content: [{ type: "text", text: `Updated metadata for scene '${scene_id}'.` }] };
+        return { content: [{ type: "text", text: `Updated metadata for scene '${scene_id}'.` }] };
+      } catch (err) {
+        if (err.code === "ENOENT") {
+          return errorResponse("STALE_PATH", `Prose file for scene '${scene_id}' not found at indexed path — the file may have moved. Run sync() to refresh.`, { indexed_path: scene.file_path });
+        }
+        return errorResponse("IO_ERROR", `Failed to write metadata for scene '${scene_id}': ${err.message}`);
+      }
     }
   );
 
@@ -729,27 +741,34 @@ function createMcpServer() {
       if (!char) {
         return errorResponse("NOT_FOUND", `Character '${character_id}' not found.`);
       }
-      const { meta } = readMeta(char.file_path, SYNC_DIR, { writable: true });
-      const updated = { ...meta, ...fields };
-      writeMeta(char.file_path, updated);
+      try {
+        const { meta } = readMeta(char.file_path, SYNC_DIR, { writable: true });
+        const updated = { ...meta, ...fields };
+        writeMeta(char.file_path, updated);
 
-      // Update DB directly
-      db.prepare(`
-        UPDATE characters SET name = ?, role = ?, arc_summary = ?, first_appearance = ?
-        WHERE character_id = ?
-      `).run(
-        updated.name ?? meta.name, updated.role ?? null,
-        updated.arc_summary ?? null, updated.first_appearance ?? null,
-        character_id
-      );
-      if (fields.traits) {
-        db.prepare(`DELETE FROM character_traits WHERE character_id = ?`).run(character_id);
-        for (const t of fields.traits) {
-          db.prepare(`INSERT OR IGNORE INTO character_traits (character_id, trait) VALUES (?, ?)`).run(character_id, t);
+        // Update DB directly
+        db.prepare(`
+          UPDATE characters SET name = ?, role = ?, arc_summary = ?, first_appearance = ?
+          WHERE character_id = ?
+        `).run(
+          updated.name ?? meta.name, updated.role ?? null,
+          updated.arc_summary ?? null, updated.first_appearance ?? null,
+          character_id
+        );
+        if (fields.traits) {
+          db.prepare(`DELETE FROM character_traits WHERE character_id = ?`).run(character_id);
+          for (const t of fields.traits) {
+            db.prepare(`INSERT OR IGNORE INTO character_traits (character_id, trait) VALUES (?, ?)`).run(character_id, t);
+          }
         }
-      }
 
-      return { content: [{ type: "text", text: `Updated character sheet for '${character_id}'.` }] };
+        return { content: [{ type: "text", text: `Updated character sheet for '${character_id}'.` }] };
+      } catch (err) {
+        if (err.code === "ENOENT") {
+          return errorResponse("STALE_PATH", `Character file for '${character_id}' not found at indexed path — the file may have moved. Run sync() to refresh.`, { indexed_path: char.file_path });
+        }
+        return errorResponse("IO_ERROR", `Failed to write character metadata for '${character_id}': ${err.message}`);
+      }
     }
   );
 
@@ -771,11 +790,18 @@ function createMcpServer() {
       if (!scene) {
         return errorResponse("NOT_FOUND", `Scene '${scene_id}' not found in project '${project_id}'.`);
       }
-      const { meta } = readMeta(scene.file_path, SYNC_DIR, { writable: true });
-      const flags = meta.flags ?? [];
-      flags.push({ note, flagged_at: new Date().toISOString() });
-      writeMeta(scene.file_path, { ...meta, flags });
-      return { content: [{ type: "text", text: `Flagged scene '${scene_id}': ${note}` }] };
+      try {
+        const { meta } = readMeta(scene.file_path, SYNC_DIR, { writable: true });
+        const flags = meta.flags ?? [];
+        flags.push({ note, flagged_at: new Date().toISOString() });
+        writeMeta(scene.file_path, { ...meta, flags });
+        return { content: [{ type: "text", text: `Flagged scene '${scene_id}': ${note}` }] };
+      } catch (err) {
+        if (err.code === "ENOENT") {
+          return errorResponse("STALE_PATH", `Prose file for scene '${scene_id}' not found at indexed path — the file may have moved. Run sync() to refresh.`, { indexed_path: scene.file_path });
+        }
+        return errorResponse("IO_ERROR", `Failed to flag scene '${scene_id}': ${err.message}`);
+      }
     }
   );
 

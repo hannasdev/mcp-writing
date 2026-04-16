@@ -23,6 +23,11 @@ export function walkFiles(dir, fileList = []) {
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) {
       walkFiles(full, fileList);
+    } else if (entry.isSymbolicLink()) {
+      try {
+        if (fs.statSync(full).isDirectory()) walkFiles(full, fileList);
+        else if (entry.name.endsWith(".md") || entry.name.endsWith(".txt")) fileList.push(full);
+      } catch { /* broken symlink — skip */ }
     } else if (entry.name.endsWith(".md") || entry.name.endsWith(".txt")) {
       fileList.push(full);
     }
@@ -36,6 +41,11 @@ export function walkSidecars(dir, fileList = []) {
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) {
       walkSidecars(full, fileList);
+    } else if (entry.isSymbolicLink()) {
+      try {
+        if (fs.statSync(full).isDirectory()) walkSidecars(full, fileList);
+        else if (entry.name.endsWith(".meta.yaml")) fileList.push(full);
+      } catch { /* broken symlink — skip */ }
     } else if (entry.name.endsWith(".meta.yaml")) {
       fileList.push(full);
     }

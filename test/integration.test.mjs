@@ -319,6 +319,14 @@ describe("search_metadata tool", () => {
     const text = await callTool("search_metadata", { query: "dragons" });
     assert.ok(text.toLowerCase().includes("no scenes"));
   });
+
+  test("returns INVALID_QUERY on malformed FTS syntax", async () => {
+    // An unmatched double-quote is invalid FTS5 syntax and previously crashed the server
+    const text = await callTool("search_metadata", { query: '"unmatched' });
+    const parsed = JSON.parse(text);
+    assert.equal(parsed.ok, false);
+    assert.equal(parsed.error.code, "INVALID_QUERY");
+  });
 });
 
 describe("list_threads tool", () => {

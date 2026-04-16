@@ -251,11 +251,68 @@ export function lintMetadataInSyncDir(syncDir) {
       continue;
     }
     const frontmatterReport = lintFrontmatter(file);
-    if (frontmatterReport) reports.push(frontmatterReport);
+    if (frontmatterReport) {
+      reports.push(frontmatterReport);
+    } else {
+      // No sidecar and no frontmatter — file will be silently skipped during sync
+      reports.push({
+        file,
+        kind: "scene",
+        issues: [{
+          level: "warning",
+          code: "NO_METADATA",
+          message: "File has no sidecar and no frontmatter — will be skipped during sync (no scene_id).",
+        }],
+      });
+    }
   }
 
   for (const file of files) {
     compareSidecarAndFrontmatter(file, reports);
+  }
+
+  // --- Duplicate scene_id detection (cross-file, errors) ---
+  const sceneIdToFiles = new Map(); // scene_id → [filePath, ...]
+
+  for (const sidecar of walkSidecars(syncDir)) {
+    try {
+      const raw = fs.readFileSync(sidecar, "utf8");
+      const meta = parseYaml(raw) ?? {};
+      if (typeof meta.scene_id === "string" && meta.scene_id) {
+        const arr = sceneIdToFiles.get(meta.scene_id) ?? [];
+        arr.push(sidecar);
+        sceneIdToFiles.set(meta.scene_id, arr);
+      }
+    } catch {}
+  }
+  for (const file of files) {
+    if (fs.existsSync(sidecarPath(file))) continue; // already counted via sidecar
+    try {
+      const { data } = parseFile(file);
+      if (typeof data.scene_id === "string" && data.scene_id) {
+        const arr = sceneIdToFiles.get(data.scene_id) ?? [];
+        arr.push(file);
+        sceneIdToFiles.set(data.scene_id, arr);
+      }
+    } catch {}
+  }
+
+  for (const [sceneId, dupeFiles] of sceneIdToFiles) {
+    if (dupeFiles.length < 2) continue;
+    const relPaths = dupeFiles.map(f => path.relative(syncDir, f)).join(", ");
+    for (const f of dupeFiles) {
+      const report = reports.find(r => r.file === f);
+      const issue = {
+        level: "error",
+        code: "DUPLICATE_SCENE_ID",
+        message: `scene_id "${sceneId}" is used by ${dupeFiles.length} files: ${relPaths}`,
+      };
+      if (report) {
+        report.issues.push(issue);
+      } else {
+        reports.push({ file: f, kind: "scene", issues: [issue] });
+      }
+    }
   }
 
   const errors = reports.flatMap(r => r.issues.map(i => ({ ...i, file: r.file, kind: r.kind }))).filter(i => i.level === "error");
