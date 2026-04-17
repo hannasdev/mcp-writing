@@ -2,13 +2,18 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import http from "node:http";
 import fs from "node:fs";
+import path from "node:path";
 import matter from "gray-matter";
+import yaml from "js-yaml";
 import { z } from "zod";
 import { openDb } from "./db.js";
 import { syncAll, isSyncDirWritable, writeMeta, readMeta, indexSceneFile, normalizeSceneMetaForPath } from "./sync.js";
+import { isGitAvailable, isGitRepository, initGitRepository, createSnapshot, listSnapshots, getSceneProseAtCommit } from "./git.js";
 
 const SYNC_DIR = process.env.WRITING_SYNC_DIR ?? "./sync";
 const DB_PATH = process.env.DB_PATH ?? "./writing.db";
+const SYNC_DIR_ABS = path.resolve(SYNC_DIR);
+const DB_PATH_DISPLAY = DB_PATH === ":memory:" ? DB_PATH : path.resolve(DB_PATH);
 const HTTP_PORT = parseInt(process.env.HTTP_PORT ?? "3000", 10);
 const MAX_CHAPTER_SCENES = parseInt(process.env.MAX_CHAPTER_SCENES ?? "10", 10);
 const DEFAULT_METADATA_PAGE_SIZE = parseInt(process.env.DEFAULT_METADATA_PAGE_SIZE ?? "20", 10);
@@ -96,10 +101,42 @@ function inferCharacterIdsFromProse(dbHandle, prose, projectId) {
 // ---------------------------------------------------------------------------
 const db = openDb(DB_PATH);
 
+process.stderr.write(`[mcp-writing] Sync dir: ${SYNC_DIR_ABS}\n`);
+process.stderr.write(`[mcp-writing] DB path: ${DB_PATH_DISPLAY}\n`);
+
 // Check sync dir writability once at startup (needed for Phase 2 sidecar writes)
 const SYNC_DIR_WRITABLE = isSyncDirWritable(SYNC_DIR);
 if (!SYNC_DIR_WRITABLE) {
   process.stderr.write(`[mcp-writing] WARNING: sync dir is not writable — sidecar auto-migration and metadata write-back will be unavailable\n`);
+}
+
+// Check git availability and initialize repository if needed (Phase 3)
+const GIT_AVAILABLE = isGitAvailable();
+let GIT_ENABLED = false;
+if (GIT_AVAILABLE && SYNC_DIR_WRITABLE) {
+  if (!isGitRepository(SYNC_DIR)) {
+    try {
+      initGitRepository(SYNC_DIR);
+      process.stderr.write(`[mcp-writing] Initialized git repository at ${SYNC_DIR}\n`);
+      GIT_ENABLED = true;
+    } catch (err) {
+      process.stderr.write(`[mcp-writing] WARNING: Failed to initialize git repository: ${err.message}\n`);
+    }
+  } else {
+    GIT_ENABLED = true;
+    process.stderr.write(`[mcp-writing] Git repository detected at ${SYNC_DIR} — Phase 3 editing tools enabled\n`);
+  }
+} else if (!GIT_AVAILABLE) {
+  process.stderr.write(`[mcp-writing] WARNING: git not found on PATH — Phase 3 editing tools will be unavailable\n`);
+} else if (!SYNC_DIR_WRITABLE) {
+  process.stderr.write(`[mcp-writing] NOTE: sync dir is read-only — Phase 3 editing tools will be unavailable\n`);
+}
+
+// In-memory storage for pending edit proposals (Phase 3)
+const pendingProposals = new Map();
+let nextProposalId = 1;
+function generateProposalId() {
+  return `proposal-${nextProposalId++}`;
 }
 
 // Run sync on startup
@@ -120,6 +157,23 @@ function createMcpServer() {
     if (result.warnings.length) parts.push(`\n⚠️ Warnings:\n` + result.warnings.map(w => `- ${w}`).join("\n"));
     return { content: [{ type: "text", text: parts.join(" ") }] };
   });
+
+  // ---- get_runtime_config --------------------------------------------------
+  s.tool(
+    "get_runtime_config",
+    "Show the active runtime paths and capabilities for this server instance (sync dir, database path, writability, and git availability). Use this to verify which manuscript location is currently connected.",
+    {},
+    async () => {
+      return jsonResponse({
+        sync_dir: SYNC_DIR_ABS,
+        db_path: DB_PATH_DISPLAY,
+        sync_dir_writable: SYNC_DIR_WRITABLE,
+        git_available: GIT_AVAILABLE,
+        git_enabled: GIT_ENABLED,
+        http_port: HTTP_PORT,
+      });
+    }
+  );
 
   // ---- find_scenes ---------------------------------------------------------
   s.tool(
@@ -202,22 +256,34 @@ function createMcpServer() {
   // ---- get_scene_prose -----------------------------------------------------
   s.tool(
     "get_scene_prose",
-    "Load the full prose text of a single scene. Use this for close reading, continuity checks, or when you need the actual writing. For overview or filtering, use find_scenes instead — it is much cheaper.",
+    "Load the full prose text of a single scene. Use this for close reading, continuity checks, or when you need the actual writing. For overview or filtering, use find_scenes instead — it is much cheaper. Optionally retrieve a past version from git history.",
     {
       scene_id: z.string().describe("The scene_id to retrieve (e.g. 'sc-001-prologue'). Get this from find_scenes or get_arc."),
+      commit: z.string().optional().describe("Optional git commit hash to retrieve a past version. Use list_snapshots to find valid hashes. If omitted, returns the current prose."),
     },
-    async ({ scene_id }) => {
+    async ({ scene_id, commit }) => {
       const scene = db.prepare(`SELECT file_path, metadata_stale FROM scenes WHERE scene_id = ?`).get(scene_id);
       if (!scene) {
         return errorResponse("NOT_FOUND", `Scene '${scene_id}' not found. Run sync() if you just added it.`);
       }
       try {
-        const raw = fs.readFileSync(scene.file_path, "utf8");
-        const { content: prose } = matter(raw);
-        const warning = scene.metadata_stale
+        let rawContent;
+        if (commit && GIT_ENABLED) {
+          // Retrieve from git history
+          rawContent = getSceneProseAtCommit(SYNC_DIR, scene.file_path, commit);
+        } else if (commit && !GIT_ENABLED) {
+          return errorResponse("GIT_UNAVAILABLE", "Git is not available — cannot retrieve historical versions.");
+        } else {
+          // Retrieve current version
+          rawContent = fs.readFileSync(scene.file_path, "utf8");
+        }
+
+        const { content: prose } = matter(rawContent);
+        const versionNote = commit ? `\n\n(Retrieved from commit: ${commit})` : "";
+        const warning = scene.metadata_stale && !commit
           ? `\n\n⚠️ Metadata for this scene may be stale — prose has changed since last enrichment.`
           : "";
-        return { content: [{ type: "text", text: prose.trim() + warning }] };
+        return { content: [{ type: "text", text: prose.trim() + versionNote + warning }] };
       } catch (err) {
         if (err.code === "ENOENT") {
           return errorResponse(
@@ -831,6 +897,249 @@ function createMcpServer() {
         return errorResponse("NO_RESULTS", `No relationship data found between '${from_character}' and '${to_character}'.`);
       }
       return { content: [{ type: "text", text: JSON.stringify(rows, null, 2) }] };
+    }
+  );
+
+  // ---- PHASE 3: Prose Editing (git-backed) --------------------------------
+
+  // ---- propose_edit --------------------------------------------------------
+  s.tool(
+    "propose_edit",
+    "Generate a proposed revision for a scene. Returns a proposal_id and a diff preview. Nothing is written yet — you must call commit_edit to apply the change. This tool requires git to be available.",
+    {
+      scene_id: z.string().describe("The scene_id to revise (e.g. 'sc-011-sebastian')."),
+      instruction: z.string().describe("A brief instruction for the edit (e.g. 'Tighten the opening paragraph'). Used in the git commit message."),
+      revised_prose: z.string().describe("The complete revised prose text for the scene."),
+    },
+    async ({ scene_id, instruction, revised_prose }) => {
+      if (!GIT_ENABLED) {
+        return errorResponse("GIT_UNAVAILABLE", "Git is not available — prose editing is not supported. Ensure git is installed and the sync directory is writable.");
+      }
+
+      const scene = db.prepare(`SELECT file_path FROM scenes WHERE scene_id = ?`).get(scene_id);
+      if (!scene) {
+        return errorResponse("NOT_FOUND", `Scene '${scene_id}' not found.`);
+      }
+
+      try {
+        // Read current prose
+        const raw = fs.readFileSync(scene.file_path, "utf8");
+        const { data: metadata, content: currentProse } = matter(raw);
+
+        // Generate a simple diff representation
+        const currentLines = currentProse.trim().split("\n");
+        const revisedLines = revised_prose.trim().split("\n");
+        const diffLines = [];
+        const maxLines = Math.max(currentLines.length, revisedLines.length);
+
+        // Simple line-by-line diff
+        for (let i = 0; i < Math.min(3, maxLines); i++) {
+          const curr = currentLines[i] || "(removed)";
+          const rev = revisedLines[i] || "(removed)";
+          if (curr !== rev) {
+            diffLines.push(`- ${curr.substring(0, 80)}`);
+            diffLines.push(`+ ${rev.substring(0, 80)}`);
+          }
+        }
+        if (maxLines > 3) {
+          diffLines.push(`... (${maxLines - 3} more lines)`);
+        }
+
+        const proposalId = generateProposalId();
+        pendingProposals.set(proposalId, {
+          scene_id,
+          scene_file_path: scene.file_path,
+          instruction,
+          revised_prose,
+          original_prose: currentProse,
+          metadata,
+          created_at: new Date().toISOString(),
+        });
+
+        const summary = {
+          proposal_id: proposalId,
+          scene_id,
+          instruction,
+          diff_preview: diffLines.join("\n"),
+          note: "Review the diff above. Call commit_edit with this proposal_id to apply the change.",
+        };
+
+        return jsonResponse(summary);
+      } catch (err) {
+        if (err.code === "ENOENT") {
+          return errorResponse("STALE_PATH", `Prose file for scene '${scene_id}' not found at indexed path.`, { indexed_path: scene.file_path });
+        }
+        return errorResponse("IO_ERROR", `Failed to read scene file: ${err.message}`);
+      }
+    }
+  );
+
+  // ---- commit_edit ---------------------------------------------------------
+  s.tool(
+    "commit_edit",
+    "Apply a proposed edit and commit it to git. First creates a pre-edit snapshot, then writes the revised prose and metadata back to disk. The scene metadata stale flag is cleared.",
+    {
+      scene_id: z.string().describe("The scene_id being revised."),
+      proposal_id: z.string().describe("The proposal_id returned by propose_edit."),
+    },
+    async ({ scene_id, proposal_id }) => {
+      if (!GIT_ENABLED) {
+        return errorResponse("GIT_UNAVAILABLE", "Git is not available — prose editing is not supported.");
+      }
+
+      const proposal = pendingProposals.get(proposal_id);
+      if (!proposal) {
+        return errorResponse("PROPOSAL_NOT_FOUND", `Proposal '${proposal_id}' not found or has expired.`);
+      }
+
+      if (proposal.scene_id !== scene_id) {
+        return errorResponse("INVALID_EDIT", `Proposal '${proposal_id}' is for scene '${proposal.scene_id}', not '${scene_id}'.`);
+      }
+
+      try {
+        // Reconstruct file content, preserving frontmatter only if the original had it
+        const hasFrontmatter = proposal.metadata && Object.keys(proposal.metadata).length > 0;
+        const content = hasFrontmatter
+          ? `---\n${yaml.dump(proposal.metadata)}---\n\n${proposal.revised_prose}\n`
+          : `${proposal.revised_prose}\n`;
+
+        // Create pre-edit snapshot (commits current state before overwriting)
+        const snapshot = createSnapshot(SYNC_DIR, proposal.scene_file_path, scene_id, proposal.instruction);
+
+        // Write the revised prose to disk
+        fs.writeFileSync(proposal.scene_file_path, content, "utf8");
+
+        // Re-index using canonical metadata (sidecar takes precedence over inline frontmatter)
+        const { meta: canonicalMeta } = readMeta(proposal.scene_file_path, SYNC_DIR, { writable: false });
+        const { content: newProse } = matter(content);
+        indexSceneFile(db, SYNC_DIR, proposal.scene_file_path, canonicalMeta, newProse);
+
+        // Clean up the proposal
+        pendingProposals.delete(proposal_id);
+
+        const result = {
+          ok: true,
+          scene_id,
+          proposal_id,
+          snapshot_commit: snapshot.commit_hash,
+          message: `Committed edit for scene '${scene_id}'${snapshot.commit_hash ? ` (snapshot: ${snapshot.commit_hash.substring(0, 7)})` : " (no changes to snapshot)"}`,
+        };
+
+        return jsonResponse(result);
+      } catch (err) {
+        if (err.code === "ENOENT") {
+          return errorResponse("STALE_PATH", `Prose file not found at indexed path.`, { indexed_path: proposal.scene_file_path });
+        }
+        return errorResponse("IO_ERROR", `Failed to commit edit: ${err.message}`);
+      }
+    }
+  );
+
+  // ---- discard_edit --------------------------------------------------------
+  s.tool(
+    "discard_edit",
+    "Discard a pending proposal without applying it. The proposal is deleted and the prose remains unchanged.",
+    {
+      proposal_id: z.string().describe("The proposal_id to discard (from propose_edit)."),
+    },
+    async ({ proposal_id }) => {
+      const proposal = pendingProposals.get(proposal_id);
+      if (!proposal) {
+        return errorResponse("PROPOSAL_NOT_FOUND", `Proposal '${proposal_id}' not found or has already been discarded.`);
+      }
+
+      pendingProposals.delete(proposal_id);
+      return jsonResponse({
+        ok: true,
+        proposal_id,
+        message: `Discarded proposal '${proposal_id}' for scene '${proposal.scene_id}'.`,
+      });
+    }
+  );
+
+  // ---- snapshot_scene -------------------------------------------------------
+  s.tool(
+    "snapshot_scene",
+    "Manually create a git commit (snapshot) for the current state of a scene. Use this to mark important editing checkpoints outside of the propose/commit workflow.",
+    {
+      scene_id: z.string().describe("The scene_id to snapshot."),
+      project_id: z.string().describe("Project the scene belongs to."),
+      reason: z.string().describe("A brief reason for the snapshot (e.g. 'Character arc milestone reached')."),
+    },
+    async ({ scene_id, project_id, reason }) => {
+      if (!GIT_ENABLED) {
+        return errorResponse("GIT_UNAVAILABLE", "Git is not available — snapshots cannot be created.");
+      }
+
+      const scene = db.prepare(`SELECT file_path FROM scenes WHERE scene_id = ? AND project_id = ?`)
+        .get(scene_id, project_id);
+      if (!scene) {
+        return errorResponse("NOT_FOUND", `Scene '${scene_id}' not found in project '${project_id}'.`);
+      }
+
+      try {
+        const snapshot = createSnapshot(SYNC_DIR, scene.file_path, scene_id, reason);
+        if (!snapshot.commit_hash) {
+          return jsonResponse({
+            ok: true,
+            scene_id,
+            reason,
+            message: "No changes to snapshot.",
+          });
+        }
+
+        return jsonResponse({
+          ok: true,
+          scene_id,
+          reason,
+          commit_hash: snapshot.commit_hash,
+          message: `Created snapshot for scene '${scene_id}': ${reason}`,
+        });
+      } catch (err) {
+        if (err.code === "ENOENT") {
+          return errorResponse("STALE_PATH", `Prose file not found at indexed path.`, { indexed_path: scene.file_path });
+        }
+        return errorResponse("IO_ERROR", `Failed to create snapshot: ${err.message}`);
+      }
+    }
+  );
+
+  // ---- list_snapshots -------------------------------------------------------
+  s.tool(
+    "list_snapshots",
+    "List git commit history for a scene, with timestamps and commit messages. Use this to find commit hashes for get_scene_prose historical retrieval.",
+    {
+      scene_id: z.string().describe("The scene_id to list snapshots for."),
+    },
+    async ({ scene_id }) => {
+      if (!GIT_ENABLED) {
+        return errorResponse("GIT_UNAVAILABLE", "Git is not available — snapshots cannot be retrieved.");
+      }
+
+      const scene = db.prepare(`SELECT file_path FROM scenes WHERE scene_id = ?`).get(scene_id);
+      if (!scene) {
+        return errorResponse("NOT_FOUND", `Scene '${scene_id}' not found.`);
+      }
+
+      try {
+        const snapshots = listSnapshots(SYNC_DIR, scene.file_path);
+        if (!snapshots || snapshots.length === 0) {
+          return errorResponse("NO_RESULTS", `No snapshots found for scene '${scene_id}'. Try editing and committing the scene first.`);
+        }
+
+        return jsonResponse({
+          scene_id,
+          snapshots: snapshots.map(s => ({
+            commit_hash: s.commit_hash,
+            short_hash: s.commit_hash.substring(0, 7),
+            timestamp: s.timestamp,
+            message: s.message,
+          })),
+          note: "Use the commit_hash values with get_scene_prose(scene_id, commit) to retrieve a past version.",
+        });
+      } catch (err) {
+        return errorResponse("IO_ERROR", `Failed to list snapshots: ${err.message}`);
+      }
     }
   );
 

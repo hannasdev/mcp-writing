@@ -121,6 +121,21 @@ describe("sync tool", () => {
   });
 });
 
+describe("get_runtime_config tool", () => {
+  test("returns active runtime paths and capability flags", async () => {
+    const text = await callTool("get_runtime_config");
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.sync_dir, TEST_SYNC_DIR);
+    assert.equal(parsed.db_path, ":memory:");
+    assert.equal(parsed.http_port, TEST_PORT);
+
+    assert.equal(typeof parsed.sync_dir_writable, "boolean");
+    assert.equal(typeof parsed.git_available, "boolean");
+    assert.equal(typeof parsed.git_enabled, "boolean");
+  });
+});
+
 describe("find_scenes tool", () => {
   test("returns all 3 scenes with no filters", async () => {
     const text = await callTool("find_scenes");

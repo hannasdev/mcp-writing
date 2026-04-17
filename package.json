@@ -8,6 +8,7 @@
     "index.js",
     "db.js",
     "sync.js",
+    "git.js",
     "metadata-lint.js",
     "scripts/",
     "README.md",
