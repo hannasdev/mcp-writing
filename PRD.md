@@ -143,6 +143,125 @@ This gives clean isolation: standalone projects don't see each other's character
           scene-001.md
 ```
 
+### Design Decision: Non-Draft Data Contract (consistent world/notes handling)
+
+The `Draft` folder should not be the only source of useful knowledge. Projects also contain character notes, place notes, research, continuity scratchpads, and style/process notes. These have mixed structure and should not all be forced into database entities.
+
+Decision: treat non-draft data as two classes:
+
+- **Canonical world entities** (structured, indexed): character sheets and place sheets that power filtering, joins, and arc retrieval.
+- **Supporting notes** (unstructured, file-first): any related material that is useful to read but not required for structured queries.
+
+#### Folder taxonomy
+
+- `.../world/characters/` — character entities and character-adjacent notes
+- `.../world/places/` — place entities and place-adjacent notes
+- `.../world/reference/` — universe/project lore, systems, research, style guides, continuity notes
+- `.../Notes/` (or similar) — scratch/process material, drafts, feedback, temporary planning
+
+This applies at both scopes:
+
+- **Universe scope** for cross-book canon: `universes/<universe-id>/world/...`
+- **Project scope** for book-local canon: `.../<project>/world/...`
+
+Queries for a project should include both project-local entities and universe-shared entities when the project belongs to a universe.
+
+#### Canonical-file rule inside character/place folders
+
+Character and place folders may contain many files, but exactly one file should be canonical for the entity row.
+
+- Recommended canonical filename: `sheet.md` or `sheet.txt`
+- Canonical sidecar: `sheet.meta.yaml`
+- Supporting files (for example `arc.md`, `relationships.md`, `biology-notes.md`) are allowed and remain file-first
+
+Canonical sidecar minimums:
+
+- Character: `character_id`, optional `name`, `role`, `arc_summary`, `first_appearance`, `traits`
+- Place: `place_id`, optional `name`, `associated_characters`, `tags`
+
+If a file is under `/characters/` without `character_id`, or under `/places/` without `place_id`, it should be treated as supporting notes and skipped for entity indexing.
+
+#### Database inclusion policy
+
+Only promote data to entities when stable identifiers and structured queries are needed.
+
+- **Must be entities:** scenes, characters, places, threads, scene links (scene_characters, scene_places, scene_tags, scene_threads)
+- **File-first by default:** character-adjacent meta, relationship brainstorming, lore fragments, editorial guidance, feedback, process notes
+
+Promotion trigger from file-first to entity-backed metadata:
+
+- repeated query need across many scenes/books
+- stable identifier is known
+- field semantics are stable enough to validate
+
+#### Naming and identity conventions
+
+- IDs are stable and never derived from mutable ordering
+- Character IDs: `char-<slug>`
+- Place IDs: `place-<slug>`
+- Folder rename is allowed; ID must not change
+
+#### Promotion path: local to shared canon
+
+When a previously book-local character/place becomes cross-book canon:
+
+1. Move canonical entity file from project world folder to universe world folder.
+2. Keep the same `character_id`/`place_id`.
+3. Leave project-specific supporting notes local, or copy only what is canon-relevant.
+4. Re-run `sync()`.
+
+This preserves continuity without rewriting scene links or historical references.
+
+#### Operational principle
+
+Automate deterministic structure, not editorial interpretation:
+
+- deterministic: folder scope, ID presence checks, canonical-file detection, inclusion/exclusion behavior
+- editorial: what is canon, what belongs in sheet vs supporting notes, when to promote local notes to shared canon
+
+#### Implementation checklist (non-draft content)
+
+1. **Indexer classification rules**
+  - Treat files under `/world/characters/` as character candidates.
+  - Treat files under `/world/places/` as place candidates.
+  - Treat files under `/world/reference/` and `/Notes/` as non-entity by default.
+  - Keep universe/project scope inference path-based.
+
+2. **Canonical file detection**
+  - In character/place folders, prefer `sheet.meta.yaml` + `sheet.md|txt` as canonical.
+  - If no canonical `sheet.*` exists, allow explicit opt-in via sidecar field (for example `canonical: true`).
+  - Ignore non-canonical files for entity row updates (they remain retrievable prose/reference files).
+
+3. **ID requirements and fallback behavior**
+  - Character entity indexing requires `character_id`.
+  - Place entity indexing requires `place_id`.
+  - Missing IDs do not fail sync; emit warnings and skip entity insert/update.
+  - Optional future fallback: derive ID from folder slug only when explicitly enabled by config.
+
+4. **Entity update semantics**
+  - Only canonical files may upsert `characters`/`places` rows.
+  - Preserve stable IDs even if file/folder names change.
+  - Keep support for project-local and universe-shared entities simultaneously.
+
+5. **Validation and linting**
+  - Add lint checks for multiple canonical files in one character/place folder.
+  - Add lint checks for duplicate `character_id` / `place_id` across canonical files in same scope.
+  - Add lint warning when canonical file exists without required ID field.
+
+6. **Importer behavior**
+  - Keep Draft import independent from Notes import.
+  - Importer should create canonical `sheet.*` files for detected character/place entities.
+  - Non-mappable Notes files should be copied as support notes only (no forced entity creation).
+
+7. **Tooling behavior**
+  - Entity tools (`list_characters`, `get_character_sheet`, `list_places`) read only canonical entity rows.
+  - Retrieval tools for prose/reference remain file-based and can include support notes when requested.
+
+8. **Migration and rollout**
+  - Phase A: adopt conventions with warnings only (non-breaking).
+  - Phase B: enable canonical-file enforcement once repositories are cleaned up.
+  - Provide a one-time migration script to mark or generate canonical sheets where missing.
+
 ### Scene file format — prose-first with optional legacy frontmatter
 
 ```markdown
