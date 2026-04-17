@@ -181,6 +181,14 @@ Canonical sidecar minimums:
 
 If a file is under `/characters/` without `character_id`, or under `/places/` without `place_id`, it should be treated as supporting notes and skipped for entity indexing.
 
+Canonical Markdown scaffolds should follow one formatting contract:
+
+- first line is a top-level title (`# Name`)
+- every heading is followed by a blank line
+- every generated `.md` document ends with a trailing blank line
+
+This structure is user-curated. The system should not attempt to infer canonical entities from freeform `Notes/` exports.
+
 #### Database inclusion policy
 
 Only promote data to entities when stable identifiers and structured queries are needed.
@@ -249,9 +257,10 @@ Automate deterministic structure, not editorial interpretation:
   - Add lint warning when canonical file exists without required ID field.
 
 6. **Importer behavior**
-  - Keep Draft import independent from Notes import.
-  - Importer should create canonical `sheet.*` files for detected character/place entities.
-  - Non-mappable Notes files should be copied as support notes only (no forced entity creation).
+  - Import only Draft scene prose automatically.
+  - Do not infer non-draft entities from Scrivener `Notes/` structure.
+  - Require users to place character/place/reference files into the predetermined `world/` structure directly.
+  - Keep sync/index behavior deterministic once files are placed correctly.
 
 7. **Tooling behavior**
   - Entity tools (`list_characters`, `get_character_sheet`, `list_places`) read only canonical entity rows.
@@ -430,11 +439,15 @@ A scene without frontmatter/sidecar metadata is not a hard failure for sync, but
 
 | Tool | Description |
 | --- | --- |
-| `find_scenes(character?, beat?, tags?, part?, chapter?, pov?)` | Returns matching scene metadata — no prose |
+| `get_runtime_config()` | Show the active sync dir, database path, writability, git availability, and port |
+| `find_scenes(project_id?, character?, beat?, tag?, part?, chapter?, pov?, page?, page_size?)` | Returns matching scene metadata — no prose |
 | `get_arc(character_id)` | Ordered scene metadata for all scenes involving a character |
 | `list_characters()` | All character entries |
-| `get_character_sheet(character_id)` | Character metadata + extended notes |
+| `get_character_sheet(character_id)` | Character metadata, canonical sheet content, and adjacent support notes |
+| `create_character_sheet(name, project_id?|universe_id?, notes?, fields?)` | Create a canonical character sheet folder, sidecar, and `arc.md` |
 | `list_places()` | All place entries |
+| `get_place_sheet(place_id)` | Place metadata, canonical sheet content, and adjacent support notes |
+| `create_place_sheet(name, project_id?|universe_id?, notes?, fields?)` | Create a canonical place sheet folder and sidecar |
 | `search_metadata(query)` | Lightweight text search across loglines and tags |
 
 ### Prose retrieval (loads file content — use targeted)
@@ -442,7 +455,7 @@ A scene without frontmatter/sidecar metadata is not a hard failure for sync, but
 | Tool | Description |
 | --- | --- |
 | `get_scene_prose(scene_id, commit?)` | Returns prose for a scene; optionally a past git commit hash |
-| `get_chapter_prose(part, chapter)` | Returns all prose for a chapter (use sparingly) |
+| `get_chapter_prose(project_id?, part, chapter)` | Returns all prose for a chapter (use sparingly) |
 | `list_snapshots(scene_id)` | Lists git commit history for a scene file with timestamps and messages |
 
 ### Editing — two-step, confirm before write
@@ -451,10 +464,10 @@ The AI can never write prose in a single step. All prose edits require an explic
 
 | Tool | Description |
 | --- | --- |
-| `propose_edit(scene_id, instruction)` | Generates revised prose + diff; nothing is written; returns a `proposal_id` |
-| `commit_edit(scene_id, proposal_id)` | Git-commits current prose as pre-edit snapshot, then writes the proposed revision |
+| `propose_edit(scene_id, instruction, revised_prose)` | Stores a complete revised version, returns a `proposal_id`, and shows a diff preview without writing |
+| `commit_edit(scene_id, proposal_id)` | Git-commits current prose as a pre-edit snapshot, then writes the proposed revision |
 | `discard_edit(proposal_id)` | Discards a pending proposal |
-| `snapshot_scene(scene_id, reason)` | Manually git-commits the current state of a scene with a descriptive message |
+| `snapshot_scene(scene_id, project_id, reason)` | Manually git-commits the current state of a scene with a descriptive message |
 
 ### Threads
 

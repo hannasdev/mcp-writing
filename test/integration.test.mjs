@@ -305,12 +305,63 @@ describe("get_character_sheet tool", () => {
     assert.ok(text.includes("loyalty") || text.includes("patient"),
       `Expected arc keywords for marcus, got: ${text.slice(0, 200)}`);
   });
+
+  test("returns adjacent support notes for nested character folders", async () => {
+    const charDir = path.join(writeSyncDir, "projects", "test-novel", "world", "characters", "alba-hartmann");
+    fs.mkdirSync(charDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(charDir, "sheet.md"),
+      "---\ncharacter_id: alba\nname: Alba Hartmann\nrole: scientist\n---\nCanonical sheet content."
+    );
+    fs.writeFileSync(path.join(charDir, "arc.md"), "Alba support arc notes.");
+    await callWriteTool("sync");
+
+    const text = await callWriteTool("get_character_sheet", { character_id: "alba" });
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.notes, "Canonical sheet content.");
+    assert.equal(parsed.supporting_notes.length, 1);
+    assert.equal(parsed.supporting_notes[0].file_name, "arc.md");
+    assert.equal(parsed.supporting_notes[0].content, "Alba support arc notes.");
+  });
 });
 
 describe("list_places tool", () => {
   test("lists harbor-district", async () => {
     const text = await callTool("list_places");
     assert.ok(text.includes("harbor-district"));
+  });
+});
+
+describe("get_place_sheet tool", () => {
+  test("harbor-district sheet includes associated_characters and tags", async () => {
+    const text = await callTool("get_place_sheet", { place_id: "harbor-district" });
+    const parsed = JSON.parse(text);
+
+    assert.ok(parsed.associated_characters.includes("elena"));
+    assert.ok(parsed.tags.includes("urban"));
+    assert.ok(parsed.notes.includes("brine and diesel"));
+  });
+
+  test("returns adjacent support notes for nested place folders", async () => {
+    const placeDir = path.join(writeSyncDir, "projects", "test-novel", "world", "places", "aevi-labs");
+    fs.mkdirSync(placeDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(placeDir, "sheet.md"),
+      "---\nplace_id: aevi-labs\nname: Aevi Labs\nassociated_characters:\n  - alba\ntags:\n  - lab\n---\nCanonical place sheet content."
+    );
+    fs.writeFileSync(path.join(placeDir, "history.md"), "Aevi Labs support history notes.");
+    await callWriteTool("sync");
+
+    const text = await callWriteTool("get_place_sheet", { place_id: "aevi-labs" });
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.notes, "Canonical place sheet content.");
+    assert.equal(parsed.associated_characters[0], "alba");
+    assert.equal(parsed.tags[0], "lab");
+    assert.equal(parsed.supporting_notes.length, 1);
+    assert.equal(parsed.supporting_notes[0].file_name, "history.md");
+    assert.equal(parsed.supporting_notes[0].content, "Aevi Labs support history notes.");
   });
 });
 
@@ -588,6 +639,54 @@ describe("update_character_sheet tool", () => {
       fields: { arc_summary: "X" },
     });
     assert.ok(text.toLowerCase().includes("not found"));
+  });
+});
+
+describe("create_character_sheet tool", () => {
+  test("creates a project-scoped canonical character sheet and indexes it", async () => {
+    const text = await callWriteTool("create_character_sheet", {
+      name: "Mira Nystrom",
+      project_id: "test-novel",
+      notes: "Canonical character sheet starter.",
+      fields: {
+        role: "protagonist",
+        traits: ["driven"],
+      },
+    });
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.id, "char-mira-nystrom");
+    assert.ok(fs.existsSync(parsed.prose_path));
+    assert.ok(fs.existsSync(parsed.meta_path));
+    assert.ok(fs.existsSync(path.join(path.dirname(parsed.prose_path), "arc.md")));
+
+    const listed = await callWriteTool("list_characters", { project_id: "test-novel" });
+    assert.ok(listed.includes("char-mira-nystrom"));
+  });
+});
+
+describe("create_place_sheet tool", () => {
+  test("creates a project-scoped canonical place sheet and indexes it", async () => {
+    const text = await callWriteTool("create_place_sheet", {
+      name: "University Hospital",
+      project_id: "test-novel",
+      notes: "Canonical place sheet starter.",
+      fields: {
+        associated_characters: ["elena"],
+        tags: ["hospital"],
+      },
+    });
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.id, "place-university-hospital");
+    assert.ok(fs.existsSync(parsed.prose_path));
+    assert.ok(fs.existsSync(parsed.meta_path));
+
+    const sheet = await callWriteTool("get_place_sheet", { place_id: "place-university-hospital" });
+    assert.ok(sheet.includes("hospital"));
+    assert.ok(sheet.includes("Canonical place sheet starter"));
   });
 });
 

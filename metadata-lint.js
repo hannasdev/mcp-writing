@@ -1,7 +1,17 @@
 import fs from "node:fs";
 import path from "node:path";
 import { z } from "zod";
-import { parseFile, sidecarPath, walkFiles, walkSidecars } from "./sync.js";
+import {
+  inferProjectAndUniverse,
+  isCanonicalWorldEntityFile,
+  isWorldFile,
+  parseFile,
+  sidecarPath,
+  walkFiles,
+  walkSidecars,
+  worldEntityFolderKey,
+  worldEntityKindForPath,
+} from "./sync.js";
 import yaml from "js-yaml";
 
 const { load: parseYaml } = yaml;
@@ -41,6 +51,7 @@ const sceneSchema = z.object({
 
 const characterSchema = z.object({
   character_id: z.string().min(1),
+  canonical: z.boolean().optional(),
   name: z.string().min(1).optional(),
   role: z.string().min(1).optional(),
   group: z.string().min(1).optional(),
@@ -52,6 +63,7 @@ const characterSchema = z.object({
 
 const placeSchema = z.object({
   place_id: z.string().min(1),
+  canonical: z.boolean().optional(),
   name: z.string().min(1).optional(),
   associated_characters: z.array(z.string().min(1)).optional(),
   tags: z.array(z.string().min(1)).optional(),
@@ -218,6 +230,45 @@ function lintFrontmatter(filePath) {
   }
 }
 
+function loadMetadataForFile(filePath) {
+  const sidecar = sidecarPath(filePath);
+  if (fs.existsSync(sidecar)) {
+    const loaded = loadYamlFile(sidecar);
+    return loaded.ok ? loaded.value : null;
+  }
+
+  try {
+    const { data } = parseFile(filePath);
+    return data && Object.keys(data).length ? data : {};
+  } catch {
+    return null;
+  }
+}
+
+function reportPathForFile(filePath) {
+  const sidecar = sidecarPath(filePath);
+  return fs.existsSync(sidecar) ? sidecar : filePath;
+}
+
+function addIssueToReport(reports, filePath, kind, issue) {
+  const reportFile = reportPathForFile(filePath);
+  const report = reports.find(r => r.file === reportFile);
+  if (report) {
+    report.issues.push(issue);
+    return;
+  }
+  reports.push({ file: reportFile, kind, issues: [issue] });
+}
+
+function shouldWarnNoMetadata(syncDir, filePath) {
+  if (!isWorldFile(syncDir, filePath)) return true;
+
+  const kind = worldEntityKindForPath(syncDir, filePath);
+  if (!kind) return false;
+
+  return isCanonicalWorldEntityFile(syncDir, filePath, {});
+}
+
 function compareSidecarAndFrontmatter(filePath, reports) {
   const sidecar = sidecarPath(filePath);
   if (!fs.existsSync(sidecar)) return;
@@ -256,7 +307,7 @@ export function lintMetadataInSyncDir(syncDir) {
     const frontmatterReport = lintFrontmatter(file);
     if (frontmatterReport) {
       reports.push(frontmatterReport);
-    } else {
+    } else if (shouldWarnNoMetadata(syncDir, file)) {
       // No sidecar and no frontmatter — file will be silently skipped during sync
       reports.push({
         file,
@@ -315,6 +366,66 @@ export function lintMetadataInSyncDir(syncDir) {
       } else {
         reports.push({ file: f, kind: "scene", issues: [issue] });
       }
+    }
+  }
+
+  const entityIdToFiles = new Map();
+  const canonicalFilesByFolder = new Map();
+
+  for (const file of files) {
+    const kind = worldEntityKindForPath(syncDir, file);
+    if (!kind) continue;
+
+    const meta = loadMetadataForFile(file);
+    if (!meta) continue;
+    if (!isCanonicalWorldEntityFile(syncDir, file, meta)) continue;
+
+    const folderKey = worldEntityFolderKey(syncDir, file, kind);
+    if (folderKey) {
+      const current = canonicalFilesByFolder.get(folderKey) ?? [];
+      current.push(file);
+      canonicalFilesByFolder.set(folderKey, current);
+    }
+
+    const entityId = kind === "character" ? meta.character_id : meta.place_id;
+    if (typeof entityId === "string" && entityId) {
+      const { universe_id, project_id } = inferProjectAndUniverse(syncDir, file);
+      const scopeKey = `${kind}:${universe_id ?? "-"}:${project_id ?? "-"}:${entityId}`;
+      const current = entityIdToFiles.get(scopeKey) ?? [];
+      current.push(file);
+      entityIdToFiles.set(scopeKey, current);
+    } else {
+      addIssueToReport(reports, file, kind, {
+        level: "warning",
+        code: kind === "character" ? "MISSING_CHARACTER_ID" : "MISSING_PLACE_ID",
+        message: `Canonical ${kind} file is missing required '${kind}_id'.`,
+      });
+    }
+  }
+
+  for (const [folderKey, canonicalFiles] of canonicalFilesByFolder) {
+    if (canonicalFiles.length < 2) continue;
+    const relPaths = canonicalFiles.map(f => path.relative(syncDir, f)).join(", ");
+    for (const file of canonicalFiles) {
+      addIssueToReport(reports, file, worldEntityKindForPath(syncDir, file), {
+        level: "error",
+        code: "MULTIPLE_CANONICAL_FILES",
+        message: `Multiple canonical files found in entity folder '${folderKey}': ${relPaths}`,
+      });
+    }
+  }
+
+  for (const [scopeKey, dupeFiles] of entityIdToFiles) {
+    if (dupeFiles.length < 2) continue;
+    const entityId = scopeKey.split(":").at(-1);
+    const kind = scopeKey.split(":")[0];
+    const relPaths = dupeFiles.map(f => path.relative(syncDir, f)).join(", ");
+    for (const file of dupeFiles) {
+      addIssueToReport(reports, file, kind, {
+        level: "error",
+        code: kind === "character" ? "DUPLICATE_CHARACTER_ID" : "DUPLICATE_PLACE_ID",
+        message: `${kind}_id '${entityId}' is used by ${dupeFiles.length} canonical files: ${relPaths}`,
+      });
     }
   }
 
