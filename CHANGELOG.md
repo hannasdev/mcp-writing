@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.0](https://github.com/hannasdev/mcp-writing/compare/v1.1.1...v1.2.0) (2026-04-17)
+
+
+### Features
+
+* Phase 3 git-backed prose editing, runtime config tool, startup path logging ([f30a7c8](https://github.com/hannasdev/mcp-writing/commit/f30a7c8b5e5aaf070b0b6cfaec38479141c5f60b))
+
 ## [1.1.1](https://github.com/hannasdev/mcp-writing/compare/v1.1.0...v1.1.1) (2026-04-16)
 
 
