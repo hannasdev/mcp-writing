@@ -1,6 +1,6 @@
 /**
- * Integration tests — spawn the server as a child process against
- * the real test-sync/ data, then call each tool via the MCP client.
+ * Integration tests — generate fixture sync data in temp directories,
+ * spawn the server as a child process, then call each tool via MCP client.
  */
 import { test, describe, before, after } from "node:test";
 import assert from "node:assert/strict";
@@ -14,7 +14,6 @@ import os from "node:os";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
-const TEST_SYNC_DIR = path.join(ROOT, "test-sync");
 const TEST_PORT = 3099;
 const WRITE_PORT = 3098;
 const BASE_URL = `http://localhost:${TEST_PORT}`;
@@ -27,6 +26,7 @@ let serverProc;
 let client;
 let writeServerProc;
 let writeClient;
+let readSyncDir;
 let writeSyncDir;
 
 async function waitForServer(url, retries = 20, delayMs = 200) {
@@ -76,15 +76,290 @@ function copyDirSync(src, dest) {
   }
 }
 
+function writeFileSyncWithDirs(filePath, content) {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  fs.writeFileSync(filePath, content, "utf8");
+}
+
+function createTestSyncFixture(syncDir) {
+  writeFileSyncWithDirs(
+    path.join(syncDir, "projects", "test-novel", "part-1", "chapter-1", "sc-001.md"),
+    `---
+scene_id: sc-001
+title: The Return
+part: 1
+chapter: 1
+characters: [elena, marcus]
+places: [harbor-district]
+logline: Elena returns to the harbor district after three years away and runs into Marcus.
+save_the_cat: Opening Image
+pov: elena
+timeline_position: 1
+story_time: "Day 1, late afternoon"
+tags: [reunion, tension, harbor]
+---
+
+The ferry docked at quarter past four, which meant Elena had seventeen minutes before the evening freight shift began and the harbor became impassable. She had timed it deliberately. She did not want to see anyone she knew.
+
+She was at the bottom of the gangway when she heard her name.
+
+Marcus was standing by the storage shed with a clipboard in one hand and an expression she recognized -- the particular look he got when he was pretending not to be surprised. He was very bad at pretending.
+
+"You could have called," he said.
+
+"I could have," she agreed, and kept walking.
+
+He fell into step beside her anyway, which was exactly what she had expected him to do.
+`
+  );
+
+  writeFileSyncWithDirs(
+    path.join(syncDir, "projects", "test-novel", "part-1", "chapter-1", "sc-001.meta.yaml"),
+    `scene_id: sc-001
+title: The Return
+part: 1
+chapter: 1
+characters:
+  - elena
+  - marcus
+places:
+  - harbor-district
+logline: >-
+  Elena returns to the harbor district after three years away and runs into
+  Marcus.
+save_the_cat: Opening Image
+pov: elena
+timeline_position: 1
+story_time: 'Day 1, late afternoon'
+tags:
+  - reunion
+  - tension
+  - harbor
+`
+  );
+
+  writeFileSyncWithDirs(
+    path.join(syncDir, "projects", "test-novel", "part-1", "chapter-1", "sc-002.md"),
+    `---
+scene_id: sc-002
+title: The Argument
+part: 1
+chapter: 1
+characters: [elena, marcus]
+places: [harbor-district]
+logline: Elena and Marcus argue about why she left; she deflects, he pushes back harder than before.
+save_the_cat: Theme Stated
+pov: elena
+timeline_position: 2
+story_time: "Day 1, evening"
+tags: [conflict, backstory, harbor]
+---
+
+They ended up at the old bait shed because the wind had picked up and it was the nearest shelter. The shed smelled the same as it always had -- salt and something faintly chemical. Elena had spent half her childhood in this shed. She wished she were somewhere else.
+
+"You didn't call me," Marcus said. "You didn't write. Three years."
+
+"I was busy."
+
+"Everyone is busy. That's not an answer."
+
+She looked at the water instead of him. "It's the one I've got."
+
+He was quiet for a long time. When he spoke again, his voice had changed -- less patient, more tired. "I'm not angry you left, Elena. I'm angry you decided I wouldn't understand."
+
+She didn't have an answer for that either.
+`
+  );
+
+  writeFileSyncWithDirs(
+    path.join(syncDir, "projects", "test-novel", "part-1", "chapter-1", "sc-002.meta.yaml"),
+    `scene_id: sc-002
+title: The Argument
+part: 1
+chapter: 1
+characters:
+  - elena
+  - marcus
+places:
+  - harbor-district
+logline: >-
+  Elena and Marcus argue about why she left; she deflects, he pushes back harder
+  than before.
+save_the_cat: Theme Stated
+pov: elena
+timeline_position: 2
+story_time: 'Day 1, evening'
+tags:
+  - conflict
+  - backstory
+  - harbor
+`
+  );
+
+  writeFileSyncWithDirs(
+    path.join(syncDir, "projects", "test-novel", "part-1", "chapter-2", "sc-003.md"),
+    `---
+scene_id: sc-003
+title: The Offer
+part: 1
+chapter: 2
+characters: [elena]
+places: [harbor-district]
+logline: Elena receives an envelope at her old address -- an offer she doesn't understand yet, but can't ignore.
+save_the_cat: Catalyst
+pov: elena
+timeline_position: 3
+story_time: "Day 2, morning"
+tags: [mystery, catalyst, solo]
+---
+
+The envelope had been slipped under the door of the flat she no longer lived in. The landlord had kept it for her -- "figured you'd be back eventually," he said, in a tone that suggested he had not figured this at all.
+
+Her name was on the front in handwriting she didn't recognize. Inside was a single card with an address across town and a time: 9 p.m., two days from now.
+
+No name. No explanation.
+
+She turned the card over. On the back, in smaller writing: *You know what happened to your father. We do too.*
+
+Elena sat down on the floor of the empty flat and stared at the card for a long time.
+`
+  );
+
+  writeFileSyncWithDirs(
+    path.join(syncDir, "projects", "test-novel", "part-1", "chapter-2", "sc-003.meta.yaml"),
+    `scene_id: sc-003
+title: The Offer
+part: 1
+chapter: 2
+characters:
+  - elena
+places:
+  - harbor-district
+logline: >-
+  Elena receives an envelope at her old address -- an offer she doesn't
+  understand yet, but can't ignore.
+save_the_cat: Catalyst
+pov: elena
+timeline_position: 3
+story_time: 'Day 2, morning'
+tags:
+  - mystery
+  - catalyst
+  - solo
+`
+  );
+
+  writeFileSyncWithDirs(
+    path.join(syncDir, "projects", "test-novel", "world", "characters", "elena.md"),
+    `---
+character_id: elena
+name: Elena Voss
+role: protagonist
+traits: [driven, guarded, perceptive, self-sabotaging]
+arc_summary: Learns to trust others without losing herself.
+first_appearance: sc-001
+tags: [main-cast]
+---
+
+Elena grew up in the harbor district, the daughter of a dockworker who disappeared when she was twelve. She has spent most of her adult life building walls and calling it independence. Perceptive to a fault -- she sees through people quickly, which makes her both valuable and exhausting to be around.
+
+Her self-sabotaging streak shows up most clearly in relationships. When things get close, she finds a reason to leave first.
+`
+  );
+
+  writeFileSyncWithDirs(
+    path.join(syncDir, "projects", "test-novel", "world", "characters", "elena.meta.yaml"),
+    `character_id: elena
+name: Elena Voss
+role: protagonist
+traits:
+  - driven
+  - guarded
+  - perceptive
+  - self-sabotaging
+arc_summary: Learns to trust others without losing herself.
+first_appearance: sc-001
+tags:
+  - main-cast
+`
+  );
+
+  writeFileSyncWithDirs(
+    path.join(syncDir, "projects", "test-novel", "world", "characters", "marcus.md"),
+    `---
+character_id: marcus
+name: Marcus Hale
+role: supporting
+traits: [patient, idealistic, stubborn, warm]
+arc_summary: Has to decide whether loyalty to Elena is worth the cost to himself.
+first_appearance: sc-001
+tags: [main-cast]
+---
+
+Marcus runs a small freight operation out of the harbor. He has known Elena since they were teenagers and is one of the few people she has never fully pushed away -- not for lack of trying on her part.
+
+He is patient in a way that sometimes reads as passive. He is not passive. He is waiting for the right moment, which he has been doing for approximately fifteen years.
+`
+  );
+
+  writeFileSyncWithDirs(
+    path.join(syncDir, "projects", "test-novel", "world", "characters", "marcus.meta.yaml"),
+    `character_id: marcus
+name: Marcus Hale
+role: supporting
+traits:
+  - patient
+  - idealistic
+  - stubborn
+  - warm
+arc_summary: Has to decide whether loyalty to Elena is worth the cost to himself.
+first_appearance: sc-001
+tags:
+  - main-cast
+`
+  );
+
+  writeFileSyncWithDirs(
+    path.join(syncDir, "projects", "test-novel", "world", "places", "harbor-district.md"),
+    `---
+place_id: harbor-district
+name: The Harbor District
+associated_characters: [elena, marcus]
+tags: [urban, working-class, recurring]
+---
+
+The harbor district is loud and smells of brine and diesel. The buildings closest to the water are old enough to have survived two floods and a fire. Most of the businesses that used to operate here have moved inland; the ones that remain are either too stubborn or too poor to follow.
+
+It is the kind of place people are from, not the kind of place people choose.
+`
+  );
+
+  writeFileSyncWithDirs(
+    path.join(syncDir, "projects", "test-novel", "world", "places", "harbor-district.meta.yaml"),
+    `place_id: harbor-district
+name: The Harbor District
+associated_characters:
+  - elena
+  - marcus
+tags:
+  - urban
+  - working-class
+  - recurring
+`
+  );
+}
+
 before(async () => {
-  // Read-only server against static test-sync/
-  serverProc = spawnServer(TEST_PORT, TEST_SYNC_DIR, { DEFAULT_METADATA_PAGE_SIZE: "2" });
+  // Read-only server against generated fixture sync dir
+  readSyncDir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-writing-read-test-"));
+  createTestSyncFixture(readSyncDir);
+  serverProc = spawnServer(TEST_PORT, readSyncDir, { DEFAULT_METADATA_PAGE_SIZE: "2" });
   await waitForServer(BASE_URL);
   client = await connectClient(BASE_URL);
 
-  // Writable server against a temp copy of test-sync/
+  // Writable server against a temp copy of generated fixture
   writeSyncDir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-writing-test-"));
-  copyDirSync(TEST_SYNC_DIR, writeSyncDir);
+  copyDirSync(readSyncDir, writeSyncDir);
   writeServerProc = spawnServer(WRITE_PORT, writeSyncDir, { DEFAULT_METADATA_PAGE_SIZE: "2" });
   await waitForServer(WRITE_URL);
   writeClient = await connectClient(WRITE_URL);
@@ -95,6 +370,7 @@ after(async () => {
   try { await writeClient.close(); } catch {}
   if (serverProc) serverProc.kill();
   if (writeServerProc) writeServerProc.kill();
+  if (readSyncDir) fs.rmSync(readSyncDir, { recursive: true, force: true });
   if (writeSyncDir) fs.rmSync(writeSyncDir, { recursive: true, force: true });
 });
 
@@ -126,7 +402,7 @@ describe("get_runtime_config tool", () => {
     const text = await callTool("get_runtime_config");
     const parsed = JSON.parse(text);
 
-    assert.equal(parsed.sync_dir, TEST_SYNC_DIR);
+    assert.equal(parsed.sync_dir, readSyncDir);
     assert.equal(parsed.db_path, ":memory:");
     assert.equal(parsed.http_port, TEST_PORT);
 
