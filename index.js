@@ -103,7 +103,7 @@ function readSupportingNotesForEntity(filePath) {
   if (base !== "sheet") return [];
 
   const dir = path.dirname(filePath);
-  let entries = [];
+  let entries;
   try {
     entries = fs.readdirSync(dir, { withFileTypes: true });
   } catch {
