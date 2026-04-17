@@ -96,6 +96,9 @@ export function inferProjectAndUniverse(syncDir, filePath) {
   const parts = rel.split(path.sep);
 
   if (parts[0] === "universes" && parts.length >= 3) {
+    if (parts[2] === "world") {
+      return { universe_id: parts[1], project_id: null };
+    }
     return { universe_id: parts[1], project_id: `${parts[1]}/${parts[2]}` };
   }
   if (parts[0] === "projects" && parts.length >= 2) {
@@ -107,6 +110,39 @@ export function inferProjectAndUniverse(syncDir, filePath) {
 export function isWorldFile(syncDir, filePath) {
   const rel = path.relative(syncDir, filePath);
   return rel.includes(`${path.sep}world${path.sep}`) || rel.includes("/world/");
+}
+
+export function worldEntityKindForPath(syncDir, filePath) {
+  const rel = path.relative(syncDir, filePath);
+  if (rel.includes(`${path.sep}characters${path.sep}`) || rel.includes("/characters/")) return "character";
+  if (rel.includes(`${path.sep}places${path.sep}`) || rel.includes("/places/")) return "place";
+  return null;
+}
+
+function worldEntityMarker(kind) {
+  return kind === "character" ? "characters" : "places";
+}
+
+export function worldEntityFolderKey(syncDir, filePath, kind = worldEntityKindForPath(syncDir, filePath)) {
+  if (!kind) return null;
+  const rel = path.relative(syncDir, filePath);
+  const parts = rel.split(path.sep);
+  const markerIndex = parts.indexOf(worldEntityMarker(kind));
+  if (markerIndex === -1) return null;
+  const after = parts.slice(markerIndex + 1);
+  if (after.length <= 1) return null;
+  return parts.slice(0, markerIndex + 2).join(path.sep);
+}
+
+export function isCanonicalWorldEntityFile(syncDir, filePath, meta = {}) {
+  const kind = worldEntityKindForPath(syncDir, filePath);
+  if (!kind) return false;
+
+  const base = path.basename(filePath, path.extname(filePath)).toLowerCase();
+  if (meta?.canonical === true) return true;
+  if (base === "sheet") return true;
+
+  return worldEntityFolderKey(syncDir, filePath, kind) === null;
 }
 
 export function parseFile(filePath) {
@@ -174,9 +210,11 @@ export function isSyncDirWritable(syncDir) {
 
 export function indexWorldFile(db, syncDir, file, meta) {
   const { universe_id, project_id } = inferProjectAndUniverse(syncDir, file);
-  const rel = path.relative(syncDir, file);
+  const kind = worldEntityKindForPath(syncDir, file);
 
-  if (rel.includes(`${path.sep}characters${path.sep}`) || rel.includes("/characters/")) {
+  if (!kind || !isCanonicalWorldEntityFile(syncDir, file, meta)) return;
+
+  if (kind === "character") {
     if (!meta.character_id) return;
     db.prepare(`
       INSERT INTO characters (character_id, project_id, universe_id, name, role, arc_summary, first_appearance, file_path)
@@ -195,7 +233,7 @@ export function indexWorldFile(db, syncDir, file, meta) {
         meta.character_id, t
       );
     }
-  } else if (rel.includes(`${path.sep}places${path.sep}`) || rel.includes("/places/")) {
+  } else if (kind === "place") {
     if (!meta.place_id) return;
     db.prepare(`
       INSERT INTO places (place_id, project_id, universe_id, name, file_path)

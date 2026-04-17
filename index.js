@@ -7,8 +7,9 @@ import matter from "gray-matter";
 import yaml from "js-yaml";
 import { z } from "zod";
 import { openDb } from "./db.js";
-import { syncAll, isSyncDirWritable, writeMeta, readMeta, indexSceneFile, normalizeSceneMetaForPath } from "./sync.js";
+import { syncAll, isSyncDirWritable, writeMeta, readMeta, indexSceneFile, normalizeSceneMetaForPath, sidecarPath } from "./sync.js";
 import { isGitAvailable, isGitRepository, initGitRepository, createSnapshot, listSnapshots, getSceneProseAtCommit } from "./git.js";
+import { renderCharacterArcTemplate, renderCharacterSheetTemplate, renderPlaceSheetTemplate, slugifyEntityName } from "./world-entity-templates.js";
 
 const SYNC_DIR = process.env.WRITING_SYNC_DIR ?? "./sync";
 const DB_PATH = process.env.DB_PATH ?? "./writing.db";
@@ -94,6 +95,118 @@ function inferCharacterIdsFromProse(dbHandle, prose, projectId) {
     }
   }
   return [...new Set(found)].slice(0, 12);
+}
+
+function readSupportingNotesForEntity(filePath) {
+  const ext = path.extname(filePath).toLowerCase();
+  const base = path.basename(filePath, ext).toLowerCase();
+  if (base !== "sheet") return [];
+
+  const dir = path.dirname(filePath);
+  let entries;
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+
+  return entries
+    .filter(entry => entry.isFile())
+    .map(entry => entry.name)
+    .filter(name => /\.(md|txt)$/i.test(name))
+    .filter(name => !/^sheet\.(md|txt)$/i.test(name))
+    .sort((a, b) => a.localeCompare(b))
+    .map(name => {
+      const notePath = path.join(dir, name);
+      try {
+        const raw = fs.readFileSync(notePath, "utf8");
+        const { content } = matter(raw);
+        return {
+          file_name: name,
+          content: content.trim(),
+        };
+      } catch {
+        return null;
+      }
+    })
+    .filter(Boolean)
+    .filter(note => note.content);
+}
+
+function readEntityMetadata(filePath) {
+  const metaPath = sidecarPath(filePath);
+  if (fs.existsSync(metaPath)) {
+    try {
+      return yaml.load(fs.readFileSync(metaPath, "utf8")) ?? {};
+    } catch {
+      return {};
+    }
+  }
+
+  try {
+    return matter(fs.readFileSync(filePath, "utf8")).data ?? {};
+  } catch {
+    return {};
+  }
+}
+
+function resolveProjectRoot(projectId) {
+  if (projectId.includes("/")) {
+    const [universeId, projectSlug] = projectId.split("/");
+    return path.join(SYNC_DIR, "universes", universeId, projectSlug);
+  }
+  return path.join(SYNC_DIR, "projects", projectId);
+}
+
+function resolveWorldEntityDir({ kind, projectId, universeId, name }) {
+  const slug = slugifyEntityName(name);
+  const baseDir = projectId
+    ? path.join(resolveProjectRoot(projectId), "world")
+    : path.join(SYNC_DIR, "universes", universeId, "world");
+  const bucket = kind === "character" ? "characters" : "places";
+  return {
+    slug,
+    dir: path.join(baseDir, bucket, slug),
+  };
+}
+
+function createCanonicalWorldEntity({ kind, name, notes, projectId, universeId, meta }) {
+  const prefix = kind === "character" ? "char" : "place";
+  const idKey = kind === "character" ? "character_id" : "place_id";
+  const slug = slugifyEntityName(name);
+  if (!slug) throw new Error("Name must contain at least one alphanumeric character.");
+
+  const { dir } = resolveWorldEntityDir({ kind, projectId, universeId, name });
+  const prosePath = path.join(dir, "sheet.md");
+  const metaPath = sidecarPath(prosePath);
+  if (fs.existsSync(prosePath) || fs.existsSync(metaPath)) {
+    throw new Error(`Canonical sheet already exists at ${dir}`);
+  }
+
+  fs.mkdirSync(dir, { recursive: true });
+  const defaultSheet = kind === "character"
+    ? renderCharacterSheetTemplate(name)
+    : renderPlaceSheetTemplate(name);
+  fs.writeFileSync(prosePath, `${notes?.trim() ?? defaultSheet}${(notes?.trim() ?? defaultSheet) ? "\n" : ""}`, "utf8");
+  if (kind === "character") {
+    fs.writeFileSync(path.join(dir, "arc.md"), `${renderCharacterArcTemplate(name)}\n`, "utf8");
+  }
+  const payload = {
+    [idKey]: `${prefix}-${slug}`,
+    name,
+    ...meta,
+  };
+  fs.writeFileSync(metaPath, yaml.dump(payload, { lineWidth: 120 }), "utf8");
+
+  syncAll(db, SYNC_DIR, { writable: SYNC_DIR_WRITABLE });
+
+  return {
+    id: payload[idKey],
+    prose_path: prosePath,
+    meta_path: metaPath,
+    project_id: projectId ?? null,
+    universe_id: universeId ?? null,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -417,7 +530,7 @@ function createMcpServer() {
   // ---- get_character_sheet -------------------------------------------------
   s.tool(
     "get_character_sheet",
-    "Get full character details: role, arc_summary, traits, and the full content of the character notes file. Use list_characters first to get the character_id.",
+    "Get full character details: role, arc_summary, traits, the canonical sheet content, and any adjacent support notes when the character uses a folder-based layout. Use list_characters first to get the character_id.",
     {
       character_id: z.string().describe("The character_id to look up (e.g. 'char-sebastian'). Use list_characters to find valid IDs."),
     },
@@ -431,16 +544,64 @@ function createMcpServer() {
         .all(character_id).map(r => r.trait);
 
       let notes = "";
+      let supportingNotes = [];
       if (character.file_path) {
         try {
           const raw = fs.readFileSync(character.file_path, "utf8");
           const { content } = matter(raw);
           notes = content.trim();
+          supportingNotes = readSupportingNotesForEntity(character.file_path);
         } catch { /* empty */ }
       }
 
-      const result = { ...character, traits, notes: notes || undefined };
+      const result = {
+        ...character,
+        traits,
+        notes: notes || undefined,
+        supporting_notes: supportingNotes.length ? supportingNotes : undefined,
+      };
       return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    }
+  );
+
+  // ---- create_character_sheet ---------------------------------------------
+  s.tool(
+    "create_character_sheet",
+    "Create a canonical character sheet folder with sheet.md and sheet.meta.yaml so the character can be indexed immediately. Use this before migrating freeform notes into the new folder structure.",
+    {
+      name: z.string().describe("Display name of the character (e.g. 'Mira Nystrom')."),
+      project_id: z.string().optional().describe("Project scope for a book-local character (e.g. 'universe-1/book-1-the-lamb' or 'test-novel')."),
+      universe_id: z.string().optional().describe("Universe scope for a cross-book shared character (e.g. 'universe-1')."),
+      notes: z.string().optional().describe("Optional starter prose content for sheet.md."),
+      fields: z.object({
+        role: z.string().optional(),
+        arc_summary: z.string().optional(),
+        first_appearance: z.string().optional(),
+        traits: z.array(z.string()).optional(),
+      }).optional().describe("Optional starter metadata fields for the character sidecar."),
+    },
+    async ({ name, project_id, universe_id, notes, fields }) => {
+      if (!SYNC_DIR_WRITABLE) {
+        return errorResponse("READ_ONLY", "Cannot create character sheet: sync dir is read-only.");
+      }
+      if ((project_id && universe_id) || (!project_id && !universe_id)) {
+        return errorResponse("VALIDATION_ERROR", "Provide exactly one of project_id or universe_id.");
+      }
+
+      try {
+        const created = createCanonicalWorldEntity({
+          kind: "character",
+          name,
+          notes,
+          projectId: project_id,
+          universeId: universe_id,
+          meta: fields ?? {},
+        });
+
+        return jsonResponse({ ok: true, action: "created", kind: "character", ...created });
+      } catch (err) {
+        return errorResponse("IO_ERROR", `Failed to create character sheet: ${err.message}`);
+      }
     }
   );
 
@@ -466,6 +627,87 @@ function createMcpServer() {
         return errorResponse("NO_RESULTS", "No places found.");
       }
       return { content: [{ type: "text", text: JSON.stringify(rows, null, 2) }] };
+    }
+  );
+
+  // ---- create_place_sheet -------------------------------------------------
+  s.tool(
+    "create_place_sheet",
+    "Create a canonical place sheet folder with sheet.md and sheet.meta.yaml so the place can be indexed immediately. Use this before migrating freeform notes into the new folder structure.",
+    {
+      name: z.string().describe("Display name of the place (e.g. 'University Hospital')."),
+      project_id: z.string().optional().describe("Project scope for a book-local place (e.g. 'universe-1/book-1-the-lamb' or 'test-novel')."),
+      universe_id: z.string().optional().describe("Universe scope for a cross-book shared place (e.g. 'universe-1')."),
+      notes: z.string().optional().describe("Optional starter prose content for sheet.md."),
+      fields: z.object({
+        associated_characters: z.array(z.string()).optional(),
+        tags: z.array(z.string()).optional(),
+      }).optional().describe("Optional starter metadata fields for the place sidecar."),
+    },
+    async ({ name, project_id, universe_id, notes, fields }) => {
+      if (!SYNC_DIR_WRITABLE) {
+        return errorResponse("READ_ONLY", "Cannot create place sheet: sync dir is read-only.");
+      }
+      if ((project_id && universe_id) || (!project_id && !universe_id)) {
+        return errorResponse("VALIDATION_ERROR", "Provide exactly one of project_id or universe_id.");
+      }
+
+      try {
+        const created = createCanonicalWorldEntity({
+          kind: "place",
+          name,
+          notes,
+          projectId: project_id,
+          universeId: universe_id,
+          meta: fields ?? {},
+        });
+
+        return jsonResponse({ ok: true, action: "created", kind: "place", ...created });
+      } catch (err) {
+        return errorResponse("IO_ERROR", `Failed to create place sheet: ${err.message}`);
+      }
+    }
+  );
+
+  // ---- get_place_sheet -----------------------------------------------------
+  s.tool(
+    "get_place_sheet",
+    "Get full place details: associated_characters, tags, the canonical sheet content, and any adjacent support notes when the place uses a folder-based layout. Use list_places first to get the place_id.",
+    {
+      place_id: z.string().describe("The place_id to look up (e.g. 'place-harbor-district'). Use list_places to find valid IDs."),
+    },
+    async ({ place_id }) => {
+      const place = db.prepare(`SELECT * FROM places WHERE place_id = ?`).get(place_id);
+      if (!place) {
+        return errorResponse("NOT_FOUND", `Place '${place_id}' not found.`);
+      }
+
+      let notes = "";
+      let supportingNotes = [];
+      let associatedCharacters = [];
+      let tags = [];
+
+      if (place.file_path) {
+        try {
+          const raw = fs.readFileSync(place.file_path, "utf8");
+          const { content } = matter(raw);
+          notes = content.trim();
+          supportingNotes = readSupportingNotesForEntity(place.file_path);
+
+          const meta = readEntityMetadata(place.file_path);
+          associatedCharacters = Array.isArray(meta.associated_characters) ? meta.associated_characters : [];
+          tags = Array.isArray(meta.tags) ? meta.tags : [];
+        } catch { /* empty */ }
+      }
+
+      const result = {
+        ...place,
+        associated_characters: associatedCharacters.length ? associatedCharacters : undefined,
+        tags: tags.length ? tags : undefined,
+        notes: notes || undefined,
+        supporting_notes: supportingNotes.length ? supportingNotes : undefined,
+      };
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
     }
   );
 
