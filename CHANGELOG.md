@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.8](https://github.com/hannasdev/mcp-writing/compare/v1.3.7...v1.3.8) (2026-04-18)
+
+
+### Miscellaneous Chores
+
+* enable auto-merge for Release Please version PRs ([#24](https://github.com/hannasdev/mcp-writing/issues/24)) ([07981af](https://github.com/hannasdev/mcp-writing/commit/07981af84c4029cb25aef1947f301eb172df3d3a))
+
 ## [1.3.7](https://github.com/hannasdev/mcp-writing/compare/v1.3.6...v1.3.7) (2026-04-18)
 
 
