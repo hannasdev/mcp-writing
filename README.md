@@ -230,10 +230,11 @@ npm install
 npm test           # unit + integration tests
 npm run test:unit  # unit tests only (no server required)
 npm run lint:metadata      # lint metadata in WRITING_SYNC_DIR or ./sync
-npm run lint:metadata:test # lint fixture metadata in ./test-sync
 ```
 
-Unit tests use an in-memory SQLite database and temporary directories — no server needed. Integration tests spawn a real server against `test-sync/` on port 3099 and verify all MCP tools end-to-end.
+Unit tests use an in-memory SQLite database and temporary directories — no server needed. Integration tests generate a fixture sync tree at runtime in temporary directories, spawn a real server on port 3099, and verify all MCP tools end-to-end.
+
+For real projects, keep your manuscript sync folder outside this tool repository and point `WRITING_SYNC_DIR` at that external path.
 
 ## Environment variables
 

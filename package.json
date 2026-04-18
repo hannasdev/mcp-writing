@@ -22,7 +22,6 @@
     "new:entity": "node scripts/new-world-entity.js",
     "lint": "eslint index.js db.js sync.js metadata-lint.js scripts/",
     "lint:metadata": "node scripts/lint-metadata.mjs",
-    "lint:metadata:test": "node scripts/lint-metadata.mjs --sync-dir ./test-sync",
     "test:unit": "node --experimental-sqlite --test test/unit.test.mjs",
     "test:integration": "node --experimental-sqlite --test test/integration.test.mjs",
     "test": "node --experimental-sqlite --test test/unit.test.mjs test/integration.test.mjs"
