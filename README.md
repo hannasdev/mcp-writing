@@ -66,6 +66,8 @@ The importer:
 - Converts `Draft/` files to scene sidecars (`.meta.yaml`) with auto-generated `scene_id`, `title`, `part`, `chapter`, and `save_the_cat_beat` fields derived from the filename/structure.
 - Skips beat-marker files (`-Setup-`, `-Catalyst-`, etc.), chapter-intro files, epigraphs, and trashed files.
 
+Important: `sync` does not run this import step for you. If your source is a raw Scrivener `Draft/` export, run `scripts/import.js` first so scene files get `scene_id` metadata before indexing.
+
 Non-draft content is not inferred from `Notes/`. Put it directly into the target sync dir using the `world/` folder conventions described below.
 
 ### 3. Start the server
@@ -323,6 +325,14 @@ When `mcp-writing` runs behind OpenClaw (or any Docker MCP gateway), these detai
 - Mount your manuscript sync repo to `/sync`
 - Mount a persistent path for SQLite data at `/data`
 
+If `/sync` contains raw Scrivener external-sync output, run the importer once before normal `sync` usage:
+
+```sh
+node scripts/import.js /path/to/scrivener-export /sync --project my-novel
+```
+
+`sync` indexes files that already contain scene metadata. It does not convert Scrivener `Draft/` filenames into scene sidecars by itself.
+
 #### Git ownership trust for mounted repos
 
 If host and container ownership differ, git can fail with:
@@ -497,6 +507,22 @@ Fix:
 2. Ensure the format is set to **Plain text** (not RTF or .docx)
 3. Verify the export folder has a `Draft/` subdirectory with `.txt` files
 4. Try the import again: `node scripts/import.js ~/my-novel-txt /path/to/sync-dir --project my-novel`
+
+### "OpenClaw can read tools, but scene indexing is empty or incomplete"
+
+You are likely running `sync` on raw Scrivener `Draft/` output that has not been imported yet.
+
+Fix:
+
+1. Run importer once to create scene metadata sidecars:
+
+```sh
+node scripts/import.js /path/to/scrivener-export /path/to/sync-dir --project my-novel
+```
+
+2. Restart the service (if needed), then call `sync` again.
+
+Note: importer behavior is Draft-aware (`<source>/Draft` if present, else source root), but plain `sync` only indexes already-normalized scene files.
 
 ### Tests fail after updating Node.js
 
