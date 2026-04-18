@@ -1,8 +1,8 @@
 name: Publish to npm
 
 on:
-  release:
-    types: [published]
+  push:
+    branches: [main]
 
 permissions:
   contents: read
@@ -13,6 +13,7 @@ jobs:
     name: npm publish
     runs-on: ubuntu-latest
     environment: npm
+    if: startsWith(github.event.head_commit.message, 'chore(main): release ')
 
     steps:
       - uses: actions/checkout@v4
