@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.4](https://github.com/hannasdev/mcp-writing/compare/v1.3.3...v1.3.4) (2026-04-18)
+
+
+### Bug Fixes
+
+* **ci:** use tag trigger for npm publish (matches n8n pattern) ([#18](https://github.com/hannasdev/mcp-writing/issues/18)) ([a3c5992](https://github.com/hannasdev/mcp-writing/commit/a3c5992e8cb560aa79b554389d41457fcf3c0cfd))
+
 ## [1.3.3](https://github.com/hannasdev/mcp-writing/compare/v1.3.2...v1.3.3) (2026-04-18)
 
 
