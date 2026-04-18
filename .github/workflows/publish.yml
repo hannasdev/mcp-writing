@@ -30,5 +30,12 @@ jobs:
       - name: Run tests
         run: node --experimental-sqlite --test test/unit.test.mjs test/integration.test.mjs
 
+      - name: Verify npm auth
+        run: npm whoami
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
       - name: Publish
         run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
