@@ -32,6 +32,21 @@ npm --version     # should be 8.0.0 or later
 git --version     # should be installed
 ```
 
+## First-time setup path (recommended)
+
+If this is your first time, use this path and skip the advanced/reference sections for now:
+
+1. Follow either **Quick start with Scrivener** or **Running with Docker**.
+2. Start the server with `npm start`.
+3. Run **Verify your setup** (`/healthz` and `/sse`).
+4. Use the MCP `sync` tool once to build the index.
+
+After that, come back to:
+
+- **Advanced: Native sync format** for custom project layouts
+- **Reference: Available tools** for the full tool catalog
+- **Appendix: Real-world usage scenarios** for workflow ideas
+
 ## Quick start with Scrivener
 
 If you write in [Scrivener](https://www.literatureandlatte.com/scrivener), you can seed `mcp-writing` from a Scrivener external-sync export for scene prose, then curate non-draft content directly into the target folder structure.
@@ -61,7 +76,7 @@ WRITING_SYNC_DIR=/path/to/sync-dir DB_PATH=./writing.db npm start
 
 You should see:
 
-```
+```sh
 Listening on port 3000
 Sync dir: /path/to/sync-dir
 Database: ./writing.db
@@ -79,7 +94,7 @@ Exits non-zero if any errors are found. Warnings (e.g. `UNKNOWN_KEY`) are inform
 
 ---
 
-## Native sync format
+## Advanced: Native sync format
 
 For projects not starting from a Scrivener export, place plain `.md` files in the sync folder directly. Metadata lives in a YAML frontmatter block.
 
@@ -177,7 +192,7 @@ Recommended workflow:
 
 ---
 
-## Real-world usage scenarios
+## Appendix: Real-world usage scenarios
 
 The tool list is useful as reference. These example workflows show how people actually use `mcp-writing` while drafting and revising.
 
@@ -227,7 +242,7 @@ Outcome: you get AI speed with explicit approval and recoverable history for eve
 
 ---
 
-## Available tools
+## Reference: Available tools
 
 | Tool | Description |
 | --- | --- |
@@ -294,6 +309,91 @@ Then register in your OpenClaw config:
 }
 ```
 
+<details>
+<summary>Advanced OpenClaw / Docker integration notes</summary>
+
+### OpenClaw / Docker integration notes
+
+When `mcp-writing` runs behind OpenClaw (or any Docker MCP gateway), these details prevent common runtime failures.
+
+#### Required environment and mounts
+
+- Set `WRITING_SYNC_DIR=/sync`
+- Set `DB_PATH=/data/writing.db`
+- Mount your manuscript sync repo to `/sync`
+- Mount a persistent path for SQLite data at `/data`
+
+#### Git ownership trust for mounted repos
+
+If host and container ownership differ, git can fail with:
+
+- `fatal: detected dubious ownership in repository`
+
+Mark the mounted repo path as safe in the container image:
+
+```sh
+git config --system --add safe.directory /sync
+```
+
+#### SSH transport hardening
+
+For private remotes, mount SSH materials read-only and enforce strict host checks:
+
+- Auth key for fetch/pull/push
+- `known_hosts` with GitHub host key
+- `StrictHostKeyChecking=yes`
+
+Example:
+
+```sh
+export GIT_SSH_COMMAND="ssh -i /root/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/root/.ssh/known_hosts"
+```
+
+#### Separate auth and signing keys
+
+Use dedicated keys for transport and signing:
+
+- Auth key: repository transport (`fetch` / `pull` / `push`)
+- Signing key: commit/tag signatures
+
+Recommended git config:
+
+```sh
+git config gpg.format ssh
+git config user.signingkey /root/.ssh/id_ed25519_signing
+git config commit.gpgsign true
+git config pull.ff only
+```
+
+#### Git identity and GitHub email privacy
+
+If GitHub email privacy is enabled, pushes can fail unless `user.email` is a GitHub noreply address:
+
+```sh
+git config user.name "Edda"
+git config user.email "<id>+<username>@users.noreply.github.com"
+```
+
+#### Branch safety for automation
+
+For bot-driven edits, prefer branch-per-change flow:
+
+- Push to `edda/*` or `bot/*`
+- Merge via pull request
+- Protect `main` from direct automation pushes
+
+#### Quick validation
+
+```sh
+ssh -T git@github.com
+git -C /sync fetch origin
+git -C /sync pull --ff-only
+```
+
+Then create and push a signed smoke commit on a temporary branch.
+
+</details>
+
 ## Running locally
 
 ```sh
@@ -339,19 +439,19 @@ For real projects, keep your manuscript sync folder outside this tool repository
 
 ### "Module not found: sqlite" or "Database support not available"
 
-**Cause:** Node.js version is below 22.6.0 or the `--experimental-sqlite` flag was not passed.
+Your Node.js version is too old, or SQLite support was not started with the required flag.
 
-**Solution:**
-1. Check your Node.js version: `node --version` (should be v22.6.0+)
-2. Update Node.js if needed: use nvm, homebrew, or download from nodejs.org
-3. Restart with `npm start` (which includes the flag automatically)
+Fix:
+
+1. Run `node --version` and confirm v22.6.0 or newer.
+2. Upgrade Node.js if needed.
+3. Restart with `npm start` (the script already includes `--experimental-sqlite`).
 
 ### "EADDRINUSE: address already in use :::3000"
 
-**Cause:** Port 3000 is already in use by another application.
+Port 3000 is already in use.
 
-**Solution:**
-Use a different port:
+Fix: start on a different port.
 
 ```sh
 HTTP_PORT=3001 WRITING_SYNC_DIR=./my-manuscript DB_PATH=./writing.db npm start
@@ -361,10 +461,9 @@ Then update your MCP client config to use `http://localhost:3001/sse`.
 
 ### "ENOENT: no such file or directory, open './writing.db'"
 
-**Cause:** The directory for `DB_PATH` does not exist.
+The directory for `DB_PATH` does not exist.
 
-**Solution:**
-Create the directory first:
+Fix: create the directory first.
 
 ```sh
 mkdir -p $(dirname ./writing.db)  # if using a subdirectory
@@ -379,23 +478,21 @@ WRITING_SYNC_DIR=~/my-manuscript DB_PATH=~/writing-data/writing.db npm start
 
 ### "Sync dir not found: ./my-manuscript"
 
-**Cause:** The `WRITING_SYNC_DIR` path does not exist.
+The `WRITING_SYNC_DIR` path does not exist.
 
-**Solution:**
-Create the sync folder first:
+Fix: create it (or point to an existing sync folder).
 
 ```sh
 mkdir -p ./my-manuscript/projects/my-novel
 WRITING_SYNC_DIR=./my-manuscript DB_PATH=./writing.db npm start
 ```
 
-Or point to an existing folder where you've already placed scene files.
-
 ### "Import failed: unrecognized format"
 
-**Cause:** The Scrivener export format was not plain text (`.txt`) or the folder structure is unexpected.
+Scrivener export is not plain text (`.txt`) or folder layout is unexpected.
 
-**Solution:**
+Fix:
+
 1. In Scrivener, re-export with **File → Sync → With External Folder**
 2. Ensure the format is set to **Plain text** (not RTF or .docx)
 3. Verify the export folder has a `Draft/` subdirectory with `.txt` files
@@ -403,10 +500,9 @@ Or point to an existing folder where you've already placed scene files.
 
 ### Tests fail after updating Node.js
 
-**Cause:** SQLite module cache may be stale.
+Local install state may be stale after the Node.js change.
 
-**Solution:**
-Clear npm cache and reinstall:
+Fix: reinstall dependencies.
 
 ```sh
 rm -rf node_modules package-lock.json
