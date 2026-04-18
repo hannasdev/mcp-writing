@@ -4,6 +4,7 @@
     ".": {
       "release-type": "node",
       "include-component-in-tag": false,
+      "pull-request-auto-merge": true,
       "changelog-sections": [
         {
           "type": "feat",
