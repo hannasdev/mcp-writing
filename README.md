@@ -252,7 +252,7 @@ Outcome: you get AI speed with explicit approval and recoverable history for eve
 | `find_scenes` | Filter scenes by character, beat, tag, part, chapter, or POV |
 | `get_scene_prose` | Load the full prose for a specific scene |
 | `get_chapter_prose` | Load all prose for a chapter |
-| `get_runtime_config` | Show the active sync dir, DB path, and runtime capabilities |
+| `get_runtime_config` | Show active paths/capabilities plus runtime warnings and setup recommendations |
 | `get_arc` | Ordered scene metadata for all scenes involving a character |
 | `list_characters` | All characters, optionally filtered by project or universe |
 | `get_character_sheet` | Full character metadata, traits, notes, and support notes |
@@ -523,6 +523,25 @@ node scripts/import.js /path/to/scrivener-export /path/to/sync-dir --project my-
 2. Restart the service (if needed), then call `sync` again.
 
 Note: importer behavior is Draft-aware (`<source>/Draft` if present, else source root), but plain `sync` only indexes already-normalized scene files.
+
+### "Write access to repository denied" (or git push/pull fails in container)
+
+Your container can start and read files, but cannot write metadata, create snapshots, or push branches.
+
+Fix:
+
+1. Check runtime diagnostics via `get_runtime_config`:
+  - `sync_dir_writable` must be `true`
+  - `runtime_warnings` should be empty for normal editing flows
+2. Ensure `/sync` is mounted read-write (no `:ro`) and owned by the container user.
+3. For mounted git repos with UID mismatch, mark safe directory:
+
+```sh
+git config --system --add safe.directory /sync
+```
+
+4. Verify SSH key has write access to the remote and `known_hosts` is mounted.
+5. Prefer branch-per-change workflow (`bot/*` or `edda/*`) if `main` is protected.
 
 ### Tests fail after updating Node.js
 

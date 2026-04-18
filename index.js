@@ -252,6 +252,43 @@ function generateProposalId() {
   return `proposal-${nextProposalId++}`;
 }
 
+function getRuntimeDiagnostics() {
+  const warnings = [];
+  const recommendations = [];
+
+  if (!SYNC_DIR_WRITABLE) {
+    warnings.push("SYNC_DIR_READ_ONLY: sync dir is read-only; metadata write-back and prose editing tools are unavailable.");
+    recommendations.push("Mount WRITING_SYNC_DIR with write access (avoid read-only mounts like ':ro').");
+    recommendations.push("If running in Docker/OpenClaw, verify volume ownership and permissions for the container user.");
+  }
+
+  if (!GIT_AVAILABLE) {
+    warnings.push("GIT_NOT_FOUND: git is not available on PATH; snapshot/edit tools are unavailable.");
+    recommendations.push("Install git in the runtime image/environment.");
+  }
+
+  if (GIT_AVAILABLE && SYNC_DIR_WRITABLE && !GIT_ENABLED) {
+    warnings.push("GIT_DISABLED: git is available but repository snapshot tools are not active.");
+    recommendations.push("Ensure WRITING_SYNC_DIR points to a writable git repository root, or allow mcp-writing to initialize one.");
+  }
+
+  if (GIT_AVAILABLE && !SYNC_DIR_WRITABLE) {
+    recommendations.push("If git reports 'dubious ownership' for mounted repos, add: git config --system --add safe.directory /sync");
+  }
+
+  recommendations.push("If indexing finds many files without scene_id, run scripts/import.js first for Scrivener Draft exports, then run sync.");
+
+  return { warnings, recommendations };
+}
+
+const RUNTIME_DIAGNOSTICS = getRuntimeDiagnostics();
+if (RUNTIME_DIAGNOSTICS.warnings.length) {
+  process.stderr.write(`[mcp-writing] Runtime diagnostics:\n`);
+  for (const line of RUNTIME_DIAGNOSTICS.warnings) {
+    process.stderr.write(`[mcp-writing] - ${line}\n`);
+  }
+}
+
 // Run sync on startup
 syncAll(db, SYNC_DIR, { writable: SYNC_DIR_WRITABLE });
 
@@ -267,6 +304,7 @@ function createMcpServer() {
     const parts = [`Sync complete. ${result.indexed} scenes indexed. ${result.staleMarked} scenes marked stale.`];
     if (result.sidecarsMigrated) parts.push(`${result.sidecarsMigrated} sidecar(s) auto-generated from frontmatter.`);
     if (result.skipped) parts.push(`${result.skipped} file(s) skipped (no scene_id).`);
+    if (result.skipped) parts.push(`Tip: for raw Scrivener Draft exports, run scripts/import.js first, then run sync again.`);
     if (result.warnings.length) parts.push(`\n⚠️ Warnings:\n` + result.warnings.map(w => `- ${w}`).join("\n"));
     return { content: [{ type: "text", text: parts.join(" ") }] };
   });
@@ -284,6 +322,8 @@ function createMcpServer() {
         git_available: GIT_AVAILABLE,
         git_enabled: GIT_ENABLED,
         http_port: HTTP_PORT,
+        runtime_warnings: RUNTIME_DIAGNOSTICS.warnings,
+        setup_recommendations: RUNTIME_DIAGNOSTICS.recommendations,
       });
     }
   );
