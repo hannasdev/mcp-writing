@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.3.1](https://github.com/hannasdev/mcp-writing/compare/v1.3.0...v1.3.1) (2026-04-18)
+
+
+### Bug Fixes
+
+* **ci:** set npm environment for trusted publishing ([b75fb08](https://github.com/hannasdev/mcp-writing/commit/b75fb0897dbbbd9df2d136cbb78a06218f0c0b50))
+
+
+### Miscellaneous Chores
+
+* generate integration fixtures at runtime and remove test-sync ([#14](https://github.com/hannasdev/mcp-writing/issues/14)) ([0ff5024](https://github.com/hannasdev/mcp-writing/commit/0ff5024f0c3724b099035a6f76fbe4c517870652))
+
 ## [1.3.0](https://github.com/hannasdev/mcp-writing/compare/v1.2.0...v1.3.0) (2026-04-17)
 
 
