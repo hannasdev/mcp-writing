@@ -12,8 +12,9 @@ jobs:
   publish:
     name: npm publish
     runs-on: ubuntu-latest
-    environment: npm
-    if: startsWith(github.event.head_commit.message, 'chore(main): release ')
+    environment:
+      name: "npm"
+    if: "${{ startsWith(github.event.head_commit.message, 'chore(main): release ') }}"
 
     steps:
       - uses: actions/checkout@v4
