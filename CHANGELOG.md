@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.5](https://github.com/hannasdev/mcp-writing/compare/v1.3.4...v1.3.5) (2026-04-18)
+
+
+### Bug Fixes
+
+* **ci:** force OIDC-only npm publish auth ([c9f1216](https://github.com/hannasdev/mcp-writing/commit/c9f1216f2d3aa49fcc2aad5e6c4032962ad843d1))
+
 ## [1.3.4](https://github.com/hannasdev/mcp-writing/compare/v1.3.3...v1.3.4) (2026-04-18)
 
 
