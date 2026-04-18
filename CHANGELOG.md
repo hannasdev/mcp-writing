@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.0](https://github.com/hannasdev/mcp-writing/compare/v1.3.8...v1.4.0) (2026-04-18)
+
+
+### Features
+
+* add runtime write-access diagnostics for onboarding ([434c453](https://github.com/hannasdev/mcp-writing/commit/434c45323b7662312cff8cc24e2c8ee2c0fd8745))
+
 ## [1.3.8](https://github.com/hannasdev/mcp-writing/compare/v1.3.7...v1.3.8) (2026-04-18)
 
 
