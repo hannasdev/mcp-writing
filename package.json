@@ -34,6 +34,10 @@
     "scrivener"
   ],
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hannasdev/mcp-writing"
+  },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@xmldom/xmldom": "^0.9.9",
