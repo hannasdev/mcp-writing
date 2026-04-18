@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.7](https://github.com/hannasdev/mcp-writing/compare/v1.3.6...v1.3.7) (2026-04-18)
+
+
+### Miscellaneous Chores
+
+* **ci:** remove npm whoami diagnostic step ([65435e9](https://github.com/hannasdev/mcp-writing/commit/65435e9c8cfa829ceb6937904250c46afc45b54c))
+
 ## [1.3.6](https://github.com/hannasdev/mcp-writing/compare/v1.3.5...v1.3.6) (2026-04-18)
 
 
