@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.0](https://github.com/hannasdev/mcp-writing/compare/v1.2.0...v1.3.0) (2026-04-17)
+
+
+### Features
+
+* formalize non-draft content and stable Scrivener imports ([#12](https://github.com/hannasdev/mcp-writing/issues/12)) ([70b4beb](https://github.com/hannasdev/mcp-writing/commit/70b4bebd0d3cd823ffe3a9251f59f9a0c0e5f12f))
+
 ## [1.2.0](https://github.com/hannasdev/mcp-writing/compare/v1.1.1...v1.2.0) (2026-04-17)
 
 
