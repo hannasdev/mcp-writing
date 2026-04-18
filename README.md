@@ -18,6 +18,20 @@ Instead of feeding an entire manuscript to an AI and hoping it fits in the conte
 - AI-assisted editing workflows where you want targeted context retrieval instead of full-manuscript prompting.
 - Projects that need traceable, reversible edits with metadata that stays synchronized as drafts evolve.
 
+## Prerequisites
+
+- **Node.js 22.6.0 or later** (required for SQLite support via `--experimental-sqlite` flag)
+- **npm 8.0.0 or later**
+- **Git** (for edit snapshots and version history)
+
+Verify your setup:
+
+```sh
+node --version    # should be v22.6.0 or later
+npm --version     # should be 8.0.0 or later
+git --version     # should be installed
+```
+
 ## Quick start with Scrivener
 
 If you write in [Scrivener](https://www.literatureandlatte.com/scrivener), you can seed `mcp-writing` from a Scrivener external-sync export for scene prose, then curate non-draft content directly into the target folder structure.
@@ -43,6 +57,14 @@ Non-draft content is not inferred from `Notes/`. Put it directly into the target
 
 ```sh
 WRITING_SYNC_DIR=/path/to/sync-dir DB_PATH=./writing.db npm start
+```
+
+You should see:
+
+```
+Listening on port 3000
+Sync dir: /path/to/sync-dir
+Database: ./writing.db
 ```
 
 Then call the `sync` tool once to index everything.
@@ -279,6 +301,27 @@ npm install
 WRITING_SYNC_DIR=./my-manuscript DB_PATH=./writing.db npm start
 ```
 
+The `npm start` script automatically includes the `--experimental-sqlite` flag needed for SQLite support in Node.js 22+.
+
+## Verify your setup
+
+After starting the server, test that it's working:
+
+```sh
+# In a new terminal
+curl http://localhost:3000/healthz
+# Should return: ok
+```
+
+Then test the MCP endpoint:
+
+```sh
+curl http://localhost:3000/sse
+# Should return a stream endpoint: /message?sessionId=<id>
+```
+
+If both return successfully, the server is ready to use.
+
 ## Development
 
 ```sh
@@ -291,6 +334,85 @@ npm run lint:metadata      # lint metadata in WRITING_SYNC_DIR or ./sync
 Unit tests use an in-memory SQLite database and temporary directories — no server needed. Integration tests generate a fixture sync tree at runtime in temporary directories, spawn a real server on port 3099, and verify all MCP tools end-to-end.
 
 For real projects, keep your manuscript sync folder outside this tool repository and point `WRITING_SYNC_DIR` at that external path.
+
+## Troubleshooting
+
+### "Module not found: sqlite" or "Database support not available"
+
+**Cause:** Node.js version is below 22.6.0 or the `--experimental-sqlite` flag was not passed.
+
+**Solution:**
+1. Check your Node.js version: `node --version` (should be v22.6.0+)
+2. Update Node.js if needed: use nvm, homebrew, or download from nodejs.org
+3. Restart with `npm start` (which includes the flag automatically)
+
+### "EADDRINUSE: address already in use :::3000"
+
+**Cause:** Port 3000 is already in use by another application.
+
+**Solution:**
+Use a different port:
+
+```sh
+HTTP_PORT=3001 WRITING_SYNC_DIR=./my-manuscript DB_PATH=./writing.db npm start
+```
+
+Then update your MCP client config to use `http://localhost:3001/sse`.
+
+### "ENOENT: no such file or directory, open './writing.db'"
+
+**Cause:** The directory for `DB_PATH` does not exist.
+
+**Solution:**
+Create the directory first:
+
+```sh
+mkdir -p $(dirname ./writing.db)  # if using a subdirectory
+WRITING_SYNC_DIR=./my-manuscript DB_PATH=./writing.db npm start
+```
+
+Or use an absolute path:
+
+```sh
+WRITING_SYNC_DIR=~/my-manuscript DB_PATH=~/writing-data/writing.db npm start
+```
+
+### "Sync dir not found: ./my-manuscript"
+
+**Cause:** The `WRITING_SYNC_DIR` path does not exist.
+
+**Solution:**
+Create the sync folder first:
+
+```sh
+mkdir -p ./my-manuscript/projects/my-novel
+WRITING_SYNC_DIR=./my-manuscript DB_PATH=./writing.db npm start
+```
+
+Or point to an existing folder where you've already placed scene files.
+
+### "Import failed: unrecognized format"
+
+**Cause:** The Scrivener export format was not plain text (`.txt`) or the folder structure is unexpected.
+
+**Solution:**
+1. In Scrivener, re-export with **File → Sync → With External Folder**
+2. Ensure the format is set to **Plain text** (not RTF or .docx)
+3. Verify the export folder has a `Draft/` subdirectory with `.txt` files
+4. Try the import again: `node scripts/import.js ~/my-novel-txt /path/to/sync-dir --project my-novel`
+
+### Tests fail after updating Node.js
+
+**Cause:** SQLite module cache may be stale.
+
+**Solution:**
+Clear npm cache and reinstall:
+
+```sh
+rm -rf node_modules package-lock.json
+npm install
+npm test
+```
 
 ## Environment variables
 
