@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.6](https://github.com/hannasdev/mcp-writing/compare/v1.3.5...v1.3.6) (2026-04-18)
+
+
+### Bug Fixes
+
+* **ci:** restore npm trusted publishing auth config ([f043368](https://github.com/hannasdev/mcp-writing/commit/f0433681e984e34d1c38725f2d85dc3d14031626))
+
 ## [1.3.5](https://github.com/hannasdev/mcp-writing/compare/v1.3.4...v1.3.5) (2026-04-18)
 
 
