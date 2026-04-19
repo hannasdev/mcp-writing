@@ -564,6 +564,52 @@ describe("get_runtime_config tool", () => {
       if (invalidProc) invalidProc.kill();
     }
   });
+
+  test("normalizes trimmed/uppercased OWNERSHIP_GUARD_MODE values", async () => {
+    const normalizedPort = 3095;
+    const normalizedUrl = `http://localhost:${normalizedPort}`;
+    const normalizedProc = spawnServer(normalizedPort, readSyncDir, {
+      OWNERSHIP_GUARD_MODE: "  FAIL\n",
+    });
+    let normalizedClient;
+
+    try {
+      await waitForServer(normalizedUrl);
+      normalizedClient = await connectClient(normalizedUrl);
+      const result = await normalizedClient.callTool({ name: "get_runtime_config", arguments: {} });
+      const parsed = JSON.parse(result.content?.[0]?.text ?? "{}");
+
+      assert.equal(parsed.ownership_guard_mode, "fail");
+      assert.equal((parsed.runtime_warnings ?? []).some(w => w.includes("OWNERSHIP_GUARD_MODE_INVALID")), false);
+    } finally {
+      try { await normalizedClient?.close(); } catch {}
+      if (normalizedProc) normalizedProc.kill();
+    }
+  });
+
+  test("skips fail-mode ownership guard when runtime UID is root", async () => {
+    const rootPort = 3096;
+    const rootUrl = `http://localhost:${rootPort}`;
+    const rootProc = spawnServer(rootPort, readSyncDir, {
+      OWNERSHIP_GUARD_MODE: "fail",
+      RUNTIME_UID_OVERRIDE: "0",
+    });
+    let rootClient;
+
+    try {
+      await waitForServer(rootUrl);
+      rootClient = await connectClient(rootUrl);
+      const result = await rootClient.callTool({ name: "get_runtime_config", arguments: {} });
+      const parsed = JSON.parse(result.content?.[0]?.text ?? "{}");
+
+      assert.equal(parsed.ownership_guard_mode, "fail");
+      assert.equal(parsed.permission_diagnostics?.runtime_uid, 0);
+      assert.ok((parsed.runtime_warnings ?? []).some(w => w.includes("OWNERSHIP_GUARD_SKIPPED_FOR_ROOT")));
+    } finally {
+      try { await rootClient?.close(); } catch {}
+      if (rootProc) rootProc.kill();
+    }
+  });
 });
 
 describe("find_scenes tool", () => {
