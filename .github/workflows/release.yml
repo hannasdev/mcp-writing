@@ -52,6 +52,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          fetch-tags: true
           # Use SSH deploy key so branch-rule bypass is scoped to deploy key actor.
           ssh-key: ${{ secrets.RELEASE_DEPLOY_KEY }}
           ssh-known-hosts: ${{ secrets.RELEASE_DEPLOY_KNOWN_HOSTS }}
@@ -70,6 +71,38 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Validate package version against latest tag
+        run: |
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          if [ -z "$LAST_TAG" ]; then
+            exit 0
+          fi
+
+          PACKAGE_VERSION=$(node -p "JSON.parse(require('fs').readFileSync('package.json', 'utf8')).version")
+          TAG_VERSION="${LAST_TAG#v}"
+
+          node <<'NODE' "$PACKAGE_VERSION" "$TAG_VERSION"
+          const [pkg, tag] = process.argv.slice(1);
+
+          function compareSemver(left, right) {
+            const leftParts = left.split('.').map(Number);
+            const rightParts = right.split('.').map(Number);
+            for (let index = 0; index < 3; index += 1) {
+              const delta = (leftParts[index] ?? 0) - (rightParts[index] ?? 0);
+              if (delta !== 0) return Math.sign(delta);
+            }
+            return 0;
+          }
+
+          const comparison = compareSemver(pkg, tag);
+          if (comparison < 0) {
+            console.error(`package.json version ${pkg} is behind latest tag ${tag}.`);
+            console.error('This usually means a stale workflow rerun after a tag was already published.');
+            console.error('Do not rerun the old release job; trigger release from current main instead.');
+            process.exit(1);
+          }
+          NODE
 
       - name: Determine version increment
         id: increment

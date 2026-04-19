@@ -453,7 +453,7 @@ How it works:
 
 1. A PR is merged into `main`.
 2. `.github/workflows/release.yml` runs on that push.
-3. The workflow infers version bump type from commits since last tag:
+3. The workflow fetches tags and infers version bump type from commits since last tag:
   - `BREAKING CHANGE` or `!:` -> major
   - `feat:` -> minor
   - everything else -> patch
@@ -472,6 +472,12 @@ Local dry-run (optional):
 ```sh
 npm run release -- --ci --dry-run
 ```
+
+Operational note:
+
+- If a release job partially succeeds by pushing a tag before failing later, do not rerun that old workflow run.
+- The workflow now fails fast when `package.json` is behind the latest tag, which indicates a stale rerun.
+- In that case, trigger the next release from current `main` instead of retrying the old run.
 
 ## Troubleshooting
 
