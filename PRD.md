@@ -442,15 +442,15 @@ A scene without frontmatter/sidecar metadata is not a hard failure for sync, but
 
 | Tool | Description |
 | --- | --- |
-| `get_runtime_config()` | Show the active sync dir, database path, writability, git availability, and port |
+| `get_runtime_config()` | Show active runtime paths/capabilities plus diagnostics (`sync_dir_writable`, `permission_diagnostics`, runtime warnings, setup recommendations, git availability/enabled state, port) |
 | `find_scenes(project_id?, character?, beat?, tag?, part?, chapter?, pov?, page?, page_size?)` | Returns matching scene metadata — no prose |
 | `get_arc(character_id)` | Ordered scene metadata for all scenes involving a character |
 | `list_characters()` | All character entries |
 | `get_character_sheet(character_id)` | Character metadata, canonical sheet content, and adjacent support notes |
-| `create_character_sheet(name, project_id?|universe_id?, notes?, fields?)` | Create a canonical character sheet folder, sidecar, and `arc.md` |
+| `create_character_sheet(name, project_id?|universe_id?, notes?, fields?)` | Create or reuse a canonical character sheet folder. If it already exists, validate sidecar YAML, backfill required canonical files/keys only, preserve existing sidecar text when no backfill is needed, and return `action: exists` |
 | `list_places()` | All place entries |
 | `get_place_sheet(place_id)` | Place metadata, canonical sheet content, and adjacent support notes |
-| `create_place_sheet(name, project_id?|universe_id?, notes?, fields?)` | Create a canonical place sheet folder and sidecar |
+| `create_place_sheet(name, project_id?|universe_id?, notes?, fields?)` | Create or reuse a canonical place sheet folder with the same idempotent/backfill semantics as `create_character_sheet` |
 | `search_metadata(query)` | Lightweight text search across loglines and tags |
 
 ### Prose retrieval (loads file content — use targeted)
@@ -468,7 +468,7 @@ The AI can never write prose in a single step. All prose edits require an explic
 | Tool | Description |
 | --- | --- |
 | `propose_edit(scene_id, instruction, revised_prose)` | Stores a complete revised version, returns a `proposal_id`, and shows a diff preview without writing |
-| `commit_edit(scene_id, proposal_id)` | Git-commits current prose as a pre-edit snapshot, then writes the proposed revision |
+| `commit_edit(scene_id, proposal_id)` | Git-commits current prose as a pre-edit snapshot, then writes the proposed revision after preflight path checks. Returns explicit envelopes for stale/misclassified/unwritable paths (`STALE_PATH`, `INVALID_PROSE_PATH`, `PROSE_FILE_NOT_WRITABLE`) |
 | `discard_edit(proposal_id)` | Discards a pending proposal |
 | `snapshot_scene(scene_id, project_id, reason)` | Manually git-commits the current state of a scene with a descriptive message |
 
@@ -553,8 +553,8 @@ Scrivener restructures freely by moving `.md` files. If the `.md` file has been 
 **#2 — FTS ambiguity across projects (resolved)**
 Previously, indexing `scenes_fts` by `scene_id` alone could produce ambiguous joins when different projects shared IDs (for example, `sc-001`). This is now fixed by including `project_id` in FTS indexing and query joins.
 
-**#3 — Sync dir not writable (important)**
-If `WRITING_SYNC_DIR` is a read-only Docker mount or network share, Phase 2 sidecar writes fail at runtime. The service should detect and warn at startup if the sync dir is not writable, and degrade gracefully: Phase 1 read-only tools continue to work; Phase 2 write tools return a clear error rather than crashing.
+**#3 — Sync dir not writable (resolved)**
+If `WRITING_SYNC_DIR` is a read-only Docker mount or network share, Phase 2 sidecar writes fail at runtime. The service now detects and warns at startup, exposes permission diagnostics via `get_runtime_config`, and degrades gracefully: read-only tools continue to work while write tools return clear envelopes.
 
 **#4 — `get_chapter_prose` unbounded load (important)**
 A large chapter (e.g. 30 scenes × 3000 words) produces ~90k words in a single tool response — guaranteed context overflow for any model. Add a configurable `MAX_CHAPTER_SCENES` limit (default: 10) with an explicit warning in the response when the limit is hit.
@@ -613,9 +613,9 @@ The importer currently derives `scene_id` from the exported sequence prefix plus
 
 **Goal:** You can ask the AI to suggest rewrites. You see what it wants to change before anything is committed. Every AI-assisted edit is automatically saved as a restore point so you can always go back. The manuscript is never silently modified.
 
-- [ ] Ensure git is available in the container; `git init` sync folder on first use
-- [ ] Implement `propose_edit`, `commit_edit`, `discard_edit` (git commit as pre-edit snapshot)
-- [ ] Implement `snapshot_scene`, `list_snapshots`, `get_scene_prose(scene_id, commit?)`
+- [x] Ensure git is available in the container; `git init` sync folder on first use
+- [x] Implement `propose_edit`, `commit_edit`, `discard_edit` (git commit as pre-edit snapshot)
+- [x] Implement `snapshot_scene`, `list_snapshots`, `get_scene_prose(scene_id, commit?)`
 - [ ] Warn at startup if sync folder has no git remote configured
 - [ ] Decide on proposal persistence model (Open Question C)
 
