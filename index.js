@@ -7,7 +7,7 @@ import matter from "gray-matter";
 import yaml from "js-yaml";
 import { z } from "zod";
 import { openDb } from "./db.js";
-import { syncAll, isSyncDirWritable, getSyncOwnershipDiagnostics, writeMeta, readMeta, indexSceneFile, normalizeSceneMetaForPath, sidecarPath } from "./sync.js";
+import { syncAll, isSyncDirWritable, getSyncOwnershipDiagnostics, getFileWriteDiagnostics, writeMeta, readMeta, indexSceneFile, normalizeSceneMetaForPath, sidecarPath } from "./sync.js";
 import { isGitAvailable, isGitRepository, initGitRepository, createSnapshot, listSnapshots, getSceneProseAtCommit } from "./git.js";
 import { renderCharacterArcTemplate, renderCharacterSheetTemplate, renderPlaceSheetTemplate, slugifyEntityName } from "./world-entity-templates.js";
 import { importScrivenerSync, validateProjectId } from "./importer.js";
@@ -180,28 +180,48 @@ function createCanonicalWorldEntity({ kind, name, notes, projectId, universeId, 
   const { dir } = resolveWorldEntityDir({ kind, projectId, universeId, name });
   const prosePath = path.join(dir, "sheet.md");
   const metaPath = sidecarPath(prosePath);
-  if (fs.existsSync(prosePath) || fs.existsSync(metaPath)) {
-    throw new Error(`Canonical sheet already exists at ${dir}`);
-  }
+  const hadProse = fs.existsSync(prosePath);
+  const hadMeta = fs.existsSync(metaPath);
 
   fs.mkdirSync(dir, { recursive: true });
-  const defaultSheet = kind === "character"
-    ? renderCharacterSheetTemplate(name)
-    : renderPlaceSheetTemplate(name);
-  fs.writeFileSync(prosePath, `${notes?.trim() ?? defaultSheet}${(notes?.trim() ?? defaultSheet) ? "\n" : ""}`, "utf8");
-  if (kind === "character") {
-    fs.writeFileSync(path.join(dir, "arc.md"), `${renderCharacterArcTemplate(name)}\n`, "utf8");
+
+  if (!hadProse) {
+    const defaultSheet = kind === "character"
+      ? renderCharacterSheetTemplate(name)
+      : renderPlaceSheetTemplate(name);
+    const body = notes?.trim() ?? defaultSheet;
+    fs.writeFileSync(prosePath, `${body}${body ? "\n" : ""}`, "utf8");
   }
+
+  if (kind === "character") {
+    const arcPath = path.join(dir, "arc.md");
+    if (!fs.existsSync(arcPath)) {
+      fs.writeFileSync(arcPath, `${renderCharacterArcTemplate(name)}\n`, "utf8");
+    }
+  }
+
+  let existingMeta = {};
+  if (hadMeta) {
+    try {
+      existingMeta = yaml.load(fs.readFileSync(metaPath, "utf8")) ?? {};
+    } catch {
+      existingMeta = {};
+    }
+  }
+
   const payload = {
-    [idKey]: `${prefix}-${slug}`,
-    name,
-    ...meta,
+    ...existingMeta,
+    ...(meta ?? {}),
+    [idKey]: existingMeta[idKey] ?? `${prefix}-${slug}`,
+    name: existingMeta.name ?? name,
   };
+
   fs.writeFileSync(metaPath, yaml.dump(payload, { lineWidth: 120 }), "utf8");
 
   syncAll(db, SYNC_DIR, { writable: SYNC_DIR_WRITABLE });
 
   return {
+    created: !hadProse && !hadMeta,
     id: payload[idKey],
     prose_path: prosePath,
     meta_path: metaPath,
@@ -711,7 +731,7 @@ function createMcpServer() {
   // ---- create_character_sheet ---------------------------------------------
   s.tool(
     "create_character_sheet",
-    "Create a canonical character sheet folder with sheet.md and sheet.meta.yaml so the character can be indexed immediately. Use this before migrating freeform notes into the new folder structure.",
+    "Create or reuse a canonical character sheet folder with sheet.md and sheet.meta.yaml so the character can be indexed immediately. If the folder already exists, missing canonical files are backfilled and the existing sheet is preserved.",
     {
       name: z.string().describe("Display name of the character (e.g. 'Mira Nystrom')."),
       project_id: z.string().optional().describe("Project scope for a book-local character (e.g. 'universe-1/book-1-the-lamb' or 'test-novel')."),
@@ -742,7 +762,7 @@ function createMcpServer() {
           meta: fields ?? {},
         });
 
-        return jsonResponse({ ok: true, action: "created", kind: "character", ...created });
+        return jsonResponse({ ok: true, action: created.created ? "created" : "exists", kind: "character", ...created });
       } catch (err) {
         return errorResponse("IO_ERROR", `Failed to create character sheet: ${err.message}`);
       }
@@ -777,7 +797,7 @@ function createMcpServer() {
   // ---- create_place_sheet -------------------------------------------------
   s.tool(
     "create_place_sheet",
-    "Create a canonical place sheet folder with sheet.md and sheet.meta.yaml so the place can be indexed immediately. Use this before migrating freeform notes into the new folder structure.",
+    "Create or reuse a canonical place sheet folder with sheet.md and sheet.meta.yaml so the place can be indexed immediately. If the folder already exists, missing canonical files are backfilled and the existing sheet is preserved.",
     {
       name: z.string().describe("Display name of the place (e.g. 'University Hospital')."),
       project_id: z.string().optional().describe("Project scope for a book-local place (e.g. 'universe-1/book-1-the-lamb' or 'test-novel')."),
@@ -806,7 +826,7 @@ function createMcpServer() {
           meta: fields ?? {},
         });
 
-        return jsonResponse({ ok: true, action: "created", kind: "place", ...created });
+        return jsonResponse({ ok: true, action: created.created ? "created" : "exists", kind: "place", ...created });
       } catch (err) {
         return errorResponse("IO_ERROR", `Failed to create place sheet: ${err.message}`);
       }
@@ -1383,6 +1403,32 @@ function createMcpServer() {
       }
 
       try {
+        const proseWriteDiagnostics = getFileWriteDiagnostics(proposal.scene_file_path);
+        if (!proseWriteDiagnostics.exists) {
+          return errorResponse("STALE_PATH", "Prose file not found at indexed path.", {
+            indexed_path: proposal.scene_file_path,
+            prose_write_diagnostics: proseWriteDiagnostics,
+          });
+        }
+
+        if (!proseWriteDiagnostics.is_file) {
+          return errorResponse("INVALID_PROSE_PATH", "Indexed prose path is not a regular file.", {
+            indexed_path: proposal.scene_file_path,
+            prose_write_diagnostics: proseWriteDiagnostics,
+          });
+        }
+
+        if (!proseWriteDiagnostics.writable) {
+          return errorResponse(
+            "PROSE_FILE_NOT_WRITABLE",
+            "Scene prose file is not writable by the current runtime user.",
+            {
+              indexed_path: proposal.scene_file_path,
+              prose_write_diagnostics: proseWriteDiagnostics,
+            }
+          );
+        }
+
         // Reconstruct file content, preserving frontmatter only if the original had it
         const hasFrontmatter = proposal.metadata && Object.keys(proposal.metadata).length > 0;
         const content = hasFrontmatter

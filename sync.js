@@ -297,6 +297,50 @@ export function getSyncOwnershipDiagnostics(syncDir, { sampleLimit = 200 } = {})
   return diagnostics;
 }
 
+export function getFileWriteDiagnostics(filePath) {
+  const runtimeUid = typeof process.getuid === "function" ? process.getuid() : null;
+  const resolvedPath = path.resolve(filePath);
+  const parentDir = path.dirname(resolvedPath);
+  const diagnostics = {
+    path: resolvedPath,
+    parent_dir: parentDir,
+    exists: false,
+    is_file: false,
+    writable: false,
+    parent_dir_writable: false,
+    supported: runtimeUid !== null,
+    runtime_uid: runtimeUid,
+    owner_uid: null,
+    root_owned: false,
+  };
+
+  try {
+    const stat = fs.statSync(resolvedPath);
+    diagnostics.exists = true;
+    diagnostics.is_file = stat.isFile();
+    diagnostics.owner_uid = typeof stat.uid === "number" ? stat.uid : null;
+    diagnostics.root_owned = stat.uid === 0;
+  } catch {
+    return diagnostics;
+  }
+
+  try {
+    fs.accessSync(resolvedPath, fs.constants.W_OK);
+    diagnostics.writable = diagnostics.is_file;
+  } catch {
+    diagnostics.writable = false;
+  }
+
+  try {
+    fs.accessSync(parentDir, fs.constants.W_OK);
+    diagnostics.parent_dir_writable = true;
+  } catch {
+    diagnostics.parent_dir_writable = false;
+  }
+
+  return diagnostics;
+}
+
 // ---------------------------------------------------------------------------
 // DB-dependent sync (takes db + syncDir as arguments for testability)
 // ---------------------------------------------------------------------------

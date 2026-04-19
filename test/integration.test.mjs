@@ -1070,6 +1070,38 @@ describe("create_character_sheet tool", () => {
     const listed = await callWriteTool("list_characters", { project_id: "test-novel" });
     assert.ok(listed.includes("char-mira-nystrom"));
   });
+
+  test("reuses an existing canonical folder and returns exists", async () => {
+    const existingDir = path.join(
+      writeSyncDir,
+      "projects",
+      "test-novel",
+      "world",
+      "characters",
+      "leah-quinn"
+    );
+    fs.mkdirSync(existingDir, { recursive: true });
+    fs.writeFileSync(path.join(existingDir, "sheet.md"), "# Leah Quinn\n\nExisting notes.\n", "utf8");
+
+    const text = await callWriteTool("create_character_sheet", {
+      name: "Leah Quinn",
+      project_id: "test-novel",
+      fields: {
+        role: "support",
+      },
+    });
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.action, "exists");
+    assert.equal(parsed.id, "char-leah-quinn");
+    assert.ok(fs.existsSync(parsed.prose_path));
+    assert.ok(fs.existsSync(parsed.meta_path));
+    assert.ok(fs.existsSync(path.join(path.dirname(parsed.prose_path), "arc.md")));
+
+    const sidecarRaw = fs.readFileSync(parsed.meta_path, "utf8");
+    assert.ok(sidecarRaw.includes("character_id: char-leah-quinn"));
+  });
 });
 
 describe("create_place_sheet tool", () => {

@@ -11,6 +11,7 @@ import {
   inferScenePositionFromPath,
   isCanonicalWorldEntityFile,
   getSyncOwnershipDiagnostics,
+  getFileWriteDiagnostics,
   isWorldFile,
   readMeta,
   isSyncDirWritable,
@@ -202,6 +203,40 @@ describe("getSyncOwnershipDiagnostics", () => {
     assert.equal(diagnostics.sync_dir_is_directory, false);
     assert.equal(diagnostics.sync_dir_exists, false);
     assert.equal(diagnostics.sampled_paths, 0);
+
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+});
+
+describe("getFileWriteDiagnostics", () => {
+  test("reports writable regular files", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "file-write-"));
+    const filePath = path.join(dir, "scene.md");
+    fs.writeFileSync(filePath, "Prose", "utf8");
+
+    const diagnostics = getFileWriteDiagnostics(filePath);
+    assert.equal(diagnostics.exists, true);
+    assert.equal(diagnostics.is_file, true);
+    assert.equal(diagnostics.parent_dir_writable, true);
+    assert.equal(typeof diagnostics.writable, "boolean");
+
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  test("reports missing files without throwing", () => {
+    const diagnostics = getFileWriteDiagnostics("/tmp/__nonexistent_dir_xyz__/missing.md");
+    assert.equal(diagnostics.exists, false);
+    assert.equal(diagnostics.is_file, false);
+    assert.equal(diagnostics.writable, false);
+  });
+
+  test("reports directories as non-writable prose targets", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "file-write-"));
+
+    const diagnostics = getFileWriteDiagnostics(dir);
+    assert.equal(diagnostics.exists, true);
+    assert.equal(diagnostics.is_file, false);
+    assert.equal(diagnostics.writable, false);
 
     fs.rmSync(dir, { recursive: true, force: true });
   });
