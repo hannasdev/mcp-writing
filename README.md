@@ -339,7 +339,7 @@ Paginated tools (`find_scenes`, `get_arc`, `list_threads`, `get_thread_arc`, `se
 # docker-compose.yml snippet
 writing-mcp:
   build: .
-  user: "${UID}:${GID}"
+  user: "${UID:-1000}:${GID:-1000}"
   environment:
     WRITING_SYNC_DIR: /sync
     DB_PATH: /data/writing.db
@@ -356,6 +356,8 @@ writing-mcp:
 volumes:
   writing-mcp-data:
 ```
+
+If you want explicit host mapping, set `UID` and `GID` in your shell or a `.env` file next to `docker-compose.yml`.
 
 Then register in your OpenClaw config:
 

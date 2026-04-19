@@ -269,7 +269,7 @@ function getRuntimeDiagnostics() {
       `OWNERSHIP_MISMATCH: ${SYNC_OWNERSHIP_DIAGNOSTICS.non_runtime_owned_paths} sampled path(s) are not owned by runtime UID ${SYNC_OWNERSHIP_DIAGNOSTICS.runtime_uid}.`
     );
     recommendations.push(
-      `Repair ownership once on host: sudo chown -R $(id -u):$(id -g) ${SYNC_DIR_ABS}`
+      `Repair ownership once on host: sudo chown -R "$(id -u):$(id -g)" "${SYNC_DIR_ABS}"`
     );
     recommendations.push(
       "For Docker, run container as host user (compose: user: \"${UID}:${GID}\") to prevent root-owned sync files."
@@ -415,7 +415,7 @@ function createMcpServer() {
   // ---- get_runtime_config --------------------------------------------------
   s.tool(
     "get_runtime_config",
-    "Show the active runtime paths and capabilities for this server instance (sync dir, database path, writability, and git availability). Use this to verify which manuscript location is currently connected.",
+    "Show the active runtime paths and capabilities for this server instance (sync dir, database path, writability, permission diagnostics, and git availability). Use this to verify which manuscript location is currently connected.",
     {},
     async () => {
       return jsonResponse({
