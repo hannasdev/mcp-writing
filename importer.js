@@ -129,6 +129,57 @@ function removeIfExists(filePath) {
   if (filePath && fs.existsSync(filePath)) fs.unlinkSync(filePath);
 }
 
+function resolveSyncRootFromPrefix(prefix, syncDirAbs) {
+  const parsedRoot = path.parse(syncDirAbs).root;
+
+  if (!prefix) {
+    return parsedRoot ? path.resolve(parsedRoot) : path.resolve(syncDirAbs);
+  }
+
+  // On Windows, a regex prefix like "C:" would resolve relative to cwd on drive C.
+  // Use the true drive root instead (e.g., "C:\\").
+  if (/^[a-zA-Z]:$/.test(prefix)) {
+    return parsedRoot || `${prefix}${path.sep}`;
+  }
+
+  return path.resolve(prefix);
+}
+
+function detectScopedSyncDir(syncDirAbs) {
+  const normalized = syncDirAbs.split(path.sep).join("/");
+
+  const universeMatch = normalized.match(/^(.*)\/universes\/([^/]+)\/([^/]+)(?:\/scenes)?$/);
+  if (universeMatch) {
+    const prefix = universeMatch[1];
+    const universeId = universeMatch[2];
+    const projectSlug = universeMatch[3];
+    const syncRoot = resolveSyncRootFromPrefix(prefix, syncDirAbs);
+    const projectRoot = path.join(syncRoot, "universes", universeId, projectSlug);
+    return {
+      projectId: `${universeId}/${projectSlug}`,
+      scope: "universe",
+      syncRoot,
+      projectRoot,
+    };
+  }
+
+  const projectMatch = normalized.match(/^(.*)\/projects\/([^/]+)(?:\/scenes)?$/);
+  if (projectMatch) {
+    const prefix = projectMatch[1];
+    const projectSlug = projectMatch[2];
+    const syncRoot = resolveSyncRootFromPrefix(prefix, syncDirAbs);
+    const projectRoot = path.join(syncRoot, "projects", projectSlug);
+    return {
+      projectId: projectSlug,
+      scope: "project",
+      syncRoot,
+      projectRoot,
+    };
+  }
+
+  return null;
+}
+
 export function importScrivenerSync({
   scrivenerDir,
   mcpSyncDir,
@@ -138,31 +189,48 @@ export function importScrivenerSync({
 }) {
   const scrivenerDirAbs = path.resolve(scrivenerDir);
   const mcpSyncDirAbs = path.resolve(mcpSyncDir);
+  const scopedSyncDir = detectScopedSyncDir(mcpSyncDirAbs);
+  const fallbackProjectId = path.basename(mcpSyncDirAbs).replace(/[^a-z0-9-]/gi, "-").toLowerCase();
   const resolvedProjectId = projectId
     ? projectId
-    : path.basename(mcpSyncDirAbs).replace(/[^a-z0-9-]/gi, "-").toLowerCase();
+    : scopedSyncDir?.projectId ?? fallbackProjectId;
 
   const projectIdCheck = validateProjectId(resolvedProjectId);
   if (!projectIdCheck.ok) {
     throw new Error(`Invalid project_id '${resolvedProjectId}': ${projectIdCheck.reason}`);
   }
 
+  if (scopedSyncDir && projectId && projectId !== scopedSyncDir.projectId) {
+    throw new Error(
+      `project_id '${projectId}' does not match WRITING_SYNC_DIR scope '${scopedSyncDir.projectId}'. `
+      + "Set WRITING_SYNC_DIR to the sync root or use the matching project_id."
+    );
+  }
+
   if (!fs.existsSync(scrivenerDirAbs)) {
     throw new Error(`Scrivener sync dir not found: ${scrivenerDirAbs}`);
   }
 
-  // Route universe/project IDs to universes/<universe>/<project>/scenes,
-  // matching the convention used by inferProjectAndUniverse in sync.js.
-  const segments = resolvedProjectId.split("/");
   let scenesDir;
   let scenesBoundaryRoot;
-  if (segments.length === 2) {
-    const [universeId, projectSlug] = segments;
-    scenesBoundaryRoot = path.join(mcpSyncDirAbs, "universes");
-    scenesDir = path.resolve(scenesBoundaryRoot, universeId, projectSlug, "scenes");
+  if (scopedSyncDir) {
+    scenesBoundaryRoot = path.join(
+      scopedSyncDir.syncRoot,
+      scopedSyncDir.scope === "universe" ? "universes" : "projects"
+    );
+    scenesDir = path.join(scopedSyncDir.projectRoot, "scenes");
   } else {
-    scenesBoundaryRoot = path.join(mcpSyncDirAbs, "projects");
-    scenesDir = path.resolve(scenesBoundaryRoot, resolvedProjectId, "scenes");
+    // Route universe/project IDs to universes/<universe>/<project>/scenes,
+    // matching the convention used by inferProjectAndUniverse in sync.js.
+    const segments = resolvedProjectId.split("/");
+    if (segments.length === 2) {
+      const [universeId, projectSlug] = segments;
+      scenesBoundaryRoot = path.join(mcpSyncDirAbs, "universes");
+      scenesDir = path.resolve(scenesBoundaryRoot, universeId, projectSlug, "scenes");
+    } else {
+      scenesBoundaryRoot = path.join(mcpSyncDirAbs, "projects");
+      scenesDir = path.resolve(scenesBoundaryRoot, resolvedProjectId, "scenes");
+    }
   }
 
   const relFromBoundary = path.relative(scenesBoundaryRoot, scenesDir);
