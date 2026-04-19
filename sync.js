@@ -241,7 +241,14 @@ function collectOwnershipSample(rootDir, limit = 200) {
 }
 
 export function getSyncOwnershipDiagnostics(syncDir, { sampleLimit = 200 } = {}) {
-  const runtimeUid = typeof process.getuid === "function" ? process.getuid() : null;
+  let runtimeUid = typeof process.getuid === "function" ? process.getuid() : null;
+  const runtimeUidOverrideRaw = process.env.RUNTIME_UID_OVERRIDE;
+  if (runtimeUidOverrideRaw !== undefined) {
+    const parsed = Number.parseInt(runtimeUidOverrideRaw, 10);
+    if (Number.isInteger(parsed) && parsed >= 0) {
+      runtimeUid = parsed;
+    }
+  }
   let syncDirPathExists;
   let syncDirIsDirectory;
   try {
