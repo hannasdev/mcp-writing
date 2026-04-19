@@ -36,15 +36,15 @@ git --version     # should be installed
 
 ## First-time setup path (recommended)
 
-If this is your first time, use this path and skip the advanced/reference sections for now:
+If this is your first time, follow these steps in order:
 
-1. Follow **Quick start with Scrivener** (or **Running with Docker** if you run everything in containers).
+1. Start with **Quick start with Scrivener** (or use **Running with Docker** if that is your preferred setup).
 2. Start the server.
 3. Verify the server (`/healthz` and `/sse`).
-4. Run `import_scrivener_sync` once (use `dry_run: true` first).
-5. Re-run `import_scrivener_sync` with `dry_run: false` to write files. Keep `auto_sync: true` (default) so indexing happens immediately.
+4. Run `import_scrivener_sync` with `dry_run: true` first to preview what will happen.
+5. Run it again with `dry_run: false` to write files. Keep `auto_sync: true` (default) so your scenes are indexed immediately.
 
-After that, come back to:
+Once this is working, you can come back to:
 
 - **Advanced: Native sync format** for custom project layouts
 - **Reference: Available tools** for the full tool catalog
@@ -52,11 +52,13 @@ After that, come back to:
 
 ## Quick start with Scrivener
 
-If you write in [Scrivener](https://www.literatureandlatte.com/scrivener), you can seed `mcp-writing` from a Scrivener external-sync export for scene prose, then curate non-draft content directly into the target folder structure.
+If you write in [Scrivener](https://www.literatureandlatte.com/scrivener), this gives you the smoothest path to get started.
 
 ### 1. Export from Scrivener
 
-In Scrivener: **File → Sync → With External Folder**. Set the format to **plain text** (`.txt`) and pick an output folder, for example `~/my-novel-txt/`. `mcp-writing` imports the `Draft/` folder automatically.
+In Scrivener, go to **File → Sync → With External Folder**. Set the format to **plain text** (`.txt`) and choose an output folder, for example `~/my-novel-txt/`.
+
+Only `Draft/` is imported automatically.
 
 ### 2. Start mcp-writing
 
@@ -74,12 +76,12 @@ Database: ./writing.db
 
 ### 3. Verify the server
 
-- `http://localhost:3000/healthz` should return OK.
-- `http://localhost:3000/sse` should open an SSE stream.
+- Open `http://localhost:3000/healthz` and confirm it returns OK.
+- Open `http://localhost:3000/sse` and confirm it opens an SSE stream.
 
 ### 4. Import Draft scenes through MCP (recommended)
 
-Call `import_scrivener_sync` from your MCP client with:
+From your MCP client, call `import_scrivener_sync` with:
 
 ```json
 {
@@ -89,7 +91,7 @@ Call `import_scrivener_sync` from your MCP client with:
 }
 ```
 
-If the dry run looks correct, run it again with writes enabled:
+If the preview looks right, run it again with writes enabled:
 
 ```json
 {
@@ -110,7 +112,7 @@ Non-draft content is not inferred from `Notes/`. Put it directly into the target
 
 ### 5. Optional: CLI fallback import
 
-If you need to seed files outside MCP, use:
+If you prefer to run the import from the command line, use:
 
 ```sh
 node scripts/import.js ~/my-novel-txt /path/to/sync-dir --project my-novel
@@ -124,7 +126,7 @@ Then call `sync` once.
 node scripts/lint-metadata.mjs --sync-dir /path/to/sync-dir
 ```
 
-Exits non-zero if any errors are found. Warnings (e.g. `UNKNOWN_KEY`) are informational only.
+This exits with a non-zero code if it finds errors. Warnings (for example `UNKNOWN_KEY`) are informational.
 
 ---
 
