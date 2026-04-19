@@ -8,11 +8,15 @@ on:
 permissions:
   contents: read
   id-token: write
+  deployments: write
 
 jobs:
   publish:
     name: npm publish
     runs-on: ubuntu-latest
+    environment:
+      name: npm
+      url: https://www.npmjs.com/package/@hanna84/mcp-writing
 
     steps:
       - uses: actions/checkout@v4
