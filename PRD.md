@@ -451,7 +451,7 @@ A scene without frontmatter/sidecar metadata is not a hard failure for sync, but
 | `list_places()` | All place entries |
 | `get_place_sheet(place_id)` | Place metadata, canonical sheet content, and adjacent support notes |
 | `create_place_sheet(name, project_id\|universe_id, notes?, fields?)` | Create or reuse a canonical place sheet folder with the same idempotent/backfill semantics as `create_character_sheet`. Exactly one of `project_id` or `universe_id` must be provided; omitting both or supplying both returns a `VALIDATION_ERROR` |
-| `search_metadata(query)` | Lightweight text search across loglines and tags |
+| `search_metadata(query)` | Lightweight text search across scene titles, loglines, and metadata keywords (tags/characters/places/versions) |
 
 ### Prose retrieval (loads file content — use targeted)
 

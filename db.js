@@ -116,12 +116,43 @@ export const SCHEMA = `
   );
 
   CREATE VIRTUAL TABLE IF NOT EXISTS scenes_fts USING fts5(
-    scene_id, project_id, logline, title
+    scene_id, project_id, logline, title, keywords
   );
 `;
 
 export function openDb(dbPath) {
   const db = new DatabaseSync(dbPath);
   db.exec(SCHEMA);
+
+  // Rebuild legacy FTS table if it predates keyword indexing.
+  // Preserve existing indexed rows so metadata search remains available
+  // even before the next sync pass repopulates from source files.
+  const ftsSql = db.prepare(`
+    SELECT sql
+    FROM sqlite_master
+    WHERE type = 'table' AND name = 'scenes_fts'
+  `).get()?.sql;
+  if (typeof ftsSql === "string" && !ftsSql.toLowerCase().includes("keywords")) {
+    db.exec(`BEGIN IMMEDIATE;`);
+    try {
+      db.exec(`
+        CREATE VIRTUAL TABLE scenes_fts_migrating USING fts5(
+          scene_id, project_id, logline, title, keywords
+        );
+      `);
+      db.exec(`
+        INSERT INTO scenes_fts_migrating (scene_id, project_id, logline, title, keywords)
+        SELECT scene_id, project_id, logline, title, ''
+        FROM scenes_fts;
+      `);
+      db.exec(`DROP TABLE scenes_fts;`);
+      db.exec(`ALTER TABLE scenes_fts_migrating RENAME TO scenes_fts;`);
+      db.exec(`COMMIT;`);
+    } catch (err) {
+      db.exec(`ROLLBACK;`);
+      throw err;
+    }
+  }
+
   return db;
 }
