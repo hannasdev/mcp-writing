@@ -272,7 +272,7 @@ function getRuntimeDiagnostics() {
       `Repair ownership once on host: sudo chown -R "$(id -u):$(id -g)" "${SYNC_DIR_ABS}"`
     );
     recommendations.push(
-      "For Docker, run container as host user (compose: user: \"${UID}:${GID}\") to prevent root-owned sync files."
+      "For Docker, run container as host user (compose: user: \"${UID:-1000}:${GID:-1000}\"). Optionally set UID/GID explicitly in a .env file."
     );
   }
 
