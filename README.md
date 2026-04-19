@@ -254,7 +254,7 @@ Two separate rulesets apply depending on whether a file lives under `scenes/` (i
 
 ### scenes/ — import-managed files
 
-The importer is the only writer for prose. Sidecars are shared but with clearly partitioned fields.
+The importer is the authoritative writer for Scrivener-imported prose; any edits to `scenes/**/*.md` (manual or via tools) will be overwritten on re-import. Sidecars are shared but with clearly partitioned fields.
 
 | File | Writer | Fields written | Behaviour on re-import |
 |---|---|---|---|
