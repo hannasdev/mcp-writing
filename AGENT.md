@@ -2,6 +2,8 @@
 
 Purpose: Persist project-specific operating context for future AI sessions.
 
+Canonical release setup and maintainer operations live in `MAINTAINERS.md`.
+
 ## Repo workflow defaults
 
 - Branch strategy: PR-only into main.
@@ -10,42 +12,6 @@ Purpose: Persist project-specific operating context for future AI sessions.
   - Optional: rebase merge when preserving multiple meaningful commits.
   - Avoid merge commits unless explicitly needed.
 - Direct pushes to main are not part of normal workflow.
-
-## Release automation model (current)
-
-This repo uses release-it automation (not Release Please).
-
-- Workflow: .github/workflows/release.yml
-- Trigger: push to main
-- Publish workflow: .github/workflows/publish.yml (on v*.*.* tags)
-
-Release flow:
-1. PR merges to main.
-2. Release workflow infers increment from commit messages since last tag.
-3. release-it creates release commit and tag.
-4. Tag triggers npm publish workflow.
-
-## Branch rules and auth model
-
-- Main branch is protected with PR-based rules.
-- Release workflow uses SSH deploy key auth (not PAT user bypass).
-- Ruleset must include Deploy Key bypass actor for release commit/tag push.
-
-## Required secrets
-
-- RELEASE_DEPLOY_KEY: private SSH key for write-enabled deploy key.
-- RELEASE_DEPLOY_KNOWN_HOSTS: optional extra known_hosts entries.
-- NPM_TOKEN: npm publish token used by publish workflow.
-
-Important key split:
-- Deploy Keys page requires PUBLIC key (single line ssh-ed25519 ...).
-- Actions secret RELEASE_DEPLOY_KEY requires PRIVATE key block.
-
-## Versioning conventions used by release workflow
-
-- major: commit body/title includes BREAKING CHANGE or !:
-- minor: commit starts with feat:
-- patch: everything else
 
 ## Known failure modes and fixes
 
