@@ -1318,7 +1318,7 @@ describe("commit_edit preflight diagnostics", () => {
       assert.equal(commitResult.error.details?.prose_write_diagnostics?.is_file, false);
     } finally {
       if (fs.existsSync(originalScenePath) && fs.statSync(originalScenePath).isDirectory()) {
-        fs.rmdirSync(originalScenePath);
+        fs.rmSync(originalScenePath, { recursive: true, force: true });
       }
       if (fs.existsSync(replacementPath) && !fs.existsSync(originalScenePath)) {
         fs.renameSync(replacementPath, originalScenePath);

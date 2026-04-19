@@ -183,23 +183,6 @@ function createCanonicalWorldEntity({ kind, name, notes, projectId, universeId, 
   const hadProse = fs.existsSync(prosePath);
   const hadMeta = fs.existsSync(metaPath);
 
-  fs.mkdirSync(dir, { recursive: true });
-
-  if (!hadProse) {
-    const defaultSheet = kind === "character"
-      ? renderCharacterSheetTemplate(name)
-      : renderPlaceSheetTemplate(name);
-    const body = notes?.trim() ?? defaultSheet;
-    fs.writeFileSync(prosePath, `${body}${body ? "\n" : ""}`, "utf8");
-  }
-
-  if (kind === "character") {
-    const arcPath = path.join(dir, "arc.md");
-    if (!fs.existsSync(arcPath)) {
-      fs.writeFileSync(arcPath, `${renderCharacterArcTemplate(name)}\n`, "utf8");
-    }
-  }
-
   let shouldWriteMeta = !hadMeta;
   let payload;
   const derivedId = `${prefix}-${slug}`;
@@ -236,6 +219,23 @@ function createCanonicalWorldEntity({ kind, name, notes, projectId, universeId, 
       name,
       ...(meta ?? {}),
     };
+  }
+
+  fs.mkdirSync(dir, { recursive: true });
+
+  if (!hadProse) {
+    const defaultSheet = kind === "character"
+      ? renderCharacterSheetTemplate(name)
+      : renderPlaceSheetTemplate(name);
+    const body = notes?.trim() ?? defaultSheet;
+    fs.writeFileSync(prosePath, `${body}${body ? "\n" : ""}`, "utf8");
+  }
+
+  if (kind === "character") {
+    const arcPath = path.join(dir, "arc.md");
+    if (!fs.existsSync(arcPath)) {
+      fs.writeFileSync(arcPath, `${renderCharacterArcTemplate(name)}\n`, "utf8");
+    }
   }
 
   if (shouldWriteMeta) {
