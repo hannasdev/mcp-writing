@@ -151,11 +151,23 @@ export function importScrivenerSync({
     throw new Error(`Scrivener sync dir not found: ${scrivenerDirAbs}`);
   }
 
-  const projectsRoot = path.join(mcpSyncDirAbs, "projects");
-  const scenesDir = path.resolve(projectsRoot, resolvedProjectId, "scenes");
-  const relFromProjectsRoot = path.relative(projectsRoot, scenesDir);
-  if (relFromProjectsRoot.startsWith("..") || path.isAbsolute(relFromProjectsRoot)) {
-    throw new Error(`Invalid project_id '${resolvedProjectId}': resolved path escapes WRITING_SYNC_DIR/projects.`);
+  // Route universe/project IDs to universes/<universe>/<project>/scenes,
+  // matching the convention used by inferProjectAndUniverse in sync.js.
+  const segments = resolvedProjectId.split("/");
+  let scenesDir;
+  let scenesBoundaryRoot;
+  if (segments.length === 2) {
+    const [universeId, projectSlug] = segments;
+    scenesBoundaryRoot = path.join(mcpSyncDirAbs, "universes");
+    scenesDir = path.resolve(scenesBoundaryRoot, universeId, projectSlug, "scenes");
+  } else {
+    scenesBoundaryRoot = path.join(mcpSyncDirAbs, "projects");
+    scenesDir = path.resolve(scenesBoundaryRoot, resolvedProjectId, "scenes");
+  }
+
+  const relFromBoundary = path.relative(scenesBoundaryRoot, scenesDir);
+  if (relFromBoundary.startsWith("..") || path.isAbsolute(relFromBoundary)) {
+    throw new Error(`Invalid project_id '${resolvedProjectId}': resolved path escapes expected sync root.`);
   }
   const draftDir = path.join(scrivenerDirAbs, "Draft");
   const hasDraft = fs.existsSync(draftDir);

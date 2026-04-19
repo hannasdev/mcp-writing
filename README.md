@@ -85,17 +85,19 @@ From your MCP client, call `import_scrivener_sync` with:
 
 ```json
 {
-  "source_dir": "~/my-novel-txt",
+  "source_dir": "/Users/yourname/my-novel-txt",
   "project_id": "my-novel",
   "dry_run": true
 }
 ```
 
+> **Note:** use a full absolute path for `source_dir`. Shell shortcuts like `~` are not expanded by Node.js.
+
 If the preview looks right, run it again with writes enabled:
 
 ```json
 {
-  "source_dir": "~/my-novel-txt",
+  "source_dir": "/Users/yourname/my-novel-txt",
   "project_id": "my-novel",
   "dry_run": false,
   "auto_sync": true

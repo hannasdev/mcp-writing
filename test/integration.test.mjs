@@ -505,6 +505,26 @@ describe("import_scrivener_sync tool", () => {
     assert.equal(parsed.ok, false);
     assert.equal(parsed.error.code, "INVALID_PROJECT_ID");
   });
+
+  test("universe-scoped project_id routes to universes/<universe>/<project>/scenes", async () => {
+    const projectId = "aether/book-one";
+    const expectedScenesDir = path.join(writeSyncDir, "universes", "aether", "book-one", "scenes");
+
+    const text = await callWriteTool("import_scrivener_sync", {
+      source_dir: scrivenerImportDir,
+      project_id: projectId,
+      dry_run: false,
+      auto_sync: false,
+    });
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.import.project_id, projectId);
+    assert.equal(parsed.import.scenes_dir, expectedScenesDir);
+    assert.equal(fs.existsSync(expectedScenesDir), true);
+    const sidecars = fs.readdirSync(expectedScenesDir).filter(n => n.endsWith(".meta.yaml"));
+    assert.equal(sidecars.length, 2);
+  });
 });
 
 describe("get_runtime_config tool", () => {
