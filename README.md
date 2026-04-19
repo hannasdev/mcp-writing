@@ -368,6 +368,7 @@ sh scripts/setup-openclaw-env.sh
 
 That script writes `OPENCLAW_UID`, `OPENCLAW_GID`, `OPENCLAW_WORKSPACE_DIR`, and `OPENCLAW_SSH_DIR` to `.env`.
 Running Compose without these values is unsupported and may create invalid mount definitions.
+It also normalizes `OWNERSHIP_GUARD_MODE` to `warn` or `fail` and preserves an existing valid value when rerun.
 
 Then register in your OpenClaw config:
 
@@ -394,6 +395,13 @@ When `mcp-writing` runs behind OpenClaw (or any Docker MCP gateway), these detai
 - Mount your manuscript sync repo to `/sync`
 - Mount a persistent path for SQLite data at `/data`
 - Mount SSH materials read-only at `/ssh` and use `GIT_SSH_COMMAND` with `/ssh` paths
+
+Debug/test-only runtime override knobs:
+
+- `RUNTIME_UID_OVERRIDE` — test helper to simulate runtime UID during ownership diagnostics
+- `ALLOW_RUNTIME_UID_OVERRIDE=1` — explicitly enables the override outside `NODE_ENV=test`
+
+Do not set these in normal production or desktop deployments.
 
 If `/sync` contains raw Scrivener external-sync output, run the importer once before normal `sync` usage:
 
