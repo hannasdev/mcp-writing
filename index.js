@@ -200,7 +200,6 @@ function createCanonicalWorldEntity({ kind, name, notes, projectId, universeId, 
     }
   }
 
-  let existingMeta = {};
   let shouldWriteMeta = !hadMeta;
   let payload;
   const derivedId = `${prefix}-${slug}`;
@@ -215,13 +214,11 @@ function createCanonicalWorldEntity({ kind, name, notes, projectId, universeId, 
       );
     }
 
-    if (parsedMeta == null) {
-      existingMeta = {};
-    } else if (typeof parsedMeta === "object" && !Array.isArray(parsedMeta)) {
-      existingMeta = parsedMeta;
-    } else {
+    if (parsedMeta != null && (typeof parsedMeta !== "object" || Array.isArray(parsedMeta))) {
       throw new Error(`Existing metadata sidecar must be a YAML mapping at ${metaPath}.`);
     }
+
+    const existingMeta = parsedMeta ?? {};
 
     const backfilledId = existingMeta[idKey] ?? derivedId;
     const backfilledName = existingMeta.name ?? name;
