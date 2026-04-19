@@ -38,10 +38,11 @@ git --version     # should be installed
 
 If this is your first time, use this path and skip the advanced/reference sections for now:
 
-1. Follow either **Quick start with Scrivener** or **Running with Docker**.
-2. Start the server with `npm start`.
-3. Run **Verify your setup** (`/healthz` and `/sse`).
-4. Use the MCP `sync` tool once to build the index.
+1. Follow **Quick start with Scrivener** (or **Running with Docker** if you run everything in containers).
+2. Start the server.
+3. Verify the server (`/healthz` and `/sse`).
+4. Run `import_scrivener_sync` once (use `dry_run: true` first).
+5. Re-run `import_scrivener_sync` with `dry_run: false` to write files. Keep `auto_sync: true` (default) so indexing happens immediately.
 
 After that, come back to:
 
@@ -57,22 +58,7 @@ If you write in [Scrivener](https://www.literatureandlatte.com/scrivener), you c
 
 In Scrivener: **File → Sync → With External Folder**. Set the format to **plain text** (`.txt`) and pick an output folder, for example `~/my-novel-txt/`. `mcp-writing` imports the `Draft/` folder automatically.
 
-### 2. Import into mcp-writing
-
-```sh
-node scripts/import.js ~/my-novel-txt /path/to/sync-dir --project my-novel
-```
-
-The importer:
-
-- Converts `Draft/` files to scene sidecars (`.meta.yaml`) with auto-generated `scene_id`, `title`, `part`, `chapter`, and `save_the_cat_beat` fields derived from the filename/structure.
-- Skips beat-marker files (`-Setup-`, `-Catalyst-`, etc.), chapter-intro files, epigraphs, and trashed files.
-
-Important: `sync` does not run this import step for you. If your source is a raw Scrivener `Draft/` export, run `scripts/import.js` first so scene files get `scene_id` metadata before indexing.
-
-Non-draft content is not inferred from `Notes/`. Put it directly into the target sync dir using the `world/` folder conventions described below.
-
-### 3. Start the server
+### 2. Start mcp-writing
 
 ```sh
 WRITING_SYNC_DIR=/path/to/sync-dir DB_PATH=./writing.db npm start
@@ -86,9 +72,53 @@ Sync dir: /path/to/sync-dir
 Database: ./writing.db
 ```
 
-Then call the `sync` tool once to index everything.
+### 3. Verify the server
 
-### 4. Lint your metadata (optional)
+- `http://localhost:3000/healthz` should return OK.
+- `http://localhost:3000/sse` should open an SSE stream.
+
+### 4. Import Draft scenes through MCP (recommended)
+
+Call `import_scrivener_sync` from your MCP client with:
+
+```json
+{
+  "source_dir": "~/my-novel-txt",
+  "project_id": "my-novel",
+  "dry_run": true
+}
+```
+
+If the dry run looks correct, run it again with writes enabled:
+
+```json
+{
+  "source_dir": "~/my-novel-txt",
+  "project_id": "my-novel",
+  "dry_run": false,
+  "auto_sync": true
+}
+```
+
+The importer:
+
+- Converts `Draft/` files to scene sidecars (`.meta.yaml`) with generated `scene_id`, `title`, `timeline_position`, `external_source`, `external_id`, and carried `save_the_cat_beat` where applicable.
+- Skips beat-marker files (`-Setup-`, `-Catalyst-`, etc.), chapter-intro files, epigraphs, and trashed files.
+- Reconciles updates by stable Scrivener binder ID (`[123]` in filenames) so reorder/move operations map to existing scenes.
+
+Non-draft content is not inferred from `Notes/`. Put it directly into the target sync dir using the `world/` folder conventions described below.
+
+### 5. Optional: CLI fallback import
+
+If you need to seed files outside MCP, use:
+
+```sh
+node scripts/import.js ~/my-novel-txt /path/to/sync-dir --project my-novel
+```
+
+Then call `sync` once.
+
+### 6. Lint your metadata (optional)
 
 ```sh
 node scripts/lint-metadata.mjs --sync-dir /path/to/sync-dir
@@ -251,6 +281,7 @@ Outcome: you get AI speed with explicit approval and recoverable history for eve
 | Tool | Description |
 | --- | --- |
 | `sync` | Re-scan the sync folder and update the index |
+| `import_scrivener_sync` | Import Scrivener Draft export into sidecars and optionally auto-run sync |
 | `find_scenes` | Filter scenes by character, beat, tag, part, chapter, or POV |
 | `get_scene_prose` | Load the full prose for a specific scene |
 | `get_chapter_prose` | Load all prose for a chapter |
