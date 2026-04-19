@@ -6,6 +6,7 @@
   "main": "index.js",
   "files": [
     "index.js",
+    "importer.js",
     "db.js",
     "sync.js",
     "git.js",
@@ -21,7 +22,7 @@
     "start": "node --experimental-sqlite index.js",
     "new:entity": "node scripts/new-world-entity.js",
     "release": "release-it",
-    "lint": "eslint index.js db.js sync.js metadata-lint.js scripts/",
+    "lint": "eslint index.js importer.js db.js sync.js metadata-lint.js scripts/",
     "lint:metadata": "node scripts/lint-metadata.mjs",
     "test:unit": "node --experimental-sqlite --test test/unit.test.mjs",
     "test:integration": "node --experimental-sqlite --test test/integration.test.mjs",

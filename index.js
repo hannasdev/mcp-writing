@@ -10,6 +10,7 @@ import { openDb } from "./db.js";
 import { syncAll, isSyncDirWritable, writeMeta, readMeta, indexSceneFile, normalizeSceneMetaForPath, sidecarPath } from "./sync.js";
 import { isGitAvailable, isGitRepository, initGitRepository, createSnapshot, listSnapshots, getSceneProseAtCommit } from "./git.js";
 import { renderCharacterArcTemplate, renderCharacterSheetTemplate, renderPlaceSheetTemplate, slugifyEntityName } from "./world-entity-templates.js";
+import { importScrivenerSync } from "./importer.js";
 
 const SYNC_DIR = process.env.WRITING_SYNC_DIR ?? "./sync";
 const DB_PATH = process.env.DB_PATH ?? "./writing.db";
@@ -308,6 +309,82 @@ function createMcpServer() {
     if (result.warnings.length) parts.push(`\n⚠️ Warnings:\n` + result.warnings.map(w => `- ${w}`).join("\n"));
     return { content: [{ type: "text", text: parts.join(" ") }] };
   });
+
+  // ---- import_scrivener_sync ----------------------------------------------
+  s.tool(
+    "import_scrivener_sync",
+    "Import Scrivener External Folder Sync Draft files into this server's WRITING_SYNC_DIR by generating scene sidecars and reconciling by Scrivener binder ID. Use this for first-time setup before sync().",
+    {
+      source_dir: z.string().describe("Path to Scrivener external sync folder (the folder that contains Draft/, or Draft/ itself)."),
+      project_id: z.string().optional().describe("Project ID override (e.g. 'the-lamb'). Defaults to a slug derived from WRITING_SYNC_DIR."),
+      dry_run: z.boolean().optional().describe("If true, reports planned writes without changing files."),
+      auto_sync: z.boolean().optional().describe("If true (default), runs sync() after import when not dry-run."),
+    },
+    async ({ source_dir, project_id, dry_run = false, auto_sync = true }) => {
+      if (!dry_run && !SYNC_DIR_WRITABLE) {
+        return errorResponse(
+          "SYNC_DIR_NOT_WRITABLE",
+          "Cannot import because WRITING_SYNC_DIR is not writable in this runtime.",
+          { sync_dir: SYNC_DIR_ABS }
+        );
+      }
+
+      let importResult;
+      try {
+        importResult = importScrivenerSync({
+          scrivenerDir: source_dir,
+          mcpSyncDir: SYNC_DIR,
+          projectId: project_id,
+          dryRun: Boolean(dry_run),
+        });
+      } catch (error) {
+        return errorResponse(
+          "IMPORT_FAILED",
+          error instanceof Error ? error.message : "Import failed.",
+          {
+            source_dir,
+            sync_dir: SYNC_DIR_ABS,
+            project_id: project_id ?? null,
+          }
+        );
+      }
+
+      let syncResult = null;
+      if (!dry_run && auto_sync) {
+        syncResult = syncAll(db, SYNC_DIR, { writable: SYNC_DIR_WRITABLE });
+      }
+
+      return jsonResponse({
+        ok: true,
+        import: {
+          source_dir: importResult.scrivenerDir,
+          sync_dir: importResult.mcpSyncDir,
+          scenes_dir: importResult.scenesDir,
+          project_id: importResult.projectId,
+          source_files: importResult.sourceFiles,
+          created: importResult.created,
+          existing: importResult.existing,
+          skipped: importResult.skipped,
+          beat_markers_seen: importResult.beatMarkersSeen,
+          dry_run: importResult.dryRun,
+        },
+        sync: syncResult
+          ? {
+            indexed: syncResult.indexed,
+            stale_marked: syncResult.staleMarked,
+            sidecars_migrated: syncResult.sidecarsMigrated,
+            skipped: syncResult.skipped,
+            warnings: syncResult.warnings,
+          }
+          : null,
+        next_step: dry_run
+          ? "Dry run complete. Re-run with dry_run=false to write files."
+          : auto_sync
+            ? "Import and sync complete."
+            : "Import complete. Run sync() to index imported scenes.",
+      });
+    }
+  );
 
   // ---- get_runtime_config --------------------------------------------------
   s.tool(
