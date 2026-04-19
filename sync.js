@@ -585,6 +585,10 @@ export function indexSceneFile(db, syncDir, file, meta, prose) {
 }
 
 export function syncAll(db, syncDir, { quiet = false, writable = false } = {}) {
+  // Reset per-run inference cache so filesystem changes between sync calls
+  // (for example after imports or path repairs) are reflected immediately.
+  UNIVERSE_PROJECT_ROOT_CACHE.clear();
+
   const files = walkFiles(syncDir);
   let indexed = 0;
   let staleMarked = 0;
