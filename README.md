@@ -347,8 +347,8 @@ writing-mcp:
     OWNERSHIP_GUARD_MODE: "${OWNERSHIP_GUARD_MODE:-warn}"
     GIT_SSH_COMMAND: "ssh -i /ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/ssh/known_hosts"
   volumes:
-    - ${OPENCLAW_WORKSPACE_DIR}/sync:/sync
-    - ${OPENCLAW_SSH_DIR}:/ssh:ro
+    - ${OPENCLAW_WORKSPACE_DIR:?run scripts/setup-openclaw-env.sh first}/sync:/sync
+    - ${OPENCLAW_SSH_DIR:?run scripts/setup-openclaw-env.sh first}:/ssh:ro
     - writing-mcp-data:/data
   healthcheck:
     test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
@@ -367,6 +367,7 @@ sh scripts/setup-openclaw-env.sh
 ```
 
 That script writes `OPENCLAW_UID`, `OPENCLAW_GID`, `OPENCLAW_WORKSPACE_DIR`, and `OPENCLAW_SSH_DIR` to `.env`.
+Running Compose without these values is unsupported and may create invalid mount definitions.
 
 Then register in your OpenClaw config:
 
