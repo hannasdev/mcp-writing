@@ -447,10 +447,10 @@ A scene without frontmatter/sidecar metadata is not a hard failure for sync, but
 | `get_arc(character_id)` | Ordered scene metadata for all scenes involving a character |
 | `list_characters()` | All character entries |
 | `get_character_sheet(character_id)` | Character metadata, canonical sheet content, and adjacent support notes |
-| `create_character_sheet(name, project_id?|universe_id?, notes?, fields?)` | Create or reuse a canonical character sheet folder. If it already exists, validate sidecar YAML, backfill required canonical files/keys only, preserve existing sidecar text when no backfill is needed, and return `action: exists` |
+| `create_character_sheet(name, project_id\|universe_id, notes?, fields?)` | Create or reuse a canonical character sheet folder. Exactly one of `project_id` (book-local) or `universe_id` (cross-book shared) must be provided; omitting both or supplying both returns a `VALIDATION_ERROR`. If it already exists, validate sidecar YAML, backfill required canonical files/keys only, preserve existing sidecar text when no backfill is needed, and return `action: exists` |
 | `list_places()` | All place entries |
 | `get_place_sheet(place_id)` | Place metadata, canonical sheet content, and adjacent support notes |
-| `create_place_sheet(name, project_id?|universe_id?, notes?, fields?)` | Create or reuse a canonical place sheet folder with the same idempotent/backfill semantics as `create_character_sheet` |
+| `create_place_sheet(name, project_id\|universe_id, notes?, fields?)` | Create or reuse a canonical place sheet folder with the same idempotent/backfill semantics as `create_character_sheet`. Exactly one of `project_id` or `universe_id` must be provided; omitting both or supplying both returns a `VALIDATION_ERROR` |
 | `search_metadata(query)` | Lightweight text search across loglines and tags |
 
 ### Prose retrieval (loads file content — use targeted)
