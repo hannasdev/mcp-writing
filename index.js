@@ -209,12 +209,17 @@ function createCanonicalWorldEntity({ kind, name, notes, projectId, universeId, 
     }
   }
 
-  const payload = {
-    ...existingMeta,
-    ...(meta ?? {}),
-    [idKey]: existingMeta[idKey] ?? `${prefix}-${slug}`,
-    name: existingMeta.name ?? name,
-  };
+  const payload = hadMeta
+    ? {
+      ...existingMeta,
+      [idKey]: existingMeta[idKey] ?? `${prefix}-${slug}`,
+      name: existingMeta.name ?? name,
+    }
+    : {
+      [idKey]: `${prefix}-${slug}`,
+      name,
+      ...(meta ?? {}),
+    };
 
   fs.writeFileSync(metaPath, yaml.dump(payload, { lineWidth: 120 }), "utf8");
 
@@ -753,7 +758,7 @@ function createMcpServer() {
       }
 
       try {
-        const created = createCanonicalWorldEntity({
+        const result = createCanonicalWorldEntity({
           kind: "character",
           name,
           notes,
@@ -762,7 +767,7 @@ function createMcpServer() {
           meta: fields ?? {},
         });
 
-        return jsonResponse({ ok: true, action: created.created ? "created" : "exists", kind: "character", ...created });
+        return jsonResponse({ ok: true, action: result.created ? "created" : "exists", kind: "character", ...result });
       } catch (err) {
         return errorResponse("IO_ERROR", `Failed to create character sheet: ${err.message}`);
       }
@@ -817,7 +822,7 @@ function createMcpServer() {
       }
 
       try {
-        const created = createCanonicalWorldEntity({
+        const result = createCanonicalWorldEntity({
           kind: "place",
           name,
           notes,
@@ -826,7 +831,7 @@ function createMcpServer() {
           meta: fields ?? {},
         });
 
-        return jsonResponse({ ok: true, action: created.created ? "created" : "exists", kind: "place", ...created });
+        return jsonResponse({ ok: true, action: result.created ? "created" : "exists", kind: "place", ...result });
       } catch (err) {
         return errorResponse("IO_ERROR", `Failed to create place sheet: ${err.message}`);
       }

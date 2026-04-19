@@ -211,34 +211,43 @@ describe("getSyncOwnershipDiagnostics", () => {
 describe("getFileWriteDiagnostics", () => {
   test("reports writable regular files", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "file-write-"));
-    const filePath = path.join(dir, "scene.md");
-    fs.writeFileSync(filePath, "Prose", "utf8");
+    try {
+      const filePath = path.join(dir, "scene.md");
+      fs.writeFileSync(filePath, "Prose", "utf8");
 
-    const diagnostics = getFileWriteDiagnostics(filePath);
-    assert.equal(diagnostics.exists, true);
-    assert.equal(diagnostics.is_file, true);
-    assert.equal(diagnostics.parent_dir_writable, true);
-    assert.equal(typeof diagnostics.writable, "boolean");
-
-    fs.rmSync(dir, { recursive: true, force: true });
+      const diagnostics = getFileWriteDiagnostics(filePath);
+      assert.equal(diagnostics.exists, true);
+      assert.equal(diagnostics.is_file, true);
+      assert.equal(diagnostics.parent_dir_writable, true);
+      assert.equal(typeof diagnostics.writable, "boolean");
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   test("reports missing files without throwing", () => {
-    const diagnostics = getFileWriteDiagnostics("/tmp/__nonexistent_dir_xyz__/missing.md");
-    assert.equal(diagnostics.exists, false);
-    assert.equal(diagnostics.is_file, false);
-    assert.equal(diagnostics.writable, false);
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "file-write-missing-"));
+    try {
+      const missingPath = path.join(dir, "definitely-missing.md");
+      const diagnostics = getFileWriteDiagnostics(missingPath);
+      assert.equal(diagnostics.exists, false);
+      assert.equal(diagnostics.is_file, false);
+      assert.equal(diagnostics.writable, false);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   test("reports directories as non-writable prose targets", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "file-write-"));
-
-    const diagnostics = getFileWriteDiagnostics(dir);
-    assert.equal(diagnostics.exists, true);
-    assert.equal(diagnostics.is_file, false);
-    assert.equal(diagnostics.writable, false);
-
-    fs.rmSync(dir, { recursive: true, force: true });
+    try {
+      const diagnostics = getFileWriteDiagnostics(dir);
+      assert.equal(diagnostics.exists, true);
+      assert.equal(diagnostics.is_file, false);
+      assert.equal(diagnostics.writable, false);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
 
