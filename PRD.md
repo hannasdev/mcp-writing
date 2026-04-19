@@ -261,6 +261,9 @@ Automate deterministic structure, not editorial interpretation:
   - Do not infer non-draft entities from Scrivener `Notes/` structure.
   - Require users to place character/place/reference files into the predetermined `world/` structure directly.
   - Keep sync/index behavior deterministic once files are placed correctly.
+  - Expose importer via MCP as a first-class tool (`import_scrivener_sync`) so first-time setup can run end-to-end without manual shell commands.
+  - MCP importer should accept `source_dir` + optional `project_id`, support `dry_run`, and reconcile by stable Scrivener binder ID.
+  - MCP importer should support optional auto-sync and return machine-readable counts (`created`, `existing`, `skipped`, `beat_markers_seen`).
 
 7. **Tooling behavior**
   - Entity tools (`list_characters`, `get_character_sheet`, `list_places`) read only canonical entity rows.

@@ -36,14 +36,15 @@ git --version     # should be installed
 
 ## First-time setup path (recommended)
 
-If this is your first time, use this path and skip the advanced/reference sections for now:
+If this is your first time, follow these steps in order:
 
-1. Follow either **Quick start with Scrivener** or **Running with Docker**.
-2. Start the server with `npm start`.
-3. Run **Verify your setup** (`/healthz` and `/sse`).
-4. Use the MCP `sync` tool once to build the index.
+1. Start with **Quick start with Scrivener** (or use **Running with Docker** if that is your preferred setup).
+2. Start the server.
+3. Verify the server (`/healthz` and `/sse`).
+4. Run `import_scrivener_sync` with `dry_run: true` first to preview what will happen.
+5. Run it again with `dry_run: false` to write files. Keep `auto_sync: true` (default) so your scenes are indexed immediately.
 
-After that, come back to:
+Once this is working, you can come back to:
 
 - **Advanced: Native sync format** for custom project layouts
 - **Reference: Available tools** for the full tool catalog
@@ -51,28 +52,15 @@ After that, come back to:
 
 ## Quick start with Scrivener
 
-If you write in [Scrivener](https://www.literatureandlatte.com/scrivener), you can seed `mcp-writing` from a Scrivener external-sync export for scene prose, then curate non-draft content directly into the target folder structure.
+If you write in [Scrivener](https://www.literatureandlatte.com/scrivener), this gives you the smoothest path to get started.
 
 ### 1. Export from Scrivener
 
-In Scrivener: **File → Sync → With External Folder**. Set the format to **plain text** (`.txt`) and pick an output folder, for example `~/my-novel-txt/`. `mcp-writing` imports the `Draft/` folder automatically.
+In Scrivener, go to **File → Sync → With External Folder**. Set the format to **plain text** (`.txt`) and choose an output folder, for example `~/my-novel-txt/`.
 
-### 2. Import into mcp-writing
+Only `Draft/` is imported automatically.
 
-```sh
-node scripts/import.js ~/my-novel-txt /path/to/sync-dir --project my-novel
-```
-
-The importer:
-
-- Converts `Draft/` files to scene sidecars (`.meta.yaml`) with auto-generated `scene_id`, `title`, `part`, `chapter`, and `save_the_cat_beat` fields derived from the filename/structure.
-- Skips beat-marker files (`-Setup-`, `-Catalyst-`, etc.), chapter-intro files, epigraphs, and trashed files.
-
-Important: `sync` does not run this import step for you. If your source is a raw Scrivener `Draft/` export, run `scripts/import.js` first so scene files get `scene_id` metadata before indexing.
-
-Non-draft content is not inferred from `Notes/`. Put it directly into the target sync dir using the `world/` folder conventions described below.
-
-### 3. Start the server
+### 2. Start mcp-writing
 
 ```sh
 WRITING_SYNC_DIR=/path/to/sync-dir DB_PATH=./writing.db npm start
@@ -86,15 +74,61 @@ Sync dir: /path/to/sync-dir
 Database: ./writing.db
 ```
 
-Then call the `sync` tool once to index everything.
+### 3. Verify the server
 
-### 4. Lint your metadata (optional)
+- Open `http://localhost:3000/healthz` and confirm it returns OK.
+- Open `http://localhost:3000/sse` and confirm it opens an SSE stream.
+
+### 4. Import Draft scenes through MCP (recommended)
+
+From your MCP client, call `import_scrivener_sync` with:
+
+```json
+{
+  "source_dir": "/Users/yourname/my-novel-txt",
+  "project_id": "my-novel",
+  "dry_run": true
+}
+```
+
+> **Note:** use a full absolute path for `source_dir`. Shell shortcuts like `~` are not expanded by Node.js.
+
+If the preview looks right, run it again with writes enabled:
+
+```json
+{
+  "source_dir": "/Users/yourname/my-novel-txt",
+  "project_id": "my-novel",
+  "dry_run": false,
+  "auto_sync": true
+}
+```
+
+The importer:
+
+- Converts `Draft/` files to scene sidecars (`.meta.yaml`) with generated `scene_id`, `title`, `timeline_position`, `external_source`, `external_id`, and carried `save_the_cat_beat` where applicable.
+- Skips beat-marker files (`-Setup-`, `-Catalyst-`, etc.), chapter-intro files, epigraphs, and trashed files.
+- Reconciles updates by stable Scrivener binder ID (`[123]` in filenames) so reorder/move operations map to existing scenes.
+
+Non-draft content is not inferred from `Notes/`. Put it directly into the target sync dir using the `world/` folder conventions described below.
+
+### 5. Optional: CLI fallback import
+
+If you prefer to run the import from the command line, use:
+
+```sh
+node scripts/import.js ~/my-novel-txt /path/to/sync-dir --project my-novel
+```
+
+Then call `sync` once.
+
+### 6. Lint your metadata (optional)
 
 ```sh
 node scripts/lint-metadata.mjs --sync-dir /path/to/sync-dir
 ```
 
-Exits non-zero if any errors are found. Warnings (e.g. `UNKNOWN_KEY`) are informational only.
+This exits with a non-zero code if it finds errors. Warnings (for example `UNKNOWN_KEY`) are informational.
 
 ---
 
@@ -251,6 +285,7 @@ Outcome: you get AI speed with explicit approval and recoverable history for eve
 | Tool | Description |
 | --- | --- |
 | `sync` | Re-scan the sync folder and update the index |
+| `import_scrivener_sync` | Import Scrivener Draft export into sidecars and optionally auto-run sync |
 | `find_scenes` | Filter scenes by character, beat, tag, part, chapter, or POV |
 | `get_scene_prose` | Load the full prose for a specific scene |
 | `get_chapter_prose` | Load all prose for a chapter |
