@@ -96,6 +96,17 @@ export function normalizeSceneMetaForPath(syncDir, filePath, meta = {}) {
   };
 }
 
+// Structural directory names that are never project slugs under projects/<id>/.
+const PROJECT_STRUCTURAL_DIRS = new Set(["world", "scenes", "misc", "fragments", "feedback", "Draft"]);
+
+// Returns true for known structural path segments directly under a project root
+// (named dirs like "world", "scenes", and part-N / chapter-N path segments).
+function isProjectStructuralDir(name) {
+  return PROJECT_STRUCTURAL_DIRS.has(name)
+    || /^part-\d/i.test(name)
+    || /^chapter-\d/i.test(name);
+}
+
 export function inferProjectAndUniverse(syncDir, filePath) {
   const rel = path.relative(syncDir, filePath);
   const parts = rel.split(path.sep);
@@ -107,6 +118,13 @@ export function inferProjectAndUniverse(syncDir, filePath) {
     return { universe_id: parts[1], project_id: `${parts[1]}/${parts[2]}` };
   }
   if (parts[0] === "projects" && parts.length >= 2) {
+    // Detect accidental two-segment layout: projects/<universe>/<project>/...
+    // This occurs when a universe-scoped project_id (e.g. "universe-1/book-1-the-lamb")
+    // is written under projects/ instead of universes/. Identify it by checking
+    // whether parts[2] is not a known structural directory (world, scenes, part-N, etc.).
+    if (parts.length >= 3 && parts[2] !== undefined && !isProjectStructuralDir(parts[2])) {
+      return { universe_id: parts[1], project_id: `${parts[1]}/${parts[2]}` };
+    }
     return { universe_id: null, project_id: parts[1] };
   }
   return { universe_id: null, project_id: parts[0] ?? "default" };

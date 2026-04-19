@@ -296,6 +296,18 @@ describe("inferProjectAndUniverse", () => {
     const result = inferProjectAndUniverse(syncDir, "/sync/my-standalone/sc-001.md");
     assert.deepEqual(result, { universe_id: null, project_id: "my-standalone" });
   });
+
+  test("projects/ single-segment layout is unaffected", () => {
+    const result = inferProjectAndUniverse(syncDir, "/sync/projects/my-novel/world/characters/elena.md");
+    assert.deepEqual(result, { universe_id: null, project_id: "my-novel" });
+  });
+
+  test("projects/ two-segment layout (accidental universe path) returns correct compound project_id", () => {
+    // Regression: projects/universe-1/book-1-the-lamb/scenes/... was being
+    // inferred as project_id 'universe-1' instead of 'universe-1/book-1-the-lamb'.
+    const result = inferProjectAndUniverse(syncDir, "/sync/projects/universe-1/book-1-the-lamb/scenes/sc-001.txt");
+    assert.deepEqual(result, { universe_id: "universe-1", project_id: "universe-1/book-1-the-lamb" });
+  });
 });
 
 // ---------------------------------------------------------------------------
