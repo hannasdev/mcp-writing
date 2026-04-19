@@ -131,18 +131,21 @@ export function inferProjectAndUniverse(syncDir, filePath) {
   const parts = rel.split(path.sep);
 
   if (parts[0] === "universes" && parts.length >= 3) {
-    if (String(parts[2] ?? "").toLowerCase() === "world") {
+    // Case-sensitive "world" intentionally matches isWorldFile() which also uses lowercase.
+    if (parts[2] === "world") {
       return { universe_id: parts[1], project_id: null };
     }
     return { universe_id: parts[1], project_id: `${parts[1]}/${parts[2]}` };
   }
   if (parts[0] === "projects" && parts.length >= 2) {
-    // Detect accidental two-segment layout: projects/<universe>/<project>/...
+    // Detect accidental two-segment layout: projects/<universe>/<book>/...
     // This occurs when a universe-scoped project_id (e.g. "universe-1/book-1-the-lamb")
-    // is written under projects/ instead of universes/. Keep this conservative to
-    // avoid misclassifying valid nested project layouts (e.g. projects/my-novel/notes/...).
-    // Only treat as two-segment when the second segment looks like a book slug and
-    // the next segment is a known structural directory (scenes, world, part-N, etc.).
+    // is written under projects/ instead of universes/.
+    // Detection is deliberately conservative to avoid mis-classifying valid nested
+    // project layouts (e.g. projects/my-novel/notes/...). All three conditions must hold:
+    //   1. parts[2] matches a book-* slug pattern (book-1, book-one, book-1-the-lamb, …)
+    //   2. parts[3] is a known structural directory (scenes, world, part-N, chapter-N, …)
+    //   3. A matching universes/<universe>/<book> directory exists on disk
     if (
       parts.length >= 4
       && parts[2] !== undefined
