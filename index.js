@@ -206,7 +206,10 @@ function createCanonicalWorldEntity({ kind, name, notes, projectId, universeId, 
     try {
       parsedMeta = yaml.load(fs.readFileSync(metaPath, "utf8"));
     } catch (err) {
-      throw new Error(`Existing metadata sidecar is invalid YAML at ${metaPath}: ${err.message}`);
+      throw new Error(
+        `Existing metadata sidecar is invalid YAML at ${metaPath}: ${err.message}`,
+        { cause: err }
+      );
     }
 
     if (parsedMeta == null) {
