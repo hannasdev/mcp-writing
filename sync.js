@@ -53,6 +53,11 @@ export function walkSidecars(dir, fileList = []) {
   return fileList;
 }
 
+function isNestedMirrorPath(syncDir, filePath) {
+  const rel = path.relative(syncDir, filePath).split(path.sep).join("/");
+  return rel.includes("/scenes/projects/") || rel.includes("/scenes/universes/");
+}
+
 export function sidecarPath(filePath) {
   return filePath.replace(/\.(md|txt)$/, ".meta.yaml");
 }
@@ -202,6 +207,80 @@ export function isSyncDirWritable(syncDir) {
   } catch {
     return false;
   }
+}
+
+function collectOwnershipSample(rootDir, limit = 200) {
+  const samples = [];
+  const stack = [rootDir];
+
+  while (stack.length && samples.length < limit) {
+    const current = stack.pop();
+    samples.push(current);
+
+    let entries;
+    try {
+      entries = fs.readdirSync(current, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+
+    for (const entry of entries) {
+      if (samples.length + stack.length >= limit) break;
+      if (entry.isSymbolicLink()) continue;
+      const full = path.join(current, entry.name);
+      if (entry.isDirectory()) {
+        stack.push(full);
+      } else {
+        samples.push(full);
+        if (samples.length >= limit) break;
+      }
+    }
+  }
+
+  return samples;
+}
+
+export function getSyncOwnershipDiagnostics(syncDir, { sampleLimit = 200 } = {}) {
+  const runtimeUid = typeof process.getuid === "function" ? process.getuid() : null;
+  const diagnostics = {
+    sync_dir: path.resolve(syncDir),
+    sync_dir_exists: fs.existsSync(syncDir),
+    supported: runtimeUid !== null,
+    runtime_uid: runtimeUid,
+    sampled_paths: 0,
+    sample_limit: sampleLimit,
+    root_owned_paths: 0,
+    non_runtime_owned_paths: 0,
+    unreadable_paths: 0,
+    root_owned_examples: [],
+    non_runtime_owned_examples: [],
+  };
+
+  if (!diagnostics.sync_dir_exists || runtimeUid === null) {
+    return diagnostics;
+  }
+
+  const sample = collectOwnershipSample(syncDir, sampleLimit);
+  diagnostics.sampled_paths = sample.length;
+
+  for (const filePath of sample) {
+    try {
+      const stat = fs.statSync(filePath);
+      const rel = path.relative(syncDir, filePath) || ".";
+      if (stat.uid === 0) {
+        diagnostics.root_owned_paths++;
+        if (diagnostics.root_owned_examples.length < 5) diagnostics.root_owned_examples.push(rel);
+      }
+      if (stat.uid !== runtimeUid) {
+        diagnostics.non_runtime_owned_paths++;
+        if (diagnostics.non_runtime_owned_examples.length < 5) diagnostics.non_runtime_owned_examples.push(rel);
+      }
+    } catch {
+      diagnostics.unreadable_paths++;
+    }
+  }
+
+  return diagnostics;
 }
 
 // ---------------------------------------------------------------------------
@@ -368,9 +447,18 @@ export function syncAll(db, syncDir, { quiet = false, writable = false } = {}) {
   const indexedSceneIds = new Set(); // scene_id only — for orphaned sidecar move detection
   const warnings = [];
 
+  const scanFiles = [];
+  for (const file of files) {
+    if (isNestedMirrorPath(syncDir, file)) {
+      warnings.push(`Ignored nested mirror path: ${path.relative(syncDir, file)}`);
+      continue;
+    }
+    scanFiles.push(file);
+  }
+
   // --- Pass 1: world files (characters/places must be indexed before scenes
   // so that character name → ID resolution in scene_characters works) ---
-  for (const file of files) {
+  for (const file of scanFiles) {
     if (!isWorldFile(syncDir, file)) continue;
     try {
       const { meta } = readMeta(file, syncDir, { writable });
@@ -386,7 +474,7 @@ export function syncAll(db, syncDir, { quiet = false, writable = false } = {}) {
   }
 
   // --- Pass 2: scene files ---
-  for (const file of files) {
+  for (const file of scanFiles) {
     if (isWorldFile(syncDir, file)) continue;
     try {
       const { meta, sourceMeta, sidecarGenerated, derived, mismatches } = readMeta(file, syncDir, { writable });
@@ -431,7 +519,7 @@ export function syncAll(db, syncDir, { quiet = false, writable = false } = {}) {
   }
 
   // --- Orphaned sidecar detection ---
-  const sidecars = walkSidecars(syncDir);
+  const sidecars = walkSidecars(syncDir).filter(sidecar => !isNestedMirrorPath(syncDir, sidecar));
   for (const sidecar of sidecars) {
     const prose = sidecar.replace(/\.meta\.yaml$/, ".md");
     const proseTxt = sidecar.replace(/\.meta\.yaml$/, ".txt");

@@ -34,6 +34,24 @@ npm --version     # should be 8.0.0 or later
 git --version     # should be installed
 ```
 
+## Permission Contract (Recommended For All Users)
+
+To keep MCP write tools reliable across local runs, Docker, and AI agents, use this contract:
+
+1. The same non-root user should own and write the sync directory.
+2. Containerized runs should use host UID/GID, not root.
+3. If ownership drifts (for example root-owned files), repair once on host and continue.
+
+Repair commands (host):
+
+```sh
+sudo chown -R "$(id -u):$(id -g)" /path/to/sync-dir
+find /path/to/sync-dir -type d -exec chmod u+rwx {} +
+find /path/to/sync-dir -type f -exec chmod u+rw {} +
+```
+
+You can also inspect ownership/writability status at runtime via `get_runtime_config`.
+
 ## First-time setup path (recommended)
 
 If this is your first time, follow these steps in order:
@@ -321,6 +339,7 @@ Paginated tools (`find_scenes`, `get_arc`, `list_threads`, `get_thread_arc`, `se
 # docker-compose.yml snippet
 writing-mcp:
   build: .
+  user: "${UID}:${GID}"
   environment:
     WRITING_SYNC_DIR: /sync
     DB_PATH: /data/writing.db
