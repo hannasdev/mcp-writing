@@ -339,13 +339,16 @@ Paginated tools (`find_scenes`, `get_arc`, `list_threads`, `get_thread_arc`, `se
 # docker-compose.yml snippet
 writing-mcp:
   build: .
-  user: "${UID:-1000}:${GID:-1000}"
+  user: "${OPENCLAW_UID:-1000}:${OPENCLAW_GID:-1000}"
   environment:
     WRITING_SYNC_DIR: /sync
     DB_PATH: /data/writing.db
     HTTP_PORT: "3000"
+    OWNERSHIP_GUARD_MODE: "${OWNERSHIP_GUARD_MODE:-warn}"
+    GIT_SSH_COMMAND: "ssh -i /ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/ssh/known_hosts"
   volumes:
-    - /path/to/sync-dir:/sync
+    - ${OPENCLAW_WORKSPACE_DIR}/sync:/sync
+    - ${OPENCLAW_SSH_DIR}:/ssh:ro
     - writing-mcp-data:/data
   healthcheck:
     test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
@@ -357,7 +360,13 @@ volumes:
   writing-mcp-data:
 ```
 
-If you want explicit host mapping, set `UID` and `GID` in your shell or a `.env` file next to `docker-compose.yml`.
+Recommended: start from `docker-compose.example.yml` and generate `.env` with machine-specific values:
+
+```sh
+sh scripts/setup-openclaw-env.sh
+```
+
+That script writes `OPENCLAW_UID`, `OPENCLAW_GID`, `OPENCLAW_WORKSPACE_DIR`, and `OPENCLAW_SSH_DIR` to `.env`.
 
 Then register in your OpenClaw config:
 
@@ -380,8 +389,10 @@ When `mcp-writing` runs behind OpenClaw (or any Docker MCP gateway), these detai
 
 - Set `WRITING_SYNC_DIR=/sync`
 - Set `DB_PATH=/data/writing.db`
+- Set `OWNERSHIP_GUARD_MODE=warn` (or `fail` to block startup on ownership drift)
 - Mount your manuscript sync repo to `/sync`
 - Mount a persistent path for SQLite data at `/data`
+- Mount SSH materials read-only at `/ssh` and use `GIT_SSH_COMMAND` with `/ssh` paths
 
 If `/sync` contains raw Scrivener external-sync output, run the importer once before normal `sync` usage:
 
@@ -414,7 +425,7 @@ For private remotes, mount SSH materials read-only and enforce strict host check
 Example:
 
 ```sh
-export GIT_SSH_COMMAND="ssh -i /root/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/root/.ssh/known_hosts"
+export GIT_SSH_COMMAND="ssh -i /ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/ssh/known_hosts"
 ```
 
 #### Separate auth and signing keys
@@ -603,6 +614,22 @@ git config --system --add safe.directory /sync
 4. Verify SSH key has write access to the remote and `known_hosts` is mounted.
 5. Prefer branch-per-change workflow (`bot/*` or `edda/*`) if `main` is protected.
 
+### "Blocked: file is root-owned" (EACCES / ownership drift)
+
+The runtime user can read but cannot overwrite prose files.
+
+Fix:
+
+1. Repair host ownership once:
+
+```sh
+sudo chown -R "$(id -u):$(id -g)" /path/to/sync-dir
+```
+
+2. Ensure container user mapping is set from `.env` (`OPENCLAW_UID` / `OPENCLAW_GID`).
+3. Optionally set `OWNERSHIP_GUARD_MODE=fail` to catch mismatches at startup.
+4. Re-check `get_runtime_config` and confirm ownership warnings are gone.
+
 ### Tests fail after updating Node.js
 
 Local install state may be stale after the Node.js change.
@@ -624,6 +651,7 @@ npm test
 | `HTTP_PORT` | `3000` | Port for the MCP SSE endpoint |
 | `MAX_CHAPTER_SCENES` | `10` | Maximum scenes returned by `get_chapter_prose` |
 | `DEFAULT_METADATA_PAGE_SIZE` | `20` | Default page size for paginated tools |
+| `OWNERSHIP_GUARD_MODE` | `warn` | Startup ownership policy: `warn` logs drift, `fail` exits when sampled files are not owned by runtime user |
 
 ## License
 

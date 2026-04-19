@@ -19,6 +19,7 @@ const DB_PATH_DISPLAY = DB_PATH === ":memory:" ? DB_PATH : path.resolve(DB_PATH)
 const HTTP_PORT = parseInt(process.env.HTTP_PORT ?? "3000", 10);
 const MAX_CHAPTER_SCENES = parseInt(process.env.MAX_CHAPTER_SCENES ?? "10", 10);
 const DEFAULT_METADATA_PAGE_SIZE = parseInt(process.env.DEFAULT_METADATA_PAGE_SIZE ?? "20", 10);
+const OWNERSHIP_GUARD_MODE = (process.env.OWNERSHIP_GUARD_MODE ?? "warn").toLowerCase();
 
 function paginateRows(rows, { page, pageSize, forcePagination = false }) {
   const totalCount = rows.length;
@@ -316,7 +317,7 @@ function getRuntimeDiagnostics() {
       `Repair ownership once on host: sudo chown -R "$(id -u):$(id -g)" "${SYNC_DIR_ABS}"`
     );
     recommendations.push(
-      "For Docker, run container as host user (compose: user: \"${UID:-1000}:${GID:-1000}\"). Optionally set UID/GID explicitly in a .env file."
+      "For Docker/OpenClaw, run container as host user (compose: user: \"${OPENCLAW_UID:-1000}:${OPENCLAW_GID:-1000}\")."
     );
   }
 
@@ -351,6 +352,16 @@ if (RUNTIME_DIAGNOSTICS.warnings.length) {
   for (const line of RUNTIME_DIAGNOSTICS.warnings) {
     process.stderr.write(`[mcp-writing] - ${line}\n`);
   }
+}
+
+if (OWNERSHIP_GUARD_MODE === "fail" && SYNC_OWNERSHIP_DIAGNOSTICS.supported && SYNC_OWNERSHIP_DIAGNOSTICS.non_runtime_owned_paths > 0) {
+  process.stderr.write(
+    `[mcp-writing] FATAL: OWNERSHIP_GUARD_MODE=fail and ${SYNC_OWNERSHIP_DIAGNOSTICS.non_runtime_owned_paths} sampled path(s) are not owned by runtime UID ${SYNC_OWNERSHIP_DIAGNOSTICS.runtime_uid}.\n`
+  );
+  process.stderr.write(
+    `[mcp-writing] FATAL: Repair ownership once on host: sudo chown -R "$(id -u):$(id -g)" "${SYNC_DIR_ABS}"\n`
+  );
+  process.exit(1);
 }
 
 // Run sync on startup
@@ -466,6 +477,7 @@ function createMcpServer() {
         sync_dir: SYNC_DIR_ABS,
         db_path: DB_PATH_DISPLAY,
         sync_dir_writable: SYNC_DIR_WRITABLE,
+        ownership_guard_mode: OWNERSHIP_GUARD_MODE,
         permission_diagnostics: SYNC_OWNERSHIP_DIAGNOSTICS,
         git_available: GIT_AVAILABLE,
         git_enabled: GIT_ENABLED,
