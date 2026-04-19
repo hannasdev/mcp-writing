@@ -946,7 +946,7 @@ function createMcpServer() {
   // ---- search_metadata -----------------------------------------------------
   s.tool(
     "search_metadata",
-    "Full-text search across scene titles and loglines (synopsis/logline text fields). Use this when you don't know the exact scene_id or chapter but want to find scenes by topic, theme, or keywords in the description. Not a prose search — use get_scene_prose to read actual text. Supports pagination via page/page_size and auto-paginates large result sets with total_count.",
+    "Full-text search across scene titles, loglines (synopsis/logline text fields), and metadata keywords (tags/characters/places/versions). Use this when you don't know the exact scene_id or chapter but want to find scenes by topic, theme, or metadata keyword. Not a prose search — use get_scene_prose to read actual text. Supports pagination via page/page_size and auto-paginates large result sets with total_count.",
     {
       query: z.string().describe("Search terms (e.g. 'hospital' or 'Sebastian feeding'). FTS5 syntax supported."),
       page: z.number().int().min(1).optional().describe("Optional page number for paginated responses (1-based)."),

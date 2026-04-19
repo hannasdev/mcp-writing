@@ -204,6 +204,7 @@ tags:
   - conflict
   - backstory
   - harbor
+  - Daniel Nystrom
 `
   );
 
@@ -923,6 +924,11 @@ describe("search_metadata tool", () => {
   test("search envelope returns sc-003 (logline)", async () => {
     const text = await callTool("search_metadata", { query: "envelope" });
     assert.ok(text.includes("sc-003"));
+  });
+
+  test("search matches metadata keyword phrases from sidecar fields", async () => {
+    const text = await callTool("search_metadata", { query: '"Daniel Nystrom"' });
+    assert.ok(text.includes("sc-002"));
   });
 
   test("supports pagination with total_count", async () => {

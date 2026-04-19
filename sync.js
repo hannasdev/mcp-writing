@@ -515,8 +515,24 @@ export function indexSceneFile(db, syncDir, file, meta, prose) {
     );
   }
 
-  db.prepare(`INSERT OR REPLACE INTO scenes_fts (scene_id, project_id, logline, title) VALUES (?, ?, ?, ?)`).run(
-    meta.scene_id, project_id, meta.logline ?? meta.synopsis ?? "", meta.title ?? ""
+  const keywordTokens = [
+    ...(meta.tags ?? []),
+    ...(meta.characters ?? []),
+    ...(meta.places ?? []),
+    ...(meta.versions ?? []),
+  ]
+    .filter(Boolean)
+    .map(String)
+    .map(s => s.trim())
+    .filter(Boolean)
+    .join(" ");
+
+  db.prepare(`INSERT OR REPLACE INTO scenes_fts (scene_id, project_id, logline, title, keywords) VALUES (?, ?, ?, ?, ?)`).run(
+    meta.scene_id,
+    project_id,
+    meta.logline ?? meta.synopsis ?? "",
+    meta.title ?? "",
+    keywordTokens,
   );
 
   return { isStale };

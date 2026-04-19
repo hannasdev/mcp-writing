@@ -315,7 +315,7 @@ Outcome: you get AI speed with explicit approval and recoverable history for eve
 | `list_places` | All places |
 | `get_place_sheet` | Full place metadata, tags, associated characters, notes, and support notes |
 | `create_place_sheet` | Create a canonical place sheet folder and sidecar |
-| `search_metadata` | Full-text search across scene titles and loglines |
+| `search_metadata` | Full-text search across scene titles, loglines, and metadata keywords (tags/characters/places/versions) |
 | `list_threads` | All subplot threads for a project |
 | `get_thread_arc` | Scenes belonging to a thread, with per-thread beat |
 | `upsert_thread_link` | Create/update a thread and link it to a scene |
