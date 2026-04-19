@@ -7,16 +7,18 @@
 #
 # PREREQUISITES
 #
-# A Personal Access Token with repo write access is required so release-it can
-# push the version bump commit and tag to the default branch.
+# A deploy key with write access is required so release-it can push the version
+# bump commit and tag to the default branch over SSH.
 #
-# 1. GitHub -> Settings -> Developer settings -> Personal access tokens
-# 2. Create token with repository write access
+# 1. Generate an SSH keypair dedicated to release automation
+# 2. Add the public key as a repository deploy key with write access enabled
 # 3. Repo -> Settings -> Secrets and variables -> Actions -> New repository secret
-#    Name: RELEASE_TOKEN   Value: <the token>
+#    Name: RELEASE_DEPLOY_KEY   Value: <private key>
+# 4. (Optional) Add RELEASE_DEPLOY_KNOWN_HOSTS with ssh-keyscan output for hosts
+#    you require beyond GitHub.com.
 #
-# If your default branch has PR-only rules, allow this actor as a bypass actor
-# in the branch ruleset, or this workflow's push/tag step will be blocked.
+# If your default branch has PR-only rules, allow the Deploy Key actor as a
+# bypass actor in the branch ruleset, or this workflow's push/tag step fails.
 
 name: Release
 
@@ -38,18 +40,22 @@ jobs:
     if: "!startsWith(github.event.head_commit.message, 'Release ')"
 
     steps:
-      - name: Validate release token
+      - name: Validate release deploy key
+        env:
+          RELEASE_DEPLOY_KEY: ${{ secrets.RELEASE_DEPLOY_KEY }}
         run: |
-          if [ -z "${{ secrets.RELEASE_TOKEN }}" ] && [ -z "${{ secrets.RELEASE_PLEASE_TOKEN }}" ]; then
-            echo "Error: Neither RELEASE_TOKEN nor RELEASE_PLEASE_TOKEN is set."
+          if [ -z "$RELEASE_DEPLOY_KEY" ]; then
+            echo "Error: RELEASE_DEPLOY_KEY is not set."
             exit 1
           fi
 
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          # Use PAT so the push of the version bump commit/tag is allowed.
-          token: ${{ secrets.RELEASE_TOKEN || secrets.RELEASE_PLEASE_TOKEN }}
+          # Use SSH deploy key so branch-rule bypass is scoped to deploy key actor.
+          ssh-key: ${{ secrets.RELEASE_DEPLOY_KEY }}
+          ssh-known-hosts: ${{ secrets.RELEASE_DEPLOY_KNOWN_HOSTS }}
+          ssh-strict: true
 
       - name: Set up Node.js
         uses: actions/setup-node@v4

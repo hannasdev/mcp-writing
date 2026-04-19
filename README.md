@@ -462,8 +462,9 @@ How it works:
 
 Required setup:
 
-- Repository secret: `RELEASE_TOKEN` (PAT with repository write access)
-- Branch rules must allow this actor to push release commit/tag (for PR-only protection, configure a bypass actor for the token owner)
+- Repository secret: `RELEASE_DEPLOY_KEY` (private SSH key for a repo deploy key with write access)
+- Optional secret: `RELEASE_DEPLOY_KNOWN_HOSTS` (additional strict host keys; GitHub host key is already handled)
+- Branch rules must allow the **Deploy Key** actor to bypass PR-only rule for release commit/tag push
 - Repository URL in `package.json` must remain valid for npm provenance
 
 Local dry-run (optional):
