@@ -243,10 +243,19 @@ function collectOwnershipSample(rootDir, limit = 200) {
 export function getSyncOwnershipDiagnostics(syncDir, { sampleLimit = 200 } = {}) {
   let runtimeUid = typeof process.getuid === "function" ? process.getuid() : null;
   const runtimeUidOverrideRaw = process.env.RUNTIME_UID_OVERRIDE;
+  const runtimeUidOverrideAllowed = process.env.NODE_ENV === "test" || process.env.ALLOW_RUNTIME_UID_OVERRIDE === "1";
+  let runtimeUidOverrideApplied = false;
+  let runtimeUidOverrideIgnored = false;
+
   if (runtimeUidOverrideRaw !== undefined) {
-    const parsed = Number.parseInt(runtimeUidOverrideRaw, 10);
-    if (Number.isInteger(parsed) && parsed >= 0) {
-      runtimeUid = parsed;
+    if (!runtimeUidOverrideAllowed) {
+      runtimeUidOverrideIgnored = true;
+    } else {
+      const parsed = Number.parseInt(runtimeUidOverrideRaw, 10);
+      if (Number.isInteger(parsed) && parsed >= 0) {
+        runtimeUid = parsed;
+        runtimeUidOverrideApplied = true;
+      }
     }
   }
   let syncDirPathExists;
@@ -268,6 +277,9 @@ export function getSyncOwnershipDiagnostics(syncDir, { sampleLimit = 200 } = {})
     sync_dir_exists: syncDirIsDirectory,
     supported: runtimeUid !== null,
     runtime_uid: runtimeUid,
+    runtime_uid_override_requested: runtimeUidOverrideRaw !== undefined,
+    runtime_uid_override_applied: runtimeUidOverrideApplied,
+    runtime_uid_override_ignored: runtimeUidOverrideIgnored,
     sampled_paths: 0,
     sample_limit: sampleLimit,
     root_owned_paths: 0,

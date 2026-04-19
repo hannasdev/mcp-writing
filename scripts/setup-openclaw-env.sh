@@ -5,7 +5,7 @@ ENV_FILE="${1:-.env}"
 OPENCLAW_UID_VALUE="$(id -u)"
 OPENCLAW_GID_VALUE="$(id -g)"
 OPENCLAW_WORKSPACE_DIR_VALUE="${OPENCLAW_WORKSPACE_DIR:-$(pwd)}"
-OPENCLAW_SSH_DIR_VALUE="${OPENCLAW_SSH_DIR:-$HOME/.ssh}"
+OPENCLAW_SSH_DIR_VALUE="${OPENCLAW_SSH_DIR:-${HOME:-$(pwd)}/.ssh}"
 OWNERSHIP_GUARD_MODE_VALUE="${2:-${OWNERSHIP_GUARD_MODE:-}}"
 
 if [ -z "$OWNERSHIP_GUARD_MODE_VALUE" ] && [ -f "$ENV_FILE" ]; then
@@ -17,7 +17,11 @@ if [ -z "$OWNERSHIP_GUARD_MODE_VALUE" ]; then
   OWNERSHIP_GUARD_MODE_VALUE="warn"
 fi
 
-TMP_FILE="$(mktemp)"
+if TMP_FILE="$(mktemp -t openclaw-env.XXXXXX 2>/dev/null)"; then
+  :
+else
+  TMP_FILE="$(mktemp "${TMPDIR:-/tmp}/openclaw-env.XXXXXX")"
+fi
 trap 'rm -f "$TMP_FILE"' EXIT
 
 if [ -f "$ENV_FILE" ]; then

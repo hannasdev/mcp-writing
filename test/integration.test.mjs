@@ -593,6 +593,7 @@ describe("get_runtime_config tool", () => {
     const rootProc = spawnServer(rootPort, readSyncDir, {
       OWNERSHIP_GUARD_MODE: "fail",
       RUNTIME_UID_OVERRIDE: "0",
+      ALLOW_RUNTIME_UID_OVERRIDE: "1",
     });
     let rootClient;
 
@@ -608,6 +609,30 @@ describe("get_runtime_config tool", () => {
     } finally {
       try { await rootClient?.close(); } catch {}
       if (rootProc) rootProc.kill();
+    }
+  });
+
+  test("ignores RUNTIME_UID_OVERRIDE unless explicitly allowed", async () => {
+    const overridePort = 3094;
+    const overrideUrl = `http://localhost:${overridePort}`;
+    const overrideProc = spawnServer(overridePort, readSyncDir, {
+      RUNTIME_UID_OVERRIDE: "0",
+    });
+    let overrideClient;
+
+    try {
+      await waitForServer(overrideUrl);
+      overrideClient = await connectClient(overrideUrl);
+      const result = await overrideClient.callTool({ name: "get_runtime_config", arguments: {} });
+      const parsed = JSON.parse(result.content?.[0]?.text ?? "{}");
+
+      assert.equal(parsed.permission_diagnostics?.runtime_uid_override_requested, true);
+      assert.equal(parsed.permission_diagnostics?.runtime_uid_override_applied, false);
+      assert.equal(parsed.permission_diagnostics?.runtime_uid_override_ignored, true);
+      assert.ok((parsed.runtime_warnings ?? []).some(w => w.includes("RUNTIME_UID_OVERRIDE_IGNORED")));
+    } finally {
+      try { await overrideClient?.close(); } catch {}
+      if (overrideProc) overrideProc.kill();
     }
   });
 });

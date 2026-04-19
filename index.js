@@ -23,6 +23,7 @@ const OWNERSHIP_GUARD_MODE_RAW = (process.env.OWNERSHIP_GUARD_MODE ?? "warn").tr
 const OWNERSHIP_GUARD_MODE = OWNERSHIP_GUARD_MODE_RAW === "fail" || OWNERSHIP_GUARD_MODE_RAW === "warn"
   ? OWNERSHIP_GUARD_MODE_RAW
   : "warn";
+const OWNERSHIP_GUARD_MODE_RAW_DISPLAY = JSON.stringify(OWNERSHIP_GUARD_MODE_RAW);
 
 function paginateRows(rows, { page, pageSize, forcePagination = false }) {
   const totalCount = rows.length;
@@ -308,9 +309,14 @@ function getRuntimeDiagnostics() {
 
   if (OWNERSHIP_GUARD_MODE_RAW !== OWNERSHIP_GUARD_MODE) {
     warnings.push(
-      `OWNERSHIP_GUARD_MODE_INVALID: Unsupported OWNERSHIP_GUARD_MODE='${OWNERSHIP_GUARD_MODE_RAW}'. Falling back to 'warn'.`
+      `OWNERSHIP_GUARD_MODE_INVALID: Unsupported OWNERSHIP_GUARD_MODE=${OWNERSHIP_GUARD_MODE_RAW_DISPLAY}. Falling back to 'warn'.`
     );
     recommendations.push("Set OWNERSHIP_GUARD_MODE to either 'warn' or 'fail'.");
+  }
+
+  if (SYNC_OWNERSHIP_DIAGNOSTICS.runtime_uid_override_ignored) {
+    warnings.push("RUNTIME_UID_OVERRIDE_IGNORED: RUNTIME_UID_OVERRIDE is ignored unless NODE_ENV=test or ALLOW_RUNTIME_UID_OVERRIDE=1.");
+    recommendations.push("Avoid RUNTIME_UID_OVERRIDE in production runtime environments.");
   }
 
   if (!SYNC_DIR_WRITABLE) {
