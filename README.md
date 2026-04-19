@@ -447,7 +447,7 @@ Unit tests use an in-memory SQLite database and temporary directories — no ser
 
 For real projects, keep your manuscript sync folder outside this tool repository and point `WRITING_SYNC_DIR` at that external path.
 
-Maintainers: see `MAINTAINERS.md` for release and operational setup notes.
+Maintainers: see `MAINTAINERS.md` for release and operational setup notes, and `AGENT.md` for persistent workflow conventions and release/recovery guidance.
 
 ## Troubleshooting
 
