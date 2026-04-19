@@ -468,7 +468,7 @@ The AI can never write prose in a single step. All prose edits require an explic
 | Tool | Description |
 | --- | --- |
 | `propose_edit(scene_id, instruction, revised_prose)` | Stores a complete revised version, returns a `proposal_id`, and shows a diff preview without writing |
-| `commit_edit(scene_id, proposal_id)` | Git-commits current prose as a pre-edit snapshot, then writes the proposed revision after preflight path checks. Returns explicit envelopes for stale/misclassified/unwritable paths (`STALE_PATH`, `INVALID_PROSE_PATH`, `PROSE_FILE_NOT_WRITABLE`) |
+| `commit_edit(scene_id, proposal_id)` | Runs preflight path checks first; if they pass, git-commits current prose as a pre-edit snapshot and then writes the proposed revision. If preflight fails, no snapshot is created. Returns explicit envelopes for stale/misclassified/unwritable paths (`STALE_PATH`, `INVALID_PROSE_PATH`, `PROSE_FILE_NOT_WRITABLE`) |
 | `discard_edit(proposal_id)` | Discards a pending proposal |
 | `snapshot_scene(scene_id, project_id, reason)` | Manually git-commits the current state of a scene with a descriptive message |
 
