@@ -129,15 +129,31 @@ function removeIfExists(filePath) {
   if (filePath && fs.existsSync(filePath)) fs.unlinkSync(filePath);
 }
 
+function resolveSyncRootFromPrefix(prefix, syncDirAbs) {
+  const parsedRoot = path.parse(syncDirAbs).root;
+
+  if (!prefix) {
+    return parsedRoot ? path.resolve(parsedRoot) : path.resolve(syncDirAbs);
+  }
+
+  // On Windows, a regex prefix like "C:" would resolve relative to cwd on drive C.
+  // Use the true drive root instead (e.g., "C:\\").
+  if (/^[a-zA-Z]:$/.test(prefix)) {
+    return parsedRoot || `${prefix}${path.sep}`;
+  }
+
+  return path.resolve(prefix);
+}
+
 function detectScopedSyncDir(syncDirAbs) {
   const normalized = syncDirAbs.split(path.sep).join("/");
 
   const universeMatch = normalized.match(/^(.*)\/universes\/([^/]+)\/([^/]+)(?:\/scenes)?$/);
   if (universeMatch) {
-    const prefix = universeMatch[1] || path.parse(syncDirAbs).root;
+    const prefix = universeMatch[1];
     const universeId = universeMatch[2];
     const projectSlug = universeMatch[3];
-    const syncRoot = path.resolve(prefix || path.parse(syncDirAbs).root);
+    const syncRoot = resolveSyncRootFromPrefix(prefix, syncDirAbs);
     const projectRoot = path.join(syncRoot, "universes", universeId, projectSlug);
     return {
       projectId: `${universeId}/${projectSlug}`,
@@ -149,9 +165,9 @@ function detectScopedSyncDir(syncDirAbs) {
 
   const projectMatch = normalized.match(/^(.*)\/projects\/([^/]+)(?:\/scenes)?$/);
   if (projectMatch) {
-    const prefix = projectMatch[1] || path.parse(syncDirAbs).root;
+    const prefix = projectMatch[1];
     const projectSlug = projectMatch[2];
-    const syncRoot = path.resolve(prefix || path.parse(syncDirAbs).root);
+    const syncRoot = resolveSyncRootFromPrefix(prefix, syncDirAbs);
     const projectRoot = path.join(syncRoot, "projects", projectSlug);
     return {
       projectId: projectSlug,

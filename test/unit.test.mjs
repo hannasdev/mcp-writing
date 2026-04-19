@@ -593,8 +593,11 @@ describe("importScrivenerSync", () => {
     assert.equal(result.scenesDir, scopedSyncDir);
     assert.ok(fs.existsSync(path.join(scopedSyncDir, "001 Scene The Arrival [1].meta.yaml")));
 
-    // Regression guard: ensure no nested projects/<id>/scenes path is created inside scenes/
-    assert.equal(fs.existsSync(path.join(scopedSyncDir, "projects", "universe-1", "scenes")), false);
+    // Regression guard: ensure no nested universes/<id>/<project>/scenes path is created inside scenes/
+    assert.equal(
+      fs.existsSync(path.join(scopedSyncDir, "universes", "universe-1", "book-1-the-lamb", "scenes")),
+      false
+    );
 
     fs.rmSync(syncRoot, { recursive: true, force: true });
     fs.rmSync(scrivDir, { recursive: true, force: true });
@@ -631,6 +634,58 @@ describe("importScrivenerSync", () => {
         dryRun: true,
       }),
       /does not match WRITING_SYNC_DIR scope/
+    );
+
+    fs.rmSync(syncRoot, { recursive: true, force: true });
+    fs.rmSync(scrivDir, { recursive: true, force: true });
+  });
+
+  test("writes into existing project root path when WRITING_SYNC_DIR points to projects/<project>", () => {
+    const syncRoot = fs.mkdtempSync(path.join(os.tmpdir(), "sync-root-"));
+    const scopedProjectDir = path.join(syncRoot, "projects", "book-1-the-lamb");
+    const scrivDir = createScrivenerDraftFixture();
+
+    const result = importScrivenerSync({
+      scrivenerDir: scrivDir,
+      mcpSyncDir: scopedProjectDir,
+      projectId: "book-1-the-lamb",
+      dryRun: false,
+    });
+
+    assert.equal(result.projectId, "book-1-the-lamb");
+    assert.equal(result.scenesDir, path.join(scopedProjectDir, "scenes"));
+    assert.ok(fs.existsSync(path.join(scopedProjectDir, "scenes", "001 Scene The Arrival [1].meta.yaml")));
+
+    // Regression guard: ensure no nested projects/<project>/scenes path is created inside scoped project path.
+    assert.equal(
+      fs.existsSync(path.join(scopedProjectDir, "projects", "book-1-the-lamb", "scenes")),
+      false
+    );
+
+    fs.rmSync(syncRoot, { recursive: true, force: true });
+    fs.rmSync(scrivDir, { recursive: true, force: true });
+  });
+
+  test("writes into existing project scenes path when WRITING_SYNC_DIR points to projects/<project>/scenes", () => {
+    const syncRoot = fs.mkdtempSync(path.join(os.tmpdir(), "sync-root-"));
+    const scopedScenesDir = path.join(syncRoot, "projects", "book-1-the-lamb", "scenes");
+    const scrivDir = createScrivenerDraftFixture();
+
+    const result = importScrivenerSync({
+      scrivenerDir: scrivDir,
+      mcpSyncDir: scopedScenesDir,
+      projectId: "book-1-the-lamb",
+      dryRun: false,
+    });
+
+    assert.equal(result.projectId, "book-1-the-lamb");
+    assert.equal(result.scenesDir, scopedScenesDir);
+    assert.ok(fs.existsSync(path.join(scopedScenesDir, "001 Scene The Arrival [1].meta.yaml")));
+
+    // Regression guard: ensure no nested projects/<project>/scenes path is created inside scoped scenes path.
+    assert.equal(
+      fs.existsSync(path.join(scopedScenesDir, "projects", "book-1-the-lamb", "scenes")),
+      false
     );
 
     fs.rmSync(syncRoot, { recursive: true, force: true });
