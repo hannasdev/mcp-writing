@@ -442,7 +442,7 @@ A scene without frontmatter/sidecar metadata is not a hard failure for sync, but
 
 | Tool | Description |
 | --- | --- |
-| `get_runtime_config()` | Show active runtime paths/capabilities plus diagnostics (`sync_dir_writable`, `permission_diagnostics`, runtime warnings, setup recommendations, git availability/enabled state, port) |
+| `get_runtime_config()` | Show active runtime paths/capabilities plus diagnostics (`sync_dir_writable`, `permission_diagnostics`, runtime warnings, setup recommendations, git availability/enabled state, `http_port`) |
 | `find_scenes(project_id?, character?, beat?, tag?, part?, chapter?, pov?, page?, page_size?)` | Returns matching scene metadata — no prose |
 | `get_arc(character_id)` | Ordered scene metadata for all scenes involving a character |
 | `list_characters()` | All character entries |
