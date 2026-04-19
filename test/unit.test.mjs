@@ -171,9 +171,15 @@ describe("getSyncOwnershipDiagnostics", () => {
 
     const diagnostics = getSyncOwnershipDiagnostics(dir, { sampleLimit: 25 });
     assert.equal(diagnostics.sync_dir_exists, true);
+    assert.equal(diagnostics.sync_dir_path_exists, true);
+    assert.equal(diagnostics.sync_dir_is_directory, true);
     assert.equal(typeof diagnostics.supported, "boolean");
     assert.equal(diagnostics.sample_limit, 25);
-    assert.ok(diagnostics.sampled_paths >= 1);
+    if (diagnostics.supported) {
+      assert.ok(diagnostics.sampled_paths >= 1);
+    } else {
+      assert.equal(diagnostics.sampled_paths, 0);
+    }
 
     fs.rmSync(dir, { recursive: true, force: true });
   });
@@ -181,7 +187,23 @@ describe("getSyncOwnershipDiagnostics", () => {
   test("handles non-existent directory gracefully", () => {
     const diagnostics = getSyncOwnershipDiagnostics("/tmp/__nonexistent_dir_xyz__/subdir", { sampleLimit: 10 });
     assert.equal(diagnostics.sync_dir_exists, false);
+    assert.equal(diagnostics.sync_dir_path_exists, false);
+    assert.equal(diagnostics.sync_dir_is_directory, false);
     assert.equal(diagnostics.sampled_paths, 0);
+  });
+
+  test("treats non-directory path as invalid sync dir", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ownership-"));
+    const filePath = path.join(dir, "not-a-dir.txt");
+    fs.writeFileSync(filePath, "content", "utf8");
+
+    const diagnostics = getSyncOwnershipDiagnostics(filePath, { sampleLimit: 10 });
+    assert.equal(diagnostics.sync_dir_path_exists, true);
+    assert.equal(diagnostics.sync_dir_is_directory, false);
+    assert.equal(diagnostics.sync_dir_exists, false);
+    assert.equal(diagnostics.sampled_paths, 0);
+
+    fs.rmSync(dir, { recursive: true, force: true });
   });
 });
 

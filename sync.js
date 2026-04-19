@@ -242,9 +242,23 @@ function collectOwnershipSample(rootDir, limit = 200) {
 
 export function getSyncOwnershipDiagnostics(syncDir, { sampleLimit = 200 } = {}) {
   const runtimeUid = typeof process.getuid === "function" ? process.getuid() : null;
+  let syncDirPathExists;
+  let syncDirIsDirectory;
+  try {
+    const stat = fs.statSync(syncDir);
+    syncDirPathExists = true;
+    syncDirIsDirectory = stat.isDirectory();
+  } catch {
+    syncDirPathExists = false;
+    syncDirIsDirectory = false;
+  }
+
   const diagnostics = {
     sync_dir: path.resolve(syncDir),
-    sync_dir_exists: fs.existsSync(syncDir),
+    sync_dir_path_exists: syncDirPathExists,
+    sync_dir_is_directory: syncDirIsDirectory,
+    // Backwards-compatible: "exists" now means "exists and is a directory".
+    sync_dir_exists: syncDirIsDirectory,
     supported: runtimeUid !== null,
     runtime_uid: runtimeUid,
     sampled_paths: 0,
@@ -256,7 +270,7 @@ export function getSyncOwnershipDiagnostics(syncDir, { sampleLimit = 200 } = {})
     non_runtime_owned_examples: [],
   };
 
-  if (!diagnostics.sync_dir_exists || runtimeUid === null) {
+  if (!diagnostics.sync_dir_is_directory || runtimeUid === null) {
     return diagnostics;
   }
 
