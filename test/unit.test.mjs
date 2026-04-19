@@ -234,6 +234,7 @@ describe("getFileWriteDiagnostics", () => {
       assert.equal(diagnostics.is_file, false);
       assert.equal(diagnostics.writable, false);
       assert.equal(diagnostics.parent_dir_writable, true);
+      assert.ok(diagnostics.stat_error_code === "ENOENT" || diagnostics.stat_error_code === "ENOTDIR");
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }

@@ -1103,6 +1103,37 @@ describe("create_character_sheet tool", () => {
     assert.ok(sidecarRaw.includes("character_id: char-leah-quinn"));
   });
 
+  test("does not rewrite existing valid sidecar when no backfill is needed", async () => {
+    const existingDir = path.join(
+      writeSyncDir,
+      "projects",
+      "test-novel",
+      "world",
+      "characters",
+      "leah-preserve"
+    );
+    fs.mkdirSync(existingDir, { recursive: true });
+    fs.writeFileSync(path.join(existingDir, "sheet.md"), "# Leah Preserve\n\nExisting notes.\n", "utf8");
+
+    const metaPath = path.join(existingDir, "sheet.meta.yaml");
+    const originalMeta = "# keep this comment\ncharacter_id: char-leah-preserve\nname: Leah Preserve\nrole: support\n";
+    fs.writeFileSync(metaPath, originalMeta, "utf8");
+
+    const text = await callWriteTool("create_character_sheet", {
+      name: "Leah Preserve",
+      project_id: "test-novel",
+      fields: {
+        role: "lead",
+      },
+    });
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.action, "exists");
+    assert.equal(parsed.id, "char-leah-preserve");
+    assert.equal(fs.readFileSync(metaPath, "utf8"), originalMeta);
+  });
+
   test("returns error and preserves sidecar when existing YAML is invalid", async () => {
     const existingDir = path.join(
       writeSyncDir,
@@ -1241,17 +1272,24 @@ describe("commit_edit preflight diagnostics", () => {
     assert.ok(proposal.proposal_id);
 
     const scenePath = path.join(writeSyncDir, "projects", "test-novel", "part-1", "chapter-1", "sc-001.md");
-    fs.unlinkSync(scenePath);
+    const originalContent = fs.readFileSync(scenePath, "utf8");
+    try {
+      fs.unlinkSync(scenePath);
 
-    const commitText = await callWriteTool("commit_edit", {
-      scene_id: "sc-001",
-      proposal_id: proposal.proposal_id,
-    });
-    const commitResult = JSON.parse(commitText);
+      const commitText = await callWriteTool("commit_edit", {
+        scene_id: "sc-001",
+        proposal_id: proposal.proposal_id,
+      });
+      const commitResult = JSON.parse(commitText);
 
-    assert.equal(commitResult.ok, false);
-    assert.equal(commitResult.error.code, "STALE_PATH");
-    assert.equal(commitResult.error.details?.prose_write_diagnostics?.exists, false);
+      assert.equal(commitResult.ok, false);
+      assert.equal(commitResult.error.code, "STALE_PATH");
+      assert.equal(commitResult.error.details?.prose_write_diagnostics?.exists, false);
+    } finally {
+      if (!fs.existsSync(scenePath)) {
+        fs.writeFileSync(scenePath, originalContent, "utf8");
+      }
+    }
   });
 
   test("returns INVALID_PROSE_PATH when indexed prose path points to a directory", async () => {
@@ -1265,17 +1303,26 @@ describe("commit_edit preflight diagnostics", () => {
 
     const originalScenePath = path.join(writeSyncDir, "projects", "test-novel", "part-1", "chapter-2", "sc-003.md");
     const replacementPath = path.join(writeSyncDir, "projects", "test-novel", "part-1", "chapter-2", "sc-003-original.md");
-    fs.renameSync(originalScenePath, replacementPath);
-    fs.mkdirSync(originalScenePath, { recursive: true });
+    try {
+      fs.renameSync(originalScenePath, replacementPath);
+      fs.mkdirSync(originalScenePath, { recursive: true });
 
-    const commitText = await callWriteTool("commit_edit", {
-      scene_id: "sc-003",
-      proposal_id: proposal.proposal_id,
-    });
-    const commitResult = JSON.parse(commitText);
+      const commitText = await callWriteTool("commit_edit", {
+        scene_id: "sc-003",
+        proposal_id: proposal.proposal_id,
+      });
+      const commitResult = JSON.parse(commitText);
 
-    assert.equal(commitResult.ok, false);
-    assert.equal(commitResult.error.code, "INVALID_PROSE_PATH");
-    assert.equal(commitResult.error.details?.prose_write_diagnostics?.is_file, false);
+      assert.equal(commitResult.ok, false);
+      assert.equal(commitResult.error.code, "INVALID_PROSE_PATH");
+      assert.equal(commitResult.error.details?.prose_write_diagnostics?.is_file, false);
+    } finally {
+      if (fs.existsSync(originalScenePath) && fs.statSync(originalScenePath).isDirectory()) {
+        fs.rmdirSync(originalScenePath);
+      }
+      if (fs.existsSync(replacementPath) && !fs.existsSync(originalScenePath)) {
+        fs.renameSync(replacementPath, originalScenePath);
+      }
+    }
   });
 });

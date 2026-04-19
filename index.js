@@ -201,6 +201,9 @@ function createCanonicalWorldEntity({ kind, name, notes, projectId, universeId, 
   }
 
   let existingMeta = {};
+  let shouldWriteMeta = !hadMeta;
+  let payload;
+  const derivedId = `${prefix}-${slug}`;
   if (hadMeta) {
     let parsedMeta;
     try {
@@ -219,21 +222,28 @@ function createCanonicalWorldEntity({ kind, name, notes, projectId, universeId, 
     } else {
       throw new Error(`Existing metadata sidecar must be a YAML mapping at ${metaPath}.`);
     }
-  }
 
-  const payload = hadMeta
-    ? {
-      ...existingMeta,
-      [idKey]: existingMeta[idKey] ?? `${prefix}-${slug}`,
-      name: existingMeta.name ?? name,
-    }
-    : {
-      [idKey]: `${prefix}-${slug}`,
+    const backfilledId = existingMeta[idKey] ?? derivedId;
+    const backfilledName = existingMeta.name ?? name;
+    shouldWriteMeta = existingMeta[idKey] == null || existingMeta.name == null;
+    payload = shouldWriteMeta
+      ? {
+        ...existingMeta,
+        [idKey]: backfilledId,
+        name: backfilledName,
+      }
+      : existingMeta;
+  } else {
+    payload = {
+      [idKey]: derivedId,
       name,
       ...(meta ?? {}),
     };
+  }
 
-  fs.writeFileSync(metaPath, yaml.dump(payload, { lineWidth: 120 }), "utf8");
+  if (shouldWriteMeta) {
+    fs.writeFileSync(metaPath, yaml.dump(payload, { lineWidth: 120 }), "utf8");
+  }
 
   syncAll(db, SYNC_DIR, { writable: SYNC_DIR_WRITABLE });
 
@@ -1421,6 +1431,28 @@ function createMcpServer() {
 
       try {
         const proseWriteDiagnostics = getFileWriteDiagnostics(proposal.scene_file_path);
+        if (proseWriteDiagnostics.stat_error_code === "EACCES" || proseWriteDiagnostics.stat_error_code === "EPERM") {
+          return errorResponse(
+            "PROSE_FILE_NOT_WRITABLE",
+            "Scene prose file cannot be accessed by the current runtime user.",
+            {
+              indexed_path: proposal.scene_file_path,
+              prose_write_diagnostics: proseWriteDiagnostics,
+            }
+          );
+        }
+
+        if (proseWriteDiagnostics.stat_error_code && proseWriteDiagnostics.stat_error_code !== "ENOENT" && proseWriteDiagnostics.stat_error_code !== "ENOTDIR") {
+          return errorResponse(
+            "IO_ERROR",
+            "Failed to inspect scene prose path before writing.",
+            {
+              indexed_path: proposal.scene_file_path,
+              prose_write_diagnostics: proseWriteDiagnostics,
+            }
+          );
+        }
+
         if (!proseWriteDiagnostics.exists) {
           return errorResponse("STALE_PATH", "Prose file not found at indexed path.", {
             indexed_path: proposal.scene_file_path,

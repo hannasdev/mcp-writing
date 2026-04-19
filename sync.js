@@ -312,6 +312,8 @@ export function getFileWriteDiagnostics(filePath) {
     runtime_uid: runtimeUid,
     owner_uid: null,
     root_owned: false,
+    stat_error_code: null,
+    stat_error_message: null,
   };
 
   try {
@@ -327,7 +329,9 @@ export function getFileWriteDiagnostics(filePath) {
     diagnostics.is_file = stat.isFile();
     diagnostics.owner_uid = typeof stat.uid === "number" ? stat.uid : null;
     diagnostics.root_owned = stat.uid === 0;
-  } catch {
+  } catch (err) {
+    diagnostics.stat_error_code = typeof err?.code === "string" ? err.code : null;
+    diagnostics.stat_error_message = typeof err?.message === "string" ? err.message : String(err);
     return diagnostics;
   }
 
