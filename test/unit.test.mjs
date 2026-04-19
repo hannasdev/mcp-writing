@@ -302,7 +302,7 @@ describe("inferProjectAndUniverse", () => {
     assert.deepEqual(result, { universe_id: null, project_id: "my-novel" });
   });
 
-  test("projects/ structural dir checks are case-insensitive", () => {
+  test("projects/ single-segment world path remains single-segment project", () => {
     const result = inferProjectAndUniverse(syncDir, "/sync/projects/my-novel/World/characters/elena.md");
     assert.deepEqual(result, { universe_id: null, project_id: "my-novel" });
   });
@@ -312,11 +312,47 @@ describe("inferProjectAndUniverse", () => {
     assert.deepEqual(result, { universe_id: null, project_id: "my-novel" });
   });
 
-  test("projects/ two-segment layout (accidental universe path) returns correct compound project_id", () => {
-    // Regression: projects/universe-1/book-1-the-lamb/scenes/... was being
-    // inferred as project_id 'universe-1' instead of 'universe-1/book-1-the-lamb'.
-    const result = inferProjectAndUniverse(syncDir, "/sync/projects/universe-1/book-1-the-lamb/scenes/sc-001.txt");
-    assert.deepEqual(result, { universe_id: "universe-1", project_id: "universe-1/book-1-the-lamb" });
+  test("projects/ two-segment layout requires matching universes root on disk", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "infer-two-segment-"));
+    try {
+      fs.mkdirSync(path.join(dir, "universes", "universe-1", "book-1-the-lamb", "scenes"), { recursive: true });
+      const result = inferProjectAndUniverse(dir, path.join(dir, "projects", "universe-1", "book-1-the-lamb", "scenes", "sc-001.txt"));
+      assert.deepEqual(result, { universe_id: "universe-1", project_id: "universe-1/book-1-the-lamb" });
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("projects/ two-segment layout supports non-numeric book slugs", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "infer-book-slug-"));
+    try {
+      fs.mkdirSync(path.join(dir, "universes", "universe-1", "book-one", "scenes"), { recursive: true });
+      const result = inferProjectAndUniverse(dir, path.join(dir, "projects", "universe-1", "book-one", "scenes", "sc-001.txt"));
+      assert.deepEqual(result, { universe_id: "universe-1", project_id: "universe-1/book-one" });
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("projects/ nested book-* folder under standalone project is not misclassified", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "infer-no-universe-"));
+    try {
+      const result = inferProjectAndUniverse(dir, path.join(dir, "projects", "my-novel", "book-1", "scenes", "sc-001.txt"));
+      assert.deepEqual(result, { universe_id: null, project_id: "my-novel" });
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("projects/ two-segment candidate with case-variant structural dir is supported", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "infer-structural-case-"));
+    try {
+      fs.mkdirSync(path.join(dir, "universes", "universe-1", "book-1", "World", "characters"), { recursive: true });
+      const result = inferProjectAndUniverse(dir, path.join(dir, "projects", "universe-1", "book-1", "World", "characters", "elena.md"));
+      assert.deepEqual(result, { universe_id: "universe-1", project_id: "universe-1/book-1" });
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
 

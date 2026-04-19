@@ -99,6 +99,9 @@ export function normalizeSceneMetaForPath(syncDir, filePath, meta = {}) {
 // Structural directory names that are never project slugs under projects/<id>/.
 const PROJECT_STRUCTURAL_DIRS = new Set(["world", "scenes", "misc", "fragments", "feedback", "draft"]);
 
+// Cache universe project root existence checks during sync scans.
+const UNIVERSE_PROJECT_ROOT_CACHE = new Map();
+
 // Returns true for known structural path segments directly under a project root
 // (named dirs like "world", "scenes", and part-N / chapter-N path segments).
 function isProjectStructuralDir(name) {
@@ -109,7 +112,18 @@ function isProjectStructuralDir(name) {
 }
 
 function isBookSlug(name) {
-  return /^book-\d+([a-z0-9-]*)?$/i.test(String(name ?? ""));
+  return /^book-[a-z0-9][a-z0-9-]*$/i.test(String(name ?? ""));
+}
+
+function hasUniverseProjectRoot(syncDir, universeId, projectSlug) {
+  const key = `${syncDir}::${universeId}/${projectSlug}`;
+  if (UNIVERSE_PROJECT_ROOT_CACHE.has(key)) {
+    return UNIVERSE_PROJECT_ROOT_CACHE.get(key);
+  }
+
+  const exists = fs.existsSync(path.join(syncDir, "universes", universeId, projectSlug));
+  UNIVERSE_PROJECT_ROOT_CACHE.set(key, exists);
+  return exists;
 }
 
 export function inferProjectAndUniverse(syncDir, filePath) {
@@ -135,6 +149,7 @@ export function inferProjectAndUniverse(syncDir, filePath) {
       && parts[3] !== undefined
       && isBookSlug(parts[2])
       && isProjectStructuralDir(parts[3])
+      && hasUniverseProjectRoot(syncDir, parts[1], parts[2])
     ) {
       return { universe_id: parts[1], project_id: `${parts[1]}/${parts[2]}` };
     }
