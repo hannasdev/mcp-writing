@@ -19,6 +19,11 @@ const DB_PATH_DISPLAY = DB_PATH === ":memory:" ? DB_PATH : path.resolve(DB_PATH)
 const HTTP_PORT = parseInt(process.env.HTTP_PORT ?? "3000", 10);
 const MAX_CHAPTER_SCENES = parseInt(process.env.MAX_CHAPTER_SCENES ?? "10", 10);
 const DEFAULT_METADATA_PAGE_SIZE = parseInt(process.env.DEFAULT_METADATA_PAGE_SIZE ?? "20", 10);
+const OWNERSHIP_GUARD_MODE_RAW = (process.env.OWNERSHIP_GUARD_MODE ?? "warn").trim().toLowerCase();
+const OWNERSHIP_GUARD_MODE = OWNERSHIP_GUARD_MODE_RAW === "fail" || OWNERSHIP_GUARD_MODE_RAW === "warn"
+  ? OWNERSHIP_GUARD_MODE_RAW
+  : "warn";
+const OWNERSHIP_GUARD_MODE_RAW_DISPLAY = JSON.stringify(OWNERSHIP_GUARD_MODE_RAW);
 
 function paginateRows(rows, { page, pageSize, forcePagination = false }) {
   const totalCount = rows.length;
@@ -302,6 +307,23 @@ function getRuntimeDiagnostics() {
   const warnings = [];
   const recommendations = [];
 
+  if (OWNERSHIP_GUARD_MODE_RAW !== OWNERSHIP_GUARD_MODE) {
+    warnings.push(
+      `OWNERSHIP_GUARD_MODE_INVALID: Unsupported OWNERSHIP_GUARD_MODE=${OWNERSHIP_GUARD_MODE_RAW_DISPLAY}. Falling back to 'warn'.`
+    );
+    recommendations.push("Set OWNERSHIP_GUARD_MODE to either 'warn' or 'fail'.");
+  }
+
+  if (SYNC_OWNERSHIP_DIAGNOSTICS.runtime_uid_override_ignored) {
+    warnings.push("RUNTIME_UID_OVERRIDE_IGNORED: RUNTIME_UID_OVERRIDE is ignored unless NODE_ENV=test or ALLOW_RUNTIME_UID_OVERRIDE=1.");
+    recommendations.push("Avoid RUNTIME_UID_OVERRIDE in production runtime environments.");
+  }
+
+  if (SYNC_OWNERSHIP_DIAGNOSTICS.runtime_uid_override_invalid) {
+    warnings.push("RUNTIME_UID_OVERRIDE_INVALID: RUNTIME_UID_OVERRIDE must be a non-negative integer when enabled.");
+    recommendations.push("Set RUNTIME_UID_OVERRIDE to a non-negative integer, or unset it.");
+  }
+
   if (!SYNC_DIR_WRITABLE) {
     warnings.push("SYNC_DIR_READ_ONLY: sync dir is read-only; metadata write-back and prose editing tools are unavailable.");
     recommendations.push("Mount WRITING_SYNC_DIR with write access (avoid read-only mounts like ':ro').");
@@ -316,8 +338,15 @@ function getRuntimeDiagnostics() {
       `Repair ownership once on host: sudo chown -R "$(id -u):$(id -g)" "${SYNC_DIR_ABS}"`
     );
     recommendations.push(
-      "For Docker, run container as host user (compose: user: \"${UID:-1000}:${GID:-1000}\"). Optionally set UID/GID explicitly in a .env file."
+      "For Docker/OpenClaw, run container as host user (compose: user: \"${OPENCLAW_UID:-1000}:${OPENCLAW_GID:-1000}\")."
     );
+  }
+
+  if (OWNERSHIP_GUARD_MODE === "fail" && SYNC_OWNERSHIP_DIAGNOSTICS.runtime_uid === 0) {
+    warnings.push(
+      "OWNERSHIP_GUARD_SKIPPED_FOR_ROOT: OWNERSHIP_GUARD_MODE=fail is skipped because runtime UID is 0 (root)."
+    );
+    recommendations.push("Prefer running as a non-root host-mapped UID/GID to make ownership guard checks meaningful.");
   }
 
   if (SYNC_OWNERSHIP_DIAGNOSTICS.supported && SYNC_OWNERSHIP_DIAGNOSTICS.root_owned_paths > 0) {
@@ -351,6 +380,20 @@ if (RUNTIME_DIAGNOSTICS.warnings.length) {
   for (const line of RUNTIME_DIAGNOSTICS.warnings) {
     process.stderr.write(`[mcp-writing] - ${line}\n`);
   }
+}
+
+const SHOULD_ENFORCE_OWNERSHIP_FAIL_GUARD = OWNERSHIP_GUARD_MODE === "fail"
+  && SYNC_OWNERSHIP_DIAGNOSTICS.supported
+  && SYNC_OWNERSHIP_DIAGNOSTICS.runtime_uid !== 0;
+
+if (SHOULD_ENFORCE_OWNERSHIP_FAIL_GUARD && SYNC_OWNERSHIP_DIAGNOSTICS.non_runtime_owned_paths > 0) {
+  process.stderr.write(
+    `[mcp-writing] FATAL: OWNERSHIP_GUARD_MODE=fail and ${SYNC_OWNERSHIP_DIAGNOSTICS.non_runtime_owned_paths} sampled path(s) are not owned by runtime UID ${SYNC_OWNERSHIP_DIAGNOSTICS.runtime_uid}.\n`
+  );
+  process.stderr.write(
+    `[mcp-writing] FATAL: Repair ownership once on the host directory mounted at ${SYNC_DIR_ABS}: sudo chown -R "$(id -u):$(id -g)" /path/to/host-sync-dir\n`
+  );
+  process.exit(1);
 }
 
 // Run sync on startup
@@ -466,6 +509,7 @@ function createMcpServer() {
         sync_dir: SYNC_DIR_ABS,
         db_path: DB_PATH_DISPLAY,
         sync_dir_writable: SYNC_DIR_WRITABLE,
+        ownership_guard_mode: OWNERSHIP_GUARD_MODE,
         permission_diagnostics: SYNC_OWNERSHIP_DIAGNOSTICS,
         git_available: GIT_AVAILABLE,
         git_enabled: GIT_ENABLED,

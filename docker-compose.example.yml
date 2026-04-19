@@ -1,0 +1,22 @@
+services:
+  writing-mcp:
+    build: .
+    user: "${OPENCLAW_UID:-1000}:${OPENCLAW_GID:-1000}"
+    environment:
+      WRITING_SYNC_DIR: /sync
+      DB_PATH: /data/writing.db
+      HTTP_PORT: "3000"
+      OWNERSHIP_GUARD_MODE: "${OWNERSHIP_GUARD_MODE:-warn}"
+      GIT_SSH_COMMAND: "ssh -i /ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/ssh/known_hosts"
+    volumes:
+      - ${OPENCLAW_WORKSPACE_DIR:?run scripts/setup-openclaw-env.sh first}/sync:/sync
+      - ${OPENCLAW_SSH_DIR:?run scripts/setup-openclaw-env.sh first}:/ssh:ro
+      - writing-mcp-data:/data
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  writing-mcp-data:
