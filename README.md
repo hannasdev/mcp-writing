@@ -445,6 +445,8 @@ Unit tests use an in-memory SQLite database and temporary directories — no ser
 
 For real projects, keep your manuscript sync folder outside this tool repository and point `WRITING_SYNC_DIR` at that external path.
 
+Maintainers: see `AGENT.md` for persistent project conventions and release/recovery operational notes.
+
 ## Release automation
 
 This repository uses a `release-it` workflow (modeled after `n8n-nodes-bambulab`) instead of Release Please.
