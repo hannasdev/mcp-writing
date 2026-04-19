@@ -1,0 +1,37 @@
+# MAINTAINERS.md
+
+Maintainer-facing operational notes for this repository.
+
+## Release automation
+
+This repository uses a `release-it` workflow (modeled after `n8n-nodes-bambulab`) instead of Release Please.
+
+How it works:
+
+1. A PR is merged into `main`.
+2. `.github/workflows/release.yml` runs on that push.
+3. The workflow fetches tags and infers version bump type from commits since last tag:
+   - `BREAKING CHANGE` or `!:` -> major
+   - `feat:` -> minor
+   - everything else -> patch
+4. `release-it` creates a `Release x.y.z` commit and `vx.y.z` tag.
+5. Tag push triggers `.github/workflows/publish.yml` to publish to npm.
+
+## Required setup
+
+- Repository secret: `RELEASE_DEPLOY_KEY` (private SSH key for a repo deploy key with write access)
+- Optional secret: `RELEASE_DEPLOY_KNOWN_HOSTS` (additional strict host keys; GitHub host key is already handled)
+- Branch rules must allow the Deploy Key actor to bypass PR-only rule for release commit/tag push
+- Repository URL in `package.json` must remain valid for npm provenance
+
+Local dry-run (optional):
+
+```sh
+npm run release -- --ci --dry-run
+```
+
+## Operational note
+
+- If a release job partially succeeds by pushing a tag before failing later, do not rerun that old workflow run.
+- The workflow fails fast when `package.json` is behind the latest tag, which indicates a stale rerun.
+- In that case, trigger the next release from current `main` instead of retrying the old run.
