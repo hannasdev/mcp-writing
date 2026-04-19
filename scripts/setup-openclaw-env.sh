@@ -32,6 +32,9 @@ fi
 
 {
   cat "$TMP_FILE"
+  if [ -s "$TMP_FILE" ]; then
+    printf "\n"
+  fi
   printf "OPENCLAW_UID=%s\n" "$OPENCLAW_UID_VALUE"
   printf "OPENCLAW_GID=%s\n" "$OPENCLAW_GID_VALUE"
   printf "OPENCLAW_WORKSPACE_DIR=%s\n" "$OPENCLAW_WORKSPACE_DIR_VALUE"
