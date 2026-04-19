@@ -2,6 +2,36 @@ import fs from "node:fs";
 import path from "node:path";
 import yaml from "js-yaml";
 
+export function validateProjectId(projectId) {
+  if (typeof projectId !== "string" || projectId.trim().length === 0) {
+    return { ok: false, reason: "project_id must be a non-empty string." };
+  }
+
+  if (path.isAbsolute(projectId)) {
+    return { ok: false, reason: "project_id must not be an absolute path." };
+  }
+
+  if (projectId.includes("\\")) {
+    return { ok: false, reason: "project_id must not contain backslashes." };
+  }
+
+  const segments = projectId.split("/");
+  if (segments.length < 1 || segments.length > 2) {
+    return { ok: false, reason: "project_id must be '<project>' or '<universe>/<project>'." };
+  }
+
+  for (const segment of segments) {
+    if (!segment || segment === "." || segment === "..") {
+      return { ok: false, reason: "project_id must not contain '.' or '..' path segments." };
+    }
+    if (!/^[a-z0-9][a-z0-9_-]*$/i.test(segment)) {
+      return { ok: false, reason: "project_id segments may contain only letters, numbers, '-', and '_'." };
+    }
+  }
+
+  return { ok: true };
+}
+
 // Parse "NNN Title [binder_id].txt" -> { seq, rawTitle, binderId, ext } or null
 function parseFilename(filename) {
   const m = filename.match(/^(\d+)\s+(.+?)\s*\[(\d+)\]\.(txt|md)$/);
@@ -111,6 +141,11 @@ export function importScrivenerSync({
   const resolvedProjectId = projectId
     ? projectId
     : path.basename(mcpSyncDirAbs).replace(/[^a-z0-9-]/gi, "-").toLowerCase();
+
+  const projectIdCheck = validateProjectId(resolvedProjectId);
+  if (!projectIdCheck.ok) {
+    throw new Error(`Invalid project_id '${resolvedProjectId}': ${projectIdCheck.reason}`);
+  }
 
   if (!fs.existsSync(scrivenerDirAbs)) {
     throw new Error(`Scrivener sync dir not found: ${scrivenerDirAbs}`);

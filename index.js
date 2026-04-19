@@ -10,7 +10,7 @@ import { openDb } from "./db.js";
 import { syncAll, isSyncDirWritable, writeMeta, readMeta, indexSceneFile, normalizeSceneMetaForPath, sidecarPath } from "./sync.js";
 import { isGitAvailable, isGitRepository, initGitRepository, createSnapshot, listSnapshots, getSceneProseAtCommit } from "./git.js";
 import { renderCharacterArcTemplate, renderCharacterSheetTemplate, renderPlaceSheetTemplate, slugifyEntityName } from "./world-entity-templates.js";
-import { importScrivenerSync } from "./importer.js";
+import { importScrivenerSync, validateProjectId } from "./importer.js";
 
 const SYNC_DIR = process.env.WRITING_SYNC_DIR ?? "./sync";
 const DB_PATH = process.env.DB_PATH ?? "./writing.db";
@@ -321,6 +321,13 @@ function createMcpServer() {
       auto_sync: z.boolean().optional().describe("If true (default), runs sync() after import when not dry-run."),
     },
     async ({ source_dir, project_id, dry_run = false, auto_sync = true }) => {
+      if (project_id !== undefined) {
+        const projectIdCheck = validateProjectId(project_id);
+        if (!projectIdCheck.ok) {
+          return errorResponse("INVALID_PROJECT_ID", projectIdCheck.reason, { project_id });
+        }
+      }
+
       if (!dry_run && !SYNC_DIR_WRITABLE) {
         return errorResponse(
           "SYNC_DIR_NOT_WRITABLE",

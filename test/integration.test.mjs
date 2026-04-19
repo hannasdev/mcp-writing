@@ -28,6 +28,7 @@ let writeServerProc;
 let writeClient;
 let readSyncDir;
 let writeSyncDir;
+let scrivenerImportDir;
 
 async function waitForServer(url, retries = 20, delayMs = 200) {
   for (let i = 0; i < retries; i++) {
@@ -349,6 +350,34 @@ tags:
   );
 }
 
+function createScrivenerDraftFixture(baseDir) {
+  const draftDir = path.join(baseDir, "Draft");
+  fs.mkdirSync(draftDir, { recursive: true });
+
+  fs.writeFileSync(
+    path.join(draftDir, "001 Scene Arrival [10].txt"),
+    "Elena arrives at the station and scans for familiar faces.\n",
+    "utf8"
+  );
+
+  fs.writeFileSync(path.join(draftDir, "002 -Setup- [11].txt"), "", "utf8");
+
+  fs.writeFileSync(
+    path.join(draftDir, "003 Epigraph [12].txt"),
+    "A city remembers what its people forget.\n",
+    "utf8"
+  );
+
+  fs.writeFileSync(
+    path.join(draftDir, "004 Scene Debate [13].txt"),
+    "Marcus challenges Elena's plan in the stairwell.\n",
+    "utf8"
+  );
+
+  fs.writeFileSync(path.join(draftDir, "005 Chapter Card [14].txt"), "", "utf8");
+  fs.writeFileSync(path.join(draftDir, "006 Notes.txt"), "Not in expected filename format.\n", "utf8");
+}
+
 before(async () => {
   // Read-only server against generated fixture sync dir
   readSyncDir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-writing-read-test-"));
@@ -363,6 +392,9 @@ before(async () => {
   writeServerProc = spawnServer(WRITE_PORT, writeSyncDir, { DEFAULT_METADATA_PAGE_SIZE: "2" });
   await waitForServer(WRITE_URL);
   writeClient = await connectClient(WRITE_URL);
+
+  scrivenerImportDir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-writing-scrivener-import-"));
+  createScrivenerDraftFixture(scrivenerImportDir);
 });
 
 after(async () => {
@@ -372,6 +404,7 @@ after(async () => {
   if (writeServerProc) writeServerProc.kill();
   if (readSyncDir) fs.rmSync(readSyncDir, { recursive: true, force: true });
   if (writeSyncDir) fs.rmSync(writeSyncDir, { recursive: true, force: true });
+  if (scrivenerImportDir) fs.rmSync(scrivenerImportDir, { recursive: true, force: true });
 });
 
 // ---------------------------------------------------------------------------
@@ -394,6 +427,71 @@ describe("sync tool", () => {
   test("returns scene indexed count after initial sync", async () => {
     const text = await callTool("sync");
     assert.match(text, /3 scenes indexed/);
+  });
+});
+
+describe("import_scrivener_sync tool", () => {
+  test("dry-run returns machine-readable counts without writing files", async () => {
+    const projectId = "import-preview";
+    const scenesDir = path.join(writeSyncDir, "projects", projectId, "scenes");
+
+    const text = await callWriteTool("import_scrivener_sync", {
+      source_dir: scrivenerImportDir,
+      project_id: projectId,
+      dry_run: true,
+    });
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.import.project_id, projectId);
+    assert.equal(parsed.import.dry_run, true);
+    assert.equal(parsed.import.created, 2);
+    assert.equal(parsed.import.existing, 0);
+    assert.equal(parsed.import.skipped, 3);
+    assert.equal(parsed.import.beat_markers_seen, 1);
+    assert.equal(parsed.sync, null);
+    assert.equal(fs.existsSync(scenesDir), false);
+  });
+
+  test("non-dry-run writes sidecars and returns counts", async () => {
+    const projectId = "import-apply";
+    const scenesDir = path.join(writeSyncDir, "projects", projectId, "scenes");
+
+    const text = await callWriteTool("import_scrivener_sync", {
+      source_dir: scrivenerImportDir,
+      project_id: projectId,
+      dry_run: false,
+      auto_sync: false,
+    });
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.import.project_id, projectId);
+    assert.equal(parsed.import.dry_run, false);
+    assert.equal(parsed.import.created, 2);
+    assert.equal(parsed.import.existing, 0);
+    assert.equal(parsed.import.skipped, 3);
+    assert.equal(parsed.import.beat_markers_seen, 1);
+    assert.equal(parsed.sync, null);
+
+    assert.equal(fs.existsSync(scenesDir), true);
+    const files = fs.readdirSync(scenesDir);
+    const sidecars = files.filter(name => name.endsWith(".meta.yaml"));
+    assert.equal(sidecars.length, 2);
+    assert.ok(sidecars.some(name => name.includes("001 Scene Arrival [10].meta.yaml")));
+    assert.ok(sidecars.some(name => name.includes("004 Scene Debate [13].meta.yaml")));
+  });
+
+  test("rejects path traversal in project_id", async () => {
+    const text = await callWriteTool("import_scrivener_sync", {
+      source_dir: scrivenerImportDir,
+      project_id: "../../escape",
+      dry_run: true,
+    });
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.ok, false);
+    assert.equal(parsed.error.code, "INVALID_PROJECT_ID");
   });
 });
 
