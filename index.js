@@ -319,6 +319,11 @@ function getRuntimeDiagnostics() {
     recommendations.push("Avoid RUNTIME_UID_OVERRIDE in production runtime environments.");
   }
 
+  if (SYNC_OWNERSHIP_DIAGNOSTICS.runtime_uid_override_invalid) {
+    warnings.push("RUNTIME_UID_OVERRIDE_INVALID: RUNTIME_UID_OVERRIDE must be a non-negative integer when enabled.");
+    recommendations.push("Set RUNTIME_UID_OVERRIDE to a non-negative integer, or unset it.");
+  }
+
   if (!SYNC_DIR_WRITABLE) {
     warnings.push("SYNC_DIR_READ_ONLY: sync dir is read-only; metadata write-back and prose editing tools are unavailable.");
     recommendations.push("Mount WRITING_SYNC_DIR with write access (avoid read-only mounts like ':ro').");
@@ -386,7 +391,7 @@ if (SHOULD_ENFORCE_OWNERSHIP_FAIL_GUARD && SYNC_OWNERSHIP_DIAGNOSTICS.non_runtim
     `[mcp-writing] FATAL: OWNERSHIP_GUARD_MODE=fail and ${SYNC_OWNERSHIP_DIAGNOSTICS.non_runtime_owned_paths} sampled path(s) are not owned by runtime UID ${SYNC_OWNERSHIP_DIAGNOSTICS.runtime_uid}.\n`
   );
   process.stderr.write(
-    `[mcp-writing] FATAL: Repair ownership once on host: sudo chown -R "$(id -u):$(id -g)" "${SYNC_DIR_ABS}"\n`
+    `[mcp-writing] FATAL: Repair ownership once on the host directory mounted at ${SYNC_DIR_ABS}: sudo chown -R "$(id -u):$(id -g)" /path/to/host-sync-dir\n`
   );
   process.exit(1);
 }

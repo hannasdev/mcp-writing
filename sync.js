@@ -246,6 +246,7 @@ export function getSyncOwnershipDiagnostics(syncDir, { sampleLimit = 200 } = {})
   const runtimeUidOverrideAllowed = process.env.NODE_ENV === "test" || process.env.ALLOW_RUNTIME_UID_OVERRIDE === "1";
   let runtimeUidOverrideApplied = false;
   let runtimeUidOverrideIgnored = false;
+  let runtimeUidOverrideInvalid = false;
 
   if (runtimeUidOverrideRaw !== undefined) {
     if (!runtimeUidOverrideAllowed) {
@@ -255,6 +256,8 @@ export function getSyncOwnershipDiagnostics(syncDir, { sampleLimit = 200 } = {})
       if (Number.isInteger(parsed) && parsed >= 0) {
         runtimeUid = parsed;
         runtimeUidOverrideApplied = true;
+      } else {
+        runtimeUidOverrideInvalid = true;
       }
     }
   }
@@ -280,6 +283,7 @@ export function getSyncOwnershipDiagnostics(syncDir, { sampleLimit = 200 } = {})
     runtime_uid_override_requested: runtimeUidOverrideRaw !== undefined,
     runtime_uid_override_applied: runtimeUidOverrideApplied,
     runtime_uid_override_ignored: runtimeUidOverrideIgnored,
+    runtime_uid_override_invalid: runtimeUidOverrideInvalid,
     sampled_paths: 0,
     sample_limit: sampleLimit,
     root_owned_paths: 0,

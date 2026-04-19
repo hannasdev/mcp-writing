@@ -60,6 +60,16 @@ function spawnServer(port, syncDir, extraEnv = {}) {
   return proc;
 }
 
+async function waitForExit(proc, timeoutMs = 5000) {
+  return await new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error("Process did not exit in time")), timeoutMs);
+    proc.once("exit", (code, signal) => {
+      clearTimeout(timeout);
+      resolve({ code, signal });
+    });
+  });
+}
+
 async function connectClient(url) {
   const c = new Client({ name: "integration-test-client", version: "1.0.0" });
   const transport = new SSEClientTransport(new URL(`${url}/sse`));
@@ -634,6 +644,49 @@ describe("get_runtime_config tool", () => {
       try { await overrideClient?.close(); } catch {}
       if (overrideProc) overrideProc.kill();
     }
+  });
+
+  test("returns warning for invalid RUNTIME_UID_OVERRIDE when override is enabled", async () => {
+    const invalidOverridePort = 3093;
+    const invalidOverrideUrl = `http://localhost:${invalidOverridePort}`;
+    const invalidOverrideProc = spawnServer(invalidOverridePort, readSyncDir, {
+      RUNTIME_UID_OVERRIDE: "abc",
+      ALLOW_RUNTIME_UID_OVERRIDE: "1",
+    });
+    let invalidOverrideClient;
+
+    try {
+      await waitForServer(invalidOverrideUrl);
+      invalidOverrideClient = await connectClient(invalidOverrideUrl);
+      const result = await invalidOverrideClient.callTool({ name: "get_runtime_config", arguments: {} });
+      const parsed = JSON.parse(result.content?.[0]?.text ?? "{}");
+
+      assert.equal(parsed.permission_diagnostics?.runtime_uid_override_requested, true);
+      assert.equal(parsed.permission_diagnostics?.runtime_uid_override_applied, false);
+      assert.equal(parsed.permission_diagnostics?.runtime_uid_override_invalid, true);
+      assert.ok((parsed.runtime_warnings ?? []).some(w => w.includes("RUNTIME_UID_OVERRIDE_INVALID")));
+    } finally {
+      try { await invalidOverrideClient?.close(); } catch {}
+      if (invalidOverrideProc) invalidOverrideProc.kill();
+    }
+  });
+
+  test("exits at startup when fail-mode ownership guard detects mismatched ownership", async () => {
+    const failPort = 3092;
+    const failProc = spawnServer(failPort, readSyncDir, {
+      OWNERSHIP_GUARD_MODE: "fail",
+      RUNTIME_UID_OVERRIDE: "99999",
+      ALLOW_RUNTIME_UID_OVERRIDE: "1",
+    });
+    let stderr = "";
+    failProc.stderr?.on("data", chunk => {
+      stderr += chunk.toString("utf8");
+    });
+
+    const exit = await waitForExit(failProc);
+    assert.equal(exit.code, 1);
+    assert.ok(stderr.includes("FATAL: OWNERSHIP_GUARD_MODE=fail"));
+    assert.ok(stderr.includes("host directory mounted at"));
   });
 });
 
