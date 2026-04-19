@@ -10,6 +10,7 @@ import {
   inferProjectAndUniverse,
   inferScenePositionFromPath,
   isCanonicalWorldEntityFile,
+  getSyncOwnershipDiagnostics,
   isWorldFile,
   readMeta,
   isSyncDirWritable,
@@ -160,6 +161,49 @@ describe("isSyncDirWritable", () => {
 
   test("returns false for non-existent directory", () => {
     assert.ok(!isSyncDirWritable("/tmp/__nonexistent_dir_xyz__/subdir"));
+  });
+});
+
+describe("getSyncOwnershipDiagnostics", () => {
+  test("returns diagnostics for existing directory", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ownership-"));
+    fs.writeFileSync(path.join(dir, "scene.md"), "---\nscene_id: sc-001\n---\nProse");
+
+    const diagnostics = getSyncOwnershipDiagnostics(dir, { sampleLimit: 25 });
+    assert.equal(diagnostics.sync_dir_exists, true);
+    assert.equal(diagnostics.sync_dir_path_exists, true);
+    assert.equal(diagnostics.sync_dir_is_directory, true);
+    assert.equal(typeof diagnostics.supported, "boolean");
+    assert.equal(diagnostics.sample_limit, 25);
+    if (diagnostics.supported) {
+      assert.ok(diagnostics.sampled_paths >= 1);
+    } else {
+      assert.equal(diagnostics.sampled_paths, 0);
+    }
+
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  test("handles non-existent directory gracefully", () => {
+    const diagnostics = getSyncOwnershipDiagnostics("/tmp/__nonexistent_dir_xyz__/subdir", { sampleLimit: 10 });
+    assert.equal(diagnostics.sync_dir_exists, false);
+    assert.equal(diagnostics.sync_dir_path_exists, false);
+    assert.equal(diagnostics.sync_dir_is_directory, false);
+    assert.equal(diagnostics.sampled_paths, 0);
+  });
+
+  test("treats non-directory path as invalid sync dir", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ownership-"));
+    const filePath = path.join(dir, "not-a-dir.txt");
+    fs.writeFileSync(filePath, "content", "utf8");
+
+    const diagnostics = getSyncOwnershipDiagnostics(filePath, { sampleLimit: 10 });
+    assert.equal(diagnostics.sync_dir_path_exists, true);
+    assert.equal(diagnostics.sync_dir_is_directory, false);
+    assert.equal(diagnostics.sync_dir_exists, false);
+    assert.equal(diagnostics.sampled_paths, 0);
+
+    fs.rmSync(dir, { recursive: true, force: true });
   });
 });
 
@@ -434,6 +478,36 @@ describe("syncAll", () => {
     );
     const result = syncAll(db, dir, { quiet: true });
     assert.ok(result.warnings.some(w => w.includes("Duplicate scene_id")));
+
+    db.close();
+    fs.rmSync(dir, { recursive: true });
+  });
+
+  test("ignores nested mirrored scene paths under scenes/", () => {
+    const dir = makeTempSync();
+    const db = openDb(":memory:");
+    writeScene(dir, "sc-001");
+
+    const nestedMirrorDir = path.join(
+      dir,
+      "projects",
+      "test-novel",
+      "scenes",
+      "universes",
+      "universe-1",
+      "book-1-the-lamb",
+      "scenes"
+    );
+    fs.mkdirSync(nestedMirrorDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(nestedMirrorDir, "sc-001-duplicate.md"),
+      "---\nscene_id: sc-001\ntitle: Mirrored Duplicate\npart: 1\nchapter: 1\npov: elena\n---\nDuplicated prose."
+    );
+
+    const result = syncAll(db, dir, { quiet: true });
+    assert.equal(result.indexed, 1);
+    assert.ok(result.warnings.some(w => w.includes("Ignored nested mirror path")));
+    assert.equal(result.warnings.some(w => w.includes("Duplicate scene_id")), false);
 
     db.close();
     fs.rmSync(dir, { recursive: true });

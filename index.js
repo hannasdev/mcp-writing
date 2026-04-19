@@ -7,7 +7,7 @@ import matter from "gray-matter";
 import yaml from "js-yaml";
 import { z } from "zod";
 import { openDb } from "./db.js";
-import { syncAll, isSyncDirWritable, writeMeta, readMeta, indexSceneFile, normalizeSceneMetaForPath, sidecarPath } from "./sync.js";
+import { syncAll, isSyncDirWritable, getSyncOwnershipDiagnostics, writeMeta, readMeta, indexSceneFile, normalizeSceneMetaForPath, sidecarPath } from "./sync.js";
 import { isGitAvailable, isGitRepository, initGitRepository, createSnapshot, listSnapshots, getSceneProseAtCommit } from "./git.js";
 import { renderCharacterArcTemplate, renderCharacterSheetTemplate, renderPlaceSheetTemplate, slugifyEntityName } from "./world-entity-templates.js";
 import { importScrivenerSync, validateProjectId } from "./importer.js";
@@ -220,6 +220,7 @@ process.stderr.write(`[mcp-writing] DB path: ${DB_PATH_DISPLAY}\n`);
 
 // Check sync dir writability once at startup (needed for Phase 2 sidecar writes)
 const SYNC_DIR_WRITABLE = isSyncDirWritable(SYNC_DIR);
+const SYNC_OWNERSHIP_DIAGNOSTICS = getSyncOwnershipDiagnostics(SYNC_DIR);
 if (!SYNC_DIR_WRITABLE) {
   process.stderr.write(`[mcp-writing] WARNING: sync dir is not writable — sidecar auto-migration and metadata write-back will be unavailable\n`);
 }
@@ -261,6 +262,24 @@ function getRuntimeDiagnostics() {
     warnings.push("SYNC_DIR_READ_ONLY: sync dir is read-only; metadata write-back and prose editing tools are unavailable.");
     recommendations.push("Mount WRITING_SYNC_DIR with write access (avoid read-only mounts like ':ro').");
     recommendations.push("If running in Docker/OpenClaw, verify volume ownership and permissions for the container user.");
+  }
+
+  if (SYNC_OWNERSHIP_DIAGNOSTICS.supported && SYNC_OWNERSHIP_DIAGNOSTICS.non_runtime_owned_paths > 0) {
+    warnings.push(
+      `OWNERSHIP_MISMATCH: ${SYNC_OWNERSHIP_DIAGNOSTICS.non_runtime_owned_paths} sampled path(s) are not owned by runtime UID ${SYNC_OWNERSHIP_DIAGNOSTICS.runtime_uid}.`
+    );
+    recommendations.push(
+      `Repair ownership once on host: sudo chown -R "$(id -u):$(id -g)" "${SYNC_DIR_ABS}"`
+    );
+    recommendations.push(
+      "For Docker, run container as host user (compose: user: \"${UID:-1000}:${GID:-1000}\"). Optionally set UID/GID explicitly in a .env file."
+    );
+  }
+
+  if (SYNC_OWNERSHIP_DIAGNOSTICS.supported && SYNC_OWNERSHIP_DIAGNOSTICS.root_owned_paths > 0) {
+    warnings.push(
+      `ROOT_OWNED_PATHS: ${SYNC_OWNERSHIP_DIAGNOSTICS.root_owned_paths} sampled path(s) are owned by UID 0 (root).`
+    );
   }
 
   if (!GIT_AVAILABLE) {
@@ -396,13 +415,14 @@ function createMcpServer() {
   // ---- get_runtime_config --------------------------------------------------
   s.tool(
     "get_runtime_config",
-    "Show the active runtime paths and capabilities for this server instance (sync dir, database path, writability, and git availability). Use this to verify which manuscript location is currently connected.",
+    "Show the active runtime paths and capabilities for this server instance (sync dir, database path, writability, permission diagnostics, and git availability). Use this to verify which manuscript location is currently connected.",
     {},
     async () => {
       return jsonResponse({
         sync_dir: SYNC_DIR_ABS,
         db_path: DB_PATH_DISPLAY,
         sync_dir_writable: SYNC_DIR_WRITABLE,
+        permission_diagnostics: SYNC_OWNERSHIP_DIAGNOSTICS,
         git_available: GIT_AVAILABLE,
         git_enabled: GIT_ENABLED,
         http_port: HTTP_PORT,
