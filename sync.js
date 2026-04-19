@@ -97,14 +97,19 @@ export function normalizeSceneMetaForPath(syncDir, filePath, meta = {}) {
 }
 
 // Structural directory names that are never project slugs under projects/<id>/.
-const PROJECT_STRUCTURAL_DIRS = new Set(["world", "scenes", "misc", "fragments", "feedback", "Draft"]);
+const PROJECT_STRUCTURAL_DIRS = new Set(["world", "scenes", "misc", "fragments", "feedback", "draft"]);
 
 // Returns true for known structural path segments directly under a project root
 // (named dirs like "world", "scenes", and part-N / chapter-N path segments).
 function isProjectStructuralDir(name) {
-  return PROJECT_STRUCTURAL_DIRS.has(name)
-    || /^part-\d/i.test(name)
-    || /^chapter-\d/i.test(name);
+  const normalized = String(name ?? "").toLowerCase();
+  return PROJECT_STRUCTURAL_DIRS.has(normalized)
+    || /^part-\d+$/.test(normalized)
+    || /^chapter-\d+$/.test(normalized);
+}
+
+function isBookSlug(name) {
+  return /^book-\d+([a-z0-9-]*)?$/i.test(String(name ?? ""));
 }
 
 export function inferProjectAndUniverse(syncDir, filePath) {
@@ -112,7 +117,7 @@ export function inferProjectAndUniverse(syncDir, filePath) {
   const parts = rel.split(path.sep);
 
   if (parts[0] === "universes" && parts.length >= 3) {
-    if (parts[2] === "world") {
+    if (String(parts[2] ?? "").toLowerCase() === "world") {
       return { universe_id: parts[1], project_id: null };
     }
     return { universe_id: parts[1], project_id: `${parts[1]}/${parts[2]}` };
@@ -120,9 +125,17 @@ export function inferProjectAndUniverse(syncDir, filePath) {
   if (parts[0] === "projects" && parts.length >= 2) {
     // Detect accidental two-segment layout: projects/<universe>/<project>/...
     // This occurs when a universe-scoped project_id (e.g. "universe-1/book-1-the-lamb")
-    // is written under projects/ instead of universes/. Identify it by checking
-    // whether parts[2] is not a known structural directory (world, scenes, part-N, etc.).
-    if (parts.length >= 3 && parts[2] !== undefined && !isProjectStructuralDir(parts[2])) {
+    // is written under projects/ instead of universes/. Keep this conservative to
+    // avoid misclassifying valid nested project layouts (e.g. projects/my-novel/notes/...).
+    // Only treat as two-segment when the second segment looks like a book slug and
+    // the next segment is a known structural directory (scenes, world, part-N, etc.).
+    if (
+      parts.length >= 4
+      && parts[2] !== undefined
+      && parts[3] !== undefined
+      && isBookSlug(parts[2])
+      && isProjectStructuralDir(parts[3])
+    ) {
       return { universe_id: parts[1], project_id: `${parts[1]}/${parts[2]}` };
     }
     return { universe_id: null, project_id: parts[1] };

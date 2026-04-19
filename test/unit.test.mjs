@@ -302,6 +302,16 @@ describe("inferProjectAndUniverse", () => {
     assert.deepEqual(result, { universe_id: null, project_id: "my-novel" });
   });
 
+  test("projects/ structural dir checks are case-insensitive", () => {
+    const result = inferProjectAndUniverse(syncDir, "/sync/projects/my-novel/World/characters/elena.md");
+    assert.deepEqual(result, { universe_id: null, project_id: "my-novel" });
+  });
+
+  test("projects/ nested custom layout is not misclassified as universe-scoped", () => {
+    const result = inferProjectAndUniverse(syncDir, "/sync/projects/my-novel/notes/scenes/sc-001.md");
+    assert.deepEqual(result, { universe_id: null, project_id: "my-novel" });
+  });
+
   test("projects/ two-segment layout (accidental universe path) returns correct compound project_id", () => {
     // Regression: projects/universe-1/book-1-the-lamb/scenes/... was being
     // inferred as project_id 'universe-1' instead of 'universe-1/book-1-the-lamb'.
