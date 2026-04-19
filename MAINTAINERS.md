@@ -20,6 +20,7 @@ How it works:
 ## Required setup
 
 - Repository secret: `RELEASE_DEPLOY_KEY` (private SSH key for a repo deploy key with write access)
+- Secret used by `.github/workflows/publish.yml`: `NPM_TOKEN` (npm publish token for `npm publish`; define it as the `NPM_TOKEN` secret where that workflow reads secrets, e.g. the repository secret or the workflow's publish environment secret)
 - Optional secret: `RELEASE_DEPLOY_KNOWN_HOSTS` (additional strict host keys; GitHub host key is already handled)
 - Branch rules must allow the Deploy Key actor to bypass PR-only rule for release commit/tag push
 - Repository URL in `package.json` must remain valid for npm provenance
