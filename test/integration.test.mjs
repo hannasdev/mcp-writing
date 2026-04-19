@@ -1070,6 +1070,130 @@ describe("create_character_sheet tool", () => {
     const listed = await callWriteTool("list_characters", { project_id: "test-novel" });
     assert.ok(listed.includes("char-mira-nystrom"));
   });
+
+  test("reuses an existing canonical folder and returns exists", async () => {
+    const existingDir = path.join(
+      writeSyncDir,
+      "projects",
+      "test-novel",
+      "world",
+      "characters",
+      "leah-quinn"
+    );
+    fs.mkdirSync(existingDir, { recursive: true });
+    fs.writeFileSync(path.join(existingDir, "sheet.md"), "# Leah Quinn\n\nExisting notes.\n", "utf8");
+
+    const text = await callWriteTool("create_character_sheet", {
+      name: "Leah Quinn",
+      project_id: "test-novel",
+      fields: {
+        role: "support",
+      },
+    });
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.action, "exists");
+    assert.equal(parsed.id, "char-leah-quinn");
+    assert.ok(fs.existsSync(parsed.prose_path));
+    assert.ok(fs.existsSync(parsed.meta_path));
+    assert.ok(fs.existsSync(path.join(path.dirname(parsed.prose_path), "arc.md")));
+
+    const sidecarRaw = fs.readFileSync(parsed.meta_path, "utf8");
+    assert.ok(sidecarRaw.includes("character_id: char-leah-quinn"));
+  });
+
+  test("does not rewrite existing valid sidecar when no backfill is needed", async () => {
+    const existingDir = path.join(
+      writeSyncDir,
+      "projects",
+      "test-novel",
+      "world",
+      "characters",
+      "leah-preserve"
+    );
+    fs.mkdirSync(existingDir, { recursive: true });
+    fs.writeFileSync(path.join(existingDir, "sheet.md"), "# Leah Preserve\n\nExisting notes.\n", "utf8");
+
+    const metaPath = path.join(existingDir, "sheet.meta.yaml");
+    const originalMeta = "# keep this comment\ncharacter_id: char-leah-preserve\nname: Leah Preserve\nrole: support\n";
+    fs.writeFileSync(metaPath, originalMeta, "utf8");
+
+    const text = await callWriteTool("create_character_sheet", {
+      name: "Leah Preserve",
+      project_id: "test-novel",
+      fields: {
+        role: "lead",
+      },
+    });
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.action, "exists");
+    assert.equal(parsed.id, "char-leah-preserve");
+    assert.equal(fs.readFileSync(metaPath, "utf8"), originalMeta);
+  });
+
+  test("returns error and preserves sidecar when existing YAML is invalid", async () => {
+    const existingDir = path.join(
+      writeSyncDir,
+      "projects",
+      "test-novel",
+      "world",
+      "characters",
+      "leah-invalid-yaml"
+    );
+    fs.mkdirSync(existingDir, { recursive: true });
+    fs.writeFileSync(path.join(existingDir, "sheet.md"), "# Leah Invalid YAML\n\nExisting notes.\n", "utf8");
+
+    const metaPath = path.join(existingDir, "sheet.meta.yaml");
+    const invalidYaml = "name: [unterminated\n";
+    fs.writeFileSync(metaPath, invalidYaml, "utf8");
+
+    const text = await callWriteTool("create_character_sheet", {
+      name: "Leah Invalid YAML",
+      project_id: "test-novel",
+      fields: {
+        role: "support",
+      },
+    });
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.ok, false);
+    assert.equal(parsed.error.code, "IO_ERROR");
+    assert.ok(parsed.error.message.includes("invalid YAML"));
+    assert.equal(fs.readFileSync(metaPath, "utf8"), invalidYaml);
+  });
+
+  test("returns error when existing sidecar is not a YAML mapping", async () => {
+    const existingDir = path.join(
+      writeSyncDir,
+      "projects",
+      "test-novel",
+      "world",
+      "characters",
+      "leah-array-meta"
+    );
+    fs.mkdirSync(existingDir, { recursive: true });
+    fs.writeFileSync(path.join(existingDir, "sheet.md"), "# Leah Array Meta\n\nExisting notes.\n", "utf8");
+
+    const metaPath = path.join(existingDir, "sheet.meta.yaml");
+    fs.writeFileSync(metaPath, "- one\n- two\n", "utf8");
+
+    const text = await callWriteTool("create_character_sheet", {
+      name: "Leah Array Meta",
+      project_id: "test-novel",
+      fields: {
+        role: "support",
+      },
+    });
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.ok, false);
+    assert.equal(parsed.error.code, "IO_ERROR");
+    assert.ok(parsed.error.message.includes("YAML mapping"));
+    assert.equal(fs.readFileSync(metaPath, "utf8"), "- one\n- two\n");
+  });
 });
 
 describe("create_place_sheet tool", () => {
@@ -1134,5 +1258,71 @@ describe("get_relationship_arc tool", () => {
       to_character: "marcus",
     });
     assert.ok(text.toLowerCase().includes("no relationship data"));
+  });
+});
+
+describe("commit_edit preflight diagnostics", () => {
+  test("returns STALE_PATH when indexed prose file is missing", async () => {
+    const proposalText = await callWriteTool("propose_edit", {
+      scene_id: "sc-001",
+      instruction: "Tighten opening paragraph",
+      revised_prose: "Revised prose for stale path test.",
+    });
+    const proposal = JSON.parse(proposalText);
+    assert.ok(proposal.proposal_id);
+
+    const scenePath = path.join(writeSyncDir, "projects", "test-novel", "part-1", "chapter-1", "sc-001.md");
+    const originalContent = fs.readFileSync(scenePath, "utf8");
+    try {
+      fs.unlinkSync(scenePath);
+
+      const commitText = await callWriteTool("commit_edit", {
+        scene_id: "sc-001",
+        proposal_id: proposal.proposal_id,
+      });
+      const commitResult = JSON.parse(commitText);
+
+      assert.equal(commitResult.ok, false);
+      assert.equal(commitResult.error.code, "STALE_PATH");
+      assert.equal(commitResult.error.details?.prose_write_diagnostics?.exists, false);
+    } finally {
+      if (!fs.existsSync(scenePath)) {
+        fs.writeFileSync(scenePath, originalContent, "utf8");
+      }
+    }
+  });
+
+  test("returns INVALID_PROSE_PATH when indexed prose path points to a directory", async () => {
+    const proposalText = await callWriteTool("propose_edit", {
+      scene_id: "sc-003",
+      instruction: "Try writing to non-file path",
+      revised_prose: "Revised prose for invalid path test.",
+    });
+    const proposal = JSON.parse(proposalText);
+    assert.ok(proposal.proposal_id);
+
+    const originalScenePath = path.join(writeSyncDir, "projects", "test-novel", "part-1", "chapter-2", "sc-003.md");
+    const replacementPath = path.join(writeSyncDir, "projects", "test-novel", "part-1", "chapter-2", "sc-003-original.md");
+    try {
+      fs.renameSync(originalScenePath, replacementPath);
+      fs.mkdirSync(originalScenePath, { recursive: true });
+
+      const commitText = await callWriteTool("commit_edit", {
+        scene_id: "sc-003",
+        proposal_id: proposal.proposal_id,
+      });
+      const commitResult = JSON.parse(commitText);
+
+      assert.equal(commitResult.ok, false);
+      assert.equal(commitResult.error.code, "INVALID_PROSE_PATH");
+      assert.equal(commitResult.error.details?.prose_write_diagnostics?.is_file, false);
+    } finally {
+      if (fs.existsSync(originalScenePath) && fs.statSync(originalScenePath).isDirectory()) {
+        fs.rmSync(originalScenePath, { recursive: true, force: true });
+      }
+      if (fs.existsSync(replacementPath) && !fs.existsSync(originalScenePath)) {
+        fs.renameSync(replacementPath, originalScenePath);
+      }
+    }
   });
 });

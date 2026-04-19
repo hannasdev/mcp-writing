@@ -11,6 +11,7 @@ import {
   inferScenePositionFromPath,
   isCanonicalWorldEntityFile,
   getSyncOwnershipDiagnostics,
+  getFileWriteDiagnostics,
   isWorldFile,
   readMeta,
   isSyncDirWritable,
@@ -204,6 +205,51 @@ describe("getSyncOwnershipDiagnostics", () => {
     assert.equal(diagnostics.sampled_paths, 0);
 
     fs.rmSync(dir, { recursive: true, force: true });
+  });
+});
+
+describe("getFileWriteDiagnostics", () => {
+  test("reports writable regular files", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "file-write-"));
+    try {
+      const filePath = path.join(dir, "scene.md");
+      fs.writeFileSync(filePath, "Prose", "utf8");
+
+      const diagnostics = getFileWriteDiagnostics(filePath);
+      assert.equal(diagnostics.exists, true);
+      assert.equal(diagnostics.is_file, true);
+      assert.equal(diagnostics.parent_dir_writable, true);
+      assert.equal(typeof diagnostics.writable, "boolean");
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("reports missing files without throwing", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "file-write-missing-"));
+    try {
+      const missingPath = path.join(dir, "definitely-missing.md");
+      const diagnostics = getFileWriteDiagnostics(missingPath);
+      assert.equal(diagnostics.exists, false);
+      assert.equal(diagnostics.is_file, false);
+      assert.equal(diagnostics.writable, false);
+      assert.equal(diagnostics.parent_dir_writable, true);
+      assert.ok(diagnostics.stat_error_code === "ENOENT" || diagnostics.stat_error_code === "ENOTDIR");
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("reports directories as non-writable prose targets", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "file-write-"));
+    try {
+      const diagnostics = getFileWriteDiagnostics(dir);
+      assert.equal(diagnostics.exists, true);
+      assert.equal(diagnostics.is_file, false);
+      assert.equal(diagnostics.writable, false);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
 
