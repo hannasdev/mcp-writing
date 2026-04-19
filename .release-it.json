@@ -8,7 +8,7 @@
     "changelog": "npx auto-changelog --stdout --unreleased --commit-limit false -u --hide-credit"
   },
   "github": {
-    "release": false
+    "release": true
   },
   "npm": {
     "publish": false
