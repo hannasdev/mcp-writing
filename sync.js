@@ -96,17 +96,66 @@ export function normalizeSceneMetaForPath(syncDir, filePath, meta = {}) {
   };
 }
 
+// Structural directory names that are never project slugs under projects/<id>/.
+const PROJECT_STRUCTURAL_DIRS = new Set(["world", "scenes", "misc", "fragments", "feedback", "draft"]);
+
+// Cache universe project root existence checks during sync scans.
+const UNIVERSE_PROJECT_ROOT_CACHE = new Map();
+
+// Returns true for known structural path segments directly under a project root
+// (named dirs like "world", "scenes", and part-N / chapter-N path segments).
+function isProjectStructuralDir(name) {
+  const normalized = String(name ?? "").toLowerCase();
+  return PROJECT_STRUCTURAL_DIRS.has(normalized)
+    || /^part-\d+$/.test(normalized)
+    || /^chapter-\d+$/.test(normalized);
+}
+
+function isBookSlug(name) {
+  return /^book-[a-z0-9][a-z0-9-]*$/i.test(String(name ?? ""));
+}
+
+function hasUniverseProjectRoot(syncDir, universeId, projectSlug) {
+  const key = `${syncDir}::${universeId}/${projectSlug}`;
+  if (UNIVERSE_PROJECT_ROOT_CACHE.has(key)) {
+    return UNIVERSE_PROJECT_ROOT_CACHE.get(key);
+  }
+
+  const exists = fs.existsSync(path.join(syncDir, "universes", universeId, projectSlug));
+  UNIVERSE_PROJECT_ROOT_CACHE.set(key, exists);
+  return exists;
+}
+
 export function inferProjectAndUniverse(syncDir, filePath) {
   const rel = path.relative(syncDir, filePath);
   const parts = rel.split(path.sep);
 
   if (parts[0] === "universes" && parts.length >= 3) {
+    // Case-sensitive "world" intentionally matches isWorldFile() which also uses lowercase.
     if (parts[2] === "world") {
       return { universe_id: parts[1], project_id: null };
     }
     return { universe_id: parts[1], project_id: `${parts[1]}/${parts[2]}` };
   }
   if (parts[0] === "projects" && parts.length >= 2) {
+    // Detect accidental two-segment layout: projects/<universe>/<book>/...
+    // This occurs when a universe-scoped project_id (e.g. "universe-1/book-1-the-lamb")
+    // is written under projects/ instead of universes/.
+    // Detection is deliberately conservative to avoid mis-classifying valid nested
+    // project layouts (e.g. projects/my-novel/notes/...). All three conditions must hold:
+    //   1. parts[2] matches a book-* slug pattern (book-1, book-one, book-1-the-lamb, …)
+    //   2. parts[3] is a known structural directory (scenes, world, part-N, chapter-N, …)
+    //   3. A matching universes/<universe>/<book> directory exists on disk
+    if (
+      parts.length >= 4
+      && parts[2] !== undefined
+      && parts[3] !== undefined
+      && isBookSlug(parts[2])
+      && isProjectStructuralDir(parts[3])
+      && hasUniverseProjectRoot(syncDir, parts[1], parts[2])
+    ) {
+      return { universe_id: parts[1], project_id: `${parts[1]}/${parts[2]}` };
+    }
     return { universe_id: null, project_id: parts[1] };
   }
   return { universe_id: null, project_id: parts[0] ?? "default" };
@@ -539,6 +588,10 @@ export function indexSceneFile(db, syncDir, file, meta, prose) {
 }
 
 export function syncAll(db, syncDir, { quiet = false, writable = false } = {}) {
+  // Reset per-run inference cache so filesystem changes between sync calls
+  // (for example after imports or path repairs) are reflected immediately.
+  UNIVERSE_PROJECT_ROOT_CACHE.clear();
+
   const files = walkFiles(syncDir);
   let indexed = 0;
   let staleMarked = 0;
