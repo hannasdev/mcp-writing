@@ -315,6 +315,13 @@ export function getFileWriteDiagnostics(filePath) {
   };
 
   try {
+    fs.accessSync(parentDir, fs.constants.W_OK);
+    diagnostics.parent_dir_writable = true;
+  } catch {
+    diagnostics.parent_dir_writable = false;
+  }
+
+  try {
     const stat = fs.statSync(resolvedPath);
     diagnostics.exists = true;
     diagnostics.is_file = stat.isFile();
@@ -329,13 +336,6 @@ export function getFileWriteDiagnostics(filePath) {
     diagnostics.writable = diagnostics.is_file;
   } catch {
     diagnostics.writable = false;
-  }
-
-  try {
-    fs.accessSync(parentDir, fs.constants.W_OK);
-    diagnostics.parent_dir_writable = true;
-  } catch {
-    diagnostics.parent_dir_writable = false;
   }
 
   return diagnostics;

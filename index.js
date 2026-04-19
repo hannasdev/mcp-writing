@@ -202,10 +202,19 @@ function createCanonicalWorldEntity({ kind, name, notes, projectId, universeId, 
 
   let existingMeta = {};
   if (hadMeta) {
+    let parsedMeta;
     try {
-      existingMeta = yaml.load(fs.readFileSync(metaPath, "utf8")) ?? {};
-    } catch {
+      parsedMeta = yaml.load(fs.readFileSync(metaPath, "utf8"));
+    } catch (err) {
+      throw new Error(`Existing metadata sidecar is invalid YAML at ${metaPath}: ${err.message}`);
+    }
+
+    if (parsedMeta == null) {
       existingMeta = {};
+    } else if (typeof parsedMeta === "object" && !Array.isArray(parsedMeta)) {
+      existingMeta = parsedMeta;
+    } else {
+      throw new Error(`Existing metadata sidecar must be a YAML mapping at ${metaPath}.`);
     }
   }
 

@@ -233,6 +233,7 @@ describe("getFileWriteDiagnostics", () => {
       assert.equal(diagnostics.exists, false);
       assert.equal(diagnostics.is_file, false);
       assert.equal(diagnostics.writable, false);
+      assert.equal(diagnostics.parent_dir_writable, true);
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }

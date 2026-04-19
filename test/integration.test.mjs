@@ -1102,6 +1102,67 @@ describe("create_character_sheet tool", () => {
     const sidecarRaw = fs.readFileSync(parsed.meta_path, "utf8");
     assert.ok(sidecarRaw.includes("character_id: char-leah-quinn"));
   });
+
+  test("returns error and preserves sidecar when existing YAML is invalid", async () => {
+    const existingDir = path.join(
+      writeSyncDir,
+      "projects",
+      "test-novel",
+      "world",
+      "characters",
+      "leah-invalid-yaml"
+    );
+    fs.mkdirSync(existingDir, { recursive: true });
+    fs.writeFileSync(path.join(existingDir, "sheet.md"), "# Leah Invalid YAML\n\nExisting notes.\n", "utf8");
+
+    const metaPath = path.join(existingDir, "sheet.meta.yaml");
+    const invalidYaml = "name: [unterminated\n";
+    fs.writeFileSync(metaPath, invalidYaml, "utf8");
+
+    const text = await callWriteTool("create_character_sheet", {
+      name: "Leah Invalid YAML",
+      project_id: "test-novel",
+      fields: {
+        role: "support",
+      },
+    });
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.ok, false);
+    assert.equal(parsed.error.code, "IO_ERROR");
+    assert.ok(parsed.error.message.includes("invalid YAML"));
+    assert.equal(fs.readFileSync(metaPath, "utf8"), invalidYaml);
+  });
+
+  test("returns error when existing sidecar is not a YAML mapping", async () => {
+    const existingDir = path.join(
+      writeSyncDir,
+      "projects",
+      "test-novel",
+      "world",
+      "characters",
+      "leah-array-meta"
+    );
+    fs.mkdirSync(existingDir, { recursive: true });
+    fs.writeFileSync(path.join(existingDir, "sheet.md"), "# Leah Array Meta\n\nExisting notes.\n", "utf8");
+
+    const metaPath = path.join(existingDir, "sheet.meta.yaml");
+    fs.writeFileSync(metaPath, "- one\n- two\n", "utf8");
+
+    const text = await callWriteTool("create_character_sheet", {
+      name: "Leah Array Meta",
+      project_id: "test-novel",
+      fields: {
+        role: "support",
+      },
+    });
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.ok, false);
+    assert.equal(parsed.error.code, "IO_ERROR");
+    assert.ok(parsed.error.message.includes("YAML mapping"));
+    assert.equal(fs.readFileSync(metaPath, "utf8"), "- one\n- two\n");
+  });
 });
 
 describe("create_place_sheet tool", () => {
