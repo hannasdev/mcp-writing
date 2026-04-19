@@ -445,6 +445,33 @@ Unit tests use an in-memory SQLite database and temporary directories — no ser
 
 For real projects, keep your manuscript sync folder outside this tool repository and point `WRITING_SYNC_DIR` at that external path.
 
+## Release automation
+
+This repository uses a `release-it` workflow (modeled after `n8n-nodes-bambulab`) instead of Release Please.
+
+How it works:
+
+1. A PR is merged into `main`.
+2. `.github/workflows/release.yml` runs on that push.
+3. The workflow infers version bump type from commits since last tag:
+  - `BREAKING CHANGE` or `!:` -> major
+  - `feat:` -> minor
+  - everything else -> patch
+4. `release-it` creates a `Release x.y.z` commit and `vx.y.z` tag.
+5. Tag push triggers `.github/workflows/publish.yml` to publish to npm.
+
+Required setup:
+
+- Repository secret: `RELEASE_TOKEN` (PAT with repository write access)
+- Branch rules must allow this actor to push release commit/tag (for PR-only protection, configure a bypass actor for the token owner)
+- Repository URL in `package.json` must remain valid for npm provenance
+
+Local dry-run (optional):
+
+```sh
+npm run release -- --ci --dry-run
+```
+
 ## Troubleshooting
 
 ### "Module not found: sqlite" or "Database support not available"

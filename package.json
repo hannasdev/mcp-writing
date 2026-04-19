@@ -20,6 +20,7 @@
   "scripts": {
     "start": "node --experimental-sqlite index.js",
     "new:entity": "node scripts/new-world-entity.js",
+    "release": "release-it",
     "lint": "eslint index.js db.js sync.js metadata-lint.js scripts/",
     "lint:metadata": "node scripts/lint-metadata.mjs",
     "test:unit": "node --experimental-sqlite --test test/unit.test.mjs",
@@ -48,7 +49,9 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "auto-changelog": "^2.5.0",
     "eslint": "^10.2.0",
-    "globals": "^17.5.0"
+    "globals": "^17.5.0",
+    "release-it": "^20.0.0"
   }
 }
