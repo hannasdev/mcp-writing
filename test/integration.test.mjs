@@ -493,6 +493,18 @@ describe("import_scrivener_sync tool", () => {
     assert.equal(parsed.ok, false);
     assert.equal(parsed.error.code, "INVALID_PROJECT_ID");
   });
+
+  test("rejects non-slug project_id segments", async () => {
+    const text = await callWriteTool("import_scrivener_sync", {
+      source_dir: scrivenerImportDir,
+      project_id: "my_universe/MyProject",
+      dry_run: true,
+    });
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.ok, false);
+    assert.equal(parsed.error.code, "INVALID_PROJECT_ID");
+  });
 });
 
 describe("get_runtime_config tool", () => {

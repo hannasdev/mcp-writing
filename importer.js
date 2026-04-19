@@ -24,8 +24,8 @@ export function validateProjectId(projectId) {
     if (!segment || segment === "." || segment === "..") {
       return { ok: false, reason: "project_id must not contain '.' or '..' path segments." };
     }
-    if (!/^[a-z0-9][a-z0-9_-]*$/i.test(segment)) {
-      return { ok: false, reason: "project_id segments may contain only letters, numbers, '-', and '_'." };
+    if (!/^[a-z0-9-]+$/.test(segment)) {
+      return { ok: false, reason: "project_id segments may contain only lowercase letters, numbers, and '-'." };
     }
   }
 
@@ -151,7 +151,12 @@ export function importScrivenerSync({
     throw new Error(`Scrivener sync dir not found: ${scrivenerDirAbs}`);
   }
 
-  const scenesDir = path.join(mcpSyncDirAbs, "projects", resolvedProjectId, "scenes");
+  const projectsRoot = path.join(mcpSyncDirAbs, "projects");
+  const scenesDir = path.resolve(projectsRoot, resolvedProjectId, "scenes");
+  const relFromProjectsRoot = path.relative(projectsRoot, scenesDir);
+  if (relFromProjectsRoot.startsWith("..") || path.isAbsolute(relFromProjectsRoot)) {
+    throw new Error(`Invalid project_id '${resolvedProjectId}': resolved path escapes WRITING_SYNC_DIR/projects.`);
+  }
   const draftDir = path.join(scrivenerDirAbs, "Draft");
   const hasDraft = fs.existsSync(draftDir);
   const draftRoot = hasDraft ? draftDir : scrivenerDirAbs;
