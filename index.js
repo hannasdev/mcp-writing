@@ -19,7 +19,10 @@ const DB_PATH_DISPLAY = DB_PATH === ":memory:" ? DB_PATH : path.resolve(DB_PATH)
 const HTTP_PORT = parseInt(process.env.HTTP_PORT ?? "3000", 10);
 const MAX_CHAPTER_SCENES = parseInt(process.env.MAX_CHAPTER_SCENES ?? "10", 10);
 const DEFAULT_METADATA_PAGE_SIZE = parseInt(process.env.DEFAULT_METADATA_PAGE_SIZE ?? "20", 10);
-const OWNERSHIP_GUARD_MODE = (process.env.OWNERSHIP_GUARD_MODE ?? "warn").toLowerCase();
+const OWNERSHIP_GUARD_MODE_RAW = (process.env.OWNERSHIP_GUARD_MODE ?? "warn").toLowerCase();
+const OWNERSHIP_GUARD_MODE = OWNERSHIP_GUARD_MODE_RAW === "fail" || OWNERSHIP_GUARD_MODE_RAW === "warn"
+  ? OWNERSHIP_GUARD_MODE_RAW
+  : "warn";
 
 function paginateRows(rows, { page, pageSize, forcePagination = false }) {
   const totalCount = rows.length;
@@ -302,6 +305,13 @@ function generateProposalId() {
 function getRuntimeDiagnostics() {
   const warnings = [];
   const recommendations = [];
+
+  if (OWNERSHIP_GUARD_MODE_RAW !== OWNERSHIP_GUARD_MODE) {
+    warnings.push(
+      `OWNERSHIP_GUARD_MODE_INVALID: Unsupported OWNERSHIP_GUARD_MODE='${OWNERSHIP_GUARD_MODE_RAW}'. Falling back to 'warn'.`
+    );
+    recommendations.push("Set OWNERSHIP_GUARD_MODE to either 'warn' or 'fail'.");
+  }
 
   if (!SYNC_DIR_WRITABLE) {
     warnings.push("SYNC_DIR_READ_ONLY: sync dir is read-only; metadata write-back and prose editing tools are unavailable.");

@@ -539,6 +539,30 @@ describe("get_runtime_config tool", () => {
     assert.equal(typeof parsed.sync_dir_writable, "boolean");
     assert.equal(typeof parsed.git_available, "boolean");
     assert.equal(typeof parsed.git_enabled, "boolean");
+    assert.equal(parsed.ownership_guard_mode, "warn");
+    assert.equal(typeof parsed.permission_diagnostics, "object");
+    assert.ok(Array.isArray(parsed.runtime_warnings));
+    assert.ok(Array.isArray(parsed.setup_recommendations));
+  });
+
+  test("falls back to warn and returns warning for invalid OWNERSHIP_GUARD_MODE", async () => {
+    const invalidPort = 3097;
+    const invalidUrl = `http://localhost:${invalidPort}`;
+    const invalidProc = spawnServer(invalidPort, readSyncDir, { OWNERSHIP_GUARD_MODE: "banana" });
+    let invalidClient;
+
+    try {
+      await waitForServer(invalidUrl);
+      invalidClient = await connectClient(invalidUrl);
+      const result = await invalidClient.callTool({ name: "get_runtime_config", arguments: {} });
+      const parsed = JSON.parse(result.content?.[0]?.text ?? "{}");
+
+      assert.equal(parsed.ownership_guard_mode, "warn");
+      assert.ok((parsed.runtime_warnings ?? []).some(w => w.includes("OWNERSHIP_GUARD_MODE_INVALID")));
+    } finally {
+      try { await invalidClient?.close(); } catch {}
+      if (invalidProc) invalidProc.kill();
+    }
   });
 });
 
