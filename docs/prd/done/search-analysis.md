@@ -22,6 +22,7 @@ These tools return scene/character/place metadata without loading prose:
 | `create_place_sheet(name, project_id\|universe_id, notes?, fields?)` | Create or reuse a canonical place sheet folder with same semantics as `create_character_sheet` |
 | `list_threads(project_id, page?, page_size?)` | All threads with status |
 | `get_thread_arc(thread_id, page?, page_size?)` | Ordered scene metadata for all scenes in a thread, including per-thread beat |
+| `get_relationship_arc(from_character, to_character, project_id?)` | Ordered relationship entries between two characters, optionally scoped to one project |
 | `search_metadata(query, page?, page_size?)` | Lightweight text search across scene titles, loglines, and metadata keywords (tags/characters/places/versions) |
 | `get_runtime_config()` | Active runtime paths/capabilities, diagnostics (`sync_dir_writable`, permission diagnostics), warnings, setup recommendations, git availability/enabled state |
 
@@ -32,7 +33,7 @@ Use these when you need actual text content:
 | Tool | Description |
 | --- | --- |
 | `get_scene_prose(scene_id, commit?)` | Returns prose for a scene; optionally a past git commit hash |
-| `get_chapter_prose(project_id?, part, chapter)` | Returns all prose for a chapter (use sparingly — see Known Issues) |
+| `get_chapter_prose(project_id, part, chapter)` | Returns all prose for a chapter (use sparingly — see Known Issues) |
 
 ### Search Mechanics
 
@@ -65,8 +66,8 @@ Staleness occurs when prose has been edited since metadata was last updated. Cal
 
 ### 1. Character Arc Consistency Review
 
-1. `get_character_sheet("elena")` — load traits, arc summary
-2. `get_arc("elena")` — ordered scene metadata, loglines, beat tags
+1. `get_character_sheet("char-elena")` — load traits, arc summary
+2. `get_arc("char-elena")` — ordered scene metadata, loglines, beat tags
 3. Model identifies 3 scenes worth examining based on metadata
 4. `get_scene_prose(scene_id)` × 3 — load only those scenes
 5. Model reasons against character sheet
@@ -79,13 +80,13 @@ Staleness occurs when prose has been edited since metadata was last updated. Cal
 
 ### 3. "What Happens in the Harbor?"
 
-1. `find_scenes(places=["harbor-district"])` — metadata only
+1. `search_metadata("harbor-district")` — metadata only
 2. Model summarizes from loglines — may not need prose at all
 
 ### 4. Cross-Scene Continuity Check
 
-1. `find_scenes(character="marcus")` — all Marcus scenes
-2. `get_relationship_arc("marcus", "elena")` — their relationship evolution
+1. `find_scenes(character="char-marcus")` — all Marcus scenes
+2. `get_relationship_arc("char-marcus", "char-elena")` — their relationship evolution
 3. `get_scene_prose(scene_id)` for relationship turning points only
 4. Model identifies continuity gaps or inconsistencies
 

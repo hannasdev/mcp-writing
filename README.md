@@ -306,9 +306,10 @@ Outcome: you get AI speed with explicit approval and recoverable history for eve
 | `import_scrivener_sync` | Import Scrivener Draft export into sidecars and optionally auto-run sync |
 | `find_scenes` | Filter scenes by character, beat, tag, part, chapter, or POV |
 | `get_scene_prose` | Load the full prose for a specific scene |
-| `get_chapter_prose` | Load all prose for a chapter |
+| `get_chapter_prose` | Load all prose for a project's chapter |
 | `get_runtime_config` | Show active paths/capabilities plus runtime warnings and setup recommendations |
 | `get_arc` | Ordered scene metadata for all scenes involving a character |
+| `get_relationship_arc` | Show how a recorded relationship between two characters evolves across scenes |
 | `list_characters` | All characters, optionally filtered by project or universe |
 | `get_character_sheet` | Full character metadata, traits, notes, and support notes |
 | `create_character_sheet` | Create a canonical character sheet folder and sidecar |
@@ -325,12 +326,14 @@ Outcome: you get AI speed with explicit approval and recoverable history for eve
 | `update_place_sheet` | Write fields back to a place sidecar |
 | `flag_scene` | Mark a scene with a flag for AI follow-up |
 | `propose_edit` | Stage a scene revision for review without writing it |
-| `commit_edit` | Apply a staged prose edit and create a git-backed snapshot |
+| `commit_edit` | Apply a staged prose edit for a specific scene and create a git-backed snapshot |
 | `discard_edit` | Discard a pending staged prose edit |
-| `snapshot_scene` | Create a manual git snapshot for a scene |
+| `snapshot_scene` | Create a manual git snapshot for a scene in a project |
 | `list_snapshots` | List snapshot history for a scene |
 
 Paginated tools (`find_scenes`, `get_arc`, `list_threads`, `get_thread_arc`, `search_metadata`) accept `page` and `page_size` arguments and return `total_count` / `total_pages` in the response envelope.
+
+For tools that operate on a scene or chapter inside a specific project, follow the required `project_id` fields shown in your MCP client schema.
 
 ---
 
