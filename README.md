@@ -322,6 +322,7 @@ Outcome: you get AI speed with explicit approval and recoverable history for eve
 | `enrich_scene` | Re-derive lightweight metadata from current prose and clear `metadata_stale` |
 | `update_scene_metadata` | Write metadata fields back to a scene sidecar |
 | `update_character_sheet` | Write fields back to a character sidecar |
+| `update_place_sheet` | Write fields back to a place sidecar |
 | `flag_scene` | Mark a scene with a flag for AI follow-up |
 | `propose_edit` | Stage a scene revision for review without writing it |
 | `commit_edit` | Apply a staged prose edit and create a git-backed snapshot |

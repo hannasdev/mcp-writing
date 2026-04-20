@@ -1339,7 +1339,7 @@ function createMcpServer() {
 
         // Update DB directly
         db.prepare(`UPDATE places SET name = ? WHERE place_id = ?`)
-          .run(updated.name ?? meta.name, place_id);
+          .run(updated.name ?? meta.name ?? place_id, place_id);
 
         return { content: [{ type: "text", text: `Updated place sheet for '${place_id}'.` }] };
       } catch (err) {
