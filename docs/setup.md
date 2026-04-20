@@ -89,7 +89,7 @@ Database: ./writing.db
 
 ### 3. Verify the server
 
-- Open `http://localhost:3000/healthz` and confirm it returns OK.
+- Open `http://localhost:3000/healthz` and confirm it returns `ok`.
 - Open `http://localhost:3000/sse` and confirm it opens an SSE stream.
 
 ### 4. Import Draft scenes through MCP (recommended)
