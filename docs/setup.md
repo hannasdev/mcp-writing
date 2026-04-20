@@ -82,14 +82,14 @@ WRITING_SYNC_DIR=/path/to/sync-dir DB_PATH=./writing.db npm start
 You should see:
 
 ```sh
-Listening on port 3000
-Sync dir: /path/to/sync-dir
-Database: ./writing.db
+[mcp-writing] Listening on port 3000
+[mcp-writing] Sync dir: /path/to/sync-dir
+[mcp-writing] DB path: ./writing.db
 ```
 
 ### 3. Verify the server
 
-- Open `http://localhost:3000/healthz` and confirm it returns `ok`.
+- Open `http://localhost:3000/healthz` and confirm it returns `ok` (plain text, no JSON).
 - Open `http://localhost:3000/sse` and confirm it opens an SSE stream.
 
 ### 4. Import Draft scenes through MCP (recommended)
@@ -120,7 +120,7 @@ If the preview looks right, run it again with writes enabled:
 The importer:
 
 - Converts `Draft/` files to scene sidecars (`.meta.yaml`) with generated `scene_id`, `title`, `timeline_position`, `external_source`, `external_id`, and carried `save_the_cat_beat` where applicable.
-- Skips beat-marker files (`-Setup-`, `-Catalyst-`, etc.), chapter-intro files, epigraphs, and trashed files.
+- Skips beat-marker files (`-Setup-`, `-Catalyst-`, etc.), epigraphs, empty files, and files that do not match the expected `NNN Title [binder_id].txt` naming pattern.
 - Reconciles updates by stable Scrivener binder ID (`[123]` in filenames) so reorder/move operations map to existing scenes.
 
 Non-draft content is not inferred from `Notes/`. Put it directly into the target sync dir using the `world/` folder conventions described below.
