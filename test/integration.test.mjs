@@ -1202,6 +1202,56 @@ describe("update_character_sheet tool", () => {
   });
 });
 
+describe("update_place_sheet tool", () => {
+  test("updates name and reflects in list_places", async () => {
+    const text = await callWriteTool("update_place_sheet", {
+      place_id: "harbor-district",
+      fields: { name: "Harbor District (Revised)" },
+    });
+    assert.ok(text.includes("Updated place sheet"));
+
+    const listed = await callWriteTool("list_places");
+    assert.ok(listed.includes("Harbor District (Revised)"), `Expected updated name in list_places, got: ${listed.slice(0, 300)}`);
+  });
+
+  test("updates associated_characters and tags in sidecar", async () => {
+    const text = await callWriteTool("update_place_sheet", {
+      place_id: "harbor-district",
+      fields: { associated_characters: ["elena", "marcus"], tags: ["urban", "docks"] },
+    });
+    assert.ok(text.includes("Updated place sheet"));
+
+    const sheet = await callWriteTool("get_place_sheet", { place_id: "harbor-district" });
+    const parsed = JSON.parse(sheet);
+    assert.ok(parsed.associated_characters.includes("marcus"));
+    assert.ok(parsed.tags.includes("docks"));
+  });
+
+  test("returns error for unknown place", async () => {
+    const text = await callWriteTool("update_place_sheet", {
+      place_id: "place-does-not-exist",
+      fields: { name: "Ghost" },
+    });
+    assert.ok(text.toLowerCase().includes("not found"));
+  });
+});
+
+describe("update_scene_metadata status field", () => {
+  test("sets and reads back status via sidecar", async () => {
+    const text = await callWriteTool("update_scene_metadata", {
+      scene_id: "sc-001",
+      project_id: "test-novel",
+      fields: { status: "needs-revision" },
+    });
+    assert.ok(text.includes("Updated metadata"));
+
+    // Verify the status field was written to the sidecar on disk
+    const sidecarFile = path.join(writeSyncDir, "projects", "test-novel", "part-1", "chapter-1", "sc-001.meta.yaml");
+    const raw = fs.readFileSync(sidecarFile, "utf8");
+    assert.ok(raw.includes("needs-revision"), `Expected status in sidecar, got: ${raw.slice(0, 300)}`);
+  });
+});
+
 describe("create_character_sheet tool", () => {
   test("creates a project-scoped canonical character sheet and indexes it", async () => {
     const text = await callWriteTool("create_character_sheet", {
