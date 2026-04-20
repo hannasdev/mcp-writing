@@ -24,6 +24,7 @@
     "setup:openclaw-env": "sh scripts/setup-openclaw-env.sh",
     "release": "release-it",
     "lint": "eslint index.js importer.js db.js sync.js metadata-lint.js scripts/",
+    "docs": "node scripts/generate-tool-docs.mjs",
     "lint:metadata": "node scripts/lint-metadata.mjs",
     "test:unit": "node --experimental-sqlite --test test/unit.test.mjs",
     "test:integration": "node --experimental-sqlite --test test/integration.test.mjs",

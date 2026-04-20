@@ -300,37 +300,13 @@ Outcome: you get AI speed with explicit approval and recoverable history for eve
 
 ## Reference: Available tools
 
-| Tool | Description |
-| --- | --- |
-| `sync` | Re-scan the sync folder and update the index |
-| `import_scrivener_sync` | Import Scrivener Draft export into sidecars and optionally auto-run sync |
-| `find_scenes` | Filter scenes by character, beat, tag, part, chapter, or POV |
-| `get_scene_prose` | Load the full prose for a specific scene |
-| `get_chapter_prose` | Load all prose for a chapter |
-| `get_runtime_config` | Show active paths/capabilities plus runtime warnings and setup recommendations |
-| `get_arc` | Ordered scene metadata for all scenes involving a character |
-| `list_characters` | All characters, optionally filtered by project or universe |
-| `get_character_sheet` | Full character metadata, traits, notes, and support notes |
-| `create_character_sheet` | Create a canonical character sheet folder and sidecar |
-| `list_places` | All places |
-| `get_place_sheet` | Full place metadata, tags, associated characters, notes, and support notes |
-| `create_place_sheet` | Create a canonical place sheet folder and sidecar |
-| `search_metadata` | Full-text search across scene titles, loglines, and metadata keywords (tags/characters/places/versions) |
-| `list_threads` | All subplot threads for a project |
-| `get_thread_arc` | Scenes belonging to a thread, with per-thread beat |
-| `upsert_thread_link` | Create/update a thread and link it to a scene |
-| `enrich_scene` | Re-derive lightweight metadata from current prose and clear `metadata_stale` |
-| `update_scene_metadata` | Write metadata fields back to a scene sidecar |
-| `update_character_sheet` | Write fields back to a character sidecar |
-| `update_place_sheet` | Write fields back to a place sidecar |
-| `flag_scene` | Mark a scene with a flag for AI follow-up |
-| `propose_edit` | Stage a scene revision for review without writing it |
-| `commit_edit` | Apply a staged prose edit and create a git-backed snapshot |
-| `discard_edit` | Discard a pending staged prose edit |
-| `snapshot_scene` | Create a manual git snapshot for a scene |
-| `list_snapshots` | List snapshot history for a scene |
+The full tool reference — with every parameter, type, and description — is auto-generated from source and lives at **[docs/tools.md](docs/tools.md)**.
 
-Paginated tools (`find_scenes`, `get_arc`, `list_threads`, `get_thread_arc`, `search_metadata`) accept `page` and `page_size` arguments and return `total_count` / `total_pages` in the response envelope.
+To regenerate after editing tool definitions in `index.js`:
+
+```bash
+npm run docs
+```
 
 ---
 

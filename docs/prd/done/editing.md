@@ -62,7 +62,7 @@ If any check fails, no snapshot is created and no prose is written. The tool ret
 
 | Tool | Description |
 | --- | --- |
-| `get_relationship_arc(character_id, character_id)` | Temporal character relationship graph between two characters |
+| `get_relationship_arc(from_character, to_character, project_id?)` | Temporal character relationship graph between two characters |
 
 Shows how the relationship between two characters evolves across scenes with state transitions (TRUST, CONFLICT, DEPENDENCY, AFFECTION, etc.) and their causes.
 
