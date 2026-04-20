@@ -256,10 +256,10 @@ Two separate rulesets apply depending on whether a file lives under `scenes/` (i
 
 The importer is the authoritative writer for Scrivener-imported prose; any edits to `scenes/**/*.md` (manual or via tools) will be overwritten on re-import. Sidecars are shared but with clearly partitioned fields.
 
-| File | Writer | Fields written | Behaviour on re-import |
+| File | Writer | Fields written | Behavior on re-import |
 |---|---|---|---|
 | `scenes/**/*.md` | **Scrivener / importer** | Full prose content | **Unconditionally overwritten.** Never edit `.md` files directly — changes will be lost on the next import. |
-| `scenes/**/*.meta.yaml` | **Importer** (Scrivener fields) + **AI agent** (enrichment fields) | Importer controls: `scene_id`, `title`, `timeline_position`, `external_source`, `external_id`, `save_the_cat_beat` | Importer spreads existing sidecar first, then overlays only its 5–6 fields. All other fields (logline, status, tags, characters, notes, flags, …) are preserved across re-imports. |
+| `scenes/**/*.meta.yaml` | **Importer** (Scrivener fields) + **AI agent** (enrichment fields) | Importer writes: `scene_id`, `external_source`, `external_id` (always); `title`, `timeline_position`, `save_the_cat_beat` (from Scrivener metadata, also writable by agents via `update_scene_metadata`) | Importer spreads existing sidecar first, then overlays only its fields. All other fields (logline, status, tags, characters, notes, flags, …) are preserved across re-imports. |
 
 **Rule:** write AI-side fields via the appropriate tool — never touch the Scrivener-controlled fields manually or the importer will overwrite them.
 - `update_scene_metadata` supports: `logline`, `status`, `tags`, `characters`, `places`, `pov`, `part`, `chapter`, `timeline_position`, `story_time`, `save_the_cat_beat`, `title`.
@@ -284,10 +284,10 @@ The importer never reads or writes anything under `world/`. These files are full
 
 | File | Writer | Description |
 |---|---|---|
-| `world/characters/<slug>/sheet.md` | **Human** | Canonical character sheet prose. Edit directly — no tool writes this file. |
+| `world/characters/<slug>/sheet.md` | **Human** (after creation) | Canonical character sheet prose. `create_character_sheet` writes this file once on first setup; after that it is human-owned and no tool modifies it. |
 | `world/characters/<slug>/*.md` | **Human or AI agent** | Arc notes, relationship docs, history. Add and edit freely. |
 | `world/characters/<slug>/sheet.meta.yaml` | **AI agent** | Character metadata (`name`, `role`, `arc_summary`, `first_appearance`, `traits`). Written by `create_character_sheet`, `update_character_sheet`. |
-| `world/places/<slug>/sheet.md` | **Human** | Canonical place sheet prose. Edit directly — no tool writes this file. |
+| `world/places/<slug>/sheet.md` | **Human** (after creation) | Canonical place sheet prose. `create_place_sheet` writes this file once on first setup; after that it is human-owned and no tool modifies it. |
 | `world/places/<slug>/sheet.meta.yaml` | **AI agent** | Place metadata (`name`, `associated_characters`, `tags`). Written by `create_place_sheet`, `update_place_sheet`. |
 | `world/reference/**/*.md` | **Human** | Free-form reference notes (world rules, timelines, etc.). Never indexed as entities. |
 
