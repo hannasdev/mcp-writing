@@ -293,7 +293,7 @@ Attach a continuity or review note to a scene. Flags are appended to the sidecar
 |-----------|------|:--------:|-------------|
 | `scene_id` | `string` | ✓ | The scene_id to flag (e.g. 'sc-012-open-to-anyone'). |
 | `project_id` | `string` | ✓ | Project the scene belongs to (e.g. 'the-lamb'). |
-| `note` | `string` | ✓ | The flag note (e.g. 'Victor knows Mira\u2019s name here, but they haven\u2019t been introduced yet \u2014 contradicts sc-006'). |
+| `note` | `string` | ✓ | The flag note (e.g. 'Victor knows Mira’s name here, but they haven’t been introduced yet — contradicts sc-006'). |
 
 ---
 

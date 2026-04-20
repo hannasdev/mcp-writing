@@ -359,13 +359,17 @@ function parseParams(schemaText) {
     const type        = zodTypeString(section);
     const optional    = /\.optional\(\)/.test(section);
 
-    // .describe("...") may be on any line of the section
+    // .describe("...") may be on any line of the section.
     // Use the *last* .describe() in the section so that z.object({...}).describe("outer")
     // wins over any .describe() calls on inner fields.
-    const allDescMatches = [...section.matchAll(/\.describe\("((?:[^"\\]|\\.)*)"\)/g)];
-    const description    = allDescMatches.length > 0
-      ? allDescMatches[allDescMatches.length - 1][1]
-      : '';
+    // Use readQuotedLiteral so JS escape sequences (\u2019 etc.) are decoded, not left raw.
+    let description = '';
+    const descRe = /\.describe\("/g;
+    let descMatch;
+    while ((descMatch = descRe.exec(section)) !== null) {
+      const { text } = readQuotedLiteral(section, descMatch.index + descMatch[0].length, '"');
+      description = text; // keep iterating to get the last one
+    }
 
     params.push({ name, type, optional, description });
   }
