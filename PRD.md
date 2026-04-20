@@ -113,11 +113,11 @@ Index and search world-building notes, research, and continuity scratchpads.
 
 ---
 
-### 🚀 [OpenClaw Integration](docs/prd/todo/openclaw-integration.md) 📋
+### 🚀 [OpenClaw Integration](docs/prd/in-progress/openclaw-integration.md) 🚧
 
 Deploy writing-mcp as a service in the OpenClaw runtime with the Writing World agent.
 
-**Status:** Deferred to Phase 5. Waiting for core functionality to stabilize.
+**Status:** In progress. Runtime shape, deployment targets, and agent integration points are defined; remaining work is implementation and rollout.
 
 ---
 
@@ -186,7 +186,7 @@ See [ideas-and-questions.md](docs/prd/inbox/ideas-and-questions.md) for:
 - **Phase 2** ✅ — Answers stay accurate (metadata staleness, sidecar migration, enrichment)
 - **Phase 3** ✅ — AI helps edit prose (two-step proposals, git history, snapshots)
 - **Phase 4** 📋 — Semantic search & reference docs (pending evaluation)
-- **Phase 5** 📋 — OpenClaw integration (deferred until core stabilizes)
+- **Phase 5** 🚧 — OpenClaw integration (active planning and integration work underway)
 
 ---
 

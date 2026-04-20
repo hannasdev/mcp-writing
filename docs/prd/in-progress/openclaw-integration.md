@@ -1,10 +1,10 @@
 # OpenClaw Integration
 
-**Status:** 📋 Deferred (Phase 5)
+**Status:** 🚧 In Progress
 
 ## Goal
 
-Integrate writing-mcp with OpenClaw runtime and agent policy once core MCP functionality is tested and usable standalone.
+Integrate writing-mcp with OpenClaw runtime and agent policy while core MCP functionality is being validated and operationalized.
 
 ## Integration Points
 
@@ -25,6 +25,16 @@ Integrate writing-mcp with OpenClaw runtime and agent policy once core MCP funct
 
 - [ ] Add `writing__*` to Writing World agent `tools.allow`
 - [ ] Consider elevating Writing World agent up in Desk System (currently deferred)
+
+## Current Direction
+
+The integration is no longer purely speculative. Work is underway toward making `writing-mcp` fit the OpenClaw runtime shape, so this now belongs in active planning rather than the deferred backlog.
+
+Current signals of progress:
+
+- the MCP server is already structured around the expected service pattern
+- deployment expectations for healthcheck, volume, and runtime wiring are defined
+- agent/tool policy integration points are known
 
 ## Prerequisites
 
