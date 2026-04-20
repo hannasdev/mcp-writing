@@ -261,7 +261,11 @@ The importer is the authoritative writer for Scrivener-imported prose; any edits
 | `scenes/**/*.md` | **Scrivener / importer** | Full prose content | **Unconditionally overwritten.** Never edit `.md` files directly — changes will be lost on the next import. |
 | `scenes/**/*.meta.yaml` | **Importer** (Scrivener fields) + **AI agent** (enrichment fields) | Importer controls: `scene_id`, `title`, `timeline_position`, `external_source`, `external_id`, `save_the_cat_beat` | Importer spreads existing sidecar first, then overlays only its 5–6 fields. All other fields (logline, status, tags, characters, notes, flags, …) are preserved across re-imports. |
 
-**Rule:** only write AI-side fields (`logline`, `status`, `tags`, `characters`, `notes`, `metadata_stale`, etc.) via `update_scene_metadata`, `enrich_scene`, or `flag_scene`. Never write the Scrivener-controlled fields manually — the importer will overwrite them.
+**Rule:** write AI-side fields via the appropriate tool — never touch the Scrivener-controlled fields manually or the importer will overwrite them.
+- `update_scene_metadata` supports: `logline`, `status`, `tags`, `characters`, `places`, `pov`, `part`, `chapter`, `timeline_position`, `story_time`, `save_the_cat_beat`, `title`.
+- `flag_scene` appends accumulating continuity/review notes (free-text `flags` list).
+- `enrich_scene` re-derives lightweight metadata from the current prose and clears staleness.
+- `metadata_stale` is a SQLite-only flag set automatically by sync when prose changes — it is not a sidecar field and cannot be written by tools.
 
 ### sync — read-only with respect to files
 
@@ -270,7 +274,7 @@ The importer is the authoritative writer for Scrivener-imported prose; any edits
 | Operation | Reads | Writes |
 |---|---|---|
 | Indexing pass | `scenes/**/*.md`, `scenes/**/*.meta.yaml`, `world/**/*.md`, `world/**/*.meta.yaml` | SQLite only |
-| Frontmatter auto-migration | `scenes/**/*.md` (frontmatter) | `scenes/**/*.meta.yaml` (created once if missing) |
+| Frontmatter auto-migration | Any `.md`/`.txt` file (frontmatter block) | Corresponding `.meta.yaml` (created once if missing, for any file type including `world/**`) |
 
 `sync` never overwrites an existing sidecar and never touches a `.md` prose file.
 
@@ -280,11 +284,11 @@ The importer never reads or writes anything under `world/`. These files are full
 
 | File | Writer | Description |
 |---|---|---|
-| `world/characters/<slug>/sheet.md` | **Human or AI agent** | Canonical character sheet. Editable directly or via `update_character_sheet`. |
+| `world/characters/<slug>/sheet.md` | **Human** | Canonical character sheet prose. Edit directly — no tool writes this file. |
 | `world/characters/<slug>/*.md` | **Human or AI agent** | Arc notes, relationship docs, history. Add and edit freely. |
-| `world/characters/<slug>/sheet.meta.yaml` | **AI agent** | Character metadata. Written by `create_character_sheet`, `update_character_sheet`. |
-| `world/places/<slug>/sheet.md` | **Human or AI agent** | Canonical place sheet. Editable directly or via `update_character_sheet`. |
-| `world/places/<slug>/sheet.meta.yaml` | **AI agent** | Place metadata. Written by `create_place_sheet`. |
+| `world/characters/<slug>/sheet.meta.yaml` | **AI agent** | Character metadata (`name`, `role`, `arc_summary`, `first_appearance`, `traits`). Written by `create_character_sheet`, `update_character_sheet`. |
+| `world/places/<slug>/sheet.md` | **Human** | Canonical place sheet prose. Edit directly — no tool writes this file. |
+| `world/places/<slug>/sheet.meta.yaml` | **AI agent** | Place metadata (`name`, `associated_characters`, `tags`). Written by `create_place_sheet`, `update_place_sheet`. |
 | `world/reference/**/*.md` | **Human** | Free-form reference notes (world rules, timelines, etc.). Never indexed as entities. |
 
 **Rule:** all character and place changes that should survive forever — backstory, relationships, traits, arc notes — belong in `world/`. This content is never at risk from a Scrivener re-import.
