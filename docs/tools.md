@@ -1,38 +1,38 @@
 # Tool Reference
 
-> Auto-generated from `index.js` on 2026-04-20.
+> Auto-generated from `index.js`.
 > Do not edit manually — run `npm run docs` to regenerate.
 
 ## Tools
 
 - [`sync`](#sync)
-- [`import_scrivener_sync`](#import-scrivener-sync)
-- [`get_runtime_config`](#get-runtime-config)
-- [`find_scenes`](#find-scenes)
-- [`get_scene_prose`](#get-scene-prose)
-- [`get_chapter_prose`](#get-chapter-prose)
-- [`get_arc`](#get-arc)
-- [`list_characters`](#list-characters)
-- [`get_character_sheet`](#get-character-sheet)
-- [`create_character_sheet`](#create-character-sheet)
-- [`list_places`](#list-places)
-- [`create_place_sheet`](#create-place-sheet)
-- [`get_place_sheet`](#get-place-sheet)
-- [`search_metadata`](#search-metadata)
-- [`list_threads`](#list-threads)
-- [`get_thread_arc`](#get-thread-arc)
-- [`upsert_thread_link`](#upsert-thread-link)
-- [`enrich_scene`](#enrich-scene)
-- [`update_scene_metadata`](#update-scene-metadata)
-- [`update_character_sheet`](#update-character-sheet)
-- [`update_place_sheet`](#update-place-sheet)
-- [`flag_scene`](#flag-scene)
-- [`get_relationship_arc`](#get-relationship-arc)
-- [`propose_edit`](#propose-edit)
-- [`commit_edit`](#commit-edit)
-- [`discard_edit`](#discard-edit)
-- [`snapshot_scene`](#snapshot-scene)
-- [`list_snapshots`](#list-snapshots)
+- [`import_scrivener_sync`](#import_scrivener_sync)
+- [`get_runtime_config`](#get_runtime_config)
+- [`find_scenes`](#find_scenes)
+- [`get_scene_prose`](#get_scene_prose)
+- [`get_chapter_prose`](#get_chapter_prose)
+- [`get_arc`](#get_arc)
+- [`list_characters`](#list_characters)
+- [`get_character_sheet`](#get_character_sheet)
+- [`create_character_sheet`](#create_character_sheet)
+- [`list_places`](#list_places)
+- [`create_place_sheet`](#create_place_sheet)
+- [`get_place_sheet`](#get_place_sheet)
+- [`search_metadata`](#search_metadata)
+- [`list_threads`](#list_threads)
+- [`get_thread_arc`](#get_thread_arc)
+- [`upsert_thread_link`](#upsert_thread_link)
+- [`enrich_scene`](#enrich_scene)
+- [`update_scene_metadata`](#update_scene_metadata)
+- [`update_character_sheet`](#update_character_sheet)
+- [`update_place_sheet`](#update_place_sheet)
+- [`flag_scene`](#flag_scene)
+- [`get_relationship_arc`](#get_relationship_arc)
+- [`propose_edit`](#propose_edit)
+- [`commit_edit`](#commit_edit)
+- [`discard_edit`](#discard_edit)
+- [`snapshot_scene`](#snapshot_scene)
+- [`list_snapshots`](#list_snapshots)
 
 ---
 
@@ -96,7 +96,7 @@ Load the full prose text of a single scene. Use this for close reading, continui
 
 ## get_chapter_prose
 
-Load the full prose for every scene in a chapter, concatenated in order. Expensive — only use when you need to read an entire chapter. Capped at ${MAX_CHAPTER_SCENES} scenes. Use find_scenes first to confirm the chapter exists.
+Load the full prose for every scene in a chapter, concatenated in order. Expensive — only use when you need to read an entire chapter. Capped at 10 scenes. Use find_scenes first to confirm the chapter exists.
 
 | Parameter | Type | Required | Description |
 |-----------|------|:--------:|-------------|

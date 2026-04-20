@@ -19,6 +19,119 @@ const OUT  = path.join(ROOT, 'docs', 'tools.md');
 
 const source = readFileSync(SRC, 'utf8');
 
+function decodeEscape(src, i) {
+  const esc = src[i];
+
+  if (esc === undefined) {
+    return { value: '', end: i };
+  }
+
+  switch (esc) {
+    case 'n': return { value: '\n', end: i + 1 };
+    case 'r': return { value: '\r', end: i + 1 };
+    case 't': return { value: '\t', end: i + 1 };
+    case 'b': return { value: '\b', end: i + 1 };
+    case 'f': return { value: '\f', end: i + 1 };
+    case 'v': return { value: '\v', end: i + 1 };
+    case '0': return { value: '\0', end: i + 1 };
+    case '\\': return { value: '\\', end: i + 1 };
+    case '"': return { value: '"', end: i + 1 };
+    case "'": return { value: "'", end: i + 1 };
+    case '`': return { value: '`', end: i + 1 };
+    case 'x': {
+      const hex = src.slice(i + 1, i + 3);
+      if (/^[0-9a-fA-F]{2}$/.test(hex)) {
+        return { value: String.fromCodePoint(Number.parseInt(hex, 16)), end: i + 3 };
+      }
+      return { value: 'x', end: i + 1 };
+    }
+    case 'u': {
+      if (src[i + 1] === '{') {
+        const close = src.indexOf('}', i + 2);
+        const codePoint = close === -1 ? '' : src.slice(i + 2, close);
+        if (/^[0-9a-fA-F]+$/.test(codePoint)) {
+          return { value: String.fromCodePoint(Number.parseInt(codePoint, 16)), end: close + 1 };
+        }
+      } else {
+        const hex = src.slice(i + 1, i + 5);
+        if (/^[0-9a-fA-F]{4}$/.test(hex)) {
+          return { value: String.fromCodePoint(Number.parseInt(hex, 16)), end: i + 5 };
+        }
+      }
+      return { value: 'u', end: i + 1 };
+    }
+    default:
+      return { value: esc, end: i + 1 };
+  }
+}
+
+function readQuotedLiteral(src, i, quote) {
+  let str = '';
+
+  while (i < src.length) {
+    if (src[i] === '\\') {
+      const decoded = decodeEscape(src, i + 1);
+      str += decoded.value;
+      i = decoded.end;
+      continue;
+    }
+    if (src[i] === quote) {
+      return { text: str, end: i + 1 };
+    }
+    str += src[i++];
+  }
+
+  return { text: str, end: i };
+}
+
+function readTemplateExpression(src, i) {
+  const start = i;
+  let depth = 1;
+
+  while (i < src.length && depth > 0) {
+    const ch = src[i];
+
+    if (ch === '"' || ch === "'") {
+      i = skipString(src, i + 1, ch);
+      continue;
+    }
+    if (ch === '`') {
+      i = skipString(src, i + 1, ch);
+      continue;
+    }
+    if (ch === '{') depth++;
+    if (ch === '}') depth--;
+    i++;
+  }
+
+  return { text: src.slice(start, i - 1).trim(), end: i };
+}
+
+function extractConstantValues(src) {
+  const values = new Map();
+
+  for (const match of src.matchAll(/const\s+(\w+)\s*=\s*parseInt\([^\n]*\?\?\s*"([^"]+)"[^\n]*\);/g)) {
+    values.set(match[1], Number.parseInt(match[2], 10));
+  }
+
+  for (const match of src.matchAll(/const\s+(\w+)\s*=\s*process\.env\.\w+\s*\?\?\s*(["'`])([\s\S]*?)\2;/g)) {
+    if (!values.has(match[1])) {
+      values.set(match[1], match[3]);
+    }
+  }
+
+  for (const match of src.matchAll(/const\s+(\w+)\s*=\s*(\d+|true|false);/g)) {
+    if (!values.has(match[1])) {
+      const raw = match[2];
+      values.set(match[1], raw === 'true' ? true : raw === 'false' ? false : Number.parseInt(raw, 10));
+    }
+  }
+
+  return values;
+}
+
+const constantValues = extractConstantValues(source);
+
 // ---------------------------------------------------------------------------
 // Step 1: Extract raw text of each s.tool(...) call
 // ---------------------------------------------------------------------------
@@ -78,32 +191,15 @@ function extractStringArgs(src, count) {
   while (i < src.length && results.length < count) {
     const ch = src[i];
     if (ch === '"' || ch === "'") {
-      let str = '';
+      const { text, end } = readQuotedLiteral(src, i + 1, ch);
+      results.push(text);
+      i = end;
+    } else if (ch === '`') {
+      const { text, end } = readTemplateLiteral(src, i + 1);
+      results.push(text);
+      i = end;
+    } else {
       i++;
-      while (i < src.length) {
-        if (src[i] === '\\') {
-          i++;
-          const esc = src[i];
-          if      (esc === 'n')  str += '\n';
-          else if (esc === 't')  str += '\t';
-          else                   str += esc;
-          i++;
-          continue;
-        }
-        if (src[i] === ch) { i++; break; }
-        str += src[i++];
-      }
-      results.push(str);
-      } else if (ch === '`') {
-        let str = '';
-        i++;
-        while (i < src.length) {
-          if (src[i] === '`') { i++; break; }
-          str += src[i++];
-        }
-        results.push(str);
-      } else {
-        i++;
     }
   }
   return results;
@@ -133,14 +229,22 @@ function extractBalancedBraces(src, fromIndex) {
 }
 
 function readTemplateLiteral(src, i) {
-  let str = "";
+  let str = '';
   while (i < src.length) {
     if (src[i] === "\\") {
-      i++;
-      str += src[i++];
+      const decoded = decodeEscape(src, i + 1);
+      str += decoded.value;
+      i = decoded.end;
       continue;
     }
-    if (src[i] === "`") return { text: str, end: i + 1 };
+    if (src[i] === '$' && src[i + 1] === '{') {
+      const { text, end } = readTemplateExpression(src, i + 2);
+      const value = constantValues.get(text);
+      str += value === undefined ? `\${${text}}` : String(value);
+      i = end;
+      continue;
+    }
+    if (src[i] === '`') return { text: str, end: i + 1 };
     str += src[i++];
   }
   return { text: str, end: i };
@@ -287,17 +391,16 @@ function parseTool(block) {
 // Step 3: Generate markdown
 // ---------------------------------------------------------------------------
 
-/** Converts a tool name to a GitHub-compatible anchor (replaces _ with -). */
+/** Converts a tool name to the GitHub heading slug used by this document. */
 function anchor(name) {
-  return name.replace(/_/g, '-');
+  return name.toLowerCase();
 }
 
 function generateMarkdown(tools) {
-  const now = new Date().toISOString().slice(0, 10);
   const lines = [
     '# Tool Reference',
     '',
-    `> Auto-generated from \`index.js\` on ${now}.`,
+    '> Auto-generated from `index.js`.',
     '> Do not edit manually — run `npm run docs` to regenerate.',
     '',
     '## Tools',
