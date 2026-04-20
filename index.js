@@ -1219,6 +1219,7 @@ function createMcpServer() {
       fields: z.object({
         title:             z.string().optional(),
         logline:           z.string().optional(),
+        status:            z.string().optional().describe("Workflow status (e.g. 'draft', 'revision', 'complete'). Free text — no fixed vocabulary."),
         save_the_cat_beat: z.string().optional(),
         pov:               z.string().optional(),
         part:              z.number().int().optional(),
@@ -1307,6 +1308,45 @@ function createMcpServer() {
           return errorResponse("STALE_PATH", `Character file for '${character_id}' not found at indexed path — the file may have moved. Run sync() to refresh.`, { indexed_path: char.file_path });
         }
         return errorResponse("IO_ERROR", `Failed to write character metadata for '${character_id}': ${err.message}`);
+      }
+    }
+  );
+
+  // ---- update_place_sheet --------------------------------------------------
+  s.tool(
+    "update_place_sheet",
+    "Update structured metadata fields for a place (name, associated_characters, tags). Writes to the .meta.yaml sidecar — never modifies the prose notes file. Changes are immediately reflected in the index. Only available when the sync dir is writable.",
+    {
+      place_id: z.string().describe("The place_id to update (e.g. 'place-harbor-district'). Use list_places to find valid IDs."),
+      fields: z.object({
+        name:                  z.string().optional(),
+        associated_characters: z.array(z.string()).optional(),
+        tags:                  z.array(z.string()).optional(),
+      }).describe("Fields to update. Only supplied keys are changed."),
+    },
+    async ({ place_id, fields }) => {
+      if (!SYNC_DIR_WRITABLE) {
+        return errorResponse("READ_ONLY", "Cannot update place: sync dir is read-only.");
+      }
+      const place = db.prepare(`SELECT file_path FROM places WHERE place_id = ?`).get(place_id);
+      if (!place) {
+        return errorResponse("NOT_FOUND", `Place '${place_id}' not found.`);
+      }
+      try {
+        const { meta } = readMeta(place.file_path, SYNC_DIR, { writable: true });
+        const updated = { ...meta, ...fields };
+        writeMeta(place.file_path, updated);
+
+        // Update DB directly
+        db.prepare(`UPDATE places SET name = ? WHERE place_id = ?`)
+          .run(updated.name ?? meta.name ?? place_id, place_id);
+
+        return { content: [{ type: "text", text: `Updated place sheet for '${place_id}'.` }] };
+      } catch (err) {
+        if (err.code === "ENOENT") {
+          return errorResponse("STALE_PATH", `Place file for '${place_id}' not found at indexed path — the file may have moved. Run sync() to refresh.`, { indexed_path: place.file_path });
+        }
+        return errorResponse("IO_ERROR", `Failed to write place metadata for '${place_id}': ${err.message}`);
       }
     }
   );
