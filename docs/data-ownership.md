@@ -9,7 +9,7 @@ The importer is the authoritative writer for Scrivener-imported prose; any edits
 | File | Writer | Fields written | Behavior on re-import |
 |---|---|---|---|
 | `scenes/**/*.md` | **Scrivener / importer** | Full prose content | **Unconditionally overwritten.** Never edit `.md` files directly — changes will be lost on the next import. |
-| `scenes/**/*.meta.yaml` | **Importer** (Scrivener fields) + **AI agent** (enrichment fields) | Importer writes: `scene_id`, `external_source`, `external_id` (always); `title`, `timeline_position`, `save_the_cat_beat` (from Scrivener metadata, also writable by agents via `update_scene_metadata`) | Importer spreads existing sidecar first, then overlays only its fields. All other fields (logline, status, tags, characters, notes, flags, …) are preserved across re-imports. |
+| `scenes/**/*.meta.yaml` | **Importer** (Scrivener fields) + **AI agent** (enrichment fields) | **Importer-authoritative:** `scene_id`, `external_source`, `external_id`, `title`, `timeline_position`, `save_the_cat_beat`. **Agent-writable:** `logline`, `status`, `tags`, `characters`, `places`, `pov`, `part`, `chapter`, `story_time`, `notes`, `flags` (and others). | Importer spreads existing sidecar first, then overwrites only its authoritative fields. Agent edits to importer-controlled fields are **reverted on next import**. All other fields are safely preserved. |
 
 **Rule:** write AI-side fields via the appropriate tool — never touch the Scrivener-controlled fields manually or the importer will overwrite them.
 - `update_scene_metadata` supports: `logline`, `status`, `tags`, `characters`, `places`, `pov`, `part`, `chapter`, `timeline_position`, `story_time`, `save_the_cat_beat`, `title`.

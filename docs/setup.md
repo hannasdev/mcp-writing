@@ -212,8 +212,10 @@ npm run new:entity -- --sync-dir /path/to/sync-root --kind character --scope uni
 ```
 
 ```sh
-npm run new:entity -- --sync-dir /path/to/sync-root --kind place --scope project --project my-series/book-1 --name "University Hospital"
+npm run new:entity -- --sync-dir /path/to/sync-root --kind place --scope project --project standalone-novel --name "University Hospital"
 ```
+
+> **Note:** The scaffold script only supports standalone projects (`--scope project` without a slash). For book-local entities under `universes/<universe>/<project>/world/`, use `create_place_sheet` and `create_character_sheet` tools or create the folders manually.
 
 This creates:
 

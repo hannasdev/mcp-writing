@@ -135,7 +135,7 @@ Recommended git config:
 
 ```sh
 git config gpg.format ssh
-git config user.signingkey /root/.ssh/id_ed25519_signing
+git config user.signingkey /ssh/id_ed25519_signing
 git config commit.gpgsign true
 git config pull.ff only
 ```
