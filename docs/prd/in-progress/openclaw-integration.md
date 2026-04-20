@@ -45,7 +45,7 @@ Current signals of progress:
 
 ## Known Dependencies
 
-- `writing-mcp` requires Node.js 18+
+- `writing-mcp` requires Node.js 22.6.0+
 - Requires git CLI available in container
 - Requires read/write access to sync folder (detect and warn if read-only)
 - SQLite database stored in named volume for persistence

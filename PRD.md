@@ -145,15 +145,15 @@ See [ideas-and-questions.md](docs/prd/inbox/ideas-and-questions.md) for:
 ### Prose Tools (loads file content)
 
 - `get_scene_prose(scene_id)` — current prose
-- `get_chapter_prose(part, chapter)` — all scenes in a chapter
+- `get_chapter_prose(project_id, part, chapter)` — all scenes in a chapter
 - `list_snapshots(scene_id)` — git commit history
 
 ### Editing Tools (two-step confirm)
 
 - `propose_edit(scene_id, instruction, revised_prose)` — stage a change
-- `commit_edit(proposal_id)` — apply it (git-backed)
+- `commit_edit(scene_id, proposal_id)` — apply it (git-backed)
 - `discard_edit(proposal_id)` — reject it
-- `snapshot_scene(scene_id, reason)` — manual restore point
+- `snapshot_scene(scene_id, project_id, reason)` — manual restore point
 
 ### Metadata Update Tools (write to sidecars)
 

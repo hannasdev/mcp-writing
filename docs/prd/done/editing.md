@@ -15,7 +15,7 @@ The sync folder is a git repository. Git provides version history instead of a `
 - Before any `commit_edit` write, the service runs `git add <file> && git commit -m "pre-edit snapshot: <scene_id> — <instruction>"`
 - `list_snapshots(scene_id)` is implemented as `git log <file>`
 - `get_scene_prose(scene_id, commit?)` for a past version is implemented as `git show <commit>:<file>`
-- Manual snapshots: call `snapshot_scene(scene_id, reason)` at any time to commit the current state
+- Manual snapshots: call `snapshot_scene(scene_id, project_id, reason)` at any time to commit the current state
 
 ### Remote (Strongly Recommended)
 
@@ -43,7 +43,7 @@ The AI can never write prose in a single step. All prose edits require explicit 
 
 1. **Propose:** `propose_edit(scene_id, instruction, revised_prose)` stages the change and returns a `proposal_id`
 2. **Review:** User sees a diff preview of the proposed change
-3. **Decide:** Either `commit_edit(proposal_id)` to apply or `discard_edit(proposal_id)` to reject
+3. **Decide:** Either `commit_edit(scene_id, proposal_id)` to apply or `discard_edit(proposal_id)` to reject
 
 Proposals are not persisted; a restart between propose and commit loses the proposal. This is acceptable for Phase 3 — proposals are temporary review staging, not saved work.
 
