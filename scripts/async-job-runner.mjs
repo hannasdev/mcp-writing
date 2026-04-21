@@ -9,20 +9,30 @@ function writeResult(resultPath, payload) {
 }
 
 function normalizeImportResult(importResult) {
+  const importPayload = {
+    source_dir: importResult.scrivenerDir,
+    sync_dir: importResult.mcpSyncDir,
+    scenes_dir: importResult.scenesDir,
+    project_id: importResult.projectId,
+    source_files: importResult.sourceFiles,
+    created: importResult.created,
+    existing: importResult.existing,
+    skipped: importResult.skipped,
+    beat_markers_seen: importResult.beatMarkersSeen,
+    dry_run: importResult.dryRun,
+    preflight: importResult.preflight,
+    ignored_files: importResult.ignoredFiles,
+  };
+
+  if (importResult.preflight) {
+    importPayload.files_to_process = importResult.filesToProcess;
+    importPayload.file_previews = importResult.filePreviews;
+    importPayload.existing_sidecars = importResult.existingSidecars;
+  }
+
   return {
     ok: true,
-    import: {
-      source_dir: importResult.scrivenerDir,
-      sync_dir: importResult.mcpSyncDir,
-      scenes_dir: importResult.scenesDir,
-      project_id: importResult.projectId,
-      source_files: importResult.sourceFiles,
-      created: importResult.created,
-      existing: importResult.existing,
-      skipped: importResult.skipped,
-      beat_markers_seen: importResult.beatMarkersSeen,
-      dry_run: importResult.dryRun,
-    },
+    import: importPayload,
     sync: null,
   };
 }

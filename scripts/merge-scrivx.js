@@ -16,10 +16,10 @@
  *   synopsis          - from Files/Data/<UUID>/synopsis.txt
  *   characters        - from Scrivener keywords (character names)
  *   save_the_cat_beat - from the savethecat! custom field (if present)
- *   causality         - integer rating (0 = unset)
- *   stakes            - integer rating
- *   change            - integer rating
- *   scene_functions   - array of active function flags: character, mood, theme
+  *   causality         - integer rating (0 = unset)
+  *   stakes            - integer rating
+  *   scene_change      - string value from the "change" custom field
+  *   scene_functions   - array of active function flags: character, mood, theme
  *
  * Fields are only written if they have a meaningful value (non-empty, non-zero).
  * Existing sidecar values are preserved and not overwritten by this script.

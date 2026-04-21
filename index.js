@@ -39,7 +39,7 @@ function pruneAsyncJobs() {
   const now = Date.now();
   for (const [id, job] of asyncJobs.entries()) {
     if (!job.finishedAt) continue;
-    if (now - job.finishedAt > ASYNC_JOB_TTL_MS) {
+    if (now - Date.parse(job.finishedAt) > ASYNC_JOB_TTL_MS) {
       try {
         if (job.requestPath && fs.existsSync(job.requestPath)) fs.unlinkSync(job.requestPath);
         if (job.resultPath && fs.existsSync(job.resultPath)) fs.unlinkSync(job.resultPath);
@@ -127,6 +127,10 @@ function startAsyncJob({ kind, requestPayload, onComplete }) {
   });
 
   child.on("exit", () => {
+    if (job.status === "cancelled") {
+      pruneAsyncJobs();
+      return;
+    }
     const payload = readJsonIfExists(resultPath);
     const successful = payload?.ok === true;
     job.status = successful ? "completed" : "failed";
@@ -672,6 +676,17 @@ function createMcpServer() {
       const resolvedScenesDir = scenes_dir
         ?? (project_id ? path.join(resolveProjectRoot(project_id), "scenes") : undefined);
 
+      if (resolvedScenesDir) {
+        const rel = path.relative(SYNC_DIR_ABS, path.resolve(resolvedScenesDir));
+        if (rel.startsWith("..") || path.isAbsolute(rel)) {
+          return errorResponse(
+            "INVALID_SCENES_DIR",
+            "scenes_dir must be inside WRITING_SYNC_DIR.",
+            { scenes_dir: resolvedScenesDir, sync_dir: SYNC_DIR_ABS }
+          );
+        }
+      }
+
       let mergeResult;
       try {
         mergeResult = mergeScrivenerProjectMetadata({
@@ -838,6 +853,17 @@ function createMcpServer() {
 
       const resolvedScenesDir = scenes_dir
         ?? (project_id ? path.join(resolveProjectRoot(project_id), "scenes") : undefined);
+
+      if (resolvedScenesDir) {
+        const rel = path.relative(SYNC_DIR_ABS, path.resolve(resolvedScenesDir));
+        if (rel.startsWith("..") || path.isAbsolute(rel)) {
+          return errorResponse(
+            "INVALID_SCENES_DIR",
+            "scenes_dir must be inside WRITING_SYNC_DIR.",
+            { scenes_dir: resolvedScenesDir, sync_dir: SYNC_DIR_ABS }
+          );
+        }
+      }
 
       const job = startAsyncJob({
         kind: "merge_scrivener_project_beta",

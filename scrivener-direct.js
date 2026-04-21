@@ -92,11 +92,16 @@ export function loadScrivenerProjectData(scrivPath) {
   }
 
   const scrivxFiles = fs.readdirSync(scrivPathAbs).filter(f => f.endsWith(".scrivx"));
-  if (!scrivxFiles.length) {
+  const scrivxFilesSorted = scrivxFiles.sort((a, b) => a.localeCompare(b));
+  if (!scrivxFilesSorted.length) {
     throw new Error(`No .scrivx file found in ${scrivPathAbs}`);
   }
 
-  const scrivxPath = path.join(scrivPathAbs, scrivxFiles[0]);
+  const bundleName = path.parse(scrivPathAbs).name;
+  const preferredScrivx =
+    scrivxFilesSorted.find(f => path.parse(f).name.toLowerCase() === bundleName.toLowerCase())
+    ?? scrivxFilesSorted[0];
+  const scrivxPath = path.join(scrivPathAbs, preferredScrivx);
   const dataDir = path.join(scrivPathAbs, "Files", "Data");
 
   const xml = fs.readFileSync(scrivxPath, "utf8");
@@ -212,8 +217,17 @@ export function mergeScrivenerProjectMetadata({
   const mcpSyncDirAbs = path.resolve(mcpSyncDir);
   const resolvedProjectId = projectId
     ?? path.basename(mcpSyncDirAbs).replace(/[^a-z0-9-]/gi, "-").toLowerCase();
+
+  function deriveProjectRoot(pid) {
+    if (pid.includes("/")) {
+      const [universeId, projectSlug] = pid.split("/");
+      return path.join(mcpSyncDirAbs, "universes", universeId, projectSlug);
+    }
+    return path.join(mcpSyncDirAbs, "projects", pid);
+  }
+
   const scenesDir = scenesDirOverride
-    ?? path.join(mcpSyncDirAbs, "projects", resolvedProjectId, "scenes");
+    ?? path.join(deriveProjectRoot(resolvedProjectId), "scenes");
 
   if (!fs.existsSync(scenesDir)) {
     throw new Error(`Scenes directory not found: ${scenesDir}`);
