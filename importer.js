@@ -84,6 +84,21 @@ function walkSorted(dir) {
   return files.sort((a, b) => path.basename(a).localeCompare(path.basename(b)));
 }
 
+function compileIgnorePatterns(patterns) {
+  return patterns.map((pattern) => {
+    try {
+      return new RegExp(pattern);
+    } catch (err) {
+      const error = new Error(
+        `Invalid ignore pattern '${pattern}': ${err instanceof Error ? err.message : String(err)}`
+      );
+      error.code = "INVALID_IGNORE_PATTERN";
+      error.pattern = pattern;
+      throw error;
+    }
+  });
+}
+
 function loadYamlFile(filePath) {
   try {
     return yaml.load(fs.readFileSync(filePath, "utf8")) ?? {};
@@ -243,7 +258,7 @@ export function importScrivenerSync({
   const hasDraft = fs.existsSync(draftDir);
   const draftRoot = hasDraft ? draftDir : scrivenerDirAbs;
 
-  const compiledIgnorePatterns = ignorePatterns.map(p => new RegExp(p));
+  const compiledIgnorePatterns = compileIgnorePatterns(ignorePatterns);
 
   function isIgnored(filename) {
     return compiledIgnorePatterns.some(re => re.test(filename));

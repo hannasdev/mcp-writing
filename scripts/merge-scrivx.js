@@ -16,16 +16,17 @@
  *   synopsis          - from Files/Data/<UUID>/synopsis.txt
  *   characters        - from Scrivener keywords (character names)
  *   save_the_cat_beat - from the savethecat! custom field (if present)
-  *   causality         - integer rating (0 = unset)
-  *   stakes            - integer rating
-  *   scene_change      - string value from the "change" custom field
-  *   scene_functions   - array of active function flags: character, mood, theme
+ *   causality         - integer rating (0 = unset)
+ *   stakes            - integer rating
+ *   scene_change      - string value from the "change" custom field
+ *   scene_functions   - array of active function flags: character, mood, theme
  *
  * Fields are only written if they have a meaningful value (non-empty, non-zero).
  * Existing sidecar values are preserved and not overwritten by this script.
  */
 
 import path from "node:path";
+import { validateProjectId } from "../importer.js";
 import { mergeScrivenerProjectMetadata } from "../scrivener-direct.js";
 
 // ---------------------------------------------------------------------------
@@ -44,6 +45,12 @@ const projectIdx = args.indexOf("--project");
 const projectId  = projectIdx !== -1
   ? args[projectIdx + 1]
   : path.basename(mcpSyncDir).replace(/[^a-z0-9-]/gi, "-").toLowerCase();
+
+const projectIdCheck = validateProjectId(projectId);
+if (!projectIdCheck.ok) {
+  console.error(`Invalid project id '${projectId}': ${projectIdCheck.reason}`);
+  process.exit(1);
+}
 
 try {
   mergeScrivenerProjectMetadata({
