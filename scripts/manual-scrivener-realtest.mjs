@@ -1,35 +1,35 @@
 import fs from "node:fs";
 import path from "node:path";
+import os from "node:os";
 import { importScrivenerSync, validateProjectId } from "../importer.js";
 import { mergeScrivenerProjectMetadata } from "../scrivener-direct.js";
 
 function usage() {
-  console.error(
-    [
-      "Usage:",
-      "  node scripts/manual-scrivener-realtest.mjs \\",
-      "    --source-dir <external-sync-dir> \\",
-      "    --scriv-path <copied-project.scriv> \\",
-      "    --project-id <project|universe/project> [options]",
-      "",
-      "Keep large real-data test assets outside the repository so they cannot be",
-      "accidentally committed. Example external storage location:",
-      "  /Users/hanna/.mcp-writing-manual-data/",
-      "",
-      "Options:",
-      "  --sync-dir <path>       Temp sync root to write into.",
-      "                         Default: ./tmp/manual-realtest-sync",
-      "  --sample-count <n>      Number of sample sidecars to include. Default: 5",
-      "  --no-clean              Reuse existing sync dir instead of recreating it.",
-      "",
-      "Example:",
-      "  npm run manual:realtest -- \\",
-      "    --source-dir /Users/hanna/Code/writing/universes/universe-1/book-1-the-lamb \\",
-      "    --scriv-path /Users/hanna/.mcp-writing-manual-data/manual-test-data/Sebastian\\ the\\ Vampire.scriv \\",
-      "    --project-id universe-1/book-1-the-lamb \\",
-      "    --sync-dir /Users/hanna/.mcp-writing-manual-data/manual-realtest-sync",
-    ].join("\n")
-  );
+  return [
+    "Usage:",
+    "  node scripts/manual-scrivener-realtest.mjs \\",
+    "    --source-dir <external-sync-dir> \\",
+    "    --scriv-path <copied-project.scriv> \\",
+    "    --project-id <project|universe/project> [options]",
+    "",
+    "Keep large real-data test assets outside the repository so they cannot be",
+    "accidentally committed. Example external storage location:",
+    "  $HOME/.mcp-writing-manual-data/",
+    "",
+    "Options:",
+    "  --help                  Show this help message.",
+    "  --sync-dir <path>       Temp sync root to write into.",
+    "                         Default: ./tmp/manual-realtest-sync",
+    "  --sample-count <n>      Number of sample sidecars to include. Default: 5",
+    "  --no-clean              Reuse existing sync dir instead of recreating it.",
+    "",
+    "Example:",
+    "  npm run manual:realtest -- \\",
+    "    --source-dir <path-to-external-sync-source> \\",
+    "    --scriv-path <path-to-external-test-data>/<project-name>.scriv \\",
+    "    --project-id <universe>/<project-name> \\",
+    "    --sync-dir <path-to-external-test-data>/manual-realtest-sync",
+  ].join("\n");
 }
 
 function parseArgs(argv) {
@@ -37,29 +37,48 @@ function parseArgs(argv) {
     syncDir: "./tmp/manual-realtest-sync",
     sampleCount: 5,
     clean: true,
+    help: false,
   };
 
   for (let index = 0; index < argv.length; index++) {
     const arg = argv[index];
-    if (arg === "--source-dir") options.sourceDir = argv[++index];
-    else if (arg === "--scriv-path") options.scrivPath = argv[++index];
-    else if (arg === "--project-id") options.projectId = argv[++index];
-    else if (arg === "--sync-dir") options.syncDir = argv[++index];
-    else if (arg === "--sample-count") options.sampleCount = parseInt(argv[++index], 10);
-    else if (arg === "--no-clean") options.clean = false;
-    else throw new Error(`Unknown argument: ${arg}`);
+    if (arg === "--help") {
+      options.help = true;
+    } else if (arg === "--source-dir") {
+      if (index + 1 >= argv.length) throw new Error(`${arg} requires a value.`);
+      options.sourceDir = argv[++index];
+    } else if (arg === "--scriv-path") {
+      if (index + 1 >= argv.length) throw new Error(`${arg} requires a value.`);
+      options.scrivPath = argv[++index];
+    } else if (arg === "--project-id") {
+      if (index + 1 >= argv.length) throw new Error(`${arg} requires a value.`);
+      options.projectId = argv[++index];
+    } else if (arg === "--sync-dir") {
+      if (index + 1 >= argv.length) throw new Error(`${arg} requires a value.`);
+      options.syncDir = argv[++index];
+    } else if (arg === "--sample-count") {
+      if (index + 1 >= argv.length) throw new Error(`${arg} requires a value.`);
+      options.sampleCount = parseInt(argv[++index], 10);
+    } else if (arg === "--no-clean") {
+      options.clean = false;
+    } else {
+      throw new Error(`Unknown argument: ${arg}`);
+    }
   }
 
+  return options;
+}
+
+function validateOptions(options) {
+  if (options.help) return;
+
   if (!options.sourceDir || !options.scrivPath || !options.projectId) {
-    usage();
-    throw new Error("Missing required arguments.");
+    throw new Error("Missing required arguments: --source-dir, --scriv-path, --project-id are required.");
   }
 
   if (!Number.isInteger(options.sampleCount) || options.sampleCount < 1) {
     throw new Error("--sample-count must be a positive integer.");
   }
-
-  return options;
 }
 
 function walkSidecars(dir, out = []) {
@@ -116,8 +135,34 @@ function runStep(name, fn) {
   }
 }
 
+function isSafeToDeletSync(syncDir) {
+  const resolvedPath = path.resolve(syncDir);
+
+  // Never delete root or home directory
+  const parsed = path.parse(resolvedPath);
+  if (resolvedPath === parsed.root || resolvedPath === path.resolve(process.env.HOME || os.homedir())) {
+    return false;
+  }
+
+  // Allow deletion only if path contains a manual-realtest marker or is in ./tmp or /tmp
+  const hasMarker = resolvedPath.includes("manual-realtest");
+  const inTmpDir =
+    resolvedPath.startsWith(path.resolve("./tmp")) ||
+    resolvedPath.startsWith("/tmp") ||
+    resolvedPath.startsWith(path.join(path.sep, "tmp"));
+  return hasMarker || inTmpDir;
+}
+
 function main() {
   const options = parseArgs(process.argv.slice(2));
+
+  if (options.help) {
+    console.log(usage());
+    process.exit(0);
+  }
+
+  validateOptions(options);
+
   const projectIdCheck = validateProjectId(options.projectId);
   if (!projectIdCheck.ok) {
     throw new Error(`Invalid --project-id '${options.projectId}': ${projectIdCheck.reason}`);
@@ -135,6 +180,11 @@ function main() {
   }
 
   if (options.clean) {
+    if (!isSafeToDeletSync(syncDir)) {
+      throw new Error(
+        `Safety check failed: --sync-dir must contain 'manual-realtest' or be in ./tmp or /tmp. Got: ${syncDir}`
+      );
+    }
     fs.rmSync(syncDir, { recursive: true, force: true });
   }
   fs.mkdirSync(syncDir, { recursive: true });
@@ -193,4 +243,10 @@ function main() {
   if (failures.length) process.exit(1);
 }
 
-main();
+try {
+  main();
+} catch (err) {
+  console.error(err.message);
+  console.error(usage());
+  process.exit(1);
+}
