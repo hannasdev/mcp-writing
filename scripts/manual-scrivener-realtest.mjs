@@ -135,7 +135,7 @@ function runStep(name, fn) {
   }
 }
 
-function isSafeToDeletSync(syncDir) {
+function isSafeToDeleteSync(syncDir) {
   const resolvedPath = path.resolve(syncDir);
 
   // Never delete root or home directory
@@ -146,10 +146,15 @@ function isSafeToDeletSync(syncDir) {
 
   // Allow deletion only if path contains a manual-realtest marker or is in ./tmp or /tmp
   const hasMarker = resolvedPath.includes("manual-realtest");
-  const inTmpDir =
-    resolvedPath.startsWith(path.resolve("./tmp")) ||
-    resolvedPath.startsWith("/tmp") ||
-    resolvedPath.startsWith(path.join(path.sep, "tmp"));
+  
+  // Check if in tmp directories with proper path boundary checking
+  const localTmpDir = path.resolve("./tmp");
+  const isInLocalTmp =
+    resolvedPath === localTmpDir || resolvedPath.startsWith(localTmpDir + path.sep);
+  const isInSystemTmp =
+    resolvedPath === "/tmp" || resolvedPath.startsWith("/tmp" + path.sep);
+  const inTmpDir = isInLocalTmp || isInSystemTmp;
+  
   return hasMarker || inTmpDir;
 }
 
@@ -180,7 +185,7 @@ function main() {
   }
 
   if (options.clean) {
-    if (!isSafeToDeletSync(syncDir)) {
+    if (!isSafeToDeleteSync(syncDir)) {
       throw new Error(
         `Safety check failed: --sync-dir must contain 'manual-realtest' or be in ./tmp or /tmp. Got: ${syncDir}`
       );
@@ -246,7 +251,7 @@ function main() {
 try {
   main();
 } catch (err) {
-  console.error(err.message);
+  console.error(err instanceof Error ? err.message : String(err));
   console.error(usage());
   process.exit(1);
 }
