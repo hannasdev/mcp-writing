@@ -23,6 +23,7 @@
   "scripts": {
     "start": "node --experimental-sqlite index.js",
     "new:entity": "node scripts/new-world-entity.js",
+    "manual:realtest": "node scripts/manual-scrivener-realtest.mjs",
     "setup:openclaw-env": "sh scripts/setup-openclaw-env.sh",
     "release": "release-it",
     "lint": "eslint index.js importer.js db.js sync.js metadata-lint.js scripts/",
