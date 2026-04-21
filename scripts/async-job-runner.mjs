@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { importScrivenerSync } from "../importer.js";
 import { mergeScrivenerProjectMetadata } from "../scrivener-direct.js";
+import { runSceneCharacterBatch } from "../scene-character-batch.js";
 
 function writeResult(resultPath, payload) {
   fs.mkdirSync(path.dirname(resultPath), { recursive: true });
@@ -68,6 +69,13 @@ function normalizeMergeResult(mergeResult) {
   };
 }
 
+function normalizeSceneCharacterBatchResult(batchResult) {
+  return {
+    ok: true,
+    ...batchResult,
+  };
+}
+
 function main() {
   const requestPath = process.argv[2];
   const resultPath = process.argv[3];
@@ -104,6 +112,26 @@ function main() {
       dryRun: Boolean(request.args?.dry_run),
     });
     writeResult(resultPath, normalizeMergeResult(result));
+    return;
+  }
+
+  if (request.kind === "enrich_scene_characters_batch") {
+    const result = runSceneCharacterBatch({
+      syncDir,
+      dbPath: request.context?.db_path ?? process.env.DB_PATH ?? "./writing.db",
+      args: {
+        project_id: request.args?.project_id,
+        scene_ids: request.args?.scene_ids,
+        part: request.args?.part,
+        chapter: request.args?.chapter,
+        only_stale: Boolean(request.args?.only_stale),
+        dry_run: Boolean(request.args?.dry_run),
+        replace_mode: request.args?.replace_mode ?? "merge",
+        max_scenes: request.args?.max_scenes ?? 200,
+        include_match_details: Boolean(request.args?.include_match_details),
+      },
+    });
+    writeResult(resultPath, normalizeSceneCharacterBatchResult(result));
     return;
   }
 

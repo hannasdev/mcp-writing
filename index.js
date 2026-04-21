@@ -1063,6 +1063,85 @@ function createMcpServer() {
   );
 
   s.tool(
+    "enrich_scene_characters_batch",
+    "Start an asynchronous batch job that infers scene character mentions and updates scene metadata links. Defaults to dry_run=true.",
+    {
+      project_id: z.string().describe("Project ID (e.g. 'the-lamb' or 'universe-1/book-1-the-lamb')."),
+      scene_ids: z.array(z.string()).optional().describe("Optional allowlist of scene IDs to process before other filters are applied."),
+      part: z.number().int().optional().describe("Optional part number filter."),
+      chapter: z.number().int().optional().describe("Optional chapter number filter."),
+      only_stale: z.boolean().optional().describe("If true, only process scenes currently marked metadata_stale."),
+      dry_run: z.boolean().optional().describe("If true (default), returns preview results without writing sidecars."),
+      replace_mode: z.enum(["merge", "replace"]).optional().describe("merge (default): add inferred IDs; replace: overwrite characters with inferred IDs."),
+      max_scenes: z.number().int().positive().optional().describe("Hard guardrail for resolved scene count (default: 200)."),
+      include_match_details: z.boolean().optional().describe("If true, include extra match diagnostics per scene."),
+      confirm_replace: z.boolean().optional().describe("Must be true when replace_mode=replace."),
+    },
+    async ({
+      project_id,
+      scene_ids,
+      part,
+      chapter,
+      only_stale = false,
+      dry_run = true,
+      replace_mode = "merge",
+      max_scenes = 200,
+      include_match_details = false,
+      confirm_replace = false,
+    }) => {
+      const projectIdCheck = validateProjectId(project_id);
+      if (!projectIdCheck.ok) {
+        return errorResponse("INVALID_PROJECT_ID", projectIdCheck.reason, { project_id });
+      }
+
+      if (replace_mode === "replace" && !confirm_replace) {
+        return errorResponse(
+          "VALIDATION_ERROR",
+          "replace_mode=replace requires confirm_replace=true.",
+          { replace_mode, confirm_replace }
+        );
+      }
+
+      if (!dry_run && !SYNC_DIR_WRITABLE) {
+        return errorResponse(
+          "READ_ONLY",
+          "Cannot run batch character enrichment in write mode: sync dir is read-only.",
+          { sync_dir: SYNC_DIR_ABS }
+        );
+      }
+
+      const job = startAsyncJob({
+        kind: "enrich_scene_characters_batch",
+        requestPayload: {
+          kind: "enrich_scene_characters_batch",
+          args: {
+            project_id,
+            scene_ids,
+            part,
+            chapter,
+            only_stale: Boolean(only_stale),
+            dry_run: Boolean(dry_run),
+            replace_mode,
+            max_scenes,
+            include_match_details: Boolean(include_match_details),
+          },
+          context: {
+            sync_dir: SYNC_DIR,
+            db_path: DB_PATH,
+          },
+        },
+      });
+
+      return jsonResponse({
+        ok: true,
+        async: true,
+        job: toPublicJob(job, false),
+        next_step: "Call get_async_job_status with job_id until status is 'completed', 'failed', or 'cancelled'.",
+      });
+    }
+  );
+
+  s.tool(
     "get_async_job_status",
     "Get status and result for an asynchronous job started by import_scrivener_sync_async or merge_scrivener_project_beta_async.",
     {

@@ -914,6 +914,63 @@ describe("async import/merge job tools", () => {
   });
 });
 
+describe("enrich_scene_characters_batch tool", () => {
+  test("requires confirm_replace when replace_mode=replace", async () => {
+    const text = await callWriteTool("enrich_scene_characters_batch", {
+      project_id: "test-novel",
+      replace_mode: "replace",
+      dry_run: true,
+    });
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.ok, false);
+    assert.equal(parsed.error.code, "VALIDATION_ERROR");
+  });
+
+  test("runs async dry-run and returns batch result payload", async () => {
+    await callWriteTool("sync");
+
+    const startText = await callWriteTool("enrich_scene_characters_batch", {
+      project_id: "test-novel",
+      dry_run: true,
+      include_match_details: true,
+    });
+    const started = JSON.parse(startText);
+
+    assert.equal(started.ok, true);
+    assert.equal(started.async, true);
+    assert.equal(typeof started.job.job_id, "string");
+
+    const done = await waitForAsyncJob(started.job.job_id);
+    assert.equal(done.ok, true);
+    assert.equal(done.job.status, "completed");
+    assert.equal(done.job.result.ok, true);
+    assert.equal(done.job.result.project_id, "test-novel");
+    assert.equal(typeof done.job.result.total_scenes, "number");
+    assert.equal(typeof done.job.result.processed_scenes, "number");
+    assert.ok(Array.isArray(done.job.result.results));
+  });
+
+  test("returns completed async job with total_scenes=0 when filters match nothing", async () => {
+    await callWriteTool("sync");
+
+    const startText = await callWriteTool("enrich_scene_characters_batch", {
+      project_id: "test-novel",
+      part: 99,
+      dry_run: true,
+    });
+    const started = JSON.parse(startText);
+    const done = await waitForAsyncJob(started.job.job_id);
+
+    assert.equal(done.ok, true);
+    assert.equal(done.job.status, "completed");
+    assert.equal(done.job.result.ok, true);
+    assert.equal(done.job.result.total_scenes, 0);
+    assert.equal(done.job.result.processed_scenes, 0);
+    assert.deepEqual(done.job.result.results, []);
+  });
+});
+
 describe("sync warning_summary", () => {
   test("sync response includes warning_summary instead of raw warning list for import+sync", async () => {
     const projectId = "warning-summary-test";
