@@ -119,12 +119,14 @@ function toPublicJob(job, includeResult = true) {
     finished_at: job.finishedAt,
     pid: job.pid,
     error: job.error,
+    ...(job.progress ? { progress: job.progress } : {}),
     ...(includeResult ? { result: job.result } : {}),
   };
 }
 
 function startAsyncJob({ kind, requestPayload, onComplete }) {
   pruneAsyncJobs();
+  const progressPrefix = "__MCP_ASYNC_PROGRESS__ ";
 
   const id = randomUUID();
   const tmpPrefix = path.join(os.tmpdir(), "mcp-writing-job-");
@@ -156,14 +158,38 @@ function startAsyncJob({ kind, requestPayload, onComplete }) {
     requestPath,
     resultPath,
     result: null,
+    progress: null,
     error: null,
     onComplete,
     child,
   };
   asyncJobs.set(id, job);
 
-  child.stdout.on("data", () => {
-    // worker writes structured output to resultPath; stdout is ignored here
+  let stdoutBuffer = "";
+  child.stdout.on("data", (chunk) => {
+    stdoutBuffer += chunk.toString("utf8");
+    const lines = stdoutBuffer.split("\n");
+    stdoutBuffer = lines.pop() ?? "";
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed.startsWith(progressPrefix)) continue;
+      const payload = trimmed.slice(progressPrefix.length);
+      try {
+        const progress = JSON.parse(payload);
+        if (progress && typeof progress === "object") {
+          const nextProgress = {
+            total_scenes: Number(progress.total_scenes ?? 0),
+            processed_scenes: Number(progress.processed_scenes ?? 0),
+            scenes_changed: Number(progress.scenes_changed ?? 0),
+            failed_scenes: Number(progress.failed_scenes ?? 0),
+          };
+          job.progress = nextProgress;
+        }
+      } catch {
+        // Ignore malformed progress lines; they are best-effort telemetry.
+      }
+    }
   });
   child.stderr.on("data", () => {
     // avoid crashing on stderr backpressure for noisy runs
@@ -190,6 +216,15 @@ function startAsyncJob({ kind, requestPayload, onComplete }) {
 
     job.finishedAt = new Date().toISOString();
     job.result = payload;
+
+    if (payload && payload.ok === true) {
+      job.progress = {
+        total_scenes: Number(payload.total_scenes ?? job.progress?.total_scenes ?? 0),
+        processed_scenes: Number(payload.processed_scenes ?? job.progress?.processed_scenes ?? 0),
+        scenes_changed: Number(payload.scenes_changed ?? job.progress?.scenes_changed ?? 0),
+        failed_scenes: Number(payload.failed_scenes ?? job.progress?.failed_scenes ?? 0),
+      };
+    }
 
     if (job.status === "cancelling") {
       if (successful && !cancelledBySignal) {

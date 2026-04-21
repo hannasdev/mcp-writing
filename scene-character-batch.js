@@ -117,7 +117,7 @@ function resolveTargetScenes(db, {
   return db.prepare(query).all(...params);
 }
 
-export function runSceneCharacterBatch({ syncDir, dbPath, args }) {
+export function runSceneCharacterBatch({ syncDir, dbPath, args, onProgress }) {
   const {
     project_id,
     scene_ids,
@@ -161,10 +161,23 @@ export function runSceneCharacterBatch({ syncDir, dbPath, args }) {
     }
 
     const results = [];
+    let processed_scenes = 0;
     let scenes_changed = 0;
     let failed_scenes = 0;
     let links_added = 0;
     let links_removed = 0;
+
+    const emitProgress = () => {
+      if (typeof onProgress !== "function") return;
+      onProgress({
+        total_scenes: targetScenes.length,
+        processed_scenes,
+        scenes_changed,
+        failed_scenes,
+      });
+    };
+
+    emitProgress();
 
     for (const scene of targetScenes) {
       try {
@@ -198,7 +211,20 @@ export function runSceneCharacterBatch({ syncDir, dbPath, args }) {
           }).meta;
 
           writeMeta(scene.file_path, updatedMeta);
-          indexSceneFile(db, syncDir, scene.file_path, updatedMeta, prose);
+          try {
+            indexSceneFile(db, syncDir, scene.file_path, updatedMeta, prose);
+          } catch (indexErr) {
+            // Best-effort immediate repair retry for per-scene index write failures.
+            try {
+              indexSceneFile(db, syncDir, scene.file_path, updatedMeta, prose);
+            } catch (retryErr) {
+              const retryMessage = retryErr instanceof Error ? retryErr.message : String(retryErr);
+              const firstMessage = indexErr instanceof Error ? indexErr.message : String(indexErr);
+              throw new Error(
+                `Sidecar write succeeded but reindex failed after retry. first_error='${firstMessage}' retry_error='${retryMessage}'.`
+              );
+            }
+          }
           db.prepare(`UPDATE scenes SET metadata_stale = 0 WHERE scene_id = ? AND project_id = ?`)
             .run(scene.scene_id, scene.project_id);
         }
@@ -237,6 +263,9 @@ export function runSceneCharacterBatch({ syncDir, dbPath, args }) {
           status: "failed",
           error: error instanceof Error ? error.message : String(error),
         });
+      } finally {
+        processed_scenes += 1;
+        emitProgress();
       }
     }
 
@@ -245,7 +274,7 @@ export function runSceneCharacterBatch({ syncDir, dbPath, args }) {
       project_id,
       dry_run: Boolean(dry_run),
       total_scenes: targetScenes.length,
-      processed_scenes: targetScenes.length,
+      processed_scenes,
       scenes_changed,
       failed_scenes,
       links_added,

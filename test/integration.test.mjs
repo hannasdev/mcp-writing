@@ -949,6 +949,9 @@ describe("enrich_scene_characters_batch tool", () => {
     assert.equal(typeof done.job.result.total_scenes, "number");
     assert.equal(typeof done.job.result.processed_scenes, "number");
     assert.ok(Array.isArray(done.job.result.results));
+    assert.equal(typeof done.job.progress?.total_scenes, "number");
+    assert.equal(typeof done.job.progress?.processed_scenes, "number");
+    assert.equal(done.job.progress?.processed_scenes, done.job.result.processed_scenes);
   });
 
   test("returns completed async job with total_scenes=0 when filters match nothing", async () => {

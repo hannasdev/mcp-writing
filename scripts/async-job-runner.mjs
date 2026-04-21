@@ -4,9 +4,19 @@ import { importScrivenerSync } from "../importer.js";
 import { mergeScrivenerProjectMetadata } from "../scrivener-direct.js";
 import { runSceneCharacterBatch } from "../scene-character-batch.js";
 
+const PROGRESS_PREFIX = "__MCP_ASYNC_PROGRESS__ ";
+
 function writeResult(resultPath, payload) {
   fs.mkdirSync(path.dirname(resultPath), { recursive: true });
   fs.writeFileSync(resultPath, JSON.stringify(payload, null, 2), "utf8");
+}
+
+function writeProgress(payload) {
+  try {
+    process.stdout.write(`${PROGRESS_PREFIX}${JSON.stringify(payload)}\n`);
+  } catch {
+    // Best-effort only; never fail the job due to progress telemetry.
+  }
 }
 
 function normalizeImportResult(importResult) {
@@ -130,6 +140,7 @@ function main() {
         max_scenes: request.args?.max_scenes ?? 200,
         include_match_details: Boolean(request.args?.include_match_details),
       },
+      onProgress: progress => writeProgress({ kind: request.kind, ...progress }),
     });
     writeResult(resultPath, normalizeSceneCharacterBatchResult(result));
     return;
