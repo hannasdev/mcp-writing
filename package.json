@@ -6,10 +6,12 @@
   "main": "index.js",
   "files": [
     "index.js",
+    "scrivener-direct.js",
     "importer.js",
     "db.js",
     "sync.js",
     "git.js",
+    "world-entity-templates.js",
     "metadata-lint.js",
     "scripts/",
     "README.md",

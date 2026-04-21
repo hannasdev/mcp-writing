@@ -21,7 +21,28 @@ import { mergeScrivenerProjectMetadata } from "./scrivener-direct.js";
 const SYNC_DIR = process.env.WRITING_SYNC_DIR ?? "./sync";
 const DB_PATH = process.env.DB_PATH ?? "./writing.db";
 const SYNC_DIR_ABS = path.resolve(SYNC_DIR);
+const SYNC_DIR_REAL = (() => {
+  try {
+    return fs.realpathSync(SYNC_DIR_ABS);
+  } catch {
+    return SYNC_DIR_ABS;
+  }
+})();
 const DB_PATH_DISPLAY = DB_PATH === ":memory:" ? DB_PATH : path.resolve(DB_PATH);
+
+function isPathInsideSyncDir(candidatePath) {
+  const resolvedCandidate = path.resolve(candidatePath);
+  const canonicalCandidate = (() => {
+    try {
+      return fs.realpathSync(resolvedCandidate);
+    } catch {
+      return resolvedCandidate;
+    }
+  })();
+
+  const rel = path.relative(SYNC_DIR_REAL, canonicalCandidate);
+  return !(rel.startsWith("..") || path.isAbsolute(rel));
+}
 
 function parsePositiveIntEnv(rawValue, defaultValue) {
   const parsed = parseInt(rawValue ?? String(defaultValue), 10);
@@ -801,12 +822,11 @@ function createMcpServer() {
       const normalizedScenesDir = resolvedScenesDir ? path.resolve(resolvedScenesDir) : undefined;
 
       if (normalizedScenesDir) {
-        const rel = path.relative(SYNC_DIR_ABS, normalizedScenesDir);
-        if (rel.startsWith("..") || path.isAbsolute(rel)) {
+        if (!isPathInsideSyncDir(normalizedScenesDir)) {
           return errorResponse(
             "INVALID_SCENES_DIR",
             "scenes_dir must be inside WRITING_SYNC_DIR.",
-            { scenes_dir: normalizedScenesDir, sync_dir: SYNC_DIR_ABS }
+            { scenes_dir: normalizedScenesDir, sync_dir: SYNC_DIR_ABS, sync_dir_real: SYNC_DIR_REAL }
           );
         }
       }
@@ -994,12 +1014,11 @@ function createMcpServer() {
       const normalizedScenesDir = resolvedScenesDir ? path.resolve(resolvedScenesDir) : undefined;
 
       if (normalizedScenesDir) {
-        const rel = path.relative(SYNC_DIR_ABS, normalizedScenesDir);
-        if (rel.startsWith("..") || path.isAbsolute(rel)) {
+        if (!isPathInsideSyncDir(normalizedScenesDir)) {
           return errorResponse(
             "INVALID_SCENES_DIR",
             "scenes_dir must be inside WRITING_SYNC_DIR.",
-            { scenes_dir: normalizedScenesDir, sync_dir: SYNC_DIR_ABS }
+            { scenes_dir: normalizedScenesDir, sync_dir: SYNC_DIR_ABS, sync_dir_real: SYNC_DIR_REAL }
           );
         }
       }

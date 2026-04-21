@@ -135,10 +135,13 @@ export function loadScrivenerProjectData(scrivPath) {
     if (!uuid) continue;
 
     const customFields = {};
-    for (const mdItem of item.getElementsByTagName("MetaDataItem")) {
-      const fieldId = text(children(mdItem, "FieldID")[0]);
-      const value = text(children(mdItem, "Value")[0]);
-      if (fieldId !== null) customFields[fieldId] = value;
+    const metaEl = children(item, "MetaData")[0];
+    if (metaEl) {
+      for (const mdItem of children(metaEl, "MetaDataItem")) {
+        const fieldId = text(children(mdItem, "FieldID")[0]);
+        const value = text(children(mdItem, "Value")[0]);
+        if (fieldId !== null) customFields[fieldId] = value;
+      }
     }
 
     const characters = [];
