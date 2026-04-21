@@ -728,14 +728,15 @@ function createMcpServer() {
 
       const resolvedScenesDir = scenes_dir
         ?? (project_id ? path.join(resolveProjectRoot(project_id), "scenes") : undefined);
+      const normalizedScenesDir = resolvedScenesDir ? path.resolve(resolvedScenesDir) : undefined;
 
-      if (resolvedScenesDir) {
-        const rel = path.relative(SYNC_DIR_ABS, path.resolve(resolvedScenesDir));
+      if (normalizedScenesDir) {
+        const rel = path.relative(SYNC_DIR_ABS, normalizedScenesDir);
         if (rel.startsWith("..") || path.isAbsolute(rel)) {
           return errorResponse(
             "INVALID_SCENES_DIR",
             "scenes_dir must be inside WRITING_SYNC_DIR.",
-            { scenes_dir: resolvedScenesDir, sync_dir: SYNC_DIR_ABS }
+            { scenes_dir: normalizedScenesDir, sync_dir: SYNC_DIR_ABS }
           );
         }
       }
@@ -746,7 +747,7 @@ function createMcpServer() {
           scrivPath: source_project_dir,
           mcpSyncDir: SYNC_DIR,
           projectId: project_id,
-          scenesDir: resolvedScenesDir,
+          scenesDir: normalizedScenesDir,
           dryRun: Boolean(dry_run),
         });
       } catch (error) {
@@ -920,14 +921,15 @@ function createMcpServer() {
 
       const resolvedScenesDir = scenes_dir
         ?? (project_id ? path.join(resolveProjectRoot(project_id), "scenes") : undefined);
+      const normalizedScenesDir = resolvedScenesDir ? path.resolve(resolvedScenesDir) : undefined;
 
-      if (resolvedScenesDir) {
-        const rel = path.relative(SYNC_DIR_ABS, path.resolve(resolvedScenesDir));
+      if (normalizedScenesDir) {
+        const rel = path.relative(SYNC_DIR_ABS, normalizedScenesDir);
         if (rel.startsWith("..") || path.isAbsolute(rel)) {
           return errorResponse(
             "INVALID_SCENES_DIR",
             "scenes_dir must be inside WRITING_SYNC_DIR.",
-            { scenes_dir: resolvedScenesDir, sync_dir: SYNC_DIR_ABS }
+            { scenes_dir: normalizedScenesDir, sync_dir: SYNC_DIR_ABS }
           );
         }
       }
@@ -939,7 +941,7 @@ function createMcpServer() {
           args: {
             source_project_dir,
             project_id,
-            scenes_dir: resolvedScenesDir,
+            scenes_dir: normalizedScenesDir,
             dry_run: Boolean(dry_run),
           },
           context: {
