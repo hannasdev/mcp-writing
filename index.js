@@ -48,6 +48,8 @@ const HTTP_PORT = parseInt(process.env.HTTP_PORT ?? "3000", 10);
 const MAX_CHAPTER_SCENES = parseInt(process.env.MAX_CHAPTER_SCENES ?? "10", 10);
 const DEFAULT_METADATA_PAGE_SIZE = parseInt(process.env.DEFAULT_METADATA_PAGE_SIZE ?? "20", 10);
 const ASYNC_JOB_TTL_MS = parsePositiveIntEnv(process.env.ASYNC_JOB_TTL_MS, 86400000);
+// Maximum time to wait for running async jobs to complete before forcing process exit on SIGTERM/SIGINT.
+const GRACEFUL_SHUTDOWN_TIMEOUT_MS = parsePositiveIntEnv(process.env.GRACEFUL_SHUTDOWN_TIMEOUT_MS, 30000);
 const OWNERSHIP_GUARD_MODE_RAW = (process.env.OWNERSHIP_GUARD_MODE ?? "warn").trim().toLowerCase();
 const OWNERSHIP_GUARD_MODE = OWNERSHIP_GUARD_MODE_RAW === "fail" || OWNERSHIP_GUARD_MODE_RAW === "warn"
   ? OWNERSHIP_GUARD_MODE_RAW
@@ -147,6 +149,13 @@ function startAsyncJob({ kind, requestPayload, onComplete }) {
   });
 
   child.on("error", (error) => {
+    if (job.status === "cancelling") {
+      job.status = "cancelled";
+      job.error = error.message;
+      job.finishedAt = new Date().toISOString();
+      pruneAsyncJobs();
+      return;
+    }
     job.status = "failed";
     job.error = error.message;
     job.finishedAt = new Date().toISOString();
@@ -154,7 +163,9 @@ function startAsyncJob({ kind, requestPayload, onComplete }) {
   });
 
   child.on("exit", () => {
-    if (job.status === "cancelled") {
+    if (job.status === "cancelling") {
+      job.status = "cancelled";
+      job.finishedAt = new Date().toISOString();
       pruneAsyncJobs();
       return;
     }
@@ -554,6 +565,50 @@ if (SHOULD_ENFORCE_OWNERSHIP_FAIL_GUARD && SYNC_OWNERSHIP_DIAGNOSTICS.non_runtim
 
 // Run sync on startup
 syncAll(db, SYNC_DIR, { writable: SYNC_DIR_WRITABLE });
+
+// ---------------------------------------------------------------------------
+// Graceful shutdown — drain running async jobs before exit
+// ---------------------------------------------------------------------------
+async function waitForRunningJobs() {
+  const running = [...asyncJobs.values()].filter(
+    (j) => j.status === "running" || j.status === "cancelling"
+  );
+  if (!running.length) return;
+
+  process.stderr.write(
+    `[mcp-writing] Waiting for ${running.length} async job(s) to finish (max ${GRACEFUL_SHUTDOWN_TIMEOUT_MS / 1000}s)...\n`
+  );
+  const deadline = Date.now() + GRACEFUL_SHUTDOWN_TIMEOUT_MS;
+  return new Promise((resolve) => {
+    const check = () => {
+      const stillRunning = [...asyncJobs.values()].filter(
+        (j) => j.status === "running" || j.status === "cancelling"
+      );
+      if (!stillRunning.length) {
+        resolve();
+        return;
+      }
+      if (Date.now() >= deadline) {
+        process.stderr.write(
+          `[mcp-writing] Shutdown timeout: force-killing ${stillRunning.length} remaining job(s).\n`
+        );
+        for (const job of stillRunning) {
+          try { job.child.kill("SIGKILL"); } catch { /* ignore */ }
+        }
+        resolve();
+        return;
+      }
+      setTimeout(check, 200);
+    };
+    check();
+  });
+}
+
+async function gracefulShutdown(signal) {
+  process.stderr.write(`[mcp-writing] Received ${signal}, shutting down gracefully.\n`);
+  await waitForRunningJobs();
+  process.exit(0);
+}
 
 // ---------------------------------------------------------------------------
 // MCP server factory
@@ -1033,13 +1088,15 @@ function createMcpServer() {
       } catch {
         // best-effort cancellation
       }
-      job.status = "cancelled";
-      job.finishedAt = new Date().toISOString();
+      // Transitional: signal sent but worker has not yet exited.
+      // Exit/error handlers will finalise status to "cancelled".
+      job.status = "cancelling";
 
       return jsonResponse({
         ok: true,
         async: true,
         cancelled: true,
+        message: "Cancellation requested. Poll get_async_job_status until status is 'cancelled'.",
         job: toPublicJob(job, false),
       });
     }
@@ -2318,3 +2375,7 @@ if (MCP_TRANSPORT === "stdio") {
     process.stderr.write(`[mcp-writing] Listening on port ${HTTP_PORT}\n`);
   });
 }
+
+// Register after transport setup so signal handlers can reference asyncJobs.
+process.on("SIGTERM", () => void gracefulShutdown("SIGTERM"));
+process.on("SIGINT",  () => void gracefulShutdown("SIGINT"));

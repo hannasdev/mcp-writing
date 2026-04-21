@@ -776,9 +776,72 @@ describe("async import/merge job tools", () => {
     assert.equal(done.job.result.merge.sidecar_files, 2);
     assert.equal(done.job.result.merge.updated, 2);
   });
-});
+  test("cancel_async_job sets transitional 'cancelling' status and resolves to terminal state", async () => {
+    const startText = await callWriteTool("import_scrivener_sync_async", {
+      source_dir: scrivenerImportDir,
+      project_id: "cancel-semantics-test",
+      dry_run: true,
+      auto_sync: false,
+    });
+    const started = JSON.parse(startText);
+    assert.equal(started.ok, true);
 
-describe("import preflight and ignore_patterns", () => {
+    const cancelText = await callWriteTool("cancel_async_job", {
+      job_id: started.job.job_id,
+    });
+    const cancelResult = JSON.parse(cancelText);
+    assert.equal(cancelResult.ok, true);
+
+    if (cancelResult.cancelled === true) {
+      // cancellation was accepted — status must be transitional, not yet finalised
+      assert.equal(
+        cancelResult.job.status,
+        "cancelling",
+        `cancel_async_job must return 'cancelling' (got '${cancelResult.job.status}'); ` +
+          "setting 'cancelled' immediately is the pre-fix optimistic bug."
+      );
+    } else {
+      // job already reached a terminal state before signal was delivered — acceptable race
+      assert.ok(
+        ["completed", "failed", "cancelled"].includes(cancelResult.job.status),
+        `Expected terminal status, got '${cancelResult.job.status}'`
+      );
+    }
+
+    // Regardless of race, polling must eventually reach a terminal state
+    const done = await waitForAsyncJob(started.job.job_id);
+    assert.ok(done.ok, "get_async_job_status must succeed");
+    assert.ok(
+      ["completed", "cancelled"].includes(done.job.status),
+      `Expected 'completed' or 'cancelled', got '${done.job.status}'`
+    );
+  });
+
+  test("cancel_async_job on already-completed job returns cancelled: false without mutation", async () => {
+    const startText = await callWriteTool("import_scrivener_sync_async", {
+      source_dir: scrivenerImportDir,
+      project_id: "cancel-after-done-test",
+      dry_run: true,
+      auto_sync: false,
+    });
+    const started = JSON.parse(startText);
+    assert.equal(started.ok, true);
+
+    // Wait for job to complete
+    const done = await waitForAsyncJob(started.job.job_id);
+    assert.equal(done.job.status, "completed");
+
+    // Now cancel the completed job
+    const cancelText = await callWriteTool("cancel_async_job", {
+      job_id: started.job.job_id,
+    });
+    const cancelResult = JSON.parse(cancelText);
+    assert.equal(cancelResult.ok, true);
+    assert.equal(cancelResult.cancelled, false);
+    assert.equal(cancelResult.job.status, "completed", "completed status must not be overwritten");
+  });
+
+
   test("preflight returns file list without writing anything", async () => {
     const projectId = "preflight-test";
     const scenesDir = path.join(writeSyncDir, "projects", projectId, "scenes");
