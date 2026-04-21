@@ -823,6 +823,32 @@ describe("import preflight and ignore_patterns", () => {
     assert.equal(parsed.import.ignored_files, 1);
     assert.equal(parsed.import.created, baseCreated - 1);
   });
+
+  test("invalid ignore_patterns returns INVALID_IGNORE_PATTERN (sync)", async () => {
+    const text = await callWriteTool("import_scrivener_sync", {
+      source_dir: scrivenerImportDir,
+      project_id: "invalid-ignore-sync",
+      dry_run: true,
+      ignore_patterns: ["[unterminated"],
+    });
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.ok, false);
+    assert.equal(parsed.error.code, "INVALID_IGNORE_PATTERN");
+  });
+
+  test("invalid ignore_patterns returns INVALID_IGNORE_PATTERN (async)", async () => {
+    const text = await callWriteTool("import_scrivener_sync_async", {
+      source_dir: scrivenerImportDir,
+      project_id: "invalid-ignore-async",
+      dry_run: true,
+      ignore_patterns: ["[unterminated"],
+    });
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.ok, false);
+    assert.equal(parsed.error.code, "INVALID_IGNORE_PATTERN");
+  });
 });
 
 describe("sync warning_summary", () => {

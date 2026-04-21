@@ -29,6 +29,38 @@ function walkYamls(dir, list = []) {
   return list;
 }
 
+function isPlainObject(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function validateMergeProjectId(projectId) {
+  if (typeof projectId !== "string" || projectId.trim().length === 0) {
+    return { ok: false, reason: "project_id must be a non-empty string." };
+  }
+  if (path.isAbsolute(projectId)) {
+    return { ok: false, reason: "project_id must not be an absolute path." };
+  }
+  if (projectId.includes("\\")) {
+    return { ok: false, reason: "project_id must not contain backslashes." };
+  }
+
+  const segments = projectId.split("/");
+  if (segments.length < 1 || segments.length > 2) {
+    return { ok: false, reason: "project_id must be '<project>' or '<universe>/<project>'." };
+  }
+
+  for (const segment of segments) {
+    if (!segment || segment === "." || segment === "..") {
+      return { ok: false, reason: "project_id must not contain '.' or '..' path segments." };
+    }
+    if (!/^[a-z0-9-]+$/.test(segment)) {
+      return { ok: false, reason: "project_id segments may contain only lowercase letters, numbers, and '-'." };
+    }
+  }
+
+  return { ok: true };
+}
+
 function buildMergeDataFromProject(projectData, uuid) {
   const { metaByUUID, partByUUID, chapterByUUID } = projectData;
   const { customFields, characters, versions, synopsis } = metaByUUID[uuid] ?? {};
@@ -218,6 +250,11 @@ export function mergeScrivenerProjectMetadata({
   const resolvedProjectId = projectId
     ?? path.basename(mcpSyncDirAbs).replace(/[^a-z0-9-]/gi, "-").toLowerCase();
 
+  const projectIdCheck = validateMergeProjectId(resolvedProjectId);
+  if (!projectIdCheck.ok) {
+    throw new Error(`Invalid project_id '${resolvedProjectId}': ${projectIdCheck.reason}`);
+  }
+
   function deriveProjectRoot(pid) {
     if (pid.includes("/")) {
       const [universeId, projectSlug] = pid.split("/");
@@ -270,7 +307,11 @@ export function mergeScrivenerProjectMetadata({
       continue;
     }
 
-    const existing = yaml.load(fs.readFileSync(sidecarPath, "utf8")) ?? {};
+    const existingRaw = yaml.load(fs.readFileSync(sidecarPath, "utf8"));
+    if (existingRaw !== null && existingRaw !== undefined && !isPlainObject(existingRaw)) {
+      throw new Error(`Invalid sidecar YAML mapping at ${sidecarPath}`);
+    }
+    const existing = existingRaw ?? {};
     const { merged, changed, newKeys } = mergeSidecarData(existing, mergeData);
 
     if (!changed) {

@@ -1154,6 +1154,26 @@ describe("Scrivener direct metadata merge", () => {
     }
   });
 
+  test("mergeScrivenerProjectMetadata rejects invalid project_id shape", () => {
+    const scrivDir = createScrivenerProjectFixture();
+    const { syncRoot } = createSyncSidecarFixture();
+
+    try {
+      assert.throws(
+        () => mergeScrivenerProjectMetadata({
+          scrivPath: scrivDir,
+          mcpSyncDir: syncRoot,
+          projectId: "universe/a/b",
+          dryRun: true,
+        }),
+        /Invalid project_id/
+      );
+    } finally {
+      fs.rmSync(scrivDir, { recursive: true, force: true });
+      fs.rmSync(syncRoot, { recursive: true, force: true });
+    }
+  });
+
   test("scripts/merge-scrivx.js remains runnable and writes merged metadata", () => {
     const scrivDir = createScrivenerProjectFixture();
     const { syncRoot, scenesDir } = createSyncSidecarFixture();

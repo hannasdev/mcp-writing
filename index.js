@@ -22,10 +22,32 @@ const SYNC_DIR = process.env.WRITING_SYNC_DIR ?? "./sync";
 const DB_PATH = process.env.DB_PATH ?? "./writing.db";
 const SYNC_DIR_ABS = path.resolve(SYNC_DIR);
 const DB_PATH_DISPLAY = DB_PATH === ":memory:" ? DB_PATH : path.resolve(DB_PATH);
+
+function parsePositiveIntEnv(rawValue, defaultValue) {
+  const parsed = parseInt(rawValue ?? String(defaultValue), 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : defaultValue;
+}
+
+function validateRegexPatterns(patterns) {
+  for (const pattern of patterns ?? []) {
+    try {
+      // Validation-only compile so async and sync paths share the same input contract.
+      new RegExp(pattern);
+    } catch (error) {
+      return {
+        ok: false,
+        pattern,
+        reason: error instanceof Error ? error.message : String(error),
+      };
+    }
+  }
+  return { ok: true };
+}
+
 const HTTP_PORT = parseInt(process.env.HTTP_PORT ?? "3000", 10);
 const MAX_CHAPTER_SCENES = parseInt(process.env.MAX_CHAPTER_SCENES ?? "10", 10);
 const DEFAULT_METADATA_PAGE_SIZE = parseInt(process.env.DEFAULT_METADATA_PAGE_SIZE ?? "20", 10);
-const ASYNC_JOB_TTL_MS = parseInt(process.env.ASYNC_JOB_TTL_MS ?? "86400000", 10);
+const ASYNC_JOB_TTL_MS = parsePositiveIntEnv(process.env.ASYNC_JOB_TTL_MS, 86400000);
 const OWNERSHIP_GUARD_MODE_RAW = (process.env.OWNERSHIP_GUARD_MODE ?? "warn").trim().toLowerCase();
 const OWNERSHIP_GUARD_MODE = OWNERSHIP_GUARD_MODE_RAW === "fail" || OWNERSHIP_GUARD_MODE_RAW === "warn"
   ? OWNERSHIP_GUARD_MODE_RAW
@@ -41,8 +63,12 @@ function pruneAsyncJobs() {
     if (!job.finishedAt) continue;
     if (now - Date.parse(job.finishedAt) > ASYNC_JOB_TTL_MS) {
       try {
-        if (job.requestPath && fs.existsSync(job.requestPath)) fs.unlinkSync(job.requestPath);
-        if (job.resultPath && fs.existsSync(job.resultPath)) fs.unlinkSync(job.resultPath);
+        if (job.tmpDir && fs.existsSync(job.tmpDir)) {
+          fs.rmSync(job.tmpDir, { recursive: true, force: true });
+        } else {
+          if (job.requestPath && fs.existsSync(job.requestPath)) fs.unlinkSync(job.requestPath);
+          if (job.resultPath && fs.existsSync(job.resultPath)) fs.unlinkSync(job.resultPath);
+        }
       } catch {
         // best effort cleanup
       }
@@ -103,6 +129,7 @@ function startAsyncJob({ kind, requestPayload, onComplete }) {
     startedAt: new Date().toISOString(),
     finishedAt: null,
     pid: child.pid,
+    tmpDir,
     requestPath,
     resultPath,
     result: null,
@@ -570,6 +597,20 @@ function createMcpServer() {
         }
       }
 
+      const ignorePatternCheck = validateRegexPatterns(ignore_patterns);
+      if (!ignorePatternCheck.ok) {
+        return errorResponse(
+          "INVALID_IGNORE_PATTERN",
+          `Invalid ignore pattern '${ignorePatternCheck.pattern}': ${ignorePatternCheck.reason}`,
+          {
+            source_dir,
+            sync_dir: SYNC_DIR_ABS,
+            project_id: project_id ?? null,
+            pattern: ignorePatternCheck.pattern,
+          }
+        );
+      }
+
       if (!dry_run && !SYNC_DIR_WRITABLE) {
         return errorResponse(
           "SYNC_DIR_NOT_WRITABLE",
@@ -589,6 +630,18 @@ function createMcpServer() {
           ignorePatterns: ignore_patterns,
         });
       } catch (error) {
+        if (error && typeof error === "object" && error.code === "INVALID_IGNORE_PATTERN") {
+          return errorResponse(
+            "INVALID_IGNORE_PATTERN",
+            error instanceof Error ? error.message : "Invalid ignore pattern.",
+            {
+              source_dir,
+              sync_dir: SYNC_DIR_ABS,
+              project_id: project_id ?? null,
+              pattern: error.pattern ?? null,
+            }
+          );
+        }
         return errorResponse(
           "IMPORT_FAILED",
           error instanceof Error ? error.message : "Import failed.",
@@ -776,6 +829,20 @@ function createMcpServer() {
         if (!projectIdCheck.ok) {
           return errorResponse("INVALID_PROJECT_ID", projectIdCheck.reason, { project_id });
         }
+      }
+
+      const ignorePatternCheck = validateRegexPatterns(ignore_patterns);
+      if (!ignorePatternCheck.ok) {
+        return errorResponse(
+          "INVALID_IGNORE_PATTERN",
+          `Invalid ignore pattern '${ignorePatternCheck.pattern}': ${ignorePatternCheck.reason}`,
+          {
+            source_dir,
+            sync_dir: SYNC_DIR_ABS,
+            project_id: project_id ?? null,
+            pattern: ignorePatternCheck.pattern,
+          }
+        );
       }
 
       if (!dry_run && !SYNC_DIR_WRITABLE) {

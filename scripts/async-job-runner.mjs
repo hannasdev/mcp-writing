@@ -115,11 +115,20 @@ try {
 } catch (error) {
   const resultPath = process.argv[3];
   if (resultPath) {
+    const errorCode = error && typeof error === "object" && typeof error.code === "string"
+      ? error.code
+      : "ASYNC_JOB_FAILED";
+    const errorDetails = error && typeof error === "object"
+      ? {
+        ...(error.pattern ? { pattern: error.pattern } : {}),
+      }
+      : {};
     writeResult(resultPath, {
       ok: false,
       error: {
-        code: "ASYNC_JOB_FAILED",
+        code: errorCode,
         message: error instanceof Error ? error.message : String(error),
+        ...(Object.keys(errorDetails).length ? { details: errorDetails } : {}),
       },
     });
   }
