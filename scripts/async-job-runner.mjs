@@ -1,0 +1,117 @@
+import fs from "node:fs";
+import path from "node:path";
+import { importScrivenerSync } from "../importer.js";
+import { mergeScrivenerProjectMetadata } from "../scrivener-direct.js";
+
+function writeResult(resultPath, payload) {
+  fs.mkdirSync(path.dirname(resultPath), { recursive: true });
+  fs.writeFileSync(resultPath, JSON.stringify(payload, null, 2), "utf8");
+}
+
+function normalizeImportResult(importResult) {
+  return {
+    ok: true,
+    import: {
+      source_dir: importResult.scrivenerDir,
+      sync_dir: importResult.mcpSyncDir,
+      scenes_dir: importResult.scenesDir,
+      project_id: importResult.projectId,
+      source_files: importResult.sourceFiles,
+      created: importResult.created,
+      existing: importResult.existing,
+      skipped: importResult.skipped,
+      beat_markers_seen: importResult.beatMarkersSeen,
+      dry_run: importResult.dryRun,
+    },
+    sync: null,
+  };
+}
+
+function normalizeMergeResult(mergeResult) {
+  return {
+    ok: true,
+    beta: true,
+    merge: {
+      source_project_dir: mergeResult.scrivPath,
+      sync_dir: mergeResult.mcpSyncDir,
+      scenes_dir: mergeResult.scenesDir,
+      project_id: mergeResult.projectId,
+      dry_run: mergeResult.dryRun,
+      sidecar_files: mergeResult.sidecarFiles,
+      updated: mergeResult.updated,
+      unchanged: mergeResult.unchanged,
+      no_data: mergeResult.noData,
+      field_add_counts: mergeResult.fieldAddCounts,
+      preview_changes: mergeResult.previewChanges,
+      stats: {
+        sync_map_entries: mergeResult.stats.syncMapEntries,
+        keyword_map_entries: mergeResult.stats.keywordMapEntries,
+        binder_items: mergeResult.stats.binderItems,
+        part_chapter_assignments: mergeResult.stats.partChapterAssignments,
+      },
+    },
+    sync: null,
+    warnings: [
+      "BETA_FEATURE: Direct Scrivener project parsing may be sensitive to Scrivener internal format changes.",
+      "If this fails, use import_scrivener_sync with an External Folder Sync export as the stable fallback.",
+    ],
+  };
+}
+
+function main() {
+  const requestPath = process.argv[2];
+  const resultPath = process.argv[3];
+
+  if (!requestPath || !resultPath) {
+    throw new Error("Usage: node scripts/async-job-runner.mjs <request.json> <result.json>");
+  }
+
+  const request = JSON.parse(fs.readFileSync(requestPath, "utf8"));
+  const syncDir = request.context?.sync_dir;
+  if (!syncDir) {
+    throw new Error("Missing sync_dir in async job request context.");
+  }
+
+  if (request.kind === "import_scrivener_sync") {
+    const result = importScrivenerSync({
+      scrivenerDir: request.args?.source_dir,
+      mcpSyncDir: syncDir,
+      projectId: request.args?.project_id,
+      dryRun: Boolean(request.args?.dry_run) || Boolean(request.args?.preflight),
+      preflight: Boolean(request.args?.preflight),
+      ignorePatterns: request.args?.ignore_patterns ?? [],
+    });
+    writeResult(resultPath, normalizeImportResult(result));
+    return;
+  }
+
+  if (request.kind === "merge_scrivener_project_beta") {
+    const result = mergeScrivenerProjectMetadata({
+      scrivPath: request.args?.source_project_dir,
+      mcpSyncDir: syncDir,
+      projectId: request.args?.project_id,
+      scenesDir: request.args?.scenes_dir,
+      dryRun: Boolean(request.args?.dry_run),
+    });
+    writeResult(resultPath, normalizeMergeResult(result));
+    return;
+  }
+
+  throw new Error(`Unsupported async job kind '${request.kind}'.`);
+}
+
+try {
+  main();
+} catch (error) {
+  const resultPath = process.argv[3];
+  if (resultPath) {
+    writeResult(resultPath, {
+      ok: false,
+      error: {
+        code: "ASYNC_JOB_FAILED",
+        message: error instanceof Error ? error.message : String(error),
+      },
+    });
+  }
+  process.exit(1);
+}

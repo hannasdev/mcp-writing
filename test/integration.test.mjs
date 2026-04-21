@@ -29,6 +29,7 @@ let writeClient;
 let readSyncDir;
 let writeSyncDir;
 let scrivenerImportDir;
+let scrivenerProjectDir;
 
 async function waitForServer(url, retries = 20, delayMs = 200) {
   for (let i = 0; i < retries; i++) {
@@ -389,6 +390,70 @@ function createScrivenerDraftFixture(baseDir) {
   fs.writeFileSync(path.join(draftDir, "006 Notes.txt"), "Not in expected filename format.\n", "utf8");
 }
 
+function createScrivenerProjectBundleFixture(baseDir) {
+  const scrivDir = path.join(baseDir, "Sebastian the Vampire.scriv");
+  const scrivxPath = path.join(scrivDir, "Sebastian the Vampire.scrivx");
+  fs.mkdirSync(path.join(scrivDir, "Files", "Data", "UUID-10"), { recursive: true });
+  fs.mkdirSync(path.join(scrivDir, "Files", "Data", "UUID-13"), { recursive: true });
+
+  fs.writeFileSync(
+    path.join(scrivDir, "Files", "Data", "UUID-10", "synopsis.txt"),
+    "Elena arrives at the station and scans for familiar faces.\n",
+    "utf8"
+  );
+  fs.writeFileSync(
+    path.join(scrivDir, "Files", "Data", "UUID-13", "synopsis.txt"),
+    "Marcus challenges Elena's plan in the stairwell.\n",
+    "utf8"
+  );
+
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<ScrivenerProject>
+  <ExternalSyncMap>
+    <SyncItem ID="UUID-10">10</SyncItem>
+    <SyncItem ID="UUID-13">13</SyncItem>
+  </ExternalSyncMap>
+  <Keywords>
+    <Keyword ID="kw-elena"><Title>Elena Voss</Title></Keyword>
+    <Keyword ID="kw-version"><Title>v1.1</Title></Keyword>
+  </Keywords>
+  <Binder>
+    <BinderItem Type="DraftFolder" UUID="draft-root">
+      <Children>
+        <BinderItem Type="Folder" UUID="part-1">
+          <Children>
+            <BinderItem Type="Folder" UUID="chapter-1">
+              <Children>
+                <BinderItem Type="Text" UUID="UUID-10">
+                  <Keywords>
+                    <KeywordID>kw-elena</KeywordID>
+                    <KeywordID>kw-version</KeywordID>
+                  </Keywords>
+                  <MetaData>
+                    <MetaDataItem><FieldID>savethecat!</FieldID><Value>Setup</Value></MetaDataItem>
+                    <MetaDataItem><FieldID>causality</FieldID><Value>2</Value></MetaDataItem>
+                    <MetaDataItem><FieldID>f:character</FieldID><Value>Yes</Value></MetaDataItem>
+                  </MetaData>
+                </BinderItem>
+                <BinderItem Type="Text" UUID="UUID-13">
+                  <MetaData>
+                    <MetaDataItem><FieldID>stakes</FieldID><Value>3</Value></MetaDataItem>
+                  </MetaData>
+                </BinderItem>
+              </Children>
+            </BinderItem>
+          </Children>
+        </BinderItem>
+      </Children>
+    </BinderItem>
+  </Binder>
+</ScrivenerProject>`;
+
+  fs.mkdirSync(scrivDir, { recursive: true });
+  fs.writeFileSync(scrivxPath, xml, "utf8");
+  return scrivDir;
+}
+
 before(async () => {
   // Read-only server against generated fixture sync dir
   readSyncDir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-writing-read-test-"));
@@ -406,6 +471,9 @@ before(async () => {
 
   scrivenerImportDir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-writing-scrivener-import-"));
   createScrivenerDraftFixture(scrivenerImportDir);
+
+  const scrivenerProjectBaseDir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-writing-scrivener-project-"));
+  scrivenerProjectDir = createScrivenerProjectBundleFixture(scrivenerProjectBaseDir);
 });
 
 after(async () => {
@@ -416,6 +484,7 @@ after(async () => {
   if (readSyncDir) fs.rmSync(readSyncDir, { recursive: true, force: true });
   if (writeSyncDir) fs.rmSync(writeSyncDir, { recursive: true, force: true });
   if (scrivenerImportDir) fs.rmSync(scrivenerImportDir, { recursive: true, force: true });
+  if (scrivenerProjectDir) fs.rmSync(path.dirname(scrivenerProjectDir), { recursive: true, force: true });
 });
 
 // ---------------------------------------------------------------------------
@@ -429,6 +498,20 @@ async function callTool(name, args = {}) {
 async function callWriteTool(name, args = {}) {
   const result = await writeClient.callTool({ name, arguments: args });
   return result.content?.[0]?.text ?? "";
+}
+
+async function waitForAsyncJob(jobId, timeoutMs = 12000) {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const text = await callWriteTool("get_async_job_status", { job_id: jobId });
+    const parsed = JSON.parse(text);
+    const status = parsed.job?.status;
+    if (status === "completed" || status === "failed" || status === "cancelled") {
+      return parsed;
+    }
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  throw new Error(`Timed out waiting for async job ${jobId}`);
 }
 
 // ---------------------------------------------------------------------------
@@ -535,6 +618,238 @@ describe("import_scrivener_sync tool", () => {
     assert.equal(fs.existsSync(expectedScenesDir), true);
     const sidecars = fs.readdirSync(expectedScenesDir).filter(n => n.endsWith(".meta.yaml"));
     assert.equal(sidecars.length, 2);
+  });
+});
+
+describe("merge_scrivener_project_beta tool", () => {
+  test("dry-run returns beta merge stats and field-level preview counts", async () => {
+    const projectId = "direct-beta-preview";
+
+    await callWriteTool("import_scrivener_sync", {
+      source_dir: scrivenerImportDir,
+      project_id: projectId,
+      dry_run: false,
+      auto_sync: false,
+    });
+
+    const text = await callWriteTool("merge_scrivener_project_beta", {
+      source_project_dir: scrivenerProjectDir,
+      project_id: projectId,
+      dry_run: true,
+      auto_sync: false,
+    });
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.beta, true);
+    assert.equal(parsed.merge.project_id, projectId);
+    assert.equal(parsed.merge.dry_run, true);
+    assert.equal(parsed.merge.sidecar_files, 2);
+    assert.equal(parsed.merge.updated, 2);
+    assert.equal(parsed.merge.unchanged, 0);
+    assert.equal(parsed.merge.no_data, 0);
+    assert.ok(parsed.merge.field_add_counts.synopsis >= 1);
+    assert.ok(Array.isArray(parsed.merge.preview_changes));
+    assert.equal(parsed.sync, null);
+    assert.ok(Array.isArray(parsed.warnings));
+    assert.ok(parsed.warnings.some(w => w.includes("BETA_FEATURE")));
+  });
+
+  test("returns structured fallback guidance on parser/path failure", async () => {
+    const text = await callWriteTool("merge_scrivener_project_beta", {
+      source_project_dir: "/tmp/does-not-exist-for-mcp-writing-tests.scriv",
+      project_id: "direct-beta-preview",
+      dry_run: true,
+    });
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.ok, false);
+    assert.equal(parsed.error.code, "SCRIVENER_DIRECT_BETA_FAILED");
+    assert.ok(parsed.error.details.fallback.includes("import_scrivener_sync"));
+  });
+
+  test("scenes_dir override uses explicit path instead of project_id-derived path", async () => {
+    // Import to a universe-scoped project to create sidecars in universes/<u>/<p>/scenes/
+    const projectId = "solar/book-alpha";
+    await callWriteTool("import_scrivener_sync", {
+      source_dir: scrivenerImportDir,
+      project_id: projectId,
+      dry_run: false,
+      auto_sync: false,
+    });
+    const derivedScenesDir = path.join(writeSyncDir, "universes", "solar", "book-alpha", "scenes");
+    assert.equal(fs.existsSync(derivedScenesDir), true);
+
+    // Merge using scenes_dir pointing at that directory (no project_id supplied)
+    const text = await callWriteTool("merge_scrivener_project_beta", {
+      source_project_dir: scrivenerProjectDir,
+      scenes_dir: derivedScenesDir,
+      dry_run: true,
+      auto_sync: false,
+    });
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.merge.scenes_dir, derivedScenesDir);
+    assert.equal(parsed.merge.sidecar_files, 2);
+    assert.equal(parsed.merge.updated, 2);
+  });
+
+  test("scenes_dir takes priority over project_id when both are supplied", async () => {
+    // Create sidecars under a known project
+    const projectId = "solar/book-beta";
+    await callWriteTool("import_scrivener_sync", {
+      source_dir: scrivenerImportDir,
+      project_id: projectId,
+      dry_run: false,
+      auto_sync: false,
+    });
+    const actualScenesDir = path.join(writeSyncDir, "universes", "solar", "book-beta", "scenes");
+
+    // Pass a wrong/non-existent project_id but a correct scenes_dir — should succeed
+    const text = await callWriteTool("merge_scrivener_project_beta", {
+      source_project_dir: scrivenerProjectDir,
+      project_id: "solar/nonexistent-project",
+      scenes_dir: actualScenesDir,
+      dry_run: true,
+      auto_sync: false,
+    });
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.merge.scenes_dir, actualScenesDir);
+    assert.equal(parsed.merge.sidecar_files, 2);
+  });
+});
+
+describe("async import/merge job tools", () => {
+  test("import_scrivener_sync_async completes and returns import payload", async () => {
+    const projectId = "async-import-preview";
+    const startText = await callWriteTool("import_scrivener_sync_async", {
+      source_dir: scrivenerImportDir,
+      project_id: projectId,
+      dry_run: true,
+      auto_sync: false,
+    });
+    const started = JSON.parse(startText);
+
+    assert.equal(started.ok, true);
+    assert.equal(started.async, true);
+    assert.equal(typeof started.job.job_id, "string");
+
+    const done = await waitForAsyncJob(started.job.job_id);
+    assert.equal(done.ok, true);
+    assert.equal(done.job.status, "completed");
+    assert.equal(done.job.result.ok, true);
+    assert.equal(done.job.result.import.project_id, projectId);
+    assert.equal(done.job.result.import.created, 2);
+  });
+
+  test("merge_scrivener_project_beta_async completes and returns merge payload", async () => {
+    const projectId = "async-merge-preview";
+
+    await callWriteTool("import_scrivener_sync", {
+      source_dir: scrivenerImportDir,
+      project_id: projectId,
+      dry_run: false,
+      auto_sync: false,
+    });
+
+    const startText = await callWriteTool("merge_scrivener_project_beta_async", {
+      source_project_dir: scrivenerProjectDir,
+      project_id: projectId,
+      dry_run: true,
+      auto_sync: false,
+    });
+    const started = JSON.parse(startText);
+
+    assert.equal(started.ok, true);
+    assert.equal(started.async, true);
+    assert.equal(started.beta, true);
+    assert.equal(typeof started.job.job_id, "string");
+
+    const done = await waitForAsyncJob(started.job.job_id);
+    assert.equal(done.ok, true);
+    assert.equal(done.job.status, "completed");
+    assert.equal(done.job.result.ok, true);
+    assert.equal(done.job.result.merge.project_id, projectId);
+    assert.equal(done.job.result.merge.sidecar_files, 2);
+    assert.equal(done.job.result.merge.updated, 2);
+  });
+});
+
+describe("import preflight and ignore_patterns", () => {
+  test("preflight returns file list without writing anything", async () => {
+    const projectId = "preflight-test";
+    const scenesDir = path.join(writeSyncDir, "projects", projectId, "scenes");
+
+    const text = await callWriteTool("import_scrivener_sync", {
+      source_dir: scrivenerImportDir,
+      project_id: projectId,
+      preflight: true,
+    });
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.import.preflight, true);
+    assert.equal(typeof parsed.import.files_to_process, "number");
+    assert.ok(Array.isArray(parsed.import.file_previews));
+    assert.equal(fs.existsSync(scenesDir), false, "preflight must not write any files");
+    assert.equal(parsed.next_step.includes("preflight"), true);
+  });
+
+  test("ignore_patterns excludes matching filenames from import", async () => {
+    const projectId = "ignore-patterns-test";
+
+    // Without ignore: 2 scenes created (Arrival [10] and Debate [13])
+    const baseText = await callWriteTool("import_scrivener_sync", {
+      source_dir: scrivenerImportDir,
+      project_id: projectId + "-base",
+      dry_run: true,
+    });
+    const baseParsed = JSON.parse(baseText);
+    const baseCreated = baseParsed.import.created;
+
+    // With ignore pattern targeting "Arrival" filename
+    const text = await callWriteTool("import_scrivener_sync", {
+      source_dir: scrivenerImportDir,
+      project_id: projectId,
+      dry_run: true,
+      ignore_patterns: ["Arrival"],
+    });
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.import.ignored_files, 1);
+    assert.equal(parsed.import.created, baseCreated - 1);
+  });
+});
+
+describe("sync warning_summary", () => {
+  test("sync response includes warning_summary instead of raw warning list for import+sync", async () => {
+    const projectId = "warning-summary-test";
+
+    await callWriteTool("import_scrivener_sync", {
+      source_dir: scrivenerImportDir,
+      project_id: projectId,
+      dry_run: false,
+      auto_sync: true,
+    });
+
+    // Run a standalone sync to get a structured result
+    const text = await callWriteTool("import_scrivener_sync", {
+      source_dir: scrivenerImportDir,
+      project_id: projectId,
+      dry_run: false,
+      auto_sync: true,
+    });
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.ok, true);
+    if (parsed.sync !== null) {
+      assert.ok(typeof parsed.sync.warning_summary === "object", "warning_summary should be an object");
+      assert.equal("warnings" in parsed.sync, false, "raw warnings list should not appear in sync response");
+    }
   });
 });
 

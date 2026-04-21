@@ -1,8 +1,13 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
+import os from "node:os";
+import { randomUUID } from "node:crypto";
+import { spawn } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import matter from "gray-matter";
 import yaml from "js-yaml";
 import { z } from "zod";
@@ -11,6 +16,7 @@ import { syncAll, isSyncDirWritable, getSyncOwnershipDiagnostics, getFileWriteDi
 import { isGitAvailable, isGitRepository, initGitRepository, createSnapshot, listSnapshots, getSceneProseAtCommit } from "./git.js";
 import { renderCharacterArcTemplate, renderCharacterSheetTemplate, renderPlaceSheetTemplate, slugifyEntityName } from "./world-entity-templates.js";
 import { importScrivenerSync, validateProjectId } from "./importer.js";
+import { mergeScrivenerProjectMetadata } from "./scrivener-direct.js";
 
 const SYNC_DIR = process.env.WRITING_SYNC_DIR ?? "./sync";
 const DB_PATH = process.env.DB_PATH ?? "./writing.db";
@@ -19,11 +25,130 @@ const DB_PATH_DISPLAY = DB_PATH === ":memory:" ? DB_PATH : path.resolve(DB_PATH)
 const HTTP_PORT = parseInt(process.env.HTTP_PORT ?? "3000", 10);
 const MAX_CHAPTER_SCENES = parseInt(process.env.MAX_CHAPTER_SCENES ?? "10", 10);
 const DEFAULT_METADATA_PAGE_SIZE = parseInt(process.env.DEFAULT_METADATA_PAGE_SIZE ?? "20", 10);
+const ASYNC_JOB_TTL_MS = parseInt(process.env.ASYNC_JOB_TTL_MS ?? "86400000", 10);
 const OWNERSHIP_GUARD_MODE_RAW = (process.env.OWNERSHIP_GUARD_MODE ?? "warn").trim().toLowerCase();
 const OWNERSHIP_GUARD_MODE = OWNERSHIP_GUARD_MODE_RAW === "fail" || OWNERSHIP_GUARD_MODE_RAW === "warn"
   ? OWNERSHIP_GUARD_MODE_RAW
   : "warn";
 const OWNERSHIP_GUARD_MODE_RAW_DISPLAY = JSON.stringify(OWNERSHIP_GUARD_MODE_RAW);
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const asyncJobs = new Map();
+
+function pruneAsyncJobs() {
+  const now = Date.now();
+  for (const [id, job] of asyncJobs.entries()) {
+    if (!job.finishedAt) continue;
+    if (now - job.finishedAt > ASYNC_JOB_TTL_MS) {
+      try {
+        if (job.requestPath && fs.existsSync(job.requestPath)) fs.unlinkSync(job.requestPath);
+        if (job.resultPath && fs.existsSync(job.resultPath)) fs.unlinkSync(job.resultPath);
+      } catch {
+        // best effort cleanup
+      }
+      asyncJobs.delete(id);
+    }
+  }
+}
+
+function readJsonIfExists(filePath) {
+  if (!filePath || !fs.existsSync(filePath)) return null;
+  try {
+    return JSON.parse(fs.readFileSync(filePath, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+function toPublicJob(job, includeResult = true) {
+  return {
+    job_id: job.id,
+    kind: job.kind,
+    status: job.status,
+    created_at: job.createdAt,
+    started_at: job.startedAt,
+    finished_at: job.finishedAt,
+    pid: job.pid,
+    error: job.error,
+    ...(includeResult ? { result: job.result } : {}),
+  };
+}
+
+function startAsyncJob({ kind, requestPayload, onComplete }) {
+  pruneAsyncJobs();
+
+  const id = randomUUID();
+  const tmpPrefix = path.join(os.tmpdir(), "mcp-writing-job-");
+  const tmpDir = fs.mkdtempSync(tmpPrefix);
+  const requestPath = path.join(tmpDir, `${id}.request.json`);
+  const resultPath = path.join(tmpDir, `${id}.result.json`);
+
+  fs.writeFileSync(requestPath, JSON.stringify(requestPayload, null, 2), "utf8");
+
+  const runnerPath = path.join(__dirname, "scripts", "async-job-runner.mjs");
+  const child = spawn(
+    process.execPath,
+    ["--experimental-sqlite", runnerPath, requestPath, resultPath],
+    {
+      env: process.env,
+      stdio: ["ignore", "pipe", "pipe"],
+    }
+  );
+
+  const job = {
+    id,
+    kind,
+    status: "running",
+    createdAt: new Date().toISOString(),
+    startedAt: new Date().toISOString(),
+    finishedAt: null,
+    pid: child.pid,
+    requestPath,
+    resultPath,
+    result: null,
+    error: null,
+    onComplete,
+    child,
+  };
+  asyncJobs.set(id, job);
+
+  child.stdout.on("data", () => {
+    // worker writes structured output to resultPath; stdout is ignored here
+  });
+  child.stderr.on("data", () => {
+    // avoid crashing on stderr backpressure for noisy runs
+  });
+
+  child.on("error", (error) => {
+    job.status = "failed";
+    job.error = error.message;
+    job.finishedAt = new Date().toISOString();
+    pruneAsyncJobs();
+  });
+
+  child.on("exit", () => {
+    const payload = readJsonIfExists(resultPath);
+    const successful = payload?.ok === true;
+    job.status = successful ? "completed" : "failed";
+    job.finishedAt = new Date().toISOString();
+    job.result = payload;
+    if (!successful) {
+      job.error = payload?.error?.message ?? payload?.error ?? "Async job failed.";
+    }
+
+    if (successful && typeof job.onComplete === "function") {
+      try {
+        job.onComplete(job);
+      } catch (error) {
+        job.status = "failed";
+        job.error = error instanceof Error ? error.message : String(error);
+      }
+    }
+    pruneAsyncJobs();
+  });
+
+  return job;
+}
 
 function paginateRows(rows, { page, pageSize, forcePagination = false }) {
   const totalCount = rows.length;
@@ -412,7 +537,12 @@ function createMcpServer() {
     if (result.sidecarsMigrated) parts.push(`${result.sidecarsMigrated} sidecar(s) auto-generated from frontmatter.`);
     if (result.skipped) parts.push(`${result.skipped} file(s) skipped (no scene_id).`);
     if (result.skipped) parts.push(`Tip: for raw Scrivener Draft exports, run scripts/import.js first, then run sync again.`);
-    if (result.warnings.length) parts.push(`\n⚠️ Warnings:\n` + result.warnings.map(w => `- ${w}`).join("\n"));
+    const summary = result.warningSummary;
+    const summaryEntries = Object.entries(summary);
+    if (summaryEntries.length) {
+      const lines = summaryEntries.map(([type, entry]) => `- ${type}: ${entry.count} (e.g. ${entry.examples[0]})`);
+      parts.push(`\n⚠️ Warning summary:\n` + lines.join("\n"));
+    }
     return { content: [{ type: "text", text: parts.join(" ") }] };
   });
 
@@ -425,8 +555,10 @@ function createMcpServer() {
       project_id: z.string().optional().describe("Project ID override (e.g. 'the-lamb'). Defaults to a slug derived from WRITING_SYNC_DIR."),
       dry_run: z.boolean().optional().describe("If true, reports planned writes without changing files."),
       auto_sync: z.boolean().optional().describe("If true (default), runs sync() after import when not dry-run."),
+      preflight: z.boolean().optional().describe("If true, returns a list of files that would be processed without doing any work. Use to verify scope before a large import."),
+      ignore_patterns: z.array(z.string()).optional().describe("Array of regex patterns matched against filenames. Files matching any pattern are excluded from import. Useful to skip fragments, beat-sheet notes, or feedback files."),
     },
-    async ({ source_dir, project_id, dry_run = false, auto_sync = true }) => {
+    async ({ source_dir, project_id, dry_run = false, auto_sync = true, preflight = false, ignore_patterns = [] }) => {
       if (project_id !== undefined) {
         const projectIdCheck = validateProjectId(project_id);
         if (!projectIdCheck.ok) {
@@ -448,7 +580,9 @@ function createMcpServer() {
           scrivenerDir: source_dir,
           mcpSyncDir: SYNC_DIR,
           projectId: project_id,
-          dryRun: Boolean(dry_run),
+          dryRun: Boolean(dry_run) || preflight,
+          preflight: Boolean(preflight),
+          ignorePatterns: ignore_patterns,
         });
       } catch (error) {
         return errorResponse(
@@ -463,7 +597,7 @@ function createMcpServer() {
       }
 
       let syncResult = null;
-      if (!dry_run && auto_sync) {
+      if (!dry_run && !preflight && auto_sync) {
         syncResult = syncAll(db, SYNC_DIR, { writable: SYNC_DIR_WRITABLE });
       }
 
@@ -474,7 +608,14 @@ function createMcpServer() {
           sync_dir: importResult.mcpSyncDir,
           scenes_dir: importResult.scenesDir,
           project_id: importResult.projectId,
+          preflight: importResult.preflight,
           source_files: importResult.sourceFiles,
+          ignored_files: importResult.ignoredFiles,
+          ...(importResult.preflight ? {
+            files_to_process: importResult.filesToProcess,
+            file_previews: importResult.filePreviews,
+            existing_sidecars: importResult.existingSidecars,
+          } : {}),
           created: importResult.created,
           existing: importResult.existing,
           skipped: importResult.skipped,
@@ -487,14 +628,324 @@ function createMcpServer() {
             stale_marked: syncResult.staleMarked,
             sidecars_migrated: syncResult.sidecarsMigrated,
             skipped: syncResult.skipped,
-            warnings: syncResult.warnings,
+            warning_summary: syncResult.warningSummary,
+          }
+          : null,
+        next_step: preflight
+          ? "Preflight complete. Review file_previews and ignored_files, then re-run without preflight=true."
+          : dry_run
+            ? "Dry run complete. Re-run with dry_run=false to write files."
+            : auto_sync
+              ? "Import and sync complete."
+              : "Import complete. Run sync() to index imported scenes.",
+      });
+    }
+  );
+
+  // ---- merge_scrivener_project_beta --------------------------------------
+  s.tool(
+    "merge_scrivener_project_beta",
+    "[BETA] Merge metadata directly from a Scrivener .scriv project into existing scene sidecars. This path is opt-in and may be sensitive to Scrivener internal format changes. Requires scenes sidecars to already exist (for example, from import_scrivener_sync).",
+    {
+      source_project_dir: z.string().describe("Path to a Scrivener .scriv bundle directory."),
+      project_id: z.string().optional().describe("Project ID containing existing sidecars (e.g. 'the-lamb' or 'universe-1/book-1-the-lamb'). Defaults to a slug derived from WRITING_SYNC_DIR."),
+      scenes_dir: z.string().optional().describe("Absolute path to the scenes directory containing .meta.yaml sidecars. Overrides the path derived from project_id. Use this for non-standard sync layouts."),
+      dry_run: z.boolean().optional().describe("If true (default), reports planned merges without writing files."),
+      auto_sync: z.boolean().optional().describe("If true (default), runs sync() after a non-dry-run merge."),
+    },
+    async ({ source_project_dir, project_id, scenes_dir, dry_run = true, auto_sync = true }) => {
+      if (project_id !== undefined) {
+        const projectIdCheck = validateProjectId(project_id);
+        if (!projectIdCheck.ok) {
+          return errorResponse("INVALID_PROJECT_ID", projectIdCheck.reason, { project_id });
+        }
+      }
+
+      if (!dry_run && !SYNC_DIR_WRITABLE) {
+        return errorResponse(
+          "SYNC_DIR_NOT_WRITABLE",
+          "Cannot merge Scrivener metadata because WRITING_SYNC_DIR is not writable in this runtime.",
+          { sync_dir: SYNC_DIR_ABS }
+        );
+      }
+
+      const resolvedScenesDir = scenes_dir
+        ?? (project_id ? path.join(resolveProjectRoot(project_id), "scenes") : undefined);
+
+      let mergeResult;
+      try {
+        mergeResult = mergeScrivenerProjectMetadata({
+          scrivPath: source_project_dir,
+          mcpSyncDir: SYNC_DIR,
+          projectId: project_id,
+          scenesDir: resolvedScenesDir,
+          dryRun: Boolean(dry_run),
+        });
+      } catch (error) {
+        return errorResponse(
+          "SCRIVENER_DIRECT_BETA_FAILED",
+          error instanceof Error ? error.message : "Scrivener direct beta merge failed.",
+          {
+            source_project_dir,
+            sync_dir: SYNC_DIR_ABS,
+            project_id: project_id ?? null,
+            fallback: "Use import_scrivener_sync with a Scrivener External Folder Sync export as the stable default path.",
+          }
+        );
+      }
+
+      let syncResult = null;
+      if (!dry_run && auto_sync) {
+        syncResult = syncAll(db, SYNC_DIR, { writable: SYNC_DIR_WRITABLE });
+      }
+
+      return jsonResponse({
+        ok: true,
+        beta: true,
+        merge: {
+          source_project_dir: mergeResult.scrivPath,
+          sync_dir: mergeResult.mcpSyncDir,
+          scenes_dir: mergeResult.scenesDir,
+          project_id: mergeResult.projectId,
+          dry_run: mergeResult.dryRun,
+          sidecar_files: mergeResult.sidecarFiles,
+          updated: mergeResult.updated,
+          unchanged: mergeResult.unchanged,
+          no_data: mergeResult.noData,
+          field_add_counts: mergeResult.fieldAddCounts,
+          preview_changes: mergeResult.previewChanges,
+          stats: {
+            sync_map_entries: mergeResult.stats.syncMapEntries,
+            keyword_map_entries: mergeResult.stats.keywordMapEntries,
+            binder_items: mergeResult.stats.binderItems,
+            part_chapter_assignments: mergeResult.stats.partChapterAssignments,
+          },
+        },
+        sync: syncResult
+          ? {
+            indexed: syncResult.indexed,
+            stale_marked: syncResult.staleMarked,
+            sidecars_migrated: syncResult.sidecarsMigrated,
+            skipped: syncResult.skipped,
+            warning_summary: syncResult.warningSummary,
           }
           : null,
         next_step: dry_run
-          ? "Dry run complete. Re-run with dry_run=false to write files."
+          ? "Dry run complete. Re-run with dry_run=false to write metadata merges."
           : auto_sync
-            ? "Import and sync complete."
-            : "Import complete. Run sync() to index imported scenes.",
+            ? "Beta merge and sync complete."
+            : "Beta merge complete. Run sync() to refresh index.",
+        warnings: [
+          "BETA_FEATURE: Direct Scrivener project parsing may be sensitive to Scrivener internal format changes.",
+          "If this fails, use import_scrivener_sync with an External Folder Sync export as the stable fallback.",
+        ],
+      });
+    }
+  );
+
+  // ---- async import/merge jobs --------------------------------------------
+  s.tool(
+    "import_scrivener_sync_async",
+    "Start an asynchronous Scrivener External Folder Sync import job. Returns immediately with a job_id to poll via get_async_job_status.",
+    {
+      source_dir: z.string().describe("Path to Scrivener external sync folder (the folder that contains Draft/, or Draft/ itself)."),
+      project_id: z.string().optional().describe("Project ID override (e.g. 'the-lamb' or 'universe-1/book-1-the-lamb')."),
+      dry_run: z.boolean().optional().describe("If true, reports planned writes without changing files."),
+      auto_sync: z.boolean().optional().describe("If true, runs sync() after a non-dry-run async import finishes."),
+      preflight: z.boolean().optional().describe("If true, returns a list of files that would be processed without doing any work."),
+      ignore_patterns: z.array(z.string()).optional().describe("Array of regex patterns matched against filenames. Files matching any pattern are excluded from import."),
+    },
+    async ({ source_dir, project_id, dry_run = false, auto_sync = false, preflight = false, ignore_patterns = [] }) => {
+      if (project_id !== undefined) {
+        const projectIdCheck = validateProjectId(project_id);
+        if (!projectIdCheck.ok) {
+          return errorResponse("INVALID_PROJECT_ID", projectIdCheck.reason, { project_id });
+        }
+      }
+
+      if (!dry_run && !SYNC_DIR_WRITABLE) {
+        return errorResponse(
+          "SYNC_DIR_NOT_WRITABLE",
+          "Cannot import because WRITING_SYNC_DIR is not writable in this runtime.",
+          { sync_dir: SYNC_DIR_ABS }
+        );
+      }
+
+      const job = startAsyncJob({
+        kind: "import_scrivener_sync",
+        requestPayload: {
+          kind: "import_scrivener_sync",
+          args: {
+            source_dir,
+            project_id,
+            dry_run: Boolean(dry_run),
+            preflight: Boolean(preflight),
+            ignore_patterns,
+          },
+          context: {
+            sync_dir: SYNC_DIR,
+          },
+        },
+        onComplete: (completedJob) => {
+          if (!auto_sync || dry_run || preflight || completedJob.status !== "completed") return;
+          const syncResult = syncAll(db, SYNC_DIR, { writable: SYNC_DIR_WRITABLE });
+          if (completedJob.result && completedJob.result.ok) {
+            completedJob.result.sync = {
+              indexed: syncResult.indexed,
+              stale_marked: syncResult.staleMarked,
+              sidecars_migrated: syncResult.sidecarsMigrated,
+              skipped: syncResult.skipped,
+              warning_summary: syncResult.warningSummary,
+            };
+          }
+        },
+      });
+
+      return jsonResponse({
+        ok: true,
+        async: true,
+        job: toPublicJob(job, false),
+        next_step: "Call get_async_job_status with job_id until status is 'completed' or 'failed'.",
+      });
+    }
+  );
+
+  s.tool(
+    "merge_scrivener_project_beta_async",
+    "Start an asynchronous beta Scrivener metadata merge job. Returns immediately with a job_id to poll via get_async_job_status.",
+    {
+      source_project_dir: z.string().describe("Path to a Scrivener .scriv bundle directory."),
+      project_id: z.string().optional().describe("Project ID containing existing sidecars (e.g. 'the-lamb' or 'universe-1/book-1-the-lamb')."),
+      scenes_dir: z.string().optional().describe("Absolute path to the scenes directory containing .meta.yaml sidecars. Overrides the path derived from project_id."),
+      dry_run: z.boolean().optional().describe("If true (default), reports planned merges without writing files."),
+      auto_sync: z.boolean().optional().describe("If true, runs sync() after a non-dry-run async merge finishes."),
+    },
+    async ({ source_project_dir, project_id, scenes_dir, dry_run = true, auto_sync = false }) => {
+      if (project_id !== undefined) {
+        const projectIdCheck = validateProjectId(project_id);
+        if (!projectIdCheck.ok) {
+          return errorResponse("INVALID_PROJECT_ID", projectIdCheck.reason, { project_id });
+        }
+      }
+
+      if (!dry_run && !SYNC_DIR_WRITABLE) {
+        return errorResponse(
+          "SYNC_DIR_NOT_WRITABLE",
+          "Cannot merge Scrivener metadata because WRITING_SYNC_DIR is not writable in this runtime.",
+          { sync_dir: SYNC_DIR_ABS }
+        );
+      }
+
+      const resolvedScenesDir = scenes_dir
+        ?? (project_id ? path.join(resolveProjectRoot(project_id), "scenes") : undefined);
+
+      const job = startAsyncJob({
+        kind: "merge_scrivener_project_beta",
+        requestPayload: {
+          kind: "merge_scrivener_project_beta",
+          args: {
+            source_project_dir,
+            project_id,
+            scenes_dir: resolvedScenesDir,
+            dry_run: Boolean(dry_run),
+          },
+          context: {
+            sync_dir: SYNC_DIR,
+          },
+        },
+        onComplete: (completedJob) => {
+          if (!auto_sync || dry_run || completedJob.status !== "completed") return;
+          const syncResult = syncAll(db, SYNC_DIR, { writable: SYNC_DIR_WRITABLE });
+          if (completedJob.result && completedJob.result.ok) {
+            completedJob.result.sync = {
+              indexed: syncResult.indexed,
+              stale_marked: syncResult.staleMarked,
+              sidecars_migrated: syncResult.sidecarsMigrated,
+              skipped: syncResult.skipped,
+              warning_summary: syncResult.warningSummary,
+            };
+          }
+        },
+      });
+
+      return jsonResponse({
+        ok: true,
+        async: true,
+        beta: true,
+        job: toPublicJob(job, false),
+        next_step: "Call get_async_job_status with job_id until status is 'completed' or 'failed'.",
+      });
+    }
+  );
+
+  s.tool(
+    "get_async_job_status",
+    "Get status and result for an asynchronous job started by import_scrivener_sync_async or merge_scrivener_project_beta_async.",
+    {
+      job_id: z.string().describe("Job ID returned by an async start tool."),
+      include_result: z.boolean().optional().describe("If true (default), includes completed result payload when available."),
+    },
+    async ({ job_id, include_result = true }) => {
+      pruneAsyncJobs();
+      const job = asyncJobs.get(job_id);
+      if (!job) {
+        return errorResponse("NOT_FOUND", `Async job '${job_id}' was not found. It may have expired.`);
+      }
+      return jsonResponse({ ok: true, async: true, job: toPublicJob(job, include_result) });
+    }
+  );
+
+  s.tool(
+    "list_async_jobs",
+    "List asynchronous import/merge jobs currently known to this server.",
+    {
+      include_results: z.boolean().optional().describe("If true, includes completed result payloads."),
+    },
+    async ({ include_results = false }) => {
+      pruneAsyncJobs();
+      const jobs = [...asyncJobs.values()]
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+        .map(job => toPublicJob(job, include_results));
+      return jsonResponse({ ok: true, async: true, jobs });
+    }
+  );
+
+  s.tool(
+    "cancel_async_job",
+    "Cancel a running asynchronous job.",
+    {
+      job_id: z.string().describe("Job ID returned by an async start tool."),
+    },
+    async ({ job_id }) => {
+      pruneAsyncJobs();
+      const job = asyncJobs.get(job_id);
+      if (!job) {
+        return errorResponse("NOT_FOUND", `Async job '${job_id}' was not found. It may have expired.`);
+      }
+
+      if (job.status !== "running") {
+        return jsonResponse({
+          ok: true,
+          async: true,
+          cancelled: false,
+          message: `Job is already ${job.status}.`,
+          job: toPublicJob(job, false),
+        });
+      }
+
+      try {
+        job.child.kill("SIGTERM");
+      } catch {
+        // best-effort cancellation
+      }
+      job.status = "cancelled";
+      job.finishedAt = new Date().toISOString();
+
+      return jsonResponse({
+        ok: true,
+        async: true,
+        cancelled: true,
+        job: toPublicJob(job, false),
       });
     }
   );
@@ -1709,54 +2160,66 @@ function createMcpServer() {
 }
 
 // ---------------------------------------------------------------------------
-// HTTP server
+// Transport startup
 // ---------------------------------------------------------------------------
-const activeSessions = new Map();
+const MCP_TRANSPORT = (process.env.MCP_TRANSPORT ?? "http").trim().toLowerCase();
 
-const httpServer = http.createServer(async (req, res) => {
-  if (req.method === "GET" && req.url === "/sse") {
-    const transport = new SSEServerTransport("/message", res);
-    const sessionId = transport.sessionId;
+if (MCP_TRANSPORT === "stdio") {
+  const stdioServer = createMcpServer();
+  const stdioTransport = new StdioServerTransport();
+  await stdioServer.connect(stdioTransport);
+  process.stderr.write("[mcp-writing] Running in stdio transport mode\n");
+} else {
+  // ---------------------------------------------------------------------------
+  // HTTP server
+  // ---------------------------------------------------------------------------
+  const activeSessions = new Map();
 
-    const existing = activeSessions.get(sessionId);
-    if (existing) {
-      try { await existing.transport.close(); } catch { /* empty */ }
-      try { await existing.server.close(); } catch { /* empty */ }
-      activeSessions.delete(sessionId);
-    }
+  const httpServer = http.createServer(async (req, res) => {
+    if (req.method === "GET" && req.url === "/sse") {
+      const transport = new SSEServerTransport("/message", res);
+      const sessionId = transport.sessionId;
 
-    const sessionServer = createMcpServer();
-    activeSessions.set(sessionId, { transport, server: sessionServer });
-    res.on("close", () => activeSessions.delete(sessionId));
+      const existing = activeSessions.get(sessionId);
+      if (existing) {
+        try { await existing.transport.close(); } catch { /* empty */ }
+        try { await existing.server.close(); } catch { /* empty */ }
+        activeSessions.delete(sessionId);
+      }
 
-    await sessionServer.connect(transport);
-    process.stderr.write(`[mcp-writing] SSE client connected (session=${sessionId})\n`);
-    return;
-  }
+      const sessionServer = createMcpServer();
+      activeSessions.set(sessionId, { transport, server: sessionServer });
+      res.on("close", () => activeSessions.delete(sessionId));
 
-  if (req.method === "POST" && req.url.startsWith("/message")) {
-    const url = new URL(req.url, `http://localhost`);
-    const sessionId = url.searchParams.get("sessionId");
-    const session = sessionId ? activeSessions.get(sessionId) : null;
-    if (!session) {
-      res.writeHead(404, { "Content-Type": "text/plain" });
-      res.end("Session not found");
+      await sessionServer.connect(transport);
+      process.stderr.write(`[mcp-writing] SSE client connected (session=${sessionId})\n`);
       return;
     }
-    await session.transport.handlePostMessage(req, res);
-    return;
-  }
 
-  if (req.method === "GET" && req.url === "/healthz") {
-    res.writeHead(200, { "Content-Type": "text/plain" });
-    res.end("ok");
-    return;
-  }
+    if (req.method === "POST" && req.url.startsWith("/message")) {
+      const url = new URL(req.url, `http://localhost`);
+      const sessionId = url.searchParams.get("sessionId");
+      const session = sessionId ? activeSessions.get(sessionId) : null;
+      if (!session) {
+        res.writeHead(404, { "Content-Type": "text/plain" });
+        res.end("Session not found");
+        return;
+      }
+      await session.transport.handlePostMessage(req, res);
+      return;
+    }
 
-  res.writeHead(404, { "Content-Type": "text/plain" });
-  res.end("Not found");
-});
+    if (req.method === "GET" && req.url === "/healthz") {
+      res.writeHead(200, { "Content-Type": "text/plain" });
+      res.end("ok");
+      return;
+    }
 
-httpServer.listen(HTTP_PORT, () => {
-  process.stderr.write(`[mcp-writing] Listening on port ${HTTP_PORT}\n`);
-});
+    res.writeHead(404, { "Content-Type": "text/plain" });
+    res.end("Not found");
+  });
+
+  httpServer.listen(HTTP_PORT, () => {
+    process.stderr.write(`[mcp-writing] Listening on port ${HTTP_PORT}\n`);
+  });
+}
