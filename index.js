@@ -901,7 +901,7 @@ function createMcpServer() {
         );
       }
 
-      if (!dry_run && !SYNC_DIR_WRITABLE) {
+      if (!dry_run && !preflight && !SYNC_DIR_WRITABLE) {
         return errorResponse(
           "SYNC_DIR_NOT_WRITABLE",
           "Cannot import because WRITING_SYNC_DIR is not writable in this runtime.",
@@ -1083,11 +1083,36 @@ function createMcpServer() {
         });
       }
 
-      try {
-        job.child.kill("SIGTERM");
-      } catch {
-        // best-effort cancellation
+      // Guard: if the child has already exited, its exit handler will have
+      // set the terminal status. Don't overwrite it.
+      const childHasExited = job.child.exitCode !== null || job.child.signalCode !== null;
+      if (childHasExited) {
+        return jsonResponse({
+          ok: true,
+          async: true,
+          cancelled: false,
+          message: "Job is no longer running.",
+          job: toPublicJob(job, false),
+        });
       }
+
+      let signalSent = false;
+      try {
+        signalSent = job.child.kill("SIGTERM");
+      } catch {
+        signalSent = false;
+      }
+
+      if (!signalSent) {
+        return jsonResponse({
+          ok: true,
+          async: true,
+          cancelled: false,
+          message: "Cancellation could not be requested; job may have already finished.",
+          job: toPublicJob(job, false),
+        });
+      }
+
       // Transitional: signal sent but worker has not yet exited.
       // Exit/error handlers will finalise status to "cancelled".
       job.status = "cancelling";

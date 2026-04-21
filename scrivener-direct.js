@@ -95,6 +95,9 @@ export function loadScrivenerProjectData(scrivPath) {
   if (!fs.existsSync(scrivPathAbs)) {
     throw new Error(`Scrivener bundle not found: ${scrivPathAbs}`);
   }
+  if (!fs.statSync(scrivPathAbs).isDirectory()) {
+    throw new Error(`Scrivener bundle must be a directory: ${scrivPathAbs}`);
+  }
 
   const scrivxFiles = fs.readdirSync(scrivPathAbs).filter(f => f.endsWith(".scrivx"));
   const scrivxFilesSorted = scrivxFiles.sort((a, b) => a.localeCompare(b));
@@ -239,8 +242,14 @@ export function mergeScrivenerProjectMetadata({
   const scenesDir = scenesDirOverride
     ?? path.join(deriveProjectRoot(resolvedProjectId), "scenes");
 
-  if (!fs.existsSync(scenesDir)) {
-    throw new Error(`Scenes directory not found: ${scenesDir}`);
+  let scenesDirStat;
+  try {
+    scenesDirStat = fs.statSync(scenesDir);
+  } catch {
+    throw new Error(`Scenes directory not found or not a directory: ${scenesDir}`);
+  }
+  if (!scenesDirStat.isDirectory()) {
+    throw new Error(`Scenes directory not found or not a directory: ${scenesDir}`);
   }
 
   const projectData = loadScrivenerProjectData(scrivPath);
