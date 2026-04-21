@@ -162,23 +162,38 @@ function startAsyncJob({ kind, requestPayload, onComplete }) {
     pruneAsyncJobs();
   });
 
-  child.on("exit", () => {
-    if (job.status === "cancelling") {
-      job.status = "cancelled";
-      job.finishedAt = new Date().toISOString();
-      pruneAsyncJobs();
-      return;
-    }
+  child.on("exit", (code, signal) => {
     const payload = readJsonIfExists(resultPath);
     const successful = payload?.ok === true;
-    job.status = successful ? "completed" : "failed";
+    const cancelledBySignal = signal === "SIGTERM" || signal === "SIGKILL";
+
     job.finishedAt = new Date().toISOString();
     job.result = payload;
-    if (!successful) {
-      job.error = payload?.error?.message ?? payload?.error ?? "Async job failed.";
+
+    if (job.status === "cancelling") {
+      if (successful && !cancelledBySignal) {
+        // Race: cancellation was requested as work completed successfully.
+        job.status = "completed";
+      } else {
+        job.status = "cancelled";
+        job.error = cancelledBySignal
+          ? `Async job cancelled by signal ${signal}.`
+          : payload?.error?.message ?? payload?.error ?? "Async job cancelled.";
+        pruneAsyncJobs();
+        return;
+      }
+    } else {
+      job.status = successful ? "completed" : "failed";
+      if (!successful) {
+        job.error = payload?.error?.message
+          ?? payload?.error
+          ?? (signal
+            ? `Async job exited due to signal ${signal}.`
+            : `Async job exited with code ${code}.`);
+      }
     }
 
-    if (successful && typeof job.onComplete === "function") {
+    if (job.status === "completed" && typeof job.onComplete === "function") {
       try {
         job.onComplete(job);
       } catch (error) {

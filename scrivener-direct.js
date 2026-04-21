@@ -264,6 +264,7 @@ export function mergeScrivenerProjectMetadata({
   let updated = 0;
   let unchanged = 0;
   let noData = 0;
+  let skippedNoBracketId = 0;
   const fieldAddCounts = {};
   const previewChanges = [];
 
@@ -272,6 +273,7 @@ export function mergeScrivenerProjectMetadata({
     const match = filename.match(/\[(\d+)\]\.meta\.yaml$/);
     if (!match) {
       logger(`  SKIP  (no bracket ID) ${filename}`);
+      skippedNoBracketId++;
       continue;
     }
 
@@ -324,6 +326,7 @@ export function mergeScrivenerProjectMetadata({
   logger(`\n${"─".repeat(50)}`);
   logger(`Updated:   ${updated} sidecars${dryRun ? " (dry run)" : ""}`);
   logger(`Unchanged: ${unchanged} (already complete or no new data)`);
+  if (skippedNoBracketId) logger(`Skipped:   ${skippedNoBracketId} (no bracket ID in filename)`);
   if (noData) logger(`No data:   ${noData} (no matching binder entry)`);
 
   return {
@@ -335,6 +338,7 @@ export function mergeScrivenerProjectMetadata({
     sidecarFiles: sidecarFiles.length,
     updated,
     unchanged,
+    skippedNoBracketId,
     noData,
     fieldAddCounts,
     previewChanges,
