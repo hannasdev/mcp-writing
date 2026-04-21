@@ -119,6 +119,12 @@ Deploy writing-mcp as a service in the OpenClaw runtime with the Writing World a
 
 **Status:** In progress. Runtime shape, deployment targets, and agent integration points are defined; remaining work is implementation and rollout.
 
+### 🧪 [Scrivener Direct Extraction (Beta)](docs/prd/in-progress/scrivener-direct-extraction-beta.md) 🚧
+
+Define an official beta ingestion path that reads Scrivener project internals (`.scriv`/`.scrivx`) for richer metadata extraction, while keeping sync-folder text import as the stable default.
+
+**Status:** In progress. Scope and safeguards are being defined before implementation to avoid schema-coupled regressions and preserve current import safety guarantees.
+
 ---
 
 ## Open Questions & Ideas

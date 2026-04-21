@@ -26,6 +26,11 @@ import {
 import { lintMetadataInSyncDir, validateMetadataObject } from "../metadata-lint.js";
 import { openDb } from "../db.js";
 import { importScrivenerSync } from "../importer.js";
+import {
+  loadScrivenerProjectData,
+  mergeScrivenerProjectMetadata,
+  mergeSidecarData,
+} from "../scrivener-direct.js";
 
 // ---------------------------------------------------------------------------
 // checksumProse
@@ -1019,6 +1024,188 @@ describe("Scrivener importer", () => {
 
     fs.rmSync(scrivenerDir, { recursive: true, force: true });
     fs.rmSync(targetDir, { recursive: true, force: true });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// scripts/merge-scrivx.js and scrivener-direct.js
+// ---------------------------------------------------------------------------
+describe("Scrivener direct metadata merge", () => {
+  function createScrivenerProjectFixture() {
+    const scrivDir = fs.mkdtempSync(path.join(os.tmpdir(), "scrivener-project-"));
+    const scrivxPath = path.join(scrivDir, "Novel.scrivx");
+
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<ScrivenerProject>
+  <ExternalSyncMap>
+    <SyncItem ID="UUID-1">1</SyncItem>
+  </ExternalSyncMap>
+  <Keywords>
+    <Keyword ID="kw-character"><Title>Elena Voss</Title></Keyword>
+    <Keyword ID="kw-version"><Title>v1.2</Title></Keyword>
+  </Keywords>
+  <Binder>
+    <BinderItem Type="DraftFolder" UUID="draft-root">
+      <Children>
+        <BinderItem Type="Folder" UUID="part-1">
+          <Children>
+            <BinderItem Type="Folder" UUID="chapter-1">
+              <Children>
+                <BinderItem Type="Text" UUID="UUID-1">
+                  <Keywords>
+                    <KeywordID>kw-character</KeywordID>
+                    <KeywordID>kw-version</KeywordID>
+                  </Keywords>
+                  <MetaData>
+                    <MetaDataItem><FieldID>savethecat!</FieldID><Value>Setup</Value></MetaDataItem>
+                    <MetaDataItem><FieldID>causality</FieldID><Value>2</Value></MetaDataItem>
+                    <MetaDataItem><FieldID>stakes</FieldID><Value>3</Value></MetaDataItem>
+                    <MetaDataItem><FieldID>change</FieldID><Value>Escalates conflict</Value></MetaDataItem>
+                    <MetaDataItem><FieldID>f:character</FieldID><Value>Yes</Value></MetaDataItem>
+                    <MetaDataItem><FieldID>f:mood</FieldID><Value>Yes</Value></MetaDataItem>
+                  </MetaData>
+                </BinderItem>
+              </Children>
+            </BinderItem>
+          </Children>
+        </BinderItem>
+      </Children>
+    </BinderItem>
+  </Binder>
+</ScrivenerProject>`;
+
+    fs.writeFileSync(scrivxPath, xml, "utf8");
+    fs.mkdirSync(path.join(scrivDir, "Files", "Data", "UUID-1"), { recursive: true });
+    fs.writeFileSync(
+      path.join(scrivDir, "Files", "Data", "UUID-1", "synopsis.txt"),
+      "Elena returns to the harbor.",
+      "utf8"
+    );
+
+    return scrivDir;
+  }
+
+  function createSyncSidecarFixture(projectId = "test-import") {
+    const syncRoot = fs.mkdtempSync(path.join(os.tmpdir(), "scriv-merge-sync-"));
+    const scenesDir = path.join(syncRoot, "projects", projectId, "scenes");
+    fs.mkdirSync(scenesDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(scenesDir, "001 Scene Arrival [1].meta.yaml"),
+      yaml.dump({ scene_id: "sc-001-arrival", logline: "Preserve this existing value." }),
+      "utf8"
+    );
+
+    return { syncRoot, scenesDir };
+  }
+
+  test("mergeSidecarData only adds missing fields", () => {
+    const existing = { scene_id: "sc-001", title: "Keep title" };
+    const mergeData = { title: "New title", chapter: 2, characters: ["Elena"] };
+
+    const result = mergeSidecarData(existing, mergeData);
+
+    assert.equal(result.changed, true);
+    assert.deepEqual(result.newKeys, ["chapter", "characters"]);
+    assert.equal(result.merged.title, "Keep title");
+    assert.equal(result.merged.chapter, 2);
+  });
+
+  test("loadScrivenerProjectData parses sync map and metadata", () => {
+    const scrivDir = createScrivenerProjectFixture();
+    try {
+      const data = loadScrivenerProjectData(scrivDir);
+      assert.equal(data.syncNumToUUID["1"], "UUID-1");
+      assert.equal(data.keywordMap["kw-character"], "Elena Voss");
+      assert.equal(data.metaByUUID["UUID-1"].synopsis, "Elena returns to the harbor.");
+      assert.deepEqual(data.metaByUUID["UUID-1"].characters, ["Elena Voss"]);
+      assert.deepEqual(data.metaByUUID["UUID-1"].versions, ["v1.2"]);
+      assert.equal(data.chapterByUUID["UUID-1"], 1);
+      assert.equal(data.partByUUID["UUID-1"], 1);
+    } finally {
+      fs.rmSync(scrivDir, { recursive: true, force: true });
+    }
+  });
+
+  test("mergeScrivenerProjectMetadata dry run reports updates without writing", () => {
+    const scrivDir = createScrivenerProjectFixture();
+    const { syncRoot, scenesDir } = createSyncSidecarFixture();
+
+    try {
+      const logs = [];
+      const result = mergeScrivenerProjectMetadata({
+        scrivPath: scrivDir,
+        mcpSyncDir: syncRoot,
+        projectId: "test-import",
+        dryRun: true,
+        logger: line => logs.push(line),
+      });
+
+      const sidecarPath = path.join(scenesDir, "001 Scene Arrival [1].meta.yaml");
+      const sidecar = yaml.load(fs.readFileSync(sidecarPath, "utf8"));
+
+      assert.equal(result.updated, 1);
+      assert.ok(logs.some(line => line.includes("DRY   001 Scene Arrival [1].meta.yaml")));
+      assert.equal(sidecar.chapter, undefined);
+      assert.equal(sidecar.synopsis, undefined);
+      assert.equal(sidecar.logline, "Preserve this existing value.");
+    } finally {
+      fs.rmSync(scrivDir, { recursive: true, force: true });
+      fs.rmSync(syncRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("mergeScrivenerProjectMetadata rejects invalid project_id shape", () => {
+    const scrivDir = createScrivenerProjectFixture();
+    const { syncRoot } = createSyncSidecarFixture();
+
+    try {
+      assert.throws(
+        () => mergeScrivenerProjectMetadata({
+          scrivPath: scrivDir,
+          mcpSyncDir: syncRoot,
+          projectId: "universe/a/b",
+          dryRun: true,
+        }),
+        /Invalid project_id/
+      );
+    } finally {
+      fs.rmSync(scrivDir, { recursive: true, force: true });
+      fs.rmSync(syncRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("scripts/merge-scrivx.js remains runnable and writes merged metadata", () => {
+    const scrivDir = createScrivenerProjectFixture();
+    const { syncRoot, scenesDir } = createSyncSidecarFixture();
+
+    try {
+      const result = spawnSync(
+        process.execPath,
+        [path.join(process.cwd(), "scripts", "merge-scrivx.js"), scrivDir, syncRoot, "--project", "test-import"],
+        { encoding: "utf8" }
+      );
+
+      assert.equal(result.status, 0, result.stderr || result.stdout);
+      const sidecar = yaml.load(
+        fs.readFileSync(path.join(scenesDir, "001 Scene Arrival [1].meta.yaml"), "utf8")
+      );
+
+      assert.equal(sidecar.scene_id, "sc-001-arrival");
+      assert.equal(sidecar.logline, "Preserve this existing value.");
+      assert.equal(sidecar.part, 1);
+      assert.equal(sidecar.chapter, 1);
+      assert.equal(sidecar.synopsis, "Elena returns to the harbor.");
+      assert.deepEqual(sidecar.characters, ["Elena Voss"]);
+      assert.deepEqual(sidecar.versions, ["v1.2"]);
+      assert.equal(sidecar.save_the_cat_beat, "Setup");
+      assert.equal(sidecar.causality, 2);
+      assert.equal(sidecar.stakes, 3);
+      assert.equal(sidecar.scene_change, "Escalates conflict");
+      assert.deepEqual(sidecar.scene_functions, ["character", "mood"]);
+    } finally {
+      fs.rmSync(scrivDir, { recursive: true, force: true });
+      fs.rmSync(syncRoot, { recursive: true, force: true });
+    }
   });
 });
 

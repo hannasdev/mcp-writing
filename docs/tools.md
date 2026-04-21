@@ -7,6 +7,12 @@
 
 - [`sync`](#sync)
 - [`import_scrivener_sync`](#import_scrivener_sync)
+- [`merge_scrivener_project_beta`](#merge_scrivener_project_beta)
+- [`import_scrivener_sync_async`](#import_scrivener_sync_async)
+- [`merge_scrivener_project_beta_async`](#merge_scrivener_project_beta_async)
+- [`get_async_job_status`](#get_async_job_status)
+- [`list_async_jobs`](#list_async_jobs)
+- [`cancel_async_job`](#cancel_async_job)
 - [`get_runtime_config`](#get_runtime_config)
 - [`find_scenes`](#find_scenes)
 - [`get_scene_prose`](#get_scene_prose)
@@ -54,6 +60,82 @@ Import Scrivener External Folder Sync Draft files into this server's WRITING_SYN
 | `project_id` | `string` |  | Project ID override (e.g. 'the-lamb'). Defaults to a slug derived from WRITING_SYNC_DIR. |
 | `dry_run` | `boolean` |  | If true, reports planned writes without changing files. |
 | `auto_sync` | `boolean` |  | If true (default), runs sync() after import when not dry-run. |
+| `preflight` | `boolean` |  | If true, returns a list of files that would be processed without doing any work. Use to verify scope before a large import. |
+| `ignore_patterns` | `string[]` |  | Array of regex patterns matched against filenames. Files matching any pattern are excluded from import. Useful to skip fragments, beat-sheet notes, or feedback files. |
+
+---
+
+## merge_scrivener_project_beta
+
+[BETA] Merge metadata directly from a Scrivener .scriv project into existing scene sidecars. This path is opt-in and may be sensitive to Scrivener internal format changes. Requires scenes sidecars to already exist (for example, from import_scrivener_sync).
+
+| Parameter | Type | Required | Description |
+|-----------|------|:--------:|-------------|
+| `source_project_dir` | `string` | ✓ | Path to a Scrivener .scriv bundle directory. |
+| `project_id` | `string` |  | Project ID containing existing sidecars (e.g. 'the-lamb' or 'universe-1/book-1-the-lamb'). Defaults to a slug derived from WRITING_SYNC_DIR. |
+| `scenes_dir` | `string` |  | Absolute path to the scenes directory containing .meta.yaml sidecars. Overrides the path derived from project_id. Use this for non-standard sync layouts. |
+| `dry_run` | `boolean` |  | If true (default), reports planned merges without writing files. |
+| `auto_sync` | `boolean` |  | If true (default), runs sync() after a non-dry-run merge. |
+
+---
+
+## import_scrivener_sync_async
+
+Start an asynchronous Scrivener External Folder Sync import job. Returns immediately with a job_id to poll via get_async_job_status.
+
+| Parameter | Type | Required | Description |
+|-----------|------|:--------:|-------------|
+| `source_dir` | `string` | ✓ | Path to Scrivener external sync folder (the folder that contains Draft/, or Draft/ itself). |
+| `project_id` | `string` |  | Project ID override (e.g. 'the-lamb' or 'universe-1/book-1-the-lamb'). |
+| `dry_run` | `boolean` |  | If true, reports planned writes without changing files. |
+| `auto_sync` | `boolean` |  | If true, runs sync() after a non-dry-run async import finishes. |
+| `preflight` | `boolean` |  | If true, returns a list of files that would be processed without doing any work. |
+| `ignore_patterns` | `string[]` |  | Array of regex patterns matched against filenames. Files matching any pattern are excluded from import. |
+
+---
+
+## merge_scrivener_project_beta_async
+
+Start an asynchronous beta Scrivener metadata merge job. Returns immediately with a job_id to poll via get_async_job_status.
+
+| Parameter | Type | Required | Description |
+|-----------|------|:--------:|-------------|
+| `source_project_dir` | `string` | ✓ | Path to a Scrivener .scriv bundle directory. |
+| `project_id` | `string` |  | Project ID containing existing sidecars (e.g. 'the-lamb' or 'universe-1/book-1-the-lamb'). |
+| `scenes_dir` | `string` |  | Absolute path to the scenes directory containing .meta.yaml sidecars. Overrides the path derived from project_id. |
+| `dry_run` | `boolean` |  | If true (default), reports planned merges without writing files. |
+| `auto_sync` | `boolean` |  | If true, runs sync() after a non-dry-run async merge finishes. |
+
+---
+
+## get_async_job_status
+
+Get status and result for an asynchronous job started by import_scrivener_sync_async or merge_scrivener_project_beta_async.
+
+| Parameter | Type | Required | Description |
+|-----------|------|:--------:|-------------|
+| `job_id` | `string` | ✓ | Job ID returned by an async start tool. |
+| `include_result` | `boolean` |  | If true (default), includes completed result payload when available. |
+
+---
+
+## list_async_jobs
+
+List asynchronous import/merge jobs currently known to this server.
+
+| Parameter | Type | Required | Description |
+|-----------|------|:--------:|-------------|
+| `include_results` | `boolean` |  | If true, includes completed result payloads. |
+
+---
+
+## cancel_async_job
+
+Cancel a running asynchronous job.
+
+| Parameter | Type | Required | Description |
+|-----------|------|:--------:|-------------|
+| `job_id` | `string` | ✓ | Job ID returned by an async start tool. |
 
 ---
 

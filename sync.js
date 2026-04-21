@@ -587,6 +587,41 @@ export function indexSceneFile(db, syncDir, file, meta, prose) {
   return { isStale };
 }
 
+const WARNING_TYPE_LABELS = {
+  no_scene_id: "Skipped (no scene_id)",
+  duplicate_scene_id: "Duplicate scene_id",
+  path_metadata_mismatch: "Path/metadata mismatch",
+  orphaned_sidecar: "Orphaned sidecar",
+  moved_scene: "Moved scene",
+  nested_mirror: "Ignored nested mirror path",
+};
+
+const WARNING_PATTERNS = [
+  { type: "no_scene_id",            re: /^Skipped \(no scene_id\):/  },
+  { type: "duplicate_scene_id",     re: /^Duplicate scene_id/        },
+  { type: "path_metadata_mismatch", re: /^Path\/metadata mismatch/   },
+  { type: "moved_scene",            re: /^Moved scene detected:/      },
+  { type: "orphaned_sidecar",       re: /^Orphaned sidecar/          },
+  { type: "nested_mirror",          re: /^Ignored nested mirror path:/ },
+];
+
+const MAX_WARNING_EXAMPLES = 5;
+
+function buildWarningSummary(warnings) {
+  const summary = {};
+  for (const w of warnings) {
+    const firstLine = w.split("\n")[0];
+    const match = WARNING_PATTERNS.find(p => p.re.test(firstLine));
+    const type = match?.type ?? "other";
+    if (!summary[type]) summary[type] = { count: 0, examples: [] };
+    summary[type].count++;
+    if (summary[type].examples.length < MAX_WARNING_EXAMPLES) {
+      summary[type].examples.push(firstLine);
+    }
+  }
+  return summary;
+}
+
 export function syncAll(db, syncDir, { quiet = false, writable = false } = {}) {
   // Reset per-run inference cache so filesystem changes between sync calls
   // (for example after imports or path repairs) are reflected immediately.
@@ -697,15 +732,19 @@ export function syncAll(db, syncDir, { quiet = false, writable = false } = {}) {
     }
   }
 
+  const warningSummary = buildWarningSummary(warnings);
+
   if (!quiet) {
     process.stderr.write(
       `[mcp-writing] Sync complete: ${indexed} scenes indexed, ${staleMarked} marked stale` +
       (sidecarsMigrated ? `, ${sidecarsMigrated} sidecars auto-generated` : "") +
       (skipped ? `, ${skipped} files skipped` : "") + "\n"
     );
-    for (const w of warnings) {
-      process.stderr.write(`[mcp-writing] WARNING: ${w}\n`);
+    for (const [type, entry] of Object.entries(warningSummary)) {
+      const count = entry.count;
+      const label = WARNING_TYPE_LABELS[type] ?? type;
+      process.stderr.write(`[mcp-writing] WARNING: ${label}: ${count} file(s). First example: ${entry.examples[0]}\n`);
     }
   }
-  return { indexed, staleMarked, skipped, sidecarsMigrated, warnings };
+  return { indexed, staleMarked, skipped, sidecarsMigrated, warnings, warningSummary };
 }

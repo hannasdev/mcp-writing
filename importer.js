@@ -84,6 +84,21 @@ function walkSorted(dir) {
   return files.sort((a, b) => path.basename(a).localeCompare(path.basename(b)));
 }
 
+function compileIgnorePatterns(patterns) {
+  return patterns.map((pattern) => {
+    try {
+      return new RegExp(pattern);
+    } catch (err) {
+      const error = new Error(
+        `Invalid ignore pattern '${pattern}': ${err instanceof Error ? err.message : String(err)}`
+      );
+      error.code = "INVALID_IGNORE_PATTERN";
+      error.pattern = pattern;
+      throw error;
+    }
+  });
+}
+
 function loadYamlFile(filePath) {
   try {
     return yaml.load(fs.readFileSync(filePath, "utf8")) ?? {};
@@ -185,6 +200,8 @@ export function importScrivenerSync({
   mcpSyncDir,
   projectId,
   dryRun = false,
+  preflight = false,
+  ignorePatterns = [],
   logger = () => {},
 }) {
   const scrivenerDirAbs = path.resolve(scrivenerDir);
@@ -241,7 +258,16 @@ export function importScrivenerSync({
   const hasDraft = fs.existsSync(draftDir);
   const draftRoot = hasDraft ? draftDir : scrivenerDirAbs;
 
-  const files = walkSorted(draftRoot);
+  const compiledIgnorePatterns = compileIgnorePatterns(ignorePatterns);
+
+  function isIgnored(filename) {
+    return compiledIgnorePatterns.some(re => re.test(filename));
+  }
+
+  const rawFiles = walkSorted(draftRoot);
+  const ignoredFiles = rawFiles.filter(f => isIgnored(path.basename(f)));
+  const files = rawFiles.filter(f => !isIgnored(path.basename(f)));
+
   const existingScenes = buildExistingSceneIndex(scenesDir);
 
   let created = 0;
@@ -250,13 +276,35 @@ export function importScrivenerSync({
   let beatMarkersSeen = 0;
   let beatCarry = null;
 
+  if (preflight) {
+    const previewFiles = files.map(f => path.relative(draftRoot, f));
+    return {
+      projectId: resolvedProjectId,
+      scrivenerDir: scrivenerDirAbs,
+      mcpSyncDir: mcpSyncDirAbs,
+      scenesDir,
+      preflight: true,
+      dryRun: true,
+      sourceFiles: rawFiles.length,
+      ignoredFiles: ignoredFiles.length,
+      ignoredFilenames: ignoredFiles.map(f => path.basename(f)),
+      filesToProcess: files.length,
+      filePreviews: previewFiles,
+      existingSidecars: existingScenes.size,
+      created: 0,
+      existing: 0,
+      skipped: 0,
+      beatMarkersSeen: 0,
+    };
+  }
+
   if (!dryRun) {
     fs.mkdirSync(scenesDir, { recursive: true });
   }
 
   logger(`Project:   ${resolvedProjectId}`);
   logger(`Scenes to: ${scenesDir}`);
-  logger(`Files:     ${files.length}`);
+  logger(`Files:     ${files.length} (${ignoredFiles.length} ignored)`);
   logger("");
 
   for (const file of files) {
@@ -357,7 +405,9 @@ export function importScrivenerSync({
     scrivenerDir: scrivenerDirAbs,
     mcpSyncDir: mcpSyncDirAbs,
     scenesDir,
-    sourceFiles: files.length,
+    preflight: false,
+    sourceFiles: rawFiles.length,
+    ignoredFiles: ignoredFiles.length,
     created,
     skipped,
     existing,
