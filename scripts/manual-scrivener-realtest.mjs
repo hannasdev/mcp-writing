@@ -58,7 +58,11 @@ function parseArgs(argv) {
       options.syncDir = argv[++index];
     } else if (arg === "--sample-count") {
       if (index + 1 >= argv.length) throw new Error(`${arg} requires a value.`);
-      options.sampleCount = parseInt(argv[++index], 10);
+      const sampleCountValue = argv[++index];
+      if (!/^\d+$/.test(sampleCountValue)) {
+        throw new Error("--sample-count must be a positive integer.");
+      }
+      options.sampleCount = Number(sampleCountValue);
     } else if (arg === "--no-clean") {
       options.clean = false;
     } else {
@@ -233,11 +237,12 @@ function main() {
     dryRun: false,
   }))));
 
-  const scenesDir = options.projectId.includes("/")
-    ? path.join(syncDir, "universes", ...options.projectId.split("/"), "scenes")
-    : path.join(syncDir, "projects", options.projectId, "scenes");
-
-  const sidecars = fs.existsSync(scenesDir) ? walkSidecars(scenesDir) : [];
+  
+  // Use scenesDir from import_write result (the actual written path) instead of re-deriving
+  const importWriteResult = report.tests.find((test) => test.name === "import_write" && test.ok)?.result;
+  const scenesDir = importWriteResult?.scenesDir;
+  
+  const sidecars = scenesDir && fs.existsSync(scenesDir) ? walkSidecars(scenesDir) : [];
   report.sidecarCount = sidecars.length;
   report.sampleSidecars = sidecars
     .slice(0, options.sampleCount)
