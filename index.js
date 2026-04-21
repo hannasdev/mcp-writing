@@ -1100,7 +1100,7 @@ function createMcpServer() {
       try {
         signalSent = job.child.kill("SIGTERM");
       } catch {
-        signalSent = false;
+        // kill() threw — treat as signal not sent
       }
 
       if (!signalSent) {
