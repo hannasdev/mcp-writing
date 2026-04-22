@@ -10,6 +10,7 @@
 - [`merge_scrivener_project_beta`](#merge_scrivener_project_beta)
 - [`import_scrivener_sync_async`](#import_scrivener_sync_async)
 - [`merge_scrivener_project_beta_async`](#merge_scrivener_project_beta_async)
+- [`enrich_scene_characters_batch`](#enrich_scene_characters_batch)
 - [`get_async_job_status`](#get_async_job_status)
 - [`list_async_jobs`](#list_async_jobs)
 - [`cancel_async_job`](#cancel_async_job)
@@ -108,9 +109,28 @@ Start an asynchronous beta Scrivener metadata merge job. Returns immediately wit
 
 ---
 
+## enrich_scene_characters_batch
+
+Start an asynchronous batch job that infers scene character mentions and updates scene metadata links. Version 1 uses canonical character names only (no aliases). Defaults to dry_run=true.
+
+| Parameter | Type | Required | Description |
+|-----------|------|:--------:|-------------|
+| `project_id` | `string` | ✓ | Project ID (e.g. 'the-lamb' or 'universe-1/book-1-the-lamb'). |
+| `scene_ids` | `string[]` |  | Optional allowlist of scene IDs to process before other filters are applied. |
+| `part` | `integer` |  | Optional part number filter. |
+| `chapter` | `integer` |  | Optional chapter number filter. |
+| `only_stale` | `boolean` |  | If true, only process scenes currently marked metadata_stale. |
+| `dry_run` | `boolean` |  | If true (default), returns preview results without writing sidecars. |
+| `replace_mode` | `enum("merge","replace")` |  | merge (default): add inferred IDs; replace: overwrite characters with inferred IDs. |
+| `max_scenes` | `integer` |  | Hard guardrail for resolved scene count (default: 200). |
+| `include_match_details` | `boolean` |  | If true, include extra match diagnostics per scene. |
+| `confirm_replace` | `boolean` |  | Must be true when replace_mode=replace. |
+
+---
+
 ## get_async_job_status
 
-Get status and result for an asynchronous job started by import_scrivener_sync_async or merge_scrivener_project_beta_async.
+Get status and result for an asynchronous job started by async tools such as import_scrivener_sync_async, merge_scrivener_project_beta_async, or enrich_scene_characters_batch.
 
 | Parameter | Type | Required | Description |
 |-----------|------|:--------:|-------------|
@@ -121,7 +141,7 @@ Get status and result for an asynchronous job started by import_scrivener_sync_a
 
 ## list_async_jobs
 
-List asynchronous import/merge jobs currently known to this server.
+List asynchronous jobs currently known to this server.
 
 | Parameter | Type | Required | Description |
 |-----------|------|:--------:|-------------|

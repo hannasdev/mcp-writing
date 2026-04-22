@@ -2,10 +2,22 @@ import fs from "node:fs";
 import path from "node:path";
 import { importScrivenerSync } from "../importer.js";
 import { mergeScrivenerProjectMetadata } from "../scrivener-direct.js";
+import { runSceneCharacterBatch } from "../scene-character-batch.js";
+import { ASYNC_PROGRESS_PREFIX } from "../async-progress.js";
+
+const PROGRESS_PREFIX = ASYNC_PROGRESS_PREFIX;
 
 function writeResult(resultPath, payload) {
   fs.mkdirSync(path.dirname(resultPath), { recursive: true });
   fs.writeFileSync(resultPath, JSON.stringify(payload, null, 2), "utf8");
+}
+
+function writeProgress(payload) {
+  try {
+    process.stdout.write(`${PROGRESS_PREFIX}${JSON.stringify(payload)}\n`);
+  } catch {
+    // Best-effort only; never fail the job due to progress telemetry.
+  }
 }
 
 function normalizeImportResult(importResult) {
@@ -68,7 +80,14 @@ function normalizeMergeResult(mergeResult) {
   };
 }
 
-function main() {
+function normalizeSceneCharacterBatchResult(batchResult) {
+  return {
+    ok: true,
+    ...batchResult,
+  };
+}
+
+async function main() {
   const requestPath = process.argv[2];
   const resultPath = process.argv[3];
 
@@ -107,11 +126,37 @@ function main() {
     return;
   }
 
+  if (request.kind === "enrich_scene_characters_batch") {
+    let cancellationRequested = false;
+    const handleSigterm = () => {
+      cancellationRequested = true;
+    };
+    process.on("SIGTERM", handleSigterm);
+
+    const result = await runSceneCharacterBatch({
+      syncDir,
+      args: {
+        project_id: request.args?.project_id,
+        dry_run: Boolean(request.args?.dry_run),
+        replace_mode: request.args?.replace_mode ?? "merge",
+        include_match_details: Boolean(request.args?.include_match_details),
+        project_exists: request.args?.project_exists !== false,
+        target_scenes: request.args?.target_scenes ?? [],
+        character_rows: request.args?.character_rows ?? [],
+      },
+      onProgress: progress => writeProgress({ kind: request.kind, ...progress }),
+      shouldCancel: () => cancellationRequested,
+    });
+    process.off("SIGTERM", handleSigterm);
+    writeResult(resultPath, normalizeSceneCharacterBatchResult(result));
+    return;
+  }
+
   throw new Error(`Unsupported async job kind '${request.kind}'.`);
 }
 
 try {
-  main();
+  await main();
 } catch (error) {
   const resultPath = process.argv[3];
   if (resultPath) {

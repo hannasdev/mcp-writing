@@ -76,5 +76,17 @@ Goal: let AI propose prose edits without losing control of your draft.
 
 Outcome: you get AI speed with explicit approval and recoverable history for every applied change.
 
+### 5) Refreshing scene-character links after imports or major rewrites
+
+Goal: rebuild scene-to-character links in a controlled way after imported prose changes or metadata drift.
+
+1. Start with `enrich_scene_characters_batch` using the default `dry_run=true` to preview inferred links for a project, chapter, or explicit scene list.
+2. Poll `get_async_job_status` until the batch job completes, then review `job.result.results` for changed scenes, ambiguous matches, and partial failures.
+3. Spot-check a few affected scenes with `get_scene_prose` if the changes touch important continuity or cast-heavy chapters.
+4. Re-run `enrich_scene_characters_batch` with `dry_run=false` once the preview looks correct.
+5. If you want a destructive overwrite instead of additive merge behavior, use `replace_mode=replace` with `confirm_replace=true` deliberately.
+
+Outcome: character-link maintenance becomes a preview-first batch operation instead of a one-off regex script or manual sidecar cleanup.
+
 ## License
 AGPL-3.0-only

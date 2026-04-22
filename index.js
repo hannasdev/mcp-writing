@@ -17,6 +17,7 @@ import { isGitAvailable, isGitRepository, initGitRepository, createSnapshot, lis
 import { renderCharacterArcTemplate, renderCharacterSheetTemplate, renderPlaceSheetTemplate, slugifyEntityName } from "./world-entity-templates.js";
 import { importScrivenerSync, validateProjectId } from "./importer.js";
 import { mergeScrivenerProjectMetadata } from "./scrivener-direct.js";
+import { ASYNC_PROGRESS_PREFIX } from "./async-progress.js";
 
 const SYNC_DIR = process.env.WRITING_SYNC_DIR ?? "./sync";
 const DB_PATH = process.env.DB_PATH ?? "./writing.db";
@@ -119,12 +120,14 @@ function toPublicJob(job, includeResult = true) {
     finished_at: job.finishedAt,
     pid: job.pid,
     error: job.error,
+    ...(job.progress ? { progress: job.progress } : {}),
     ...(includeResult ? { result: job.result } : {}),
   };
 }
 
 function startAsyncJob({ kind, requestPayload, onComplete }) {
   pruneAsyncJobs();
+  const progressPrefix = ASYNC_PROGRESS_PREFIX;
 
   const id = randomUUID();
   const tmpPrefix = path.join(os.tmpdir(), "mcp-writing-job-");
@@ -156,14 +159,38 @@ function startAsyncJob({ kind, requestPayload, onComplete }) {
     requestPath,
     resultPath,
     result: null,
+    progress: null,
     error: null,
     onComplete,
     child,
   };
   asyncJobs.set(id, job);
 
-  child.stdout.on("data", () => {
-    // worker writes structured output to resultPath; stdout is ignored here
+  let stdoutBuffer = "";
+  child.stdout.on("data", (chunk) => {
+    stdoutBuffer += chunk.toString("utf8");
+    const lines = stdoutBuffer.split("\n");
+    stdoutBuffer = lines.pop() ?? "";
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed.startsWith(progressPrefix)) continue;
+      const payload = trimmed.slice(progressPrefix.length);
+      try {
+        const progress = JSON.parse(payload);
+        if (progress && typeof progress === "object") {
+          const nextProgress = {
+            total_scenes: Number(progress.total_scenes ?? 0),
+            processed_scenes: Number(progress.processed_scenes ?? 0),
+            scenes_changed: Number(progress.scenes_changed ?? 0),
+            failed_scenes: Number(progress.failed_scenes ?? 0),
+          };
+          job.progress = nextProgress;
+        }
+      } catch {
+        // Ignore malformed progress lines; they are best-effort telemetry.
+      }
+    }
   });
   child.stderr.on("data", () => {
     // avoid crashing on stderr backpressure for noisy runs
@@ -187,12 +214,32 @@ function startAsyncJob({ kind, requestPayload, onComplete }) {
     const payload = readJsonIfExists(resultPath);
     const successful = payload?.ok === true;
     const cancelledBySignal = signal === "SIGTERM" || signal === "SIGKILL";
+    const cancelledByPayload = payload?.cancelled === true;
 
     job.finishedAt = new Date().toISOString();
     job.result = payload;
 
+    const hasProgressFields = payload && (
+      payload.total_scenes !== undefined
+      || payload.processed_scenes !== undefined
+      || payload.scenes_changed !== undefined
+      || payload.failed_scenes !== undefined
+    );
+
+    if (payload && payload.ok === true && hasProgressFields) {
+      job.progress = {
+        total_scenes: Number(payload.total_scenes ?? job.progress?.total_scenes ?? 0),
+        processed_scenes: Number(payload.processed_scenes ?? job.progress?.processed_scenes ?? 0),
+        scenes_changed: Number(payload.scenes_changed ?? job.progress?.scenes_changed ?? 0),
+        failed_scenes: Number(payload.failed_scenes ?? job.progress?.failed_scenes ?? 0),
+      };
+    }
+
     if (job.status === "cancelling") {
-      if (successful && !cancelledBySignal) {
+      if (cancelledByPayload) {
+        job.status = "cancelled";
+        job.error = "Async job cancelled after returning partial results.";
+      } else if (successful && !cancelledBySignal) {
         // Race: cancellation was requested as work completed successfully.
         job.status = "completed";
       } else {
@@ -376,6 +423,63 @@ function resolveWorldEntityDir({ kind, projectId, universeId, name }) {
   return {
     slug,
     dir: path.join(baseDir, bucket, slug),
+  };
+}
+
+function resolveBatchTargetScenes(dbHandle, {
+  projectId,
+  sceneIds,
+  part,
+  chapter,
+  onlyStale,
+}) {
+  const projectExists = Boolean(
+    dbHandle.prepare(`SELECT 1 FROM projects WHERE project_id = ? LIMIT 1`).get(projectId)
+  );
+
+  if (sceneIds?.length) {
+    const placeholders = sceneIds.map(() => "?").join(",");
+    const existingRows = dbHandle.prepare(
+      `SELECT scene_id FROM scenes WHERE project_id = ? AND scene_id IN (${placeholders})`
+    ).all(projectId, ...sceneIds);
+    const existing = new Set(existingRows.map(row => row.scene_id));
+    const missing = sceneIds.filter(sceneId => !existing.has(sceneId));
+    if (missing.length > 0) {
+      return { ok: false, code: "NOT_FOUND", message: `Requested scene IDs were not found in project '${projectId}'.`, details: { missing_scene_ids: missing, project_id: projectId } };
+    }
+  }
+
+  const conditions = ["project_id = ?"];
+  const params = [projectId];
+
+  if (sceneIds?.length) {
+    const placeholders = sceneIds.map(() => "?").join(",");
+    conditions.push(`scene_id IN (${placeholders})`);
+    params.push(...sceneIds);
+  }
+  if (part !== undefined) {
+    conditions.push("part = ?");
+    params.push(part);
+  }
+  if (chapter !== undefined) {
+    conditions.push("chapter = ?");
+    params.push(chapter);
+  }
+  if (onlyStale) {
+    conditions.push("metadata_stale = 1");
+  }
+
+  const query = `
+    SELECT scene_id, project_id, file_path
+    FROM scenes
+    WHERE ${conditions.join(" AND ")}
+    ORDER BY part, chapter, timeline_position
+  `;
+
+  return {
+    ok: true,
+    rows: dbHandle.prepare(query).all(...params),
+    project_exists: projectExists,
   };
 }
 
@@ -1063,8 +1167,128 @@ function createMcpServer() {
   );
 
   s.tool(
+    "enrich_scene_characters_batch",
+    "Start an asynchronous batch job that infers scene character mentions and updates scene metadata links. Version 1 uses canonical character names only (no aliases). Defaults to dry_run=true.",
+    {
+      project_id: z.string().describe("Project ID (e.g. 'the-lamb' or 'universe-1/book-1-the-lamb')."),
+      scene_ids: z.array(z.string()).optional().describe("Optional allowlist of scene IDs to process before other filters are applied."),
+      part: z.number().int().optional().describe("Optional part number filter."),
+      chapter: z.number().int().optional().describe("Optional chapter number filter."),
+      only_stale: z.boolean().optional().describe("If true, only process scenes currently marked metadata_stale."),
+      dry_run: z.boolean().optional().describe("If true (default), returns preview results without writing sidecars."),
+      replace_mode: z.enum(["merge", "replace"]).optional().describe("merge (default): add inferred IDs; replace: overwrite characters with inferred IDs."),
+      max_scenes: z.number().int().positive().optional().describe("Hard guardrail for resolved scene count (default: 200)."),
+      include_match_details: z.boolean().optional().describe("If true, include extra match diagnostics per scene."),
+      confirm_replace: z.boolean().optional().describe("Must be true when replace_mode=replace."),
+    },
+    async ({
+      project_id,
+      scene_ids,
+      part,
+      chapter,
+      only_stale = false,
+      dry_run = true,
+      replace_mode = "merge",
+      max_scenes = 200,
+      include_match_details = false,
+      confirm_replace = false,
+    }) => {
+      const projectIdCheck = validateProjectId(project_id);
+      if (!projectIdCheck.ok) {
+        return errorResponse("INVALID_PROJECT_ID", projectIdCheck.reason, { project_id });
+      }
+
+      if (replace_mode === "replace" && !confirm_replace) {
+        return errorResponse(
+          "VALIDATION_ERROR",
+          "replace_mode=replace requires confirm_replace=true.",
+          { replace_mode, confirm_replace }
+        );
+      }
+
+      if (!dry_run && !SYNC_DIR_WRITABLE) {
+        return errorResponse(
+          "READ_ONLY",
+          "Cannot run batch character enrichment in write mode: sync dir is read-only.",
+          { sync_dir: SYNC_DIR_ABS }
+        );
+      }
+
+      const characterRows = db.prepare(`
+        SELECT character_id, name
+        FROM characters
+        WHERE project_id = ? OR universe_id = (SELECT universe_id FROM projects WHERE project_id = ?)
+        ORDER BY length(name) DESC
+      `).all(project_id, project_id);
+
+      const targetResolution = resolveBatchTargetScenes(db, {
+        projectId: project_id,
+        sceneIds: scene_ids,
+        part,
+        chapter,
+        onlyStale: Boolean(only_stale),
+      });
+      if (!targetResolution.ok) {
+        return errorResponse(targetResolution.code, targetResolution.message, targetResolution.details);
+      }
+
+      const targetScenes = targetResolution.rows;
+      const projectExists = targetResolution.project_exists !== false;
+      if (targetScenes.length > max_scenes) {
+        return errorResponse(
+          "VALIDATION_ERROR",
+          `Matched ${targetScenes.length} scenes, which exceeds max_scenes=${max_scenes}.`,
+          {
+            matched_scenes: targetScenes.length,
+            max_scenes,
+            project_id,
+          }
+        );
+      }
+
+      const job = startAsyncJob({
+        kind: "enrich_scene_characters_batch",
+        requestPayload: {
+          kind: "enrich_scene_characters_batch",
+          args: {
+            project_id,
+            dry_run: Boolean(dry_run),
+            replace_mode,
+            include_match_details: Boolean(include_match_details),
+            project_exists: projectExists,
+            target_scenes: targetScenes,
+            character_rows: characterRows,
+          },
+          context: { sync_dir: SYNC_DIR },
+        },
+        onComplete: (completedJob) => {
+          if (dry_run || completedJob.status !== "completed" || !completedJob.result?.ok) return;
+
+          syncAll(db, SYNC_DIR, { writable: SYNC_DIR_WRITABLE });
+
+          const changedScenes = (completedJob.result.results ?? [])
+            .filter(row => row.status === "changed")
+            .map(row => row.scene_id);
+
+          for (const sceneId of changedScenes) {
+            db.prepare(`UPDATE scenes SET metadata_stale = 0 WHERE scene_id = ? AND project_id = ?`)
+              .run(sceneId, project_id);
+          }
+        },
+      });
+
+      return jsonResponse({
+        ok: true,
+        async: true,
+        job: toPublicJob(job, false),
+        next_step: "Call get_async_job_status with job_id until status is 'completed', 'failed', or 'cancelled'.",
+      });
+    }
+  );
+
+  s.tool(
     "get_async_job_status",
-    "Get status and result for an asynchronous job started by import_scrivener_sync_async or merge_scrivener_project_beta_async.",
+    "Get status and result for an asynchronous job started by async tools such as import_scrivener_sync_async, merge_scrivener_project_beta_async, or enrich_scene_characters_batch.",
     {
       job_id: z.string().describe("Job ID returned by an async start tool."),
       include_result: z.boolean().optional().describe("If true (default), includes completed result payload when available."),
@@ -1081,7 +1305,7 @@ function createMcpServer() {
 
   s.tool(
     "list_async_jobs",
-    "List asynchronous import/merge jobs currently known to this server.",
+    "List asynchronous jobs currently known to this server.",
     {
       include_results: z.boolean().optional().describe("If true, includes completed result payloads."),
     },
