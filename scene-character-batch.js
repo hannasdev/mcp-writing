@@ -83,6 +83,7 @@ export async function runSceneCharacterBatch({ syncDir, args, onProgress, should
     dry_run = true,
     replace_mode = "merge",
     include_match_details = false,
+    project_exists = true,
     target_scenes = [],
     character_rows = [],
   } = args;
@@ -193,6 +194,14 @@ export async function runSceneCharacterBatch({ syncDir, args, onProgress, should
     }
   }
 
+  const warnings = [];
+  if (failed_scenes > 0) {
+    warnings.push("PARTIAL_SUCCESS: one or more scenes failed to process.");
+  }
+  if (!project_exists && targetScenes.length === 0) {
+    warnings.push(`PROJECT_NOT_FOUND_WARNING: project '${project_id}' was not found; nothing to process.`);
+  }
+
   return {
     ok: true,
     cancelled: Boolean(typeof shouldCancel === "function" && shouldCancel() && processed_scenes < targetScenes.length),
@@ -205,6 +214,6 @@ export async function runSceneCharacterBatch({ syncDir, args, onProgress, should
     links_added,
     links_removed,
     results,
-    ...(failed_scenes > 0 ? { warning: "PARTIAL_SUCCESS: one or more scenes failed to process." } : {}),
+    ...(warnings.length > 0 ? { warning: warnings.join(" ") } : {}),
   };
 }

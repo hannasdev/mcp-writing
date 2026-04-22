@@ -139,6 +139,7 @@ async function main() {
         dry_run: Boolean(request.args?.dry_run),
         replace_mode: request.args?.replace_mode ?? "merge",
         include_match_details: Boolean(request.args?.include_match_details),
+        project_exists: request.args?.project_exists !== false,
         target_scenes: request.args?.target_scenes ?? [],
         character_rows: request.args?.character_rows ?? [],
       },

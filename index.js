@@ -425,6 +425,10 @@ function resolveBatchTargetScenes(dbHandle, {
   chapter,
   onlyStale,
 }) {
+  const projectExists = Boolean(
+    dbHandle.prepare(`SELECT 1 FROM projects WHERE project_id = ? LIMIT 1`).get(projectId)
+  );
+
   if (sceneIds?.length) {
     const placeholders = sceneIds.map(() => "?").join(",");
     const existingRows = dbHandle.prepare(
@@ -464,7 +468,11 @@ function resolveBatchTargetScenes(dbHandle, {
     ORDER BY part, chapter, timeline_position
   `;
 
-  return { ok: true, rows: dbHandle.prepare(query).all(...params) };
+  return {
+    ok: true,
+    rows: dbHandle.prepare(query).all(...params),
+    project_exists: projectExists,
+  };
 }
 
 function createCanonicalWorldEntity({ kind, name, notes, projectId, universeId, meta }) {
@@ -1217,6 +1225,7 @@ function createMcpServer() {
       }
 
       const targetScenes = targetResolution.rows;
+      const projectExists = targetResolution.project_exists !== false;
       if (targetScenes.length > max_scenes) {
         return errorResponse(
           "VALIDATION_ERROR",
@@ -1238,6 +1247,7 @@ function createMcpServer() {
             dry_run: Boolean(dry_run),
             replace_mode,
             include_match_details: Boolean(include_match_details),
+            project_exists: projectExists,
             target_scenes: targetScenes,
             character_rows: characterRows,
           },

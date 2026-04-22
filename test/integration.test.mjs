@@ -973,6 +973,25 @@ describe("enrich_scene_characters_batch tool", () => {
     assert.deepEqual(done.job.result.results, []);
   });
 
+  test("returns completed zero-target job with explicit warning when project_id is unknown", async () => {
+    await callWriteTool("sync");
+
+    const startText = await callWriteTool("enrich_scene_characters_batch", {
+      project_id: "project-does-not-exist",
+      dry_run: true,
+    });
+    const started = JSON.parse(startText);
+    const done = await waitForAsyncJob(started.job.job_id);
+
+    assert.equal(done.ok, true);
+    assert.equal(done.job.status, "completed");
+    assert.equal(done.job.result.ok, true);
+    assert.equal(done.job.result.total_scenes, 0);
+    assert.equal(done.job.result.processed_scenes, 0);
+    assert.equal(typeof done.job.result.warning, "string");
+    assert.ok(done.job.result.warning.includes("PROJECT_NOT_FOUND_WARNING"));
+  });
+
   test("returns VALIDATION_ERROR when resolved scenes exceed max_scenes", async () => {
     await callWriteTool("sync");
 

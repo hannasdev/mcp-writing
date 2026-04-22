@@ -66,10 +66,10 @@ Write-capable MCP tool with preview mode and asynchronous execution.
 3. If no scenes remain after filtering, return a successful empty result rather than an error.
 4. Start an asynchronous batch job and return a job handle immediately.
 5. Process each scene independently so progress can continue after a per-scene failure.
-6. For each scene, infer character IDs from prose using canonical character metadata and aliases.
+6. For each scene, infer character IDs from prose using canonical character metadata only (no aliases in v1).
 7. Compute delta against existing scene metadata `characters`.
 8. If `dry_run=true`, persist no metadata changes and record preview results only.
-9. If `dry_run=false`, write sidecar metadata updates and reindex scene rows for that scene.
+9. If `dry_run=false`, write sidecar metadata updates during processing and run index refresh after the batch completes.
 10. Return progress and final summary through the async job result.
 
 ## Execution Model
@@ -85,9 +85,10 @@ Requirements:
 3. Progress reports include at minimum: `total_scenes`, `processed_scenes`, `scenes_changed`, `failed_scenes`.
 4. Failure in one scene must not abort the full job.
 5. Per-scene work is the atomic unit of success or failure.
-6. Each scene should only be marked successful after both sidecar write and reindex complete.
-7. If a scene write succeeds but reindex fails, the scene must be reported as failed with recovery guidance, and the implementation should attempt immediate same-scene repair before moving on.
+6. Per-scene processing is evaluated at sidecar operation boundaries; index refresh runs post-batch as a single reconciliation step.
+7. If post-batch index refresh fails, the job should surface failure details at the job level for operator recovery.
 8. If target resolution yields zero scenes, the tool should still return a completed async job record with `total_scenes: 0` so clients can use one polling contract.
+9. If `project_id` is unknown and resolution yields zero scenes, keep completed zero-target behavior for backward compatibility but include an explicit warning in `job.result.warning`.
 
 ## Async Framework Reuse
 
@@ -223,12 +224,13 @@ Implications:
 Return structured envelopes for:
 
 1. `VALIDATION_ERROR` for invalid filter combinations or parameters.
-2. `NOT_FOUND` when project or requested scene IDs do not exist.
+2. `NOT_FOUND` when requested `scene_ids` do not exist in the project.
 3. `READ_ONLY` when sidecar writes are unavailable and `dry_run=false`.
 4. `IO_ERROR` on sidecar read/write failures.
 5. `PARTIAL_SUCCESS` warning if some scenes fail while others succeed.
 6. Ambiguous matches should be represented in per-scene results, not treated as fatal job errors.
 7. `CANCELLED` should not be treated as an error envelope; cancellation is represented by job status plus partial retained results.
+8. Unknown `project_id` with zero resolved scenes should return a completed zero-target job with an explicit warning (not a fatal envelope).
 
 ## Test Plan
 
@@ -249,7 +251,7 @@ Return structured envelopes for:
 5. Mixed success path returns partial-success warning with per-scene diagnostics.
 6. Async job reports progress correctly through the shared job surface while running, then exposes final retained results on completion.
 7. `replace_mode=replace` requires explicit confirmation.
-8. A same-scene failure after write but before reindex is surfaced clearly and leaves recoverable diagnostics.
+8. Post-batch index refresh failure is surfaced clearly with recoverable diagnostics at the job level.
 9. Zero-target runs return a completed async job with `total_scenes: 0`.
 10. Cancellation preserves completed scene results and leaves untouched scenes unchanged.
 
