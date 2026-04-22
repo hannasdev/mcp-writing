@@ -10,7 +10,7 @@ This document translates the beta PRD into execution-ready tasks. It is intentio
 - M2: Official beta entrypoints (MCP + CLI) ✅
 - M2.5: Large-project UX (async jobs, warning aggregation, scoped parsing) ✅
 - M3: Safety and parity hardening
-- M4: Docs, compatibility posture, and beta operations
+- M4: Docs, compatibility posture, and beta operations ✅ (baseline docs slice)
 
 ## Recommended Execution Order
 
@@ -140,21 +140,21 @@ This phase was identified during manual testing against a real 430+ file project
 
 ### Phase D Tasks
 
-- [ ] Update setup docs with two-path guidance (stable vs beta)
-- [ ] Add "tested versions" compatibility section for beta path
-- [ ] Add troubleshooting section for parser/schema mismatch failures
-- [ ] Add tool reference updates and explicit stability tier labeling
+- [x] Update setup docs with two-path guidance (stable vs beta)
+- [x] Add "tested versions" compatibility section for beta path (initial baseline posture)
+- [x] Add troubleshooting section for parser/schema mismatch failures
+- [x] Add tool reference updates and explicit stability tier labeling
 
 ### Phase D Acceptance Criteria
 
-- [ ] Users can clearly distinguish stable default from beta option
-- [ ] Docs provide a clear fallback path when beta ingestion fails
-- [ ] Beta caveats appear in all relevant surfaces (setup, tools, runtime)
+- [x] Users can clearly distinguish stable default from beta option
+- [x] Docs provide a clear fallback path when beta ingestion fails
+- [x] Beta caveats appear in all relevant surfaces (setup, tools, runtime)
 
 ### Phase D Deliverables
 
-- [ ] Documentation updates across setup and tool reference docs
-- [ ] Compatibility notes and operational troubleshooting guidance
+- [x] Documentation updates across setup and tool reference docs
+- [x] Compatibility notes and operational troubleshooting guidance (baseline beta posture)
 
 ---
 
@@ -208,6 +208,8 @@ For each fixture:
 - Unknown Scrivener custom fields are ignored unless explicitly mapped into supported sidecar fields.
 - Invalid numeric Scrivener custom field values are ignored with structured warnings rather than hard-failing the merge.
 - Remaining Phase C work is concentrated in explicit ownership policy and conflict reporting for ambiguous mappings.
+- Phase D baseline docs slice is complete: setup guidance, troubleshooting, stability-tier tool descriptions, and generated tool reference are in place.
+- Remaining docs work is now mostly depth expansion (broader tested-version matrix and fixture coverage), not baseline guidance.
 
 ---
 
