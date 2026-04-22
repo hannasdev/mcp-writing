@@ -1,6 +1,6 @@
 # Batch Scene-Character Linking (v1) — Implementation Checklist
 
-**Status:** In Progress
+**Status:** Complete
 
 This document translates the PRD into execution-ready tasks for v1.
 
@@ -12,9 +12,9 @@ Scope reminder for v1:
 ## Progress Snapshot
 
 - Completed: M1 and M2 foundations, plus core M3 implementation path.
-- Completed: initial integration tests for validation, async execution, progress visibility, and zero-target behavior.
-- Completed: tool docs regeneration and async-tool description refresh.
-- Remaining: additional integration coverage for write-mode, stale/read-only/cancellation specifics, and optional usage docs/examples.
+- Completed: integration coverage for validation, async execution, progress visibility, write/read-only paths, zero-target behavior, and cancellation partial-result retention.
+- Completed: unit coverage for batch matching/delta behavior and docs refresh (tool docs + README usage).
+- Remaining: none for v1 scope.
 
 ## Milestones
 
@@ -131,11 +131,11 @@ Use focused PRs with one concern each.
 
 ### Unit Tests
 
-- [ ] Canonical-name-only matching behavior
-- [ ] Ambiguous token handling
-- [ ] Delta computation for `merge` and `replace`
-- [ ] `max_scenes` guardrail overflow
-- [ ] Filter precedence and zero-target behavior
+- [x] Canonical-name-only matching behavior
+- [x] Ambiguous token handling
+- [x] Delta computation for `merge` and `replace`
+- [x] `max_scenes` guardrail overflow (covered at integration/tool-contract layer)
+- [x] Filter precedence and zero-target behavior (covered at integration/tool-contract layer)
 
 ### Integration Tests
 
@@ -145,28 +145,28 @@ Use focused PRs with one concern each.
 - [x] Read-only mode returns `READ_ONLY` for write attempts
 - [x] Async job lifecycle via shared tools (start/status/list/cancel)
 - [x] Progress fields during running job (if enabled)
-- [ ] Cancellation retains completed results and leaves unstarted scenes untouched
+- [x] Cancellation retains completed results and leaves unstarted scenes untouched
 - [x] Zero-target run returns completed job with `total_scenes: 0`
 
 ### Docs Tasks
 
 - [x] Add tool docs section in `docs/tools.md` (via docs generator)
-- [ ] Add usage examples for preview vs apply mode
+- [x] Add usage examples for preview vs apply mode
 - [x] Document v1 limitation: canonical-name-only, aliases deferred
 
 ### Acceptance Criteria
 
-- [ ] Tests pass for happy path, partial failures, cancellation, and guardrails
+- [x] Tests pass for happy path, partial failures, cancellation, and guardrails
 - [x] Tool docs reflect async contract and result payload location (`job.result`)
 
 ---
 
 ## Exit Criteria (v1 Ready)
 
-- [ ] PRD-aligned behavior implemented for all required parameters and result fields
-- [ ] Async contract aligned with existing shared framework
-- [ ] Canonical-name-only matching shipped with precision-first behavior
-- [ ] No unresolved high-severity data-loss or index-consistency bugs
+- [x] PRD-aligned behavior implemented for all required parameters and result fields
+- [x] Async contract aligned with existing shared framework
+- [x] Canonical-name-only matching shipped with precision-first behavior
+- [x] No unresolved high-severity data-loss or index-consistency bugs
 
 ## Non-Goals Reminder (v1)
 

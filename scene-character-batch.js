@@ -64,7 +64,20 @@ function inferCharactersFromProse(prose, characterRows) {
   };
 }
 
-export function runSceneCharacterBatch({ syncDir, args, onProgress }) {
+function nextTurn() {
+  return new Promise(resolve => setImmediate(resolve));
+}
+
+function getInterSceneDelayMs() {
+  const raw = Number(process.env.MCP_WRITING_SCENE_CHARACTER_BATCH_DELAY_MS ?? 0);
+  return Number.isFinite(raw) && raw > 0 ? raw : 0;
+}
+
+function delay(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+export async function runSceneCharacterBatch({ syncDir, args, onProgress, shouldCancel }) {
   const {
     project_id,
     dry_run = true,
@@ -83,6 +96,7 @@ export function runSceneCharacterBatch({ syncDir, args, onProgress }) {
   let failed_scenes = 0;
   let links_added = 0;
   let links_removed = 0;
+  const interSceneDelayMs = getInterSceneDelayMs();
 
   const emitProgress = () => {
     if (typeof onProgress !== "function") return;
@@ -97,6 +111,12 @@ export function runSceneCharacterBatch({ syncDir, args, onProgress }) {
   emitProgress();
 
   for (const scene of targetScenes) {
+    await nextTurn();
+
+    if (typeof shouldCancel === "function" && shouldCancel()) {
+      break;
+    }
+
     try {
       const raw = fs.readFileSync(scene.file_path, "utf8");
       const { content: prose } = matter(raw);
@@ -167,11 +187,15 @@ export function runSceneCharacterBatch({ syncDir, args, onProgress }) {
     } finally {
       processed_scenes += 1;
       emitProgress();
+      if (interSceneDelayMs > 0) {
+        await delay(interSceneDelayMs);
+      }
     }
   }
 
   return {
     ok: true,
+    cancelled: Boolean(typeof shouldCancel === "function" && shouldCancel() && processed_scenes < targetScenes.length),
     project_id,
     dry_run: Boolean(dry_run),
     total_scenes: targetScenes.length,

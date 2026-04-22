@@ -31,6 +31,7 @@ import {
   mergeScrivenerProjectMetadata,
   mergeSidecarData,
 } from "../scrivener-direct.js";
+import { runSceneCharacterBatch } from "../scene-character-batch.js";
 
 // ---------------------------------------------------------------------------
 // checksumProse
@@ -787,6 +788,130 @@ describe("syncAll", () => {
 
     db.close();
     fs.rmSync(dir, { recursive: true });
+  });
+});
+
+describe("runSceneCharacterBatch", () => {
+  function makeBatchFixture() {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "batch-scenes-"));
+    const scenesDir = path.join(dir, "projects", "test-novel", "scenes");
+    fs.mkdirSync(scenesDir, { recursive: true });
+    return { dir, scenesDir };
+  }
+
+  function writeBatchScene(dir, id, prose, sidecarCharacters = []) {
+    const filePath = path.join(dir, "projects", "test-novel", "scenes", `${id}.md`);
+    fs.writeFileSync(filePath, `---\nscene_id: ${id}\ntitle: ${id}\npart: 1\nchapter: 1\n---\n${prose}\n`, "utf8");
+    fs.writeFileSync(
+      path.join(dir, "projects", "test-novel", "scenes", `${id}.meta.yaml`),
+      yaml.dump({ scene_id: id, title: id, part: 1, chapter: 1, characters: sidecarCharacters }),
+      "utf8"
+    );
+    return filePath;
+  }
+
+  test("infers canonical full-name matches in dry-run mode", async () => {
+    const { dir } = makeBatchFixture();
+    const filePath = writeBatchScene(dir, "sc-001", "Elena Vasquez waits by the harbor.", []);
+
+    const result = await runSceneCharacterBatch({
+      syncDir: dir,
+      args: {
+        project_id: "test-novel",
+        dry_run: true,
+        replace_mode: "merge",
+        target_scenes: [{ scene_id: "sc-001", project_id: "test-novel", file_path: filePath }],
+        character_rows: [
+          { character_id: "elena", name: "Elena Vasquez" },
+          { character_id: "marcus", name: "Marcus Hale" },
+        ],
+      },
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.results.length, 1);
+    assert.deepEqual(result.results[0].inferred_characters, ["elena"]);
+
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  test("marks ambiguous token matches as skipped_ambiguous", async () => {
+    const { dir } = makeBatchFixture();
+    const filePath = writeBatchScene(dir, "sc-001", "Elena arrives after dark.", []);
+
+    const result = await runSceneCharacterBatch({
+      syncDir: dir,
+      args: {
+        project_id: "test-novel",
+        dry_run: true,
+        replace_mode: "merge",
+        include_match_details: true,
+        target_scenes: [{ scene_id: "sc-001", project_id: "test-novel", file_path: filePath }],
+        character_rows: [
+          { character_id: "elena-v", name: "Elena Vasquez" },
+          { character_id: "elena-h", name: "Elena Hart" },
+        ],
+      },
+    });
+
+    assert.equal(result.ok, true);
+    assert.deepEqual(result.results[0].inferred_characters, []);
+    assert.equal(result.results[0].status, "skipped_ambiguous");
+    assert.deepEqual(result.results[0].match_details.ambiguous_tokens, ["elena"]);
+
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  test("merge mode preserves existing links and adds inferred ones", async () => {
+    const { dir } = makeBatchFixture();
+    const filePath = writeBatchScene(dir, "sc-001", "Elena Vasquez waits by the harbor.", ["marcus"]);
+
+    const result = await runSceneCharacterBatch({
+      syncDir: dir,
+      args: {
+        project_id: "test-novel",
+        dry_run: true,
+        replace_mode: "merge",
+        target_scenes: [{ scene_id: "sc-001", project_id: "test-novel", file_path: filePath }],
+        character_rows: [
+          { character_id: "elena", name: "Elena Vasquez" },
+          { character_id: "marcus", name: "Marcus Hale" },
+        ],
+      },
+    });
+
+    assert.deepEqual(result.results[0].before_characters, ["marcus"]);
+    assert.deepEqual(result.results[0].after_characters.sort(), ["elena", "marcus"]);
+    assert.deepEqual(result.results[0].added, ["elena"]);
+    assert.deepEqual(result.results[0].removed, []);
+
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  test("replace mode overwrites existing links with inferred ones", async () => {
+    const { dir } = makeBatchFixture();
+    const filePath = writeBatchScene(dir, "sc-001", "Elena Vasquez waits by the harbor.", ["marcus"]);
+
+    const result = await runSceneCharacterBatch({
+      syncDir: dir,
+      args: {
+        project_id: "test-novel",
+        dry_run: true,
+        replace_mode: "replace",
+        target_scenes: [{ scene_id: "sc-001", project_id: "test-novel", file_path: filePath }],
+        character_rows: [
+          { character_id: "elena", name: "Elena Vasquez" },
+          { character_id: "marcus", name: "Marcus Hale" },
+        ],
+      },
+    });
+
+    assert.deepEqual(result.results[0].before_characters, ["marcus"]);
+    assert.deepEqual(result.results[0].after_characters, ["elena"]);
+    assert.deepEqual(result.results[0].added, ["elena"]);
+    assert.deepEqual(result.results[0].removed, ["marcus"]);
+
+    fs.rmSync(dir, { recursive: true, force: true });
   });
 });
 

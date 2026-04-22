@@ -86,7 +86,7 @@ function normalizeSceneCharacterBatchResult(batchResult) {
   };
 }
 
-function main() {
+async function main() {
   const requestPath = process.argv[2];
   const resultPath = process.argv[3];
 
@@ -126,7 +126,13 @@ function main() {
   }
 
   if (request.kind === "enrich_scene_characters_batch") {
-    const result = runSceneCharacterBatch({
+    let cancellationRequested = false;
+    const handleSigterm = () => {
+      cancellationRequested = true;
+    };
+    process.on("SIGTERM", handleSigterm);
+
+    const result = await runSceneCharacterBatch({
       syncDir,
       args: {
         project_id: request.args?.project_id,
@@ -137,7 +143,9 @@ function main() {
         character_rows: request.args?.character_rows ?? [],
       },
       onProgress: progress => writeProgress({ kind: request.kind, ...progress }),
+      shouldCancel: () => cancellationRequested,
     });
+    process.off("SIGTERM", handleSigterm);
     writeResult(resultPath, normalizeSceneCharacterBatchResult(result));
     return;
   }
@@ -146,7 +154,7 @@ function main() {
 }
 
 try {
-  main();
+  await main();
 } catch (error) {
   const resultPath = process.argv[3];
   if (resultPath) {

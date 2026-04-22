@@ -973,6 +973,53 @@ describe("enrich_scene_characters_batch tool", () => {
     assert.deepEqual(done.job.result.results, []);
   });
 
+  test("returns VALIDATION_ERROR when resolved scenes exceed max_scenes", async () => {
+    await callWriteTool("sync");
+
+    const text = await callWriteTool("enrich_scene_characters_batch", {
+      project_id: "test-novel",
+      part: 1,
+      dry_run: true,
+      max_scenes: 1,
+    });
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.ok, false);
+    assert.equal(parsed.error.code, "VALIDATION_ERROR");
+    assert.equal(parsed.error.details.max_scenes, 1);
+  });
+
+  test("applies scene_ids allowlist before part/chapter/only_stale narrowing", async () => {
+    await callWriteTool("sync");
+
+    const scenePath = path.join(writeSyncDir, "projects", "test-novel", "part-1", "chapter-1", "sc-002.md");
+    const before = fs.readFileSync(scenePath, "utf8");
+
+    try {
+      fs.writeFileSync(scenePath, `${before}\n\nStale marker for filter precedence test.\n`, "utf8");
+      await callWriteTool("sync");
+
+      const startText = await callWriteTool("enrich_scene_characters_batch", {
+        project_id: "test-novel",
+        scene_ids: ["sc-002", "sc-003"],
+        chapter: 1,
+        only_stale: true,
+        dry_run: true,
+      });
+      const started = JSON.parse(startText);
+      const done = await waitForAsyncJob(started.job.job_id);
+
+      assert.equal(done.ok, true);
+      assert.equal(done.job.status, "completed");
+      assert.equal(done.job.result.total_scenes, 1);
+      assert.equal(done.job.result.results[0].scene_id, "sc-002");
+    } finally {
+      fs.writeFileSync(scenePath, before, "utf8");
+      await callWriteTool("sync");
+      await callWriteTool("enrich_scene", { scene_id: "sc-002", project_id: "test-novel" });
+    }
+  });
+
   test("dry_run=false updates sidecar links and scene_characters index", async () => {
     await callWriteTool("sync");
 
@@ -1075,6 +1122,109 @@ describe("enrich_scene_characters_batch tool", () => {
       if (roProc) roProc.kill();
       try { fs.chmodSync(roSyncDir, 0o755); } catch {}
       fs.rmSync(roSyncDir, { recursive: true, force: true });
+    }
+  });
+
+  test("cancellation retains partial results for batch jobs when cancellation lands mid-run", async () => {
+    const isolatedPort = 3197;
+    const isolatedUrl = `http://localhost:${isolatedPort}`;
+    const isolatedSyncDir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-writing-cancel-"));
+    const projectId = "cancel-batch-test";
+    const projectRoot = path.join(isolatedSyncDir, "projects", projectId);
+    const scenesDir = path.join(projectRoot, "scenes");
+    const charsDir = path.join(projectRoot, "world", "characters");
+    let isolatedProc;
+    let isolatedClient;
+
+    async function callIsolatedTool(name, args = {}) {
+      const result = await isolatedClient.callTool({ name, arguments: args });
+      return result.content[0].text;
+    }
+
+    fs.mkdirSync(scenesDir, { recursive: true });
+    fs.mkdirSync(charsDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(charsDir, "elena.md"),
+      `---\ncharacter_id: elena\nname: Elena Vasquez\nrole: protagonist\n---\nCharacter notes.\n`,
+      "utf8"
+    );
+    fs.writeFileSync(
+      path.join(charsDir, "elena.meta.yaml"),
+      `character_id: elena\nname: Elena Vasquez\nrole: protagonist\n`,
+      "utf8"
+    );
+
+    for (let index = 1; index <= 1000; index += 1) {
+      const sceneId = `sc-${String(index).padStart(3, "0")}`;
+      fs.writeFileSync(
+        path.join(scenesDir, `${sceneId}.md`),
+        `---\nscene_id: ${sceneId}\ntitle: ${sceneId}\npart: 1\nchapter: 1\npov: elena\n---\nElena Vasquez reviews scene ${index}.\n`,
+        "utf8"
+      );
+      fs.writeFileSync(
+        path.join(scenesDir, `${sceneId}.meta.yaml`),
+        `scene_id: ${sceneId}\ntitle: ${sceneId}\npart: 1\nchapter: 1\ncharacters: []\n`,
+        "utf8"
+      );
+    }
+
+    try {
+      isolatedProc = spawnServer(isolatedPort, isolatedSyncDir, {
+        MCP_WRITING_SCENE_CHARACTER_BATCH_DELAY_MS: "2",
+      });
+      await waitForServer(isolatedUrl);
+      isolatedClient = await connectClient(isolatedUrl);
+      await callIsolatedTool("sync");
+
+      const startText = await callIsolatedTool("enrich_scene_characters_batch", {
+        project_id: projectId,
+        dry_run: true,
+        max_scenes: 2000,
+      });
+      const started = JSON.parse(startText);
+      assert.equal(started.ok, true);
+
+      let status;
+      for (let attempt = 0; attempt < 100; attempt += 1) {
+        const statusText = await callIsolatedTool("get_async_job_status", {
+          job_id: started.job.job_id,
+        });
+        status = JSON.parse(statusText);
+        if ((status.job?.progress?.processed_scenes ?? 0) > 0) {
+          break;
+        }
+      }
+
+      const cancelText = await callIsolatedTool("cancel_async_job", {
+        job_id: started.job.job_id,
+      });
+      const cancelResult = JSON.parse(cancelText);
+      assert.equal(cancelResult.ok, true);
+      assert.equal(cancelResult.cancelled, true);
+
+      let done;
+      for (let attempt = 0; attempt < 200; attempt += 1) {
+        const statusText = await callIsolatedTool("get_async_job_status", {
+          job_id: started.job.job_id,
+        });
+        done = JSON.parse(statusText);
+        if (done.job?.status === "cancelled") {
+          break;
+        }
+      }
+
+      assert.equal(done.job?.status, "cancelled");
+      assert.equal(done.job.result?.cancelled, true);
+      assert.ok(Array.isArray(done.job.result?.results));
+      assert.equal(done.job.result.results.length, done.job.result.processed_scenes);
+      assert.ok(done.job.result.processed_scenes < done.job.result.total_scenes);
+    } finally {
+      try { await isolatedClient?.close(); } catch {}
+      if (isolatedProc) {
+        isolatedProc.kill();
+        try { await waitForExit(isolatedProc); } catch {}
+      }
+      fs.rmSync(isolatedSyncDir, { recursive: true, force: true });
     }
   });
 });

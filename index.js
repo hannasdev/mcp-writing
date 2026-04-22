@@ -213,6 +213,7 @@ function startAsyncJob({ kind, requestPayload, onComplete }) {
     const payload = readJsonIfExists(resultPath);
     const successful = payload?.ok === true;
     const cancelledBySignal = signal === "SIGTERM" || signal === "SIGKILL";
+    const cancelledByPayload = payload?.cancelled === true;
 
     job.finishedAt = new Date().toISOString();
     job.result = payload;
@@ -227,7 +228,10 @@ function startAsyncJob({ kind, requestPayload, onComplete }) {
     }
 
     if (job.status === "cancelling") {
-      if (successful && !cancelledBySignal) {
+      if (cancelledByPayload) {
+        job.status = "cancelled";
+        job.error = "Async job cancelled after returning partial results.";
+      } else if (successful && !cancelledBySignal) {
         // Race: cancellation was requested as work completed successfully.
         job.status = "completed";
       } else {
