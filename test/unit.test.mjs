@@ -1209,7 +1209,12 @@ describe("Scrivener importer", () => {
 // scripts/merge-scrivx.js and scrivener-direct.js
 // ---------------------------------------------------------------------------
 describe("Scrivener direct metadata merge", () => {
-  function createScrivenerProjectFixture() {
+  function createScrivenerProjectFixture(options = {}) {
+    const {
+      extraMetaDataItems = "",
+      synopsisText = "Elena returns to the harbor.",
+      includeSynopsis = true,
+    } = options;
     const scrivDir = fs.mkdtempSync(path.join(os.tmpdir(), "scrivener-project-"));
     const scrivxPath = path.join(scrivDir, "Novel.scrivx");
 
@@ -1241,6 +1246,7 @@ describe("Scrivener direct metadata merge", () => {
                     <MetaDataItem><FieldID>change</FieldID><Value>Escalates conflict</Value></MetaDataItem>
                     <MetaDataItem><FieldID>f:character</FieldID><Value>Yes</Value></MetaDataItem>
                     <MetaDataItem><FieldID>f:mood</FieldID><Value>Yes</Value></MetaDataItem>
+                    ${extraMetaDataItems}
                   </MetaData>
                 </BinderItem>
               </Children>
@@ -1254,16 +1260,18 @@ describe("Scrivener direct metadata merge", () => {
 
     fs.writeFileSync(scrivxPath, xml, "utf8");
     fs.mkdirSync(path.join(scrivDir, "Files", "Data", "UUID-1"), { recursive: true });
-    fs.writeFileSync(
-      path.join(scrivDir, "Files", "Data", "UUID-1", "synopsis.txt"),
-      "Elena returns to the harbor.",
-      "utf8"
-    );
+    if (includeSynopsis) {
+      fs.writeFileSync(
+        path.join(scrivDir, "Files", "Data", "UUID-1", "synopsis.txt"),
+        synopsisText,
+        "utf8"
+      );
+    }
 
     return scrivDir;
   }
 
-  function createSyncSidecarFixture(projectId = "test-import") {
+  function createSyncSidecarFixture(projectId = "test-import", extraSidecars = []) {
     const syncRoot = fs.mkdtempSync(path.join(os.tmpdir(), "scriv-merge-sync-"));
     const scenesDir = path.join(syncRoot, "projects", projectId, "scenes");
     fs.mkdirSync(scenesDir, { recursive: true });
@@ -1272,6 +1280,10 @@ describe("Scrivener direct metadata merge", () => {
       yaml.dump({ scene_id: "sc-001-arrival", logline: "Preserve this existing value." }),
       "utf8"
     );
+
+    for (const extraSidecar of extraSidecars) {
+      fs.writeFileSync(path.join(scenesDir, extraSidecar.name), yaml.dump(extraSidecar.data), "utf8");
+    }
 
     return { syncRoot, scenesDir };
   }
@@ -1326,6 +1338,40 @@ describe("Scrivener direct metadata merge", () => {
       assert.equal(sidecar.chapter, undefined);
       assert.equal(sidecar.synopsis, undefined);
       assert.equal(sidecar.logline, "Preserve this existing value.");
+    } finally {
+      fs.rmSync(scrivDir, { recursive: true, force: true });
+      fs.rmSync(syncRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("mergeScrivenerProjectMetadata returns structured warnings for skipped and normalized inputs", () => {
+    const scrivDir = createScrivenerProjectFixture({
+      extraMetaDataItems: [
+        "<MetaDataItem><FieldID>mood-color</FieldID><Value>Blue</Value></MetaDataItem>",
+        "<MetaDataItem><FieldID>stakes</FieldID><Value>high</Value></MetaDataItem>",
+      ].join(""),
+      includeSynopsis: false,
+    });
+    const { syncRoot } = createSyncSidecarFixture("test-import", [
+      { name: "002 Missing Mapping [99].meta.yaml", data: { scene_id: "sc-099" } },
+      { name: "Loose Scene.meta.yaml", data: { scene_id: "sc-loose" } },
+    ]);
+
+    try {
+      const result = mergeScrivenerProjectMetadata({
+        scrivPath: scrivDir,
+        mcpSyncDir: syncRoot,
+        projectId: "test-import",
+        dryRun: true,
+      });
+
+      assert.equal(result.warningSummary.missing_uuid_mapping.count, 1);
+      assert.equal(result.warningSummary.missing_bracket_id.count, 1);
+      assert.equal(result.warningSummary.ignored_custom_field.count, 1);
+      assert.equal(result.warningSummary.invalid_custom_field_value.count, 1);
+      assert.ok(result.warnings.some(w => w.code === "ignored_custom_field" && w.field_id === "mood-color"));
+      assert.ok(result.warnings.some(w => w.code === "invalid_custom_field_value" && w.field_id === "stakes"));
+      assert.ok(!("missing_synopsis" in result.warningSummary));
     } finally {
       fs.rmSync(scrivDir, { recursive: true, force: true });
       fs.rmSync(syncRoot, { recursive: true, force: true });

@@ -34,15 +34,52 @@ function isPlainObject(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
+function summarizeWarnings(warnings) {
+  const summary = {};
+
+  for (const warning of warnings) {
+    if (!summary[warning.code]) {
+      summary[warning.code] = { count: 0, examples: [] };
+    }
+
+    const entry = summary[warning.code];
+    entry.count++;
+
+    if (entry.examples.length < 5) {
+      const example = { message: warning.message };
+      for (const key of ["file", "sync_number", "field_id", "value", "uuid"]) {
+        if (warning[key] !== undefined && warning[key] !== null) {
+          example[key] = warning[key];
+        }
+      }
+      entry.examples.push(example);
+    }
+  }
+
+  return summary;
+}
+
 function buildMergeDataFromProject(projectData, uuid) {
   const { metaByUUID, partByUUID, chapterByUUID } = projectData;
   const { customFields, characters, versions, synopsis } = metaByUUID[uuid] ?? {};
   const part = partByUUID[uuid] ?? null;
   const chapter = chapterByUUID[uuid] ?? null;
+  const warnings = [];
 
-  if (!customFields && !characters && !versions && !synopsis && part === null && chapter === null) return null;
+  if (!customFields && !characters && !versions && !synopsis && part === null && chapter === null) {
+    return { mergeData: null, warnings };
+  }
 
   const out = {};
+  const knownCustomFieldIds = new Set([
+    "savethecat!",
+    "causality",
+    "stakes",
+    "change",
+    "f:character",
+    "f:mood",
+    "f:theme",
+  ]);
 
   if (part !== null) out.part = part;
   if (chapter !== null) out.chapter = chapter;
@@ -50,13 +87,45 @@ function buildMergeDataFromProject(projectData, uuid) {
   if (characters?.length) out.characters = characters;
   if (versions?.length) out.versions = versions;
 
+  for (const [fieldId, value] of Object.entries(customFields ?? {})) {
+    if (!knownCustomFieldIds.has(fieldId) && String(value ?? "").trim()) {
+      warnings.push({
+        code: "ignored_custom_field",
+        message: `Ignored unsupported Scrivener custom field '${fieldId}'.`,
+        field_id: fieldId,
+        value: String(value),
+        uuid,
+      });
+    }
+  }
+
   const stcBeat = customFields?.["savethecat!"];
   if (stcBeat && typeof stcBeat === "string" && stcBeat.trim()) {
     out.save_the_cat_beat = stcBeat.trim();
   }
 
-  const causality = Number(customFields?.["causality"] ?? 0);
-  const stakes = Number(customFields?.["stakes"] ?? 0);
+  const causalityRaw = customFields?.["causality"];
+  const stakesRaw = customFields?.["stakes"];
+  const causality = Number(causalityRaw ?? 0);
+  const stakes = Number(stakesRaw ?? 0);
+  if (causalityRaw !== undefined && String(causalityRaw).trim() && Number.isNaN(causality)) {
+    warnings.push({
+      code: "invalid_custom_field_value",
+      message: "Ignored non-numeric Scrivener custom field value for 'causality'.",
+      field_id: "causality",
+      value: String(causalityRaw),
+      uuid,
+    });
+  }
+  if (stakesRaw !== undefined && String(stakesRaw).trim() && Number.isNaN(stakes)) {
+    warnings.push({
+      code: "invalid_custom_field_value",
+      message: "Ignored non-numeric Scrivener custom field value for 'stakes'.",
+      field_id: "stakes",
+      value: String(stakesRaw),
+      uuid,
+    });
+  }
   if (causality) out.causality = causality;
   if (stakes) out.stakes = stakes;
 
@@ -69,7 +138,10 @@ function buildMergeDataFromProject(projectData, uuid) {
   if (customFields?.["f:theme"] === "Yes" || customFields?.["f:theme"] === true) fnFlags.push("theme");
   if (fnFlags.length) out.scene_functions = fnFlags;
 
-  return Object.keys(out).length ? out : null;
+  return {
+    mergeData: Object.keys(out).length ? out : null,
+    warnings,
+  };
 }
 
 export function mergeSidecarData(existing, mergeData) {
@@ -270,6 +342,7 @@ export function mergeScrivenerProjectMetadata({
   let skippedNoBracketId = 0;
   const fieldAddCounts = {};
   const previewChanges = [];
+  const warnings = [];
 
   for (const sidecarPath of sidecarFiles) {
     const filename = path.basename(sidecarPath);
@@ -277,6 +350,11 @@ export function mergeScrivenerProjectMetadata({
     if (!match) {
       logger(`  SKIP  (no bracket ID) ${filename}`);
       skippedNoBracketId++;
+      warnings.push({
+        code: "missing_bracket_id",
+        message: "Skipped sidecar because filename does not include a Scrivener sync number in brackets.",
+        file: filename,
+      });
       continue;
     }
 
@@ -285,10 +363,20 @@ export function mergeScrivenerProjectMetadata({
     if (!uuid) {
       logger(`  SKIP  (no UUID for [${syncNum}]) ${filename}`);
       noData++;
+      warnings.push({
+        code: "missing_uuid_mapping",
+        message: `Skipped sidecar because Scrivener sync number [${syncNum}] has no UUID mapping in the project.`,
+        file: filename,
+        sync_number: syncNum,
+      });
       continue;
     }
 
-    const mergeData = buildMergeDataFromProject(projectData, uuid);
+    const { mergeData, warnings: mergeWarnings } = buildMergeDataFromProject(projectData, uuid);
+    for (const warning of mergeWarnings) {
+      warnings.push({ ...warning, file: filename });
+    }
+
     if (!mergeData) {
       unchanged++;
       continue;
@@ -345,6 +433,8 @@ export function mergeScrivenerProjectMetadata({
     noData,
     fieldAddCounts,
     previewChanges,
+    warnings,
+    warningSummary: summarizeWarnings(warnings),
     stats: {
       syncMapEntries: Object.keys(projectData.syncNumToUUID).length,
       keywordMapEntries: Object.keys(projectData.keywordMap).length,

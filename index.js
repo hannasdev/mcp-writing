@@ -775,7 +775,7 @@ function createMcpServer() {
   // ---- import_scrivener_sync ----------------------------------------------
   s.tool(
     "import_scrivener_sync",
-    "Import Scrivener External Folder Sync Draft files into this server's WRITING_SYNC_DIR by generating scene sidecars and reconciling by Scrivener binder ID. Use this for first-time setup before sync().",
+    "[STABLE] Import Scrivener External Folder Sync Draft files into this server's WRITING_SYNC_DIR by generating scene sidecars and reconciling by Scrivener binder ID. This is the recommended default path for first-time setup before sync().",
     {
       source_dir: z.string().describe("Path to Scrivener external sync folder (the folder that contains Draft/, or Draft/ itself)."),
       project_id: z.string().optional().describe("Project ID override (e.g. 'the-lamb'). Defaults to a slug derived from WRITING_SYNC_DIR."),
@@ -897,7 +897,7 @@ function createMcpServer() {
   // ---- merge_scrivener_project_beta --------------------------------------
   s.tool(
     "merge_scrivener_project_beta",
-    "[BETA] Merge metadata directly from a Scrivener .scriv project into existing scene sidecars. This path is opt-in and may be sensitive to Scrivener internal format changes. Requires scenes sidecars to already exist (for example, from import_scrivener_sync).",
+    "[BETA] Merge metadata directly from a Scrivener .scriv project into existing scene sidecars. This path is opt-in, requires sidecars to already exist (for example, from import_scrivener_sync), and may be sensitive to Scrivener internal format changes.",
     {
       source_project_dir: z.string().describe("Path to a Scrivener .scriv bundle directory."),
       project_id: z.string().optional().describe("Project ID containing existing sidecars (e.g. 'the-lamb' or 'universe-1/book-1-the-lamb'). Defaults to a slug derived from WRITING_SYNC_DIR."),
@@ -977,6 +977,8 @@ function createMcpServer() {
           no_data: mergeResult.noData,
           field_add_counts: mergeResult.fieldAddCounts,
           preview_changes: mergeResult.previewChanges,
+          warnings: mergeResult.warnings,
+          warning_summary: mergeResult.warningSummary,
           stats: {
             sync_map_entries: mergeResult.stats.syncMapEntries,
             keyword_map_entries: mergeResult.stats.keywordMapEntries,
@@ -1009,7 +1011,7 @@ function createMcpServer() {
   // ---- async import/merge jobs --------------------------------------------
   s.tool(
     "import_scrivener_sync_async",
-    "Start an asynchronous Scrivener External Folder Sync import job. Returns immediately with a job_id to poll via get_async_job_status.",
+    "[STABLE] Start an asynchronous Scrivener External Folder Sync import job. This is the recommended default import path when the sync tree is large. Returns immediately with a job_id to poll via get_async_job_status.",
     {
       source_dir: z.string().describe("Path to Scrivener external sync folder (the folder that contains Draft/, or Draft/ itself)."),
       project_id: z.string().optional().describe("Project ID override (e.g. 'the-lamb' or 'universe-1/book-1-the-lamb')."),
@@ -1089,7 +1091,7 @@ function createMcpServer() {
 
   s.tool(
     "merge_scrivener_project_beta_async",
-    "Start an asynchronous beta Scrivener metadata merge job. Returns immediately with a job_id to poll via get_async_job_status.",
+    "[BETA] Start an asynchronous Scrivener metadata merge job from a `.scriv` project into existing scene sidecars. Use this only after the stable import path has created sidecars. Returns immediately with a job_id to poll via get_async_job_status.",
     {
       source_project_dir: z.string().describe("Path to a Scrivener .scriv bundle directory."),
       project_id: z.string().optional().describe("Project ID containing existing sidecars (e.g. 'the-lamb' or 'universe-1/book-1-the-lamb')."),

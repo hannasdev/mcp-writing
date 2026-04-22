@@ -425,9 +425,9 @@ function generateMarkdown(tools) {
       lines.push('_No parameters._');
     } else {
       lines.push('| Parameter | Type | Required | Description |');
-      lines.push('|-----------|------|:--------:|-------------|');
+      lines.push('| --- | --- | :---: | --- |');
       for (const p of tool.params) {
-        const req  = p.optional ? '' : '✓';
+        const req  = p.optional ? 'No' : 'Yes';
         const desc = p.description.replace(/\|/g, '\\|'); // escape pipes
         lines.push(`| \`${p.name}\` | \`${p.type}\` | ${req} | ${desc} |`);
       }

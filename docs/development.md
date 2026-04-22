@@ -135,6 +135,25 @@ Fix:
 3. Verify the export folder has a `Draft/` subdirectory with `.txt` files
 4. Try the import again: `node scripts/import.js ~/my-novel-txt /path/to/sync-dir --project my-novel`
 
+### "SCRIVENER_DIRECT_BETA_FAILED"
+
+The beta direct-merge path could not parse or reconcile the `.scriv` project safely.
+
+Common causes:
+
+1. `source_project_dir` points to the wrong path
+2. the `.scriv` bundle has no `.scrivx` file at its root
+3. the bundle layout differs from the currently tested beta fixture shape
+4. existing sidecars were not created from the same Scrivener project lineage
+
+Fix:
+
+1. Confirm you passed the `.scriv` directory path itself.
+2. Re-run `merge_scrivener_project_beta` with `dry_run: true` and inspect `merge.warnings` / `merge.warning_summary` if present.
+3. If the parser still fails, use the stable fallback path: External Folder Sync plus `import_scrivener_sync`.
+
+Beta direct parsing is intentionally opt-in. A parser/schema mismatch should not block the stable sync-folder workflow.
+
 ### Tests fail after updating Node.js
 
 Local install state may be stale after the Node.js change.

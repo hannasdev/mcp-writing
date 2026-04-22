@@ -720,6 +720,78 @@ describe("merge_scrivener_project_beta tool", () => {
     assert.equal(parsed.merge.scenes_dir, actualScenesDir);
     assert.equal(parsed.merge.sidecar_files, 2);
   });
+
+  test("returns structured warning summary for skipped beta merge sidecars", async () => {
+    const projectId = "direct-beta-warnings";
+
+    await callWriteTool("import_scrivener_sync", {
+      source_dir: scrivenerImportDir,
+      project_id: projectId,
+      dry_run: false,
+      auto_sync: false,
+    });
+
+    const scenesDir = path.join(writeSyncDir, "projects", projectId, "scenes");
+    fs.writeFileSync(
+      path.join(scenesDir, "Loose Notes.meta.yaml"),
+      "scene_id: sc-loose\n",
+      "utf8"
+    );
+    fs.writeFileSync(
+      path.join(scenesDir, "999 Missing Mapping [999].meta.yaml"),
+      "scene_id: sc-999\n",
+      "utf8"
+    );
+
+    const text = await callWriteTool("merge_scrivener_project_beta", {
+      source_project_dir: scrivenerProjectDir,
+      project_id: projectId,
+      dry_run: true,
+      auto_sync: false,
+    });
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.merge.warning_summary.missing_bracket_id.count, 1);
+    assert.equal(parsed.merge.warning_summary.missing_uuid_mapping.count, 1);
+    assert.ok(parsed.merge.warnings.some(w => w.code === "missing_bracket_id"));
+    assert.ok(parsed.merge.warnings.some(w => w.code === "missing_uuid_mapping" && w.sync_number === "999"));
+  });
+
+  test("second beta merge run is idempotent after fields have been written", async () => {
+    const projectId = "direct-beta-idempotent";
+
+    await callWriteTool("import_scrivener_sync", {
+      source_dir: scrivenerImportDir,
+      project_id: projectId,
+      dry_run: false,
+      auto_sync: false,
+    });
+
+    const firstText = await callWriteTool("merge_scrivener_project_beta", {
+      source_project_dir: scrivenerProjectDir,
+      project_id: projectId,
+      dry_run: false,
+      auto_sync: false,
+    });
+    const firstParsed = JSON.parse(firstText);
+    assert.equal(firstParsed.ok, true);
+    assert.equal(firstParsed.merge.updated, 2);
+
+    const secondText = await callWriteTool("merge_scrivener_project_beta", {
+      source_project_dir: scrivenerProjectDir,
+      project_id: projectId,
+      dry_run: true,
+      auto_sync: false,
+    });
+    const secondParsed = JSON.parse(secondText);
+
+    assert.equal(secondParsed.ok, true);
+    assert.equal(secondParsed.merge.updated, 0);
+    assert.equal(secondParsed.merge.unchanged, secondParsed.merge.sidecar_files);
+    assert.deepEqual(secondParsed.merge.field_add_counts, {});
+    assert.deepEqual(secondParsed.merge.preview_changes, []);
+  });
 });
 
 describe("async import/merge job tools", () => {
