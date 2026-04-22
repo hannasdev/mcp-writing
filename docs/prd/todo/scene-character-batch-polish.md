@@ -75,5 +75,5 @@ Expected impact:
 
 ## Related
 
-- [scene-character-linking-batch.md](../in-progress/scene-character-linking-batch.md)
-- [scene-character-linking-batch-implementation.md](../in-progress/scene-character-linking-batch-implementation.md)
+- [scene-character-linking-batch.md](../done/scene-character-linking-batch.md)
+- [scene-character-linking-batch-implementation.md](../done/scene-character-linking-batch-implementation.md)
