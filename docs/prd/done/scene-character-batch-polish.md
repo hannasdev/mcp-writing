@@ -1,6 +1,6 @@
 # Scene-Character Batch Follow-Up Polish
 
-**Status:** 📋 Deferred (Post-v1)
+**Status:** ✅ Done
 
 ## Motivation
 
@@ -23,7 +23,7 @@ Out of scope:
 
 ## Proposed Improvements
 
-### 1) Matching Setup Reuse (Performance)
+### 1) ✅ Matching Setup Reuse (Performance)
 
 Current behavior recomputes normalized character token structures for each scene.
 
@@ -35,7 +35,7 @@ Expected impact:
 - Lower CPU overhead for large batches.
 - No output contract changes.
 
-### 2) Shared Async Progress Prefix Constant (Maintainability)
+### 2) ✅ Shared Async Progress Prefix Constant (Maintainability)
 
 Current behavior defines the progress prefix string in multiple modules.
 
@@ -47,7 +47,7 @@ Expected impact:
 - Reduced drift risk if prefix ever changes.
 - No runtime behavior changes.
 
-### 3) Cancellation Polling Test Ergonomics (Test Stability)
+### 3) ✅ Cancellation Polling Test Ergonomics (Test Stability)
 
 Current integration cancellation test already gates cancellation on observed progress.
 
