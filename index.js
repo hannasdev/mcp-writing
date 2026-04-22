@@ -1178,7 +1178,7 @@ function createMcpServer() {
 
   s.tool(
     "get_async_job_status",
-    "Get status and result for an asynchronous job started by import_scrivener_sync_async or merge_scrivener_project_beta_async.",
+    "Get status and result for an asynchronous job started by async tools such as import_scrivener_sync_async, merge_scrivener_project_beta_async, or enrich_scene_characters_batch.",
     {
       job_id: z.string().describe("Job ID returned by an async start tool."),
       include_result: z.boolean().optional().describe("If true (default), includes completed result payload when available."),
@@ -1195,7 +1195,7 @@ function createMcpServer() {
 
   s.tool(
     "list_async_jobs",
-    "List asynchronous import/merge jobs currently known to this server.",
+    "List asynchronous jobs currently known to this server.",
     {
       include_results: z.boolean().optional().describe("If true, includes completed result payloads."),
     },
