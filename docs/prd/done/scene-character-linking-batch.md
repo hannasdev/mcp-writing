@@ -1,6 +1,6 @@
 # Batch Scene-Character Linking
 
-**Status:** In Progress (Planning)
+**Status:** Done
 
 ## Goal
 
