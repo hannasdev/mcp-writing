@@ -862,6 +862,59 @@ describe("runSceneCharacterBatch", () => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
+  test("does not treat duplicate tokens in one name as ambiguous", async () => {
+    const { dir } = makeBatchFixture();
+    const filePath = writeBatchScene(dir, "sc-001", "Luna appears in the doorway.", []);
+
+    const result = await runSceneCharacterBatch({
+      syncDir: dir,
+      args: {
+        project_id: "test-novel",
+        dry_run: true,
+        replace_mode: "merge",
+        include_match_details: true,
+        target_scenes: [{ scene_id: "sc-001", project_id: "test-novel", file_path: filePath }],
+        character_rows: [
+          { character_id: "luna", name: "Luna Luna" },
+          { character_id: "marcus", name: "Marcus Hale" },
+        ],
+      },
+    });
+
+    assert.equal(result.ok, true);
+    assert.deepEqual(result.results[0].inferred_characters, ["luna"]);
+    assert.deepEqual(result.results[0].match_details.ambiguous_tokens, []);
+
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  test("keeps status unchanged when inferred matches coexist with ambiguous tokens", async () => {
+    const { dir } = makeBatchFixture();
+    const filePath = writeBatchScene(dir, "sc-001", "Elena Vasquez arrives after dark.", ["elena-v"]);
+
+    const result = await runSceneCharacterBatch({
+      syncDir: dir,
+      args: {
+        project_id: "test-novel",
+        dry_run: true,
+        replace_mode: "merge",
+        include_match_details: true,
+        target_scenes: [{ scene_id: "sc-001", project_id: "test-novel", file_path: filePath }],
+        character_rows: [
+          { character_id: "elena-v", name: "Elena Vasquez" },
+          { character_id: "elena-h", name: "Elena Hart" },
+        ],
+      },
+    });
+
+    assert.equal(result.ok, true);
+    assert.deepEqual(result.results[0].inferred_characters, ["elena-v"]);
+    assert.deepEqual(result.results[0].match_details.ambiguous_tokens, ["elena"]);
+    assert.equal(result.results[0].status, "unchanged");
+
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
   test("merge mode preserves existing links and adds inferred ones", async () => {
     const { dir } = makeBatchFixture();
     const filePath = writeBatchScene(dir, "sc-001", "Elena Vasquez waits by the harbor.", ["marcus"]);

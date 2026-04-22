@@ -17,6 +17,7 @@ import { isGitAvailable, isGitRepository, initGitRepository, createSnapshot, lis
 import { renderCharacterArcTemplate, renderCharacterSheetTemplate, renderPlaceSheetTemplate, slugifyEntityName } from "./world-entity-templates.js";
 import { importScrivenerSync, validateProjectId } from "./importer.js";
 import { mergeScrivenerProjectMetadata } from "./scrivener-direct.js";
+import { ASYNC_PROGRESS_PREFIX } from "./async-progress.js";
 
 const SYNC_DIR = process.env.WRITING_SYNC_DIR ?? "./sync";
 const DB_PATH = process.env.DB_PATH ?? "./writing.db";
@@ -126,7 +127,7 @@ function toPublicJob(job, includeResult = true) {
 
 function startAsyncJob({ kind, requestPayload, onComplete }) {
   pruneAsyncJobs();
-  const progressPrefix = "__MCP_ASYNC_PROGRESS__ ";
+  const progressPrefix = ASYNC_PROGRESS_PREFIX;
 
   const id = randomUUID();
   const tmpPrefix = path.join(os.tmpdir(), "mcp-writing-job-");
@@ -218,7 +219,14 @@ function startAsyncJob({ kind, requestPayload, onComplete }) {
     job.finishedAt = new Date().toISOString();
     job.result = payload;
 
-    if (payload && payload.ok === true) {
+    const hasProgressFields = payload && (
+      payload.total_scenes !== undefined
+      || payload.processed_scenes !== undefined
+      || payload.scenes_changed !== undefined
+      || payload.failed_scenes !== undefined
+    );
+
+    if (payload && payload.ok === true && hasProgressFields) {
       job.progress = {
         total_scenes: Number(payload.total_scenes ?? job.progress?.total_scenes ?? 0),
         processed_scenes: Number(payload.processed_scenes ?? job.progress?.processed_scenes ?? 0),

@@ -3,8 +3,9 @@ import path from "node:path";
 import { importScrivenerSync } from "../importer.js";
 import { mergeScrivenerProjectMetadata } from "../scrivener-direct.js";
 import { runSceneCharacterBatch } from "../scene-character-batch.js";
+import { ASYNC_PROGRESS_PREFIX } from "../async-progress.js";
 
-const PROGRESS_PREFIX = "__MCP_ASYNC_PROGRESS__ ";
+const PROGRESS_PREFIX = ASYNC_PROGRESS_PREFIX;
 
 function writeResult(resultPath, payload) {
   fs.mkdirSync(path.dirname(resultPath), { recursive: true });

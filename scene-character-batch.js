@@ -12,7 +12,7 @@ function normalizeCharacterRows(rows) {
     .map(row => ({
       character_id: row.character_id,
       name: String(row.name).trim(),
-      tokens: String(row.name).toLowerCase().split(/\s+/).filter(Boolean),
+      tokens: [...new Set(String(row.name).toLowerCase().split(/\s+/).filter(Boolean))],
     }))
     .filter(row => row.name.length > 0);
 
@@ -30,7 +30,7 @@ function normalizeCharacterRows(rows) {
 }
 
 function inferCharactersFromProse(prose, characterRows) {
-  const { clean, tokenMap } = normalizeCharacterRows(characterRows);
+  const { clean, tokenMap } = characterRows;
   const inferred = new Set();
   const ambiguous_tokens = [];
 
@@ -90,6 +90,7 @@ export async function runSceneCharacterBatch({ syncDir, args, onProgress, should
 
   const targetScenes = Array.isArray(target_scenes) ? target_scenes : [];
   const characterRows = Array.isArray(character_rows) ? character_rows : [];
+  const normalizedCharacterRows = normalizeCharacterRows(characterRows);
 
   const results = [];
   let processed_scenes = 0;
@@ -124,7 +125,7 @@ export async function runSceneCharacterBatch({ syncDir, args, onProgress, should
       const { meta } = readMeta(scene.file_path, syncDir, { writable: !dry_run });
 
       const before_characters = [...new Set((meta.characters ?? []).map(String).filter(Boolean))];
-      const inference = inferCharactersFromProse(prose, characterRows);
+      const inference = inferCharactersFromProse(prose, normalizedCharacterRows);
       const inferred_characters = inference.inferred_characters;
 
       const afterSet = new Set(before_characters);
@@ -155,9 +156,10 @@ export async function runSceneCharacterBatch({ syncDir, args, onProgress, should
       links_added += added.length;
       links_removed += removed.length;
 
+      const hasInferredMatches = inferred_characters.length > 0;
       const sceneStatus = changed
         ? "changed"
-        : (inference.ambiguous_tokens.length > 0 ? "skipped_ambiguous" : "unchanged");
+        : (!hasInferredMatches && inference.ambiguous_tokens.length > 0 ? "skipped_ambiguous" : "unchanged");
 
       results.push({
         scene_id: scene.scene_id,

@@ -1212,7 +1212,13 @@ describe("enrich_scene_characters_batch tool", () => {
         if ((status.job?.progress?.processed_scenes ?? 0) > 0) {
           break;
         }
+        await new Promise(resolve => setTimeout(resolve, 10));
       }
+
+      assert.ok(
+        (status?.job?.progress?.processed_scenes ?? 0) > 0,
+        "Cancellation test requires observed batch progress before cancel_async_job is called."
+      );
 
       const cancelText = await callIsolatedTool("cancel_async_job", {
         job_id: started.job.job_id,
@@ -1230,6 +1236,7 @@ describe("enrich_scene_characters_batch tool", () => {
         if (done.job?.status === "cancelled") {
           break;
         }
+        await new Promise(resolve => setTimeout(resolve, 10));
       }
 
       assert.equal(done.job?.status, "cancelled");
