@@ -414,6 +414,55 @@ function resolveWorldEntityDir({ kind, projectId, universeId, name }) {
   };
 }
 
+function resolveBatchTargetScenes(dbHandle, {
+  projectId,
+  sceneIds,
+  part,
+  chapter,
+  onlyStale,
+}) {
+  if (sceneIds?.length) {
+    const placeholders = sceneIds.map(() => "?").join(",");
+    const existingRows = dbHandle.prepare(
+      `SELECT scene_id FROM scenes WHERE project_id = ? AND scene_id IN (${placeholders})`
+    ).all(projectId, ...sceneIds);
+    const existing = new Set(existingRows.map(row => row.scene_id));
+    const missing = sceneIds.filter(sceneId => !existing.has(sceneId));
+    if (missing.length > 0) {
+      return { ok: false, code: "NOT_FOUND", message: `Requested scene IDs were not found in project '${projectId}'.`, details: { missing_scene_ids: missing, project_id: projectId } };
+    }
+  }
+
+  const conditions = ["project_id = ?"];
+  const params = [projectId];
+
+  if (sceneIds?.length) {
+    const placeholders = sceneIds.map(() => "?").join(",");
+    conditions.push(`scene_id IN (${placeholders})`);
+    params.push(...sceneIds);
+  }
+  if (part !== undefined) {
+    conditions.push("part = ?");
+    params.push(part);
+  }
+  if (chapter !== undefined) {
+    conditions.push("chapter = ?");
+    params.push(chapter);
+  }
+  if (onlyStale) {
+    conditions.push("metadata_stale = 1");
+  }
+
+  const query = `
+    SELECT scene_id, project_id, file_path
+    FROM scenes
+    WHERE ${conditions.join(" AND ")}
+    ORDER BY part, chapter, timeline_position
+  `;
+
+  return { ok: true, rows: dbHandle.prepare(query).all(...params) };
+}
+
 function createCanonicalWorldEntity({ kind, name, notes, projectId, universeId, meta }) {
   const prefix = kind === "character" ? "char" : "place";
   const idKey = kind === "character" ? "character_id" : "place_id";
@@ -1099,7 +1148,7 @@ function createMcpServer() {
 
   s.tool(
     "enrich_scene_characters_batch",
-    "Start an asynchronous batch job that infers scene character mentions and updates scene metadata links. Defaults to dry_run=true.",
+    "Start an asynchronous batch job that infers scene character mentions and updates scene metadata links. Version 1 uses canonical character names only (no aliases). Defaults to dry_run=true.",
     {
       project_id: z.string().describe("Project ID (e.g. 'the-lamb' or 'universe-1/book-1-the-lamb')."),
       scene_ids: z.array(z.string()).optional().describe("Optional allowlist of scene IDs to process before other filters are applied."),
@@ -1145,25 +1194,64 @@ function createMcpServer() {
         );
       }
 
+      const characterRows = db.prepare(`
+        SELECT character_id, name
+        FROM characters
+        WHERE project_id = ? OR universe_id = (SELECT universe_id FROM projects WHERE project_id = ?)
+        ORDER BY length(name) DESC
+      `).all(project_id, project_id);
+
+      const targetResolution = resolveBatchTargetScenes(db, {
+        projectId: project_id,
+        sceneIds: scene_ids,
+        part,
+        chapter,
+        onlyStale: Boolean(only_stale),
+      });
+      if (!targetResolution.ok) {
+        return errorResponse(targetResolution.code, targetResolution.message, targetResolution.details);
+      }
+
+      const targetScenes = targetResolution.rows;
+      if (targetScenes.length > max_scenes) {
+        return errorResponse(
+          "VALIDATION_ERROR",
+          `Matched ${targetScenes.length} scenes, which exceeds max_scenes=${max_scenes}.`,
+          {
+            matched_scenes: targetScenes.length,
+            max_scenes,
+            project_id,
+          }
+        );
+      }
+
       const job = startAsyncJob({
         kind: "enrich_scene_characters_batch",
         requestPayload: {
           kind: "enrich_scene_characters_batch",
           args: {
             project_id,
-            scene_ids,
-            part,
-            chapter,
-            only_stale: Boolean(only_stale),
             dry_run: Boolean(dry_run),
             replace_mode,
-            max_scenes,
             include_match_details: Boolean(include_match_details),
+            target_scenes: targetScenes,
+            character_rows: characterRows,
           },
-          context: {
-            sync_dir: SYNC_DIR,
-            db_path: DB_PATH,
-          },
+          context: { sync_dir: SYNC_DIR },
+        },
+        onComplete: (completedJob) => {
+          if (dry_run || completedJob.status !== "completed" || !completedJob.result?.ok) return;
+
+          syncAll(db, SYNC_DIR, { writable: SYNC_DIR_WRITABLE });
+
+          const changedScenes = (completedJob.result.results ?? [])
+            .filter(row => row.status === "changed")
+            .map(row => row.scene_id);
+
+          for (const sceneId of changedScenes) {
+            db.prepare(`UPDATE scenes SET metadata_stale = 0 WHERE scene_id = ? AND project_id = ?`)
+              .run(sceneId, project_id);
+          }
         },
       });
 

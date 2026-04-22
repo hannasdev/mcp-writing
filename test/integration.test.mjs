@@ -972,6 +972,111 @@ describe("enrich_scene_characters_batch tool", () => {
     assert.equal(done.job.result.processed_scenes, 0);
     assert.deepEqual(done.job.result.results, []);
   });
+
+  test("dry_run=false updates sidecar links and scene_characters index", async () => {
+    await callWriteTool("sync");
+
+    const sceneMetaPath = path.join(writeSyncDir, "projects", "test-novel", "part-1", "chapter-2", "sc-003.meta.yaml");
+    const originalMeta = fs.readFileSync(sceneMetaPath, "utf8");
+
+    try {
+      // Remove Elena link from sidecar and re-sync to drop it from index.
+      const modifiedMeta = originalMeta.replace(/characters:\n(?:\s*- .*\n)+/, "characters: []\n");
+      fs.writeFileSync(sceneMetaPath, modifiedMeta, "utf8");
+      await callWriteTool("sync");
+
+      const startText = await callWriteTool("enrich_scene_characters_batch", {
+        project_id: "test-novel",
+        scene_ids: ["sc-003"],
+        dry_run: false,
+        replace_mode: "merge",
+      });
+      const started = JSON.parse(startText);
+      const done = await waitForAsyncJob(started.job.job_id);
+
+      assert.equal(done.ok, true);
+      assert.equal(done.job.status, "completed");
+      assert.equal(done.job.result.ok, true);
+      assert.equal(done.job.result.scenes_changed, 1);
+      assert.equal(done.job.result.links_added >= 1, true);
+
+      // Ensure parent index is refreshed before asserting link visibility.
+      await callWriteTool("sync");
+
+      const afterText = await callWriteTool("find_scenes", {
+        project_id: "test-novel",
+        character: "elena",
+        page_size: 10,
+      });
+      const after = JSON.parse(afterText);
+      assert.ok(after.results.some(r => r.scene_id === "sc-003"));
+    } finally {
+      fs.writeFileSync(sceneMetaPath, originalMeta, "utf8");
+      await callWriteTool("sync");
+      await callWriteTool("enrich_scene", { scene_id: "sc-003", project_id: "test-novel" });
+    }
+  });
+
+  test("only_stale=true scopes processing to stale scenes", async () => {
+    await callWriteTool("sync");
+
+    const scenePath = path.join(writeSyncDir, "projects", "test-novel", "part-1", "chapter-1", "sc-002.md");
+    const before = fs.readFileSync(scenePath, "utf8");
+
+    try {
+      fs.writeFileSync(scenePath, `${before}\n\nStale marker for only_stale batch test.\n`, "utf8");
+      await callWriteTool("sync");
+
+      const startText = await callWriteTool("enrich_scene_characters_batch", {
+        project_id: "test-novel",
+        part: 1,
+        chapter: 1,
+        only_stale: true,
+        dry_run: true,
+      });
+      const started = JSON.parse(startText);
+      const done = await waitForAsyncJob(started.job.job_id);
+
+      assert.equal(done.ok, true);
+      assert.equal(done.job.status, "completed");
+      assert.equal(done.job.result.total_scenes, 1);
+      assert.equal(done.job.result.results[0].scene_id, "sc-002");
+    } finally {
+      fs.writeFileSync(scenePath, before, "utf8");
+      await callWriteTool("sync");
+      await callWriteTool("enrich_scene", { scene_id: "sc-002", project_id: "test-novel" });
+    }
+  });
+
+  test("returns READ_ONLY when write mode is requested on read-only runtime", async () => {
+    const roPort = 3096;
+    const roUrl = `http://localhost:${roPort}`;
+    const roSyncDir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-writing-readonly-"));
+    copyDirSync(writeSyncDir, roSyncDir);
+    fs.chmodSync(roSyncDir, 0o555);
+
+    const roProc = spawnServer(roPort, roSyncDir, { DEFAULT_METADATA_PAGE_SIZE: "2" });
+    let roClient;
+    try {
+      await waitForServer(roUrl);
+      roClient = await connectClient(roUrl);
+      const result = await roClient.callTool({
+        name: "enrich_scene_characters_batch",
+        arguments: {
+          project_id: "test-novel",
+          dry_run: false,
+        },
+      });
+      const parsed = JSON.parse(result.content?.[0]?.text ?? "{}");
+      assert.equal(parsed.ok, false);
+      assert.equal(parsed.error.code, "READ_ONLY");
+    } finally {
+      try { await roClient?.close(); } catch {}
+      if (roProc) roProc.kill();
+      try { fs.chmodSync(roSyncDir, 0o755); } catch {}
+      fs.rmSync(roSyncDir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("sync warning_summary", () => {

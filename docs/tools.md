@@ -111,7 +111,7 @@ Start an asynchronous beta Scrivener metadata merge job. Returns immediately wit
 
 ## enrich_scene_characters_batch
 
-Start an asynchronous batch job that infers scene character mentions and updates scene metadata links. Defaults to dry_run=true.
+Start an asynchronous batch job that infers scene character mentions and updates scene metadata links. Version 1 uses canonical character names only (no aliases). Defaults to dry_run=true.
 
 | Parameter | Type | Required | Description |
 |-----------|------|:--------:|-------------|

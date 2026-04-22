@@ -128,17 +128,13 @@ function main() {
   if (request.kind === "enrich_scene_characters_batch") {
     const result = runSceneCharacterBatch({
       syncDir,
-      dbPath: request.context?.db_path ?? process.env.DB_PATH ?? "./writing.db",
       args: {
         project_id: request.args?.project_id,
-        scene_ids: request.args?.scene_ids,
-        part: request.args?.part,
-        chapter: request.args?.chapter,
-        only_stale: Boolean(request.args?.only_stale),
         dry_run: Boolean(request.args?.dry_run),
         replace_mode: request.args?.replace_mode ?? "merge",
-        max_scenes: request.args?.max_scenes ?? 200,
         include_match_details: Boolean(request.args?.include_match_details),
+        target_scenes: request.args?.target_scenes ?? [],
+        character_rows: request.args?.character_rows ?? [],
       },
       onProgress: progress => writeProgress({ kind: request.kind, ...progress }),
     });

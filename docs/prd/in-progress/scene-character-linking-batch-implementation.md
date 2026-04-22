@@ -53,7 +53,7 @@ Use focused PRs with one concern each.
 ### Acceptance Criteria
 
 - [x] Invalid params return structured `VALIDATION_ERROR`
-- [ ] Filter precedence is deterministic and documented in code comments/tests
+- [x] Filter precedence is deterministic and documented in code comments/tests
 - [x] No-target requests return a completed async job record, not a hard error
 
 ### Deliverables
@@ -140,9 +140,9 @@ Use focused PRs with one concern each.
 ### Integration Tests
 
 - [x] `dry_run=true` does not modify sidecars or DB links
-- [ ] `dry_run=false` updates sidecars and `scene_characters` links
-- [ ] `only_stale=true` scopes targets correctly
-- [ ] Read-only mode returns `READ_ONLY` for write attempts
+- [x] `dry_run=false` updates sidecars and `scene_characters` links
+- [x] `only_stale=true` scopes targets correctly
+- [x] Read-only mode returns `READ_ONLY` for write attempts
 - [x] Async job lifecycle via shared tools (start/status/list/cancel)
 - [x] Progress fields during running job (if enabled)
 - [ ] Cancellation retains completed results and leaves unstarted scenes untouched
@@ -152,7 +152,7 @@ Use focused PRs with one concern each.
 
 - [x] Add tool docs section in `docs/tools.md` (via docs generator)
 - [ ] Add usage examples for preview vs apply mode
-- [ ] Document v1 limitation: canonical-name-only, aliases deferred
+- [x] Document v1 limitation: canonical-name-only, aliases deferred
 
 ### Acceptance Criteria
 
