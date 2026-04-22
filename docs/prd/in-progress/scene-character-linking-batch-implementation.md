@@ -9,6 +9,13 @@ Scope reminder for v1:
 - Canonical-name-only matching (no alias support)
 - Shared async framework reuse (`startAsyncJob`, `get_async_job_status`, `list_async_jobs`, `cancel_async_job`)
 
+## Progress Snapshot
+
+- Completed: M1 and M2 foundations, plus core M3 implementation path.
+- Completed: initial integration tests for validation, async execution, progress visibility, and zero-target behavior.
+- Completed: tool docs regeneration and async-tool description refresh.
+- Remaining: additional integration coverage for write-mode, stale/read-only/cancellation specifics, and optional usage docs/examples.
+
 ## Milestones
 
 - M1: Tool contract and sync-safe targeting
@@ -31,28 +38,28 @@ Use focused PRs with one concern each.
 
 ### Tasks
 
-- [ ] Add MCP tool definition for `enrich_scene_characters_batch` in `index.js`
-- [ ] Validate params:
-  - [ ] `project_id` required and valid
-  - [ ] `replace_mode=replace` requires `confirm_replace=true`
-  - [ ] `max_scenes` positive integer
-- [ ] Implement filter precedence:
-  - [ ] `scene_ids` allowlist
-  - [ ] optional `part`/`chapter` narrowing
-  - [ ] optional `only_stale=true` narrowing
-- [ ] Resolve zero-target behavior to completed async job with `total_scenes: 0`
-- [ ] Enforce `max_scenes` hard guardrail with `VALIDATION_ERROR` on overflow
+- [x] Add MCP tool definition for `enrich_scene_characters_batch` in `index.js`
+- [x] Validate params:
+  - [x] `project_id` required and valid
+  - [x] `replace_mode=replace` requires `confirm_replace=true`
+  - [x] `max_scenes` positive integer
+- [x] Implement filter precedence:
+  - [x] `scene_ids` allowlist
+  - [x] optional `part`/`chapter` narrowing
+  - [x] optional `only_stale=true` narrowing
+- [x] Resolve zero-target behavior to completed async job with `total_scenes: 0`
+- [x] Enforce `max_scenes` hard guardrail with `VALIDATION_ERROR` on overflow
 
 ### Acceptance Criteria
 
-- [ ] Invalid params return structured `VALIDATION_ERROR`
+- [x] Invalid params return structured `VALIDATION_ERROR`
 - [ ] Filter precedence is deterministic and documented in code comments/tests
-- [ ] No-target requests return a completed async job record, not a hard error
+- [x] No-target requests return a completed async job record, not a hard error
 
 ### Deliverables
 
-- [ ] Tool stub + validation in `index.js`
-- [ ] Deterministic target resolution helper
+- [x] Tool stub + validation in `index.js`
+- [x] Deterministic target resolution helper
 
 ---
 
@@ -60,26 +67,26 @@ Use focused PRs with one concern each.
 
 ### Tasks
 
-- [ ] Add new async job kind for batch linking in `scripts/async-job-runner.mjs`
-- [ ] Wire start path through existing `startAsyncJob` in `index.js`
-- [ ] Reuse existing status/poll/cancel/list tools without introducing a new polling surface
-- [ ] Extend shared job shape with optional `job.progress` (backward-compatible)
-- [ ] Ensure progress fields include:
-  - [ ] `total_scenes`
-  - [ ] `processed_scenes`
-  - [ ] `scenes_changed`
-  - [ ] `failed_scenes`
+- [x] Add new async job kind for batch linking in `scripts/async-job-runner.mjs`
+- [x] Wire start path through existing `startAsyncJob` in `index.js`
+- [x] Reuse existing status/poll/cancel/list tools without introducing a new polling surface
+- [x] Extend shared job shape with optional `job.progress` (backward-compatible)
+- [x] Ensure progress fields include:
+  - [x] `total_scenes`
+  - [x] `processed_scenes`
+  - [x] `scenes_changed`
+  - [x] `failed_scenes`
 
 ### Acceptance Criteria
 
-- [ ] Start tool returns `ok: true`, `async: true`, and `job`
-- [ ] Job can be polled via `get_async_job_status`
-- [ ] Progress is visible while running (if enabled) and final results are retained
+- [x] Start tool returns `ok: true`, `async: true`, and `job`
+- [x] Job can be polled via `get_async_job_status`
+- [x] Progress is visible while running (if enabled) and final results are retained
 
 ### Deliverables
 
-- [ ] Async job dispatch for `enrich_scene_characters_batch`
-- [ ] Worker support in `scripts/async-job-runner.mjs`
+- [x] Async job dispatch for `enrich_scene_characters_batch`
+- [x] Worker support in `scripts/async-job-runner.mjs`
 
 ---
 
@@ -87,36 +94,36 @@ Use focused PRs with one concern each.
 
 ### Tasks
 
-- [ ] Implement canonical-name-only matching:
-  - [ ] full-name phrase preference
-  - [ ] conservative token handling
-  - [ ] ambiguous token -> `skipped_ambiguous`
-- [ ] Compute per-scene delta fields:
-  - [ ] `before_characters`, `inferred_characters`, `after_characters`
-  - [ ] `added`, `removed`, `changed`, per-scene `status`
-- [ ] Implement `dry_run=true` preview-only behavior
-- [ ] Implement write mode (`dry_run=false`):
-  - [ ] update sidecar `characters`
-  - [ ] reindex scene immediately
-  - [ ] clear `metadata_stale` only for successfully updated scenes
-- [ ] Per-scene atomic success/failure semantics:
-  - [ ] scene marked success only after sidecar write + reindex
-  - [ ] write-success/reindex-failure surfaces recoverable failure details
-- [ ] Cancellation semantics:
-  - [ ] best-effort stop
-  - [ ] retain completed scene results
-  - [ ] untouched unstarted scenes
+- [x] Implement canonical-name-only matching:
+  - [x] full-name phrase preference
+  - [x] conservative token handling
+  - [x] ambiguous token -> `skipped_ambiguous`
+- [x] Compute per-scene delta fields:
+  - [x] `before_characters`, `inferred_characters`, `after_characters`
+  - [x] `added`, `removed`, `changed`, per-scene `status`
+- [x] Implement `dry_run=true` preview-only behavior
+- [x] Implement write mode (`dry_run=false`):
+  - [x] update sidecar `characters`
+  - [x] reindex scene immediately
+  - [x] clear `metadata_stale` only for successfully updated scenes
+- [x] Per-scene atomic success/failure semantics:
+  - [x] scene marked success only after sidecar write + reindex
+  - [x] write-success/reindex-failure surfaces recoverable failure details
+- [x] Cancellation semantics:
+  - [x] best-effort stop
+  - [x] retain completed scene results
+  - [x] untouched unstarted scenes
 
 ### Acceptance Criteria
 
-- [ ] `merge` default preserves existing editorial links unless explicitly removed by mode
-- [ ] `replace` requires explicit confirmation and behaves predictably
-- [ ] Mixed-result runs end as `completed` with `failed_scenes > 0` and partial diagnostics in result payload
+- [x] `merge` default preserves existing editorial links unless explicitly removed by mode
+- [x] `replace` requires explicit confirmation and behaves predictably
+- [x] Mixed-result runs end as `completed` with `failed_scenes > 0` and partial diagnostics in result payload
 
 ### Deliverables
 
-- [ ] Core batch processor module/function
-- [ ] Result payload normalization aligned with PRD
+- [x] Core batch processor module/function
+- [x] Result payload normalization aligned with PRD
 
 ---
 
@@ -132,25 +139,25 @@ Use focused PRs with one concern each.
 
 ### Integration Tests
 
-- [ ] `dry_run=true` does not modify sidecars or DB links
+- [x] `dry_run=true` does not modify sidecars or DB links
 - [ ] `dry_run=false` updates sidecars and `scene_characters` links
 - [ ] `only_stale=true` scopes targets correctly
 - [ ] Read-only mode returns `READ_ONLY` for write attempts
-- [ ] Async job lifecycle via shared tools (start/status/list/cancel)
-- [ ] Progress fields during running job (if enabled)
+- [x] Async job lifecycle via shared tools (start/status/list/cancel)
+- [x] Progress fields during running job (if enabled)
 - [ ] Cancellation retains completed results and leaves unstarted scenes untouched
-- [ ] Zero-target run returns completed job with `total_scenes: 0`
+- [x] Zero-target run returns completed job with `total_scenes: 0`
 
 ### Docs Tasks
 
-- [ ] Add tool docs section in `docs/tools.md` (via docs generator)
+- [x] Add tool docs section in `docs/tools.md` (via docs generator)
 - [ ] Add usage examples for preview vs apply mode
 - [ ] Document v1 limitation: canonical-name-only, aliases deferred
 
 ### Acceptance Criteria
 
 - [ ] Tests pass for happy path, partial failures, cancellation, and guardrails
-- [ ] Tool docs reflect async contract and result payload location (`job.result`)
+- [x] Tool docs reflect async contract and result payload location (`job.result`)
 
 ---
 
