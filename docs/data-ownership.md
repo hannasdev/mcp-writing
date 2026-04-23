@@ -11,7 +11,10 @@ The importer is the authoritative writer for Scrivener-imported prose; any edits
 | `scenes/**/*.md` | **Scrivener / importer** | Full prose content | **Unconditionally overwritten.** Never edit `.md` files directly — changes will be lost on the next import. |
 | `scenes/**/*.meta.yaml` | **Importer** (Scrivener fields) + **AI agent** (enrichment fields) | **Importer-authoritative:** `scene_id`, `external_source`, `external_id`, `title`, `timeline_position`, `save_the_cat_beat`. **Agent-writable:** `logline`, `status`, `tags`, `characters`, `places`, `pov`, `part`, `chapter`, `story_time`, `notes`, `flags` (and others). | Importer spreads existing sidecar first, then overwrites only its authoritative fields. Agent edits to importer-controlled fields are **reverted on next import**. All other fields are safely preserved. |
 
+Prose typography is preserved intentionally. Smart quotes, curly apostrophes, em dashes, and other Unicode punctuation from Scrivener or human-authored manuscript text are treated as part of the authored prose, not as characters to normalize away for source-code tooling. If an editor warns about visually confusable Unicode in manuscript files, that is an IDE heuristic rather than a signal that the prose is malformed.
+
 **Rule:** write AI-side fields via the appropriate tool — never touch the Scrivener-controlled fields manually or the importer will overwrite them.
+
 - `update_scene_metadata` supports: `logline`, `status`, `tags`, `characters`, `places`, `pov`, `part`, `chapter`, `timeline_position`, `story_time`, `save_the_cat_beat`, `title`.
 - `flag_scene` appends accumulating continuity/review notes (free-text `flags` list).
 - `enrich_scene` re-derives lightweight metadata from the current prose and clears staleness.
