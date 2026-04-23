@@ -38,10 +38,10 @@ Because internal schema may change, direct extraction is an opt-in beta feature,
 
 ### Prototype/Hidden Today
 
-- `scripts/merge-scrivx.js` already parses `.scrivx` + project data to merge metadata into scene sidecars
-- Not currently an official MCP tool
-- Not currently documented as a supported ingestion mode
-- Not currently covered by equivalent test depth as the stable import path
+- `scripts/merge-scrivx.js` and `scrivener-direct.js` parse `.scrivx` + project data to merge metadata into scene sidecars
+- Official MCP beta tools exist: `merge_scrivener_project_beta` and `merge_scrivener_project_beta_async`
+- Documented as an opt-in beta ingestion mode with explicit stable fallback guidance
+- Covered by focused unit and integration tests, including dry-run behavior, fallback messaging, `scenes_dir` precedence, async completion, warning surfaces, and rerun idempotency
 
 ## Beta Scope (Phase 1)
 
@@ -53,6 +53,7 @@ Provide a supported beta capability that can be called intentionally and safely.
 2. Keep the existing stable sync-folder import unchanged
 3. Parse and merge at least:
    - Scrivener keywords
+   - Preserve keyword assignments as raw tags/keyword graph entries; do not infer semantic meaning (for example, auto-mapping keywords into `characters` or `versions`) in Phase 1
    - synopsis/card summary
    - selected custom metadata fields (initial allowlist)
 4. Preserve identity/reconciliation behavior compatible with current scene IDs and external IDs
@@ -65,6 +66,8 @@ Provide a supported beta capability that can be called intentionally and safely.
 2. Automatic background fallback between stable and beta importers
 3. Full support promise across all historical/future Scrivener versions
 4. Implicit writes outside scene sidecars
+
+Note: Optional scene relocation into chapter-based folders may be exposed as an explicit opt-in (`organize_by_chapters`). It must remain off by default and never run implicitly.
 
 ## Feature Parity Requirements
 
@@ -91,6 +94,7 @@ Direct extraction must reach functional parity with the stable importer in safet
 Direct extraction should unlock metadata quality improvements not available from text export alone.
 
 1. Keyword graph from Scrivener keyword assignments
+   - Maintain source fidelity: keyword values should be stored and exposed verbatim (subject to normalization like trimming/dedup), without interpretation-based remapping
 2. Synopsis from Scrivener synopsis files
 3. Binder hierarchy metadata for more reliable structural mapping
 4. Custom metadata fields (via explicit mapping contract)
@@ -117,6 +121,13 @@ Direct extraction should unlock metadata quality improvements not available from
 3. Errors include fallback guidance to stable sync-folder import
 4. Runtime outputs identify parser assumptions when they fail
 
+### Current Status
+
+- Stable-vs-beta setup guidance is documented in `docs/setup.md`.
+- Beta parser/schema mismatch troubleshooting and fallback guidance is documented in `docs/development.md`.
+- Tool reference labels stable and beta tiers for Scrivener import/merge tools.
+- Beta merge responses provide structured warning payloads and warning summaries for skipped or normalized inputs.
+
 ## Rollout Plan
 
 1. **Phase A: Formalize current script core**
@@ -142,6 +153,13 @@ This feature remains beta until all criteria are met:
 4. Sufficient integration coverage for representative `.scriv` fixtures
 
 If any criterion regresses, the feature stays beta.
+
+## Current Gaps Before Graduation
+
+1. Explicit importer-authoritative ownership policy enforcement remains incomplete.
+2. Conflict reporting for ambiguous mappings still needs dedicated treatment.
+3. Compatibility matrix expansion beyond the baseline fixture remains open.
+4. Tested-version coverage documentation is still partial.
 
 ## Related
 

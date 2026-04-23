@@ -775,7 +775,7 @@ function createMcpServer() {
   // ---- import_scrivener_sync ----------------------------------------------
   s.tool(
     "import_scrivener_sync",
-    "Import Scrivener External Folder Sync Draft files into this server's WRITING_SYNC_DIR by generating scene sidecars and reconciling by Scrivener binder ID. Use this for first-time setup before sync().",
+    "[STABLE] Import Scrivener External Folder Sync Draft files into this server's WRITING_SYNC_DIR by generating scene sidecars and reconciling by Scrivener binder ID. This is the recommended default path for first-time setup before sync().",
     {
       source_dir: z.string().describe("Path to Scrivener external sync folder (the folder that contains Draft/, or Draft/ itself)."),
       project_id: z.string().optional().describe("Project ID override (e.g. 'the-lamb'). Defaults to a slug derived from WRITING_SYNC_DIR."),
@@ -897,15 +897,16 @@ function createMcpServer() {
   // ---- merge_scrivener_project_beta --------------------------------------
   s.tool(
     "merge_scrivener_project_beta",
-    "[BETA] Merge metadata directly from a Scrivener .scriv project into existing scene sidecars. This path is opt-in and may be sensitive to Scrivener internal format changes. Requires scenes sidecars to already exist (for example, from import_scrivener_sync).",
+    "[BETA] Merge metadata directly from a Scrivener .scriv project into existing scene sidecars. This path is opt-in, requires sidecars to already exist (for example, from import_scrivener_sync), and may be sensitive to Scrivener internal format changes.",
     {
       source_project_dir: z.string().describe("Path to a Scrivener .scriv bundle directory."),
       project_id: z.string().optional().describe("Project ID containing existing sidecars (e.g. 'the-lamb' or 'universe-1/book-1-the-lamb'). Defaults to a slug derived from WRITING_SYNC_DIR."),
       scenes_dir: z.string().optional().describe("Absolute path to the scenes directory containing .meta.yaml sidecars. Overrides the path derived from project_id. Use this for non-standard sync layouts."),
       dry_run: z.boolean().optional().describe("If true (default), reports planned merges without writing files."),
       auto_sync: z.boolean().optional().describe("If true (default), runs sync() after a non-dry-run merge."),
+      organize_by_chapters: z.boolean().optional().describe("If true (default false), relocate scene files into chapter-based folder hierarchies (e.g., chapter-7-harbor/). Chapter metadata is always extracted to sidecars regardless of this flag."),
     },
-    async ({ source_project_dir, project_id, scenes_dir, dry_run = true, auto_sync = true }) => {
+    async ({ source_project_dir, project_id, scenes_dir, dry_run = true, auto_sync = true, organize_by_chapters = false }) => {
       if (project_id !== undefined) {
         const projectIdCheck = validateProjectId(project_id);
         if (!projectIdCheck.ok) {
@@ -943,6 +944,7 @@ function createMcpServer() {
           projectId: project_id,
           scenesDir: normalizedScenesDir,
           dryRun: Boolean(dry_run),
+          organizeByChapters: Boolean(organize_by_chapters),
         });
       } catch (error) {
         return errorResponse(
@@ -973,10 +975,14 @@ function createMcpServer() {
           dry_run: mergeResult.dryRun,
           sidecar_files: mergeResult.sidecarFiles,
           updated: mergeResult.updated,
+          relocated: mergeResult.relocated,
           unchanged: mergeResult.unchanged,
           no_data: mergeResult.noData,
           field_add_counts: mergeResult.fieldAddCounts,
           preview_changes: mergeResult.previewChanges,
+          warnings: mergeResult.warnings,
+          warnings_truncated: mergeResult.warningsTruncated,
+          warning_summary: mergeResult.warningSummary,
           stats: {
             sync_map_entries: mergeResult.stats.syncMapEntries,
             keyword_map_entries: mergeResult.stats.keywordMapEntries,
@@ -1009,7 +1015,7 @@ function createMcpServer() {
   // ---- async import/merge jobs --------------------------------------------
   s.tool(
     "import_scrivener_sync_async",
-    "Start an asynchronous Scrivener External Folder Sync import job. Returns immediately with a job_id to poll via get_async_job_status.",
+    "[STABLE] Start an asynchronous Scrivener External Folder Sync import job. This is the recommended default import path when the sync tree is large. Returns immediately with a job_id to poll via get_async_job_status.",
     {
       source_dir: z.string().describe("Path to Scrivener external sync folder (the folder that contains Draft/, or Draft/ itself)."),
       project_id: z.string().optional().describe("Project ID override (e.g. 'the-lamb' or 'universe-1/book-1-the-lamb')."),
@@ -1089,15 +1095,16 @@ function createMcpServer() {
 
   s.tool(
     "merge_scrivener_project_beta_async",
-    "Start an asynchronous beta Scrivener metadata merge job. Returns immediately with a job_id to poll via get_async_job_status.",
+    "[BETA] Start an asynchronous Scrivener metadata merge job from a `.scriv` project into existing scene sidecars. Use this only after the stable import path has created sidecars. Returns immediately with a job_id to poll via get_async_job_status.",
     {
       source_project_dir: z.string().describe("Path to a Scrivener .scriv bundle directory."),
       project_id: z.string().optional().describe("Project ID containing existing sidecars (e.g. 'the-lamb' or 'universe-1/book-1-the-lamb')."),
       scenes_dir: z.string().optional().describe("Absolute path to the scenes directory containing .meta.yaml sidecars. Overrides the path derived from project_id."),
       dry_run: z.boolean().optional().describe("If true (default), reports planned merges without writing files."),
       auto_sync: z.boolean().optional().describe("If true, runs sync() after a non-dry-run async merge finishes."),
+      organize_by_chapters: z.boolean().optional().describe("If true (default false), relocate scene files into chapter-based folder hierarchies. Chapter metadata is always extracted to sidecars."),
     },
-    async ({ source_project_dir, project_id, scenes_dir, dry_run = true, auto_sync = false }) => {
+    async ({ source_project_dir, project_id, scenes_dir, dry_run = true, auto_sync = false, organize_by_chapters = false }) => {
       if (project_id !== undefined) {
         const projectIdCheck = validateProjectId(project_id);
         if (!projectIdCheck.ok) {
@@ -1136,6 +1143,7 @@ function createMcpServer() {
             project_id,
             scenes_dir: normalizedScenesDir,
             dry_run: Boolean(dry_run),
+            organize_by_chapters: Boolean(organize_by_chapters),
           },
           context: {
             sync_dir: SYNC_DIR,
@@ -1423,7 +1431,7 @@ function createMcpServer() {
     },
     async ({ project_id, character, beat, tag, part, chapter, pov, page, page_size }) => {
       let query = `
-        SELECT DISTINCT s.scene_id, s.project_id, s.title, s.part, s.chapter, s.pov,
+        SELECT DISTINCT s.scene_id, s.project_id, s.title, s.part, s.chapter, s.chapter_title, s.pov,
                s.logline, s.scene_change, s.causality, s.stakes, s.scene_functions,
                s.save_the_cat_beat, s.timeline_position, s.story_time,
                s.word_count, s.metadata_stale
@@ -1581,7 +1589,7 @@ function createMcpServer() {
     },
     async ({ character_id, project_id, page, page_size }) => {
       let query = `
-        SELECT s.scene_id, s.project_id, s.part, s.chapter, s.title, s.logline,
+        SELECT s.scene_id, s.project_id, s.part, s.chapter, s.chapter_title, s.title, s.logline,
                s.scene_change, s.causality, s.stakes, s.scene_functions,
                s.save_the_cat_beat, s.timeline_position, s.story_time, s.pov, s.metadata_stale
         FROM scenes s
@@ -1859,7 +1867,7 @@ function createMcpServer() {
 
       if (!shouldPaginate) {
         const rows = db.prepare(`
-          SELECT f.scene_id, f.project_id, s.title, s.logline, s.part, s.chapter, s.metadata_stale
+          SELECT f.scene_id, f.project_id, s.title, s.logline, s.part, s.chapter, s.chapter_title, s.metadata_stale
           FROM scenes_fts f
           JOIN scenes s ON s.scene_id = f.scene_id AND s.project_id = f.project_id
           WHERE scenes_fts MATCH ?
@@ -1876,7 +1884,7 @@ function createMcpServer() {
       const offset = (normalizedPage - 1) * safePageSize;
 
       const rows = db.prepare(`
-        SELECT f.scene_id, f.project_id, s.title, s.logline, s.part, s.chapter, s.metadata_stale
+        SELECT f.scene_id, f.project_id, s.title, s.logline, s.part, s.chapter, s.chapter_title, s.metadata_stale
         FROM scenes_fts f
         JOIN scenes s ON s.scene_id = f.scene_id AND s.project_id = f.project_id
         WHERE scenes_fts MATCH ?
@@ -1942,7 +1950,7 @@ function createMcpServer() {
       }
 
       const rows = db.prepare(`
-        SELECT s.scene_id, s.project_id, s.part, s.chapter, s.title, s.logline,
+        SELECT s.scene_id, s.project_id, s.part, s.chapter, s.chapter_title, s.title, s.logline,
                st.beat AS thread_beat, s.timeline_position, s.story_time, s.metadata_stale
         FROM scenes s
         JOIN scene_threads st ON st.scene_id = s.scene_id AND st.thread_id = ?
@@ -2283,7 +2291,7 @@ function createMcpServer() {
       let query = `
         SELECT r.from_character, r.to_character, r.relationship_type, r.strength,
                r.scene_id, r.note,
-               s.part, s.chapter, s.timeline_position, s.title AS scene_title
+               s.part, s.chapter, s.chapter_title, s.timeline_position, s.title AS scene_title
         FROM character_relationships r
         LEFT JOIN scenes s ON s.scene_id = r.scene_id
         WHERE r.from_character = ? AND r.to_character = ?

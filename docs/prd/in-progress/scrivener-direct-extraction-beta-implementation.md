@@ -10,7 +10,7 @@ This document translates the beta PRD into execution-ready tasks. It is intentio
 - M2: Official beta entrypoints (MCP + CLI) ✅
 - M2.5: Large-project UX (async jobs, warning aggregation, scoped parsing) ✅
 - M3: Safety and parity hardening
-- M4: Docs, compatibility posture, and beta operations
+- M4: Docs, compatibility posture, and beta operations ✅ (baseline docs slice)
 
 ## Recommended Execution Order
 
@@ -22,11 +22,89 @@ Use focused PRs with one concern each. Do not combine milestones unless explicit
 4. PR-3: Ownership and parity hardening
 5. PR-4: Docs, compatibility matrix, and beta operational guidance
 
+## Next PR Sequence (Concrete)
+
+Use this as the execution plan for remaining work. Keep each PR narrowly scoped.
+
+### PR-3a: Ownership Enforcement
+
+Scope:
+- Enforce importer-authoritative write boundaries in beta merge.
+- Keep additive-only behavior for non-authoritative fields.
+- Make overwrite/skip decisions explicit in result payloads and warnings.
+- Align `walkYamls` in `scrivener-direct.js` to skip mirror subdirectories (`projects/`, `universes/`) consistent with `walkSidecarFiles` in `importer.js`, to prevent phantom `missing_bracket_id` warnings from nested mirror trees.
+
+Acceptance checks:
+- Beta merge never silently overwrites agent-authoritative fields.
+- Attempted writes to importer-authoritative fields follow explicit policy and are reported.
+- Unit tests cover allowed write, blocked write, and no-op merge outcomes.
+- Integration tests verify stable importer behavior remains unchanged.
+- `walkYamls` skips mirror subdirectories; test confirms no phantom warnings from nested mirrors.
+
+Exit signal:
+- Close checklist items:
+  - Enforce importer-authoritative field boundaries during merge
+  - No silent overwrite of agent-authoritative fields
+  - Ownership-safe merge policy implementation
+  - `walkYamls` mirror-path guard parity with `walkSidecarFiles`
+
+### PR-3b: Ambiguity Conflicts + Warning Taxonomy
+
+Scope:
+- Define and document ambiguous mapping conditions (e.g., unresolved identity ties, contradictory source metadata, ambiguous folder-derived structure).
+- Add dedicated conflict/warning codes for each condition.
+- Ensure warnings are stable, summarized, and test-covered.
+
+Acceptance checks:
+- Warning taxonomy documented in this file and reflected in tool/runtime outputs.
+- Ambiguous mapping scenarios emit deterministic conflict/warning codes.
+- Unit/integration tests cover each new code and summary behavior.
+
+Exit signal:
+- Close checklist items:
+  - Add conflict/warning reporting for ambiguous mappings
+  - Warning taxonomy is stable and documented
+
+### PR-4b: Compatibility Matrix Expansion
+
+Scope:
+- Add and validate fixtures B/C/D:
+  - B: missing optional metadata files
+  - C: custom metadata-heavy project
+  - D: reordered binder hierarchy
+- Record tested-version coverage and warning profile outcomes.
+
+Acceptance checks:
+- Each fixture has parse success + merge success + sidecar preservation checks.
+- Warning profile reviewed and recorded for each fixture.
+- Compatibility notes updated with tested-version details and known constraints.
+
+Exit signal:
+- Close checklist items:
+  - Compatibility matrix expansion beyond baseline fixture
+  - Tested-version coverage documentation partial -> complete
+  - Compatibility matrix representative coverage
+
+### PR-4c: Graduation Gate Validation
+
+Scope:
+- Validate fallback to stable importer in automated tests as an explicit gate.
+- Summarize release-window risk posture for data-loss class bugs.
+
+Acceptance checks:
+- Automated tests assert fallback guidance path on beta failure conditions.
+- Graduation criteria checklist updated with concrete evidence links.
+
+Exit signal:
+- Close checklist items:
+  - Fallback path to stable importer validated in automated tests
+  - Milestones M1-M4 complete
+
 ---
 
 ## Phase A — Parser Core Extraction (M1) ✅
 
-### Tasks
+### Phase A Tasks
 
 - [x] Extract `.scrivx` parsing and Scrivener data reads from `scripts/merge-scrivx.js` into reusable module(s)
 - [x] Define typed internal model for:
@@ -37,7 +115,7 @@ Use focused PRs with one concern each. Do not combine milestones unless explicit
 - [x] Define deterministic merge contract (input scene sidecar + extracted data -> merged sidecar)
 - [x] Preserve current script behavior while moving logic out of script wrapper
 
-### Deliverables
+### Phase A Deliverables
 
 - [x] `scrivener-direct.js` — parser/merge module with `loadScrivenerProjectData`, `mergeSidecarData`, `mergeScrivenerProjectMetadata` exports
 - [x] `scripts/merge-scrivx.js` — thinned to ~15-line arg-parsing wrapper
@@ -46,7 +124,7 @@ Use focused PRs with one concern each. Do not combine milestones unless explicit
 
 ## Phase B — Official Beta Entry Points (M2) ✅
 
-### Tasks
+### Phase B Tasks
 
 - [x] Add MCP beta tool for direct Scrivener extraction (`merge_scrivener_project_beta`)
 - [x] Keep stable `import_scrivener_sync` unchanged and documented as default
@@ -55,7 +133,7 @@ Use focused PRs with one concern each. Do not combine milestones unless explicit
 - [x] Add `scenes_dir` override parameter for non-standard sync layouts
 - [x] Universe-scoped `project_id` (`universe/project`) resolves to correct `universes/` path
 
-### Deliverables
+### Phase B Deliverables
 
 - [x] MCP tool in `index.js` with structured success/error payloads
 - [x] `SCRIVENER_DIRECT_BETA_FAILED` error code with `details.fallback` guidance
@@ -67,7 +145,7 @@ Use focused PRs with one concern each. Do not combine milestones unless explicit
 
 This phase was identified during manual testing against a real 430+ file project where blocking MCP calls timed out.
 
-### Tasks
+### Phase B.5 Tasks
 
 - [x] Async job infrastructure: `startAsyncJob`, `toPublicJob`, TTL-based pruning
 - [x] `import_scrivener_sync_async` — non-blocking import, returns `job_id` immediately
@@ -81,10 +159,10 @@ This phase was identified during manual testing against a real 430+ file project
 - [x] `import_scrivener_sync` and `import_scrivener_sync_async`: `ignore_patterns` (array of regex strings matched against filenames)
 - [x] `MCP_TRANSPORT=stdio` env var: starts server in stdio mode, no HTTP listener, no port conflicts for local tooling and debug scripts
 
-### Warning types tracked
+### Phase B.5 Warning Types Tracked
 
 | Type | Trigger |
-|---|---|
+| --- | --- |
 | `no_scene_id` | File has no `scene_id` in metadata |
 | `duplicate_scene_id` | Same `scene_id` in two files under same project |
 | `path_metadata_mismatch` | Part/chapter in sidecar doesn't match filesystem path |
@@ -92,7 +170,7 @@ This phase was identified during manual testing against a real 430+ file project
 | `moved_scene` | Sidecar exists at stale path (prose moved) |
 | `nested_mirror` | Path is inside a nested mirror directory |
 
-### Acceptance Criteria
+### Phase B.5 Acceptance Criteria
 
 - [x] Large imports don't block MCP; clients poll status until completion
 - [x] Async jobs retain result for TTL window (default 24h, configurable via `ASYNC_JOB_TTL_MS`)
@@ -101,7 +179,7 @@ This phase was identified during manual testing against a real 430+ file project
 - [x] `ignore_patterns` excludes noise files (fragments, beat sheets) from import scope
 - [x] `MCP_TRANSPORT=stdio` allows local debug scripts without port conflicts
 
-### Deliverables
+### Phase B.5 Deliverables
 
 - [x] `scripts/async-job-runner.mjs` — worker process
 - [x] 5 new MCP tools: `import_scrivener_sync_async`, `merge_scrivener_project_beta_async`, `get_async_job_status`, `list_async_jobs`, `cancel_async_job`
@@ -111,50 +189,51 @@ This phase was identified during manual testing against a real 430+ file project
 
 ## Phase C — Safety and Parity Hardening (M3)
 
-### Tasks
+### Phase C Tasks
 
 - [ ] Enforce importer-authoritative field boundaries during merge
-- [ ] Ensure non-authoritative sidecar fields are preserved
+- [x] Ensure non-authoritative sidecar fields are preserved
+- [ ] Align `walkYamls` (in `scrivener-direct.js`) to skip `projects/`/`universes/` mirror subdirectories, consistent with `walkSidecarFiles` in `importer.js`
 - [ ] Normalize handling for:
-  - [ ] missing UUID mappings
-  - [ ] missing synopsis files
-  - [ ] unknown custom fields
-  - [ ] malformed metadata values
+  - [x] missing UUID mappings
+  - [x] missing synopsis files
+  - [x] unknown custom fields
+  - [x] malformed metadata values
 - [ ] Add conflict/warning reporting for ambiguous mappings
-- [ ] Preserve scene identity and reconciliation assumptions from current importer model
+- [x] Preserve scene identity and reconciliation assumptions from current importer model
 
-### Acceptance Criteria
+### Phase C Acceptance Criteria
 
-- [ ] No duplicate logical scenes created due to ordering or path changes in source
+- [x] No duplicate logical scenes created due to ordering or path changes in source
 - [ ] No silent overwrite of agent-authoritative fields
 - [ ] Warning taxonomy is stable and documented
 
-### Deliverables
+### Phase C Deliverables
 
 - [ ] Ownership-safe merge policy implementation
-- [ ] Structured warnings and error codes
+- [x] Structured warnings and error codes
 
 ---
 
 ## Phase D — Docs and Beta Ops (M4)
 
-### Tasks
+### Phase D Tasks
 
-- [ ] Update setup docs with two-path guidance (stable vs beta)
-- [ ] Add "tested versions" compatibility section for beta path
-- [ ] Add troubleshooting section for parser/schema mismatch failures
-- [ ] Add tool reference updates and explicit stability tier labeling
+- [x] Update setup docs with two-path guidance (stable vs beta)
+- [x] Add "tested versions" compatibility section for beta path (initial baseline posture)
+- [x] Add troubleshooting section for parser/schema mismatch failures
+- [x] Add tool reference updates and explicit stability tier labeling
 
-### Acceptance Criteria
+### Phase D Acceptance Criteria
 
-- [ ] Users can clearly distinguish stable default from beta option
-- [ ] Docs provide a clear fallback path when beta ingestion fails
-- [ ] Beta caveats appear in all relevant surfaces (setup, tools, runtime)
+- [x] Users can clearly distinguish stable default from beta option
+- [x] Docs provide a clear fallback path when beta ingestion fails
+- [x] Beta caveats appear in all relevant surfaces (setup, tools, runtime)
 
-### Deliverables
+### Phase D Deliverables
 
-- [ ] Documentation updates across setup and tool reference docs
-- [ ] Compatibility notes and operational troubleshooting guidance
+- [x] Documentation updates across setup and tool reference docs
+- [x] Compatibility notes and operational troubleshooting guidance (baseline beta posture)
 
 ---
 
@@ -165,13 +244,13 @@ This phase was identified during manual testing against a real 430+ file project
 - [x] Parser reads `.scrivx` maps correctly (sync map, keyword map, binder traversal)
 - [x] Metadata extraction handles absent optional files without crash
 - [x] Merge contract preserves non-authoritative fields
-- [ ] Custom-field mapping allowlist behavior is deterministic
+- [x] Custom-field mapping allowlist behavior is deterministic
 
 ### Integration Tests
 
 - [x] MCP beta tool dry-run against fixture `.scriv` bundle
 - [x] MCP beta tool write mode updates sidecars as expected
-- [ ] Re-run idempotency: second run does not produce unintended drift
+- [x] Re-run idempotency: second run does not produce unintended drift
 - [x] Fallback messaging on incompatible or malformed source structure
 - [x] `scenes_dir` override and priority over `project_id`
 - [x] Async import and merge jobs complete successfully
@@ -196,186 +275,22 @@ Track explicitly as fixtures are added.
 
 For each fixture:
 
-- [ ] parse success
-- [ ] merge success
+- [x] parse success
+- [x] merge success
 - [ ] warning profile reviewed
-- [ ] sidecar preservation checks pass
+- [x] sidecar preservation checks pass
+
+## Implementation Notes
+
+- Current merge behavior is additive-only: beta merge fills missing sidecar fields and does not overwrite existing values.
+- Missing UUID mappings are skipped with structured warning payloads, and missing synopsis files are tolerated without failing the merge.
+- Unknown Scrivener custom fields are ignored unless explicitly mapped into supported sidecar fields.
+- Invalid numeric Scrivener custom field values are ignored with structured warnings rather than hard-failing the merge.
+- Remaining Phase C work is concentrated in explicit ownership policy and conflict reporting for ambiguous mappings.
+- Phase D baseline docs slice is complete: setup guidance, troubleshooting, stability-tier tool descriptions, and generated tool reference are in place.
+- Remaining docs work is now mostly depth expansion (broader tested-version matrix and fixture coverage), not baseline guidance.
 
 ---
-
-## Exit Criteria For Beta Graduation Review
-
-All must be true before proposing graduation from beta status.
-
-- [ ] Milestones M1-M4 complete
-- [ ] No unresolved high-severity data loss issues
-- [ ] Compatibility matrix has representative coverage and documented tested versions
-- [ ] Fallback path to stable importer validated in automated tests
-
-## Non-Goals Reminder
-
-- Replacing stable sync-folder importer in this initiative
-- Supporting every historical Scrivener version on day one
-- Expanding into unrelated metadata model changes not required for parity or beta value
-
-## Related
-
-- [scrivener-direct-extraction-beta.md](scrivener-direct-extraction-beta.md)
-- [../done/import-sync.md](../done/import-sync.md)
-- [../done/metadata.md](../done/metadata.md)
-
-
-## First PR Scope (PR-1)
-
-Goal: establish reusable parser/merge internals without changing product behavior.
-
-### In Scope
-
-- Extract reusable parser and merge modules from `scripts/merge-scrivx.js`
-- Keep the existing script as a thin wrapper
-- Add unit tests for parser + merge contract
-- Preserve current script outputs for existing fixture data
-
-### Out of Scope
-
-- No MCP tool additions
-- No docs/tool-surface labeling changes
-- No ownership policy expansion beyond preserving current behavior
-- No migration or deprecation messaging
-
-### PR-1 Acceptance Criteria
-
-- Existing script remains runnable with same CLI inputs
-- Shared module API is stable enough for later MCP integration
-- Unit tests cover success and malformed-input paths
-- No changes to stable `import_scrivener_sync` behavior
-
-## Phase A — Parser Core Extraction (M1)
-
-### Tasks
-
-- [ ] Extract `.scrivx` parsing and Scrivener data reads from `scripts/merge-scrivx.js` into reusable module(s)
-- [ ] Define typed internal model for:
-  - [ ] binder items
-  - [ ] sync number to UUID mapping
-  - [ ] keyword map
-  - [ ] per-scene extracted metadata
-- [ ] Define deterministic merge contract (input scene sidecar + extracted data -> merged sidecar)
-- [ ] Preserve current script behavior while moving logic out of script wrapper
-
-### Acceptance Criteria
-
-- [ ] Existing script behavior remains functionally equivalent for current supported fixture
-- [ ] Core parser/merge logic can be called by both CLI and MCP surfaces
-- [ ] Merge function is pure and unit-testable
-
-### Deliverables
-
-- [ ] New parser/merge module(s) under source root
-- [ ] Thin `scripts/merge-scrivx.js` wrapper using shared module
-
-## Phase B — Official Beta Entry Points (M2)
-
-### Tasks
-
-- [ ] Add MCP beta tool for direct Scrivener extraction
-- [ ] Keep stable `import_scrivener_sync` unchanged and documented as default
-- [ ] Add CLI command alias for beta flow (or formalize existing script usage)
-- [ ] Add explicit beta wording in tool/CLI descriptions and responses
-- [ ] Add `dry_run` summary with field-level change preview counts
-
-### Acceptance Criteria
-
-- [ ] Beta entrypoint is opt-in and never auto-invoked by stable import path
-- [ ] On parser/schema failure, output includes actionable fallback to stable import path
-- [ ] `dry_run` output gives enough detail for user trust before writes
-
-### Deliverables
-
-- [ ] MCP tool in `index.js` with structured success/error payloads
-- [ ] CLI behavior documented and consistent with MCP payload semantics
-
-## Phase C — Safety and Parity Hardening (M3)
-
-### Tasks
-
-- [ ] Enforce importer-authoritative field boundaries during merge
-- [ ] Ensure non-authoritative sidecar fields are preserved
-- [ ] Normalize handling for:
-  - [ ] missing UUID mappings
-  - [ ] missing synopsis files
-  - [ ] unknown custom fields
-  - [ ] malformed metadata values
-- [ ] Add conflict/warning reporting for ambiguous mappings
-- [ ] Preserve scene identity and reconciliation assumptions from current importer model
-
-### Acceptance Criteria
-
-- [ ] No duplicate logical scenes created due to ordering or path changes in source
-- [ ] No silent overwrite of agent-authoritative fields
-- [ ] Warning taxonomy is stable and documented
-
-### Deliverables
-
-- [ ] Ownership-safe merge policy implementation
-- [ ] Structured warnings and error codes
-
-## Phase D — Docs and Beta Ops (M4)
-
-### Tasks
-
-- [ ] Update setup docs with two-path guidance (stable vs beta)
-- [ ] Add "tested versions" compatibility section for beta path
-- [ ] Add troubleshooting section for parser/schema mismatch failures
-- [ ] Add tool reference updates and explicit stability tier labeling
-
-### Acceptance Criteria
-
-- [ ] Users can clearly distinguish stable default from beta option
-- [ ] Docs provide a clear fallback path when beta ingestion fails
-- [ ] Beta caveats appear in all relevant surfaces (setup, tools, runtime)
-
-### Deliverables
-
-- [ ] Documentation updates across setup and tool reference docs
-- [ ] Compatibility notes and operational troubleshooting guidance
-
-## Test Plan
-
-## Unit Tests
-
-- [ ] Parser reads `.scrivx` maps correctly (sync map, keyword map, binder traversal)
-- [ ] Metadata extraction handles absent optional files without crash
-- [ ] Merge contract preserves non-authoritative fields
-- [ ] Custom-field mapping allowlist behavior is deterministic
-
-## Integration Tests
-
-- [ ] MCP beta tool dry-run against fixture `.scriv` bundle
-- [ ] MCP beta tool write mode updates sidecars as expected
-- [ ] Re-run idempotency: second run does not produce unintended drift
-- [ ] Fallback messaging on incompatible or malformed source structure
-
-## Regression Coverage
-
-- [ ] Existing `import_scrivener_sync` integration tests remain green
-- [ ] Stable sync-folder import behavior unchanged
-
-## Compatibility Matrix (Initial)
-
-Track explicitly as fixtures are added.
-
-- [ ] Scrivener fixture A: baseline project structure
-- [ ] Scrivener fixture B: missing optional metadata files
-- [ ] Scrivener fixture C: custom metadata-heavy project
-- [ ] Scrivener fixture D: reordered binder hierarchy
-
-For each fixture:
-
-- [ ] parse success
-- [ ] merge success
-- [ ] warning profile reviewed
-- [ ] sidecar preservation checks pass
 
 ## Exit Criteria For Beta Graduation Review
 

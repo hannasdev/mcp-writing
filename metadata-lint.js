@@ -32,6 +32,7 @@ const sceneSchema = z.object({
   title: z.string().min(1).optional(),
   part: z.number().int().positive().optional(),
   chapter: z.number().int().positive().optional(),
+  chapter_title: z.string().min(1).optional(),
   pov: z.string().min(1).optional(),
   logline: z.string().min(1).optional(),
   save_the_cat_beat: z.string().min(1).optional(),

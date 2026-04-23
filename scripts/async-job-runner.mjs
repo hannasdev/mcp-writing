@@ -61,10 +61,14 @@ function normalizeMergeResult(mergeResult) {
       dry_run: mergeResult.dryRun,
       sidecar_files: mergeResult.sidecarFiles,
       updated: mergeResult.updated,
+      relocated: mergeResult.relocated,
       unchanged: mergeResult.unchanged,
       no_data: mergeResult.noData,
       field_add_counts: mergeResult.fieldAddCounts,
       preview_changes: mergeResult.previewChanges,
+      warnings: mergeResult.warnings,
+      warnings_truncated: mergeResult.warningsTruncated,
+      warning_summary: mergeResult.warningSummary,
       stats: {
         sync_map_entries: mergeResult.stats.syncMapEntries,
         keyword_map_entries: mergeResult.stats.keywordMapEntries,
@@ -121,6 +125,7 @@ async function main() {
       projectId: request.args?.project_id,
       scenesDir: request.args?.scenes_dir,
       dryRun: Boolean(request.args?.dry_run),
+      organizeByChapters: Boolean(request.args?.organize_by_chapters),
     });
     writeResult(resultPath, normalizeMergeResult(result));
     return;
