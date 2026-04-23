@@ -421,8 +421,10 @@ function createScrivenerProjectBundleFixture(baseDir) {
     <BinderItem Type="DraftFolder" UUID="draft-root">
       <Children>
         <BinderItem Type="Folder" UUID="part-1">
+          <Title>Part One</Title>
           <Children>
             <BinderItem Type="Folder" UUID="chapter-1">
+              <Title>Arrival</Title>
               <Children>
                 <BinderItem Type="Text" UUID="UUID-10">
                   <Keywords>
@@ -791,6 +793,88 @@ describe("merge_scrivener_project_beta tool", () => {
     assert.equal(secondParsed.merge.unchanged, secondParsed.merge.sidecar_files);
     assert.deepEqual(secondParsed.merge.field_add_counts, {});
     assert.deepEqual(secondParsed.merge.preview_changes, []);
+  });
+
+  test("non-dry-run beta merge relocates scenes into chapter folders and indexes chapter_title", async () => {
+    const projectId = "direct-beta-relocate";
+
+    await callWriteTool("import_scrivener_sync", {
+      source_dir: scrivenerImportDir,
+      project_id: projectId,
+      dry_run: false,
+      auto_sync: false,
+    });
+
+    const mergeText = await callWriteTool("merge_scrivener_project_beta", {
+      source_project_dir: scrivenerProjectDir,
+      project_id: projectId,
+      dry_run: false,
+      auto_sync: true,
+      organize_by_chapters: true,
+    });
+    const mergeParsed = JSON.parse(mergeText);
+
+    assert.equal(mergeParsed.ok, true);
+    assert.ok(mergeParsed.merge.relocated >= 2);
+
+    const relocatedScenePath = path.join(
+      writeSyncDir,
+      "projects",
+      projectId,
+      "scenes",
+      "part-1",
+      "chapter-1-arrival",
+      "001 Scene Arrival [10].txt"
+    );
+    const relocatedMetaPath = relocatedScenePath.replace(/\.txt$/, ".meta.yaml");
+    assert.equal(fs.existsSync(relocatedScenePath), true);
+    assert.equal(fs.existsSync(relocatedMetaPath), true);
+
+    const scenesText = await callWriteTool("find_scenes", { project_id: projectId });
+    const scenes = JSON.parse(scenesText);
+    assert.equal(Array.isArray(scenes), true);
+    assert.equal(scenes[0].chapter, 1);
+    assert.equal(scenes[0].chapter_title, "Arrival");
+  });
+
+  test("merge_scrivener_project_beta with organize_by_chapters: false keeps scenes in place", async () => {
+    const projectId = "direct-beta-no-organize";
+
+    await callWriteTool("import_scrivener_sync", {
+      source_dir: scrivenerImportDir,
+      project_id: projectId,
+      dry_run: false,
+      auto_sync: false,
+    });
+
+    const mergeText = await callWriteTool("merge_scrivener_project_beta", {
+      source_project_dir: scrivenerProjectDir,
+      project_id: projectId,
+      dry_run: false,
+      auto_sync: true,
+      organize_by_chapters: false,
+    });
+    const mergeParsed = JSON.parse(mergeText);
+
+    assert.equal(mergeParsed.ok, true);
+    assert.equal(mergeParsed.merge.relocated, 0, "No scenes should be relocated when organize_by_chapters is false");
+
+    const originalScenePath = path.join(
+      writeSyncDir,
+      "projects",
+      projectId,
+      "scenes",
+      "001 Scene Arrival [10].txt"
+    );
+    const originalMetaPath = originalScenePath.replace(/\.txt$/, ".meta.yaml");
+    assert.equal(fs.existsSync(originalScenePath), true, "Scene should remain in original scenes directory");
+    assert.equal(fs.existsSync(originalMetaPath), true, "Sidecar should remain in original scenes directory");
+
+    const scenesText = await callWriteTool("find_scenes", { project_id: projectId });
+    const scenes = JSON.parse(scenesText);
+    assert.equal(Array.isArray(scenes), true);
+    assert.equal(scenes[0].chapter, 1, "Chapter metadata should still be added");
+    assert.equal(scenes[0].chapter_title, "Arrival", "Chapter title should still be added");
   });
 });
 

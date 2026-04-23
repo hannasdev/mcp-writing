@@ -271,6 +271,11 @@ describe("inferScenePositionFromPath", () => {
     assert.deepEqual(result, { part: 2, chapter: 7 });
   });
 
+  test("extracts chapter numbers from named chapter directories", () => {
+    const result = inferScenePositionFromPath(syncDir, "/sync/projects/novel/scenes/part-2/chapter-7-the-harbor/scene.md");
+    assert.deepEqual(result, { part: 2, chapter: 7 });
+  });
+
   test("returns nulls when the path has no part/chapter segments", () => {
     const result = inferScenePositionFromPath(syncDir, "/sync/projects/novel/scenes/scene.md");
     assert.deepEqual(result, { part: null, chapter: null });
@@ -1214,6 +1219,7 @@ describe("Scrivener direct metadata merge", () => {
       extraMetaDataItems = "",
       synopsisText = "Elena returns to the harbor.",
       includeSynopsis = true,
+      chapterTitle = "Arrival",
     } = options;
     const scrivDir = fs.mkdtempSync(path.join(os.tmpdir(), "scrivener-project-"));
     const scrivxPath = path.join(scrivDir, "Novel.scrivx");
@@ -1231,8 +1237,10 @@ describe("Scrivener direct metadata merge", () => {
     <BinderItem Type="DraftFolder" UUID="draft-root">
       <Children>
         <BinderItem Type="Folder" UUID="part-1">
+          <Title>Part One</Title>
           <Children>
             <BinderItem Type="Folder" UUID="chapter-1">
+              <Title>${chapterTitle}</Title>
               <Children>
                 <BinderItem Type="Text" UUID="UUID-1">
                   <Keywords>
@@ -1311,8 +1319,75 @@ describe("Scrivener direct metadata merge", () => {
       assert.deepEqual(data.metaByUUID["UUID-1"].versions, ["v1.2"]);
       assert.equal(data.chapterByUUID["UUID-1"], 1);
       assert.equal(data.partByUUID["UUID-1"], 1);
+      assert.equal(data.chapterTitleByUUID["UUID-1"], "Arrival");
     } finally {
       fs.rmSync(scrivDir, { recursive: true, force: true });
+    }
+  });
+
+  test("mergeScrivenerProjectMetadata relocates scene files into named chapter folders", () => {
+    const scrivDir = createScrivenerProjectFixture({ chapterTitle: "Harbor Arrival" });
+    const { syncRoot, scenesDir } = createSyncSidecarFixture();
+    const prosePath = path.join(scenesDir, "001 Scene Arrival [1].txt");
+    fs.writeFileSync(prosePath, "Scene prose.\n", "utf8");
+
+    try {
+      const result = mergeScrivenerProjectMetadata({
+        scrivPath: scrivDir,
+        mcpSyncDir: syncRoot,
+        projectId: "test-import",
+        dryRun: false,
+        organizeByChapters: true,
+      });
+
+      const targetDir = path.join(scenesDir, "part-1", "chapter-1-harbor-arrival");
+      const relocatedSidecar = path.join(targetDir, "001 Scene Arrival [1].meta.yaml");
+      const relocatedProse = path.join(targetDir, "001 Scene Arrival [1].txt");
+      const sidecar = yaml.load(fs.readFileSync(relocatedSidecar, "utf8"));
+
+      assert.equal(result.updated, 1);
+      assert.equal(result.relocated, 1);
+      assert.equal(fs.existsSync(relocatedSidecar), true);
+      assert.equal(fs.existsSync(relocatedProse), true);
+      assert.equal(fs.existsSync(path.join(scenesDir, "001 Scene Arrival [1].meta.yaml")), false);
+      assert.equal(fs.existsSync(prosePath), false);
+      assert.equal(sidecar.chapter, 1);
+      assert.equal(sidecar.chapter_title, "Harbor Arrival");
+    } finally {
+      fs.rmSync(scrivDir, { recursive: true, force: true });
+      fs.rmSync(syncRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("mergeScrivenerProjectMetadata with organize_by_chapters: false keeps scenes in place and only updates sidecar metadata", () => {
+    const scrivDir = createScrivenerProjectFixture({ chapterTitle: "Harbor Arrival" });
+    const { syncRoot, scenesDir } = createSyncSidecarFixture();
+    const prosePath = path.join(scenesDir, "001 Scene Arrival [1].txt");
+    fs.writeFileSync(prosePath, "Scene prose.\n", "utf8");
+
+    try {
+      const result = mergeScrivenerProjectMetadata({
+        scrivPath: scrivDir,
+        mcpSyncDir: syncRoot,
+        projectId: "test-import",
+        dryRun: false,
+        organizeByChapters: false,
+      });
+
+      const sidecarPath = path.join(scenesDir, "001 Scene Arrival [1].meta.yaml");
+      const relocatedSidecar = path.join(scenesDir, "part-1", "chapter-1-harbor-arrival", "001 Scene Arrival [1].meta.yaml");
+      const sidecar = yaml.load(fs.readFileSync(sidecarPath, "utf8"));
+
+      assert.equal(result.updated, 1);
+      assert.equal(result.relocated, 0, "No files should be relocated when organize_by_chapters is false");
+      assert.equal(fs.existsSync(sidecarPath), true, "Sidecar should remain in original location");
+      assert.equal(fs.existsSync(prosePath), true, "Prose should remain in original location");
+      assert.equal(fs.existsSync(relocatedSidecar), false, "No relocated sidecar should exist");
+      assert.equal(sidecar.chapter, 1, "Chapter metadata should still be added to sidecar");
+      assert.equal(sidecar.chapter_title, "Harbor Arrival", "Chapter title should still be added to sidecar");
+    } finally {
+      fs.rmSync(scrivDir, { recursive: true, force: true });
+      fs.rmSync(syncRoot, { recursive: true, force: true });
     }
   });
 
@@ -1431,19 +1506,20 @@ describe("Scrivener direct metadata merge", () => {
     try {
       const result = spawnSync(
         process.execPath,
-        [path.join(process.cwd(), "scripts", "merge-scrivx.js"), scrivDir, syncRoot, "--project", "test-import"],
+        [path.join(process.cwd(), "scripts", "merge-scrivx.js"), scrivDir, syncRoot, "--project", "test-import", "--organize-by-chapters"],
         { encoding: "utf8" }
       );
 
       assert.equal(result.status, 0, result.stderr || result.stdout);
       const sidecar = yaml.load(
-        fs.readFileSync(path.join(scenesDir, "001 Scene Arrival [1].meta.yaml"), "utf8")
+        fs.readFileSync(path.join(scenesDir, "part-1", "chapter-1-arrival", "001 Scene Arrival [1].meta.yaml"), "utf8")
       );
 
       assert.equal(sidecar.scene_id, "sc-001-arrival");
       assert.equal(sidecar.logline, "Preserve this existing value.");
       assert.equal(sidecar.part, 1);
       assert.equal(sidecar.chapter, 1);
+      assert.equal(sidecar.chapter_title, "Arrival");
       assert.equal(sidecar.synopsis, "Elena returns to the harbor.");
       assert.deepEqual(sidecar.characters, ["Elena Voss"]);
       assert.deepEqual(sidecar.versions, ["v1.2"]);

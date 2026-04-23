@@ -18,6 +18,7 @@ export const SCHEMA = `
     title             TEXT,
     part              INTEGER,
     chapter           INTEGER,
+    chapter_title     TEXT,
     pov               TEXT,
     logline           TEXT,
     scene_change      TEXT,
@@ -123,6 +124,11 @@ export const SCHEMA = `
 export function openDb(dbPath) {
   const db = new DatabaseSync(dbPath);
   db.exec(SCHEMA);
+
+  const sceneColumns = db.prepare(`PRAGMA table_info(scenes)`).all();
+  if (!sceneColumns.some(column => column.name === "chapter_title")) {
+    db.exec(`ALTER TABLE scenes ADD COLUMN chapter_title TEXT;`);
+  }
 
   // Rebuild legacy FTS table if it predates keyword indexing.
   // Preserve existing indexed rows so metadata search remains available

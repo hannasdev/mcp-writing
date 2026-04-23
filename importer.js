@@ -107,20 +107,32 @@ function loadYamlFile(filePath) {
   }
 }
 
+function walkSidecarFiles(dir, fileList = []) {
+  if (!fs.existsSync(dir)) return fileList;
+
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      walkSidecarFiles(full, fileList);
+    } else if (entry.isFile() && entry.name.endsWith(".meta.yaml")) {
+      fileList.push(full);
+    }
+  }
+
+  return fileList;
+}
+
 function buildExistingSceneIndex(dir) {
   const byBinderId = new Map();
   if (!fs.existsSync(dir)) return byBinderId;
 
-  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-    if (!entry.isFile() || !entry.name.endsWith(".meta.yaml")) continue;
-
-    const sidecarPath = path.join(dir, entry.name);
+  for (const sidecarPath of walkSidecarFiles(dir)) {
     const proseCandidates = [
       sidecarPath.replace(/\.meta\.yaml$/, ".txt"),
       sidecarPath.replace(/\.meta\.yaml$/, ".md"),
     ];
     const prosePath = proseCandidates.find(candidate => fs.existsSync(candidate)) ?? null;
-    const proseName = prosePath ? path.basename(prosePath) : entry.name.replace(/\.meta\.yaml$/, ".txt");
+    const proseName = prosePath ? path.basename(prosePath) : path.basename(sidecarPath).replace(/\.meta\.yaml$/, ".txt");
     const parsedName = parseFilename(proseName);
     const meta = loadYamlFile(sidecarPath);
     const binderId = meta.external_source === "scrivener" && meta.external_id
@@ -342,7 +354,12 @@ export function importScrivenerSync({
     const title = cleanTitle(rawTitle);
     const existingScene = existingScenes.get(String(binderId)) ?? null;
     const sceneId = existingScene?.meta?.scene_id ?? makeSceneId(binderId, title);
-    const destFile = path.join(scenesDir, `${seq.toString().padStart(3, "0")} ${rawTitle} [${binderId}].${ext}`);
+    const targetDir = existingScene?.prosePath
+      ? path.dirname(existingScene.prosePath)
+      : existingScene?.sidecarPath
+        ? path.dirname(existingScene.sidecarPath)
+        : scenesDir;
+    const destFile = path.join(targetDir, `${seq.toString().padStart(3, "0")} ${rawTitle} [${binderId}].${ext}`);
     const sidecar = destFile.replace(/\.(txt|md)$/, ".meta.yaml");
 
     const meta = {
@@ -366,6 +383,7 @@ export function importScrivenerSync({
       }
       logger(`        scene_id: ${sceneId}, beat: ${beatCarry ?? "(none)"}`);
     } else {
+      fs.mkdirSync(path.dirname(destFile), { recursive: true });
       fs.copyFileSync(file, destFile);
       fs.writeFileSync(sidecar, yaml.dump(meta, { lineWidth: 120 }), "utf8");
 

@@ -34,6 +34,47 @@ function isPlainObject(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
+function slugifyPathSegment(value) {
+  return String(value ?? "")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 50);
+}
+
+function chapterFolderName(chapter, chapterTitle) {
+  if (chapter === null || chapter === undefined) return null;
+  const suffix = slugifyPathSegment(chapterTitle);
+  return suffix ? `chapter-${chapter}-${suffix}` : `chapter-${chapter}`;
+}
+
+function sceneContainerDir(scenesDir, part, chapter, chapterTitle, organizeByChapters = true) {
+  const segments = [scenesDir];
+  if (!organizeByChapters) {
+    return path.join(...segments);
+  }
+  if (part !== null && part !== undefined) segments.push(`part-${part}`);
+  const chapterDir = chapterFolderName(chapter, chapterTitle);
+  if (chapterDir) segments.push(chapterDir);
+  return path.join(...segments);
+}
+
+function findProsePathForSidecar(sidecarPath) {
+  const proseCandidates = [
+    sidecarPath.replace(/\.meta\.yaml$/, ".md"),
+    sidecarPath.replace(/\.meta\.yaml$/, ".txt"),
+  ];
+  return proseCandidates.find(candidate => fs.existsSync(candidate)) ?? null;
+}
+
+function moveFileIfNeeded(fromPath, toPath) {
+  if (!fromPath || fromPath === toPath) return;
+  fs.mkdirSync(path.dirname(toPath), { recursive: true });
+  fs.renameSync(fromPath, toPath);
+}
+
 const KNOWN_CUSTOM_FIELD_IDS = new Set([
   "savethecat!",
   "causality",
@@ -77,13 +118,14 @@ function pushWarning(warnings, warningSummary, warning) {
 }
 
 function buildMergeDataFromProject(projectData, uuid) {
-  const { metaByUUID, partByUUID, chapterByUUID } = projectData;
+  const { metaByUUID, partByUUID, chapterByUUID, chapterTitleByUUID } = projectData;
   const { customFields, characters, versions, synopsis } = metaByUUID[uuid] ?? {};
   const part = partByUUID[uuid] ?? null;
   const chapter = chapterByUUID[uuid] ?? null;
+  const chapterTitle = chapterTitleByUUID[uuid] ?? null;
   const warnings = [];
 
-  if (!customFields && !characters && !versions && !synopsis && part === null && chapter === null) {
+  if (!customFields && !characters && !versions && !synopsis && part === null && chapter === null && !chapterTitle) {
     return { mergeData: null, warnings };
   }
 
@@ -91,6 +133,7 @@ function buildMergeDataFromProject(projectData, uuid) {
 
   if (part !== null) out.part = part;
   if (chapter !== null) out.chapter = chapter;
+  if (chapterTitle) out.chapter_title = chapterTitle;
   if (synopsis) out.synopsis = synopsis;
   if (characters?.length) out.characters = characters;
   if (versions?.length) out.versions = versions;
@@ -248,6 +291,7 @@ export function loadScrivenerProjectData(scrivPath) {
 
   const partByUUID = {};
   const chapterByUUID = {};
+  const chapterTitleByUUID = {};
   let partNum = 0;
   let chapterNum = 0;
 
@@ -256,21 +300,29 @@ export function loadScrivenerProjectData(scrivPath) {
       const uuid = attr(child, "UUID");
       const type = attr(child, "Type");
       const childrenEl = children(child, "Children")[0];
+      const title = text(children(child, "Title")[0]);
 
       if (type === "Folder" && currentPart === null) {
         partNum++;
-        if (childrenEl) walkHierarchy(childrenEl, partNum, null);
+        if (childrenEl) walkHierarchy(childrenEl, { number: partNum, title }, null);
       } else if (type === "Folder") {
         chapterNum++;
+        const nextChapter = { number: chapterNum, title };
         if (uuid) {
-          partByUUID[uuid] = currentPart;
+          if (currentPart?.number !== null && currentPart?.number !== undefined) {
+            partByUUID[uuid] = currentPart.number;
+          }
           chapterByUUID[uuid] = chapterNum;
+          if (title) chapterTitleByUUID[uuid] = title;
         }
-        if (childrenEl) walkHierarchy(childrenEl, currentPart, chapterNum);
+        if (childrenEl) walkHierarchy(childrenEl, currentPart, nextChapter);
       } else if (type === "Text") {
-        if (uuid && currentChapter !== null) {
-          partByUUID[uuid] = currentPart;
-          chapterByUUID[uuid] = currentChapter;
+        if (uuid && currentChapter?.number !== null && currentChapter?.number !== undefined) {
+          if (currentPart?.number !== null && currentPart?.number !== undefined) {
+            partByUUID[uuid] = currentPart.number;
+          }
+          chapterByUUID[uuid] = currentChapter.number;
+          if (currentChapter.title) chapterTitleByUUID[uuid] = currentChapter.title;
         }
       }
     }
@@ -294,6 +346,7 @@ export function loadScrivenerProjectData(scrivPath) {
     metaByUUID,
     partByUUID,
     chapterByUUID,
+    chapterTitleByUUID,
   };
 }
 
@@ -303,6 +356,7 @@ export function mergeScrivenerProjectMetadata({
   projectId,
   scenesDir: scenesDirOverride,
   dryRun = false,
+  organizeByChapters = false,
   logger = () => {},
 }) {
   const mcpSyncDirAbs = path.resolve(mcpSyncDir);
@@ -348,6 +402,7 @@ export function mergeScrivenerProjectMetadata({
   let unchanged = 0;
   let noData = 0;
   let skippedNoBracketId = 0;
+  let relocated = 0;
   const fieldAddCounts = {};
   const previewChanges = [];
   const warnings = [];
@@ -356,6 +411,7 @@ export function mergeScrivenerProjectMetadata({
 
   for (const sidecarPath of sidecarFiles) {
     const filename = path.basename(sidecarPath);
+    const prosePath = findProsePathForSidecar(sidecarPath);
     const match = filename.match(/\[(\d+)\]\.meta\.yaml$/);
     if (!match) {
       logger(`  SKIP  (no bracket ID) ${filename}`);
@@ -398,8 +454,20 @@ export function mergeScrivenerProjectMetadata({
     }
     const existing = existingRaw ?? {};
     const { merged, changed, newKeys } = mergeSidecarData(existing, mergeData);
+    const effective = changed ? merged : existing;
+    const targetDir = sceneContainerDir(
+      scenesDir,
+      effective.part ?? null,
+      effective.chapter ?? null,
+      effective.chapter_title ?? null,
+      organizeByChapters,
+    );
+    const targetSidecarPath = path.join(targetDir, filename);
+    const targetProsePath = prosePath ? path.join(targetDir, path.basename(prosePath)) : null;
+    const needsMove = path.resolve(sidecarPath) !== path.resolve(targetSidecarPath)
+      || (prosePath && targetProsePath && path.resolve(prosePath) !== path.resolve(targetProsePath));
 
-    if (!changed) {
+    if (!changed && !needsMove) {
       unchanged++;
       continue;
     }
@@ -409,7 +477,11 @@ export function mergeScrivenerProjectMetadata({
     }
 
     if (previewChanges.length < 25) {
-      previewChanges.push({ file: filename, added_keys: [...newKeys] });
+      previewChanges.push({
+        file: filename,
+        added_keys: [...newKeys],
+        ...(needsMove ? { moved_to: path.relative(scenesDir, targetSidecarPath) || filename } : {}),
+      });
     }
 
     if (dryRun) {
@@ -417,15 +489,30 @@ export function mergeScrivenerProjectMetadata({
       for (const key of newKeys) {
         logger(`        + ${key}: ${JSON.stringify(mergeData[key]).slice(0, 80)}`);
       }
+      if (needsMove) {
+        logger(`        -> ${path.relative(scenesDir, targetSidecarPath) || filename}`);
+      }
     } else {
-      fs.writeFileSync(sidecarPath, yaml.dump(merged, { lineWidth: 120 }), "utf8");
-      logger(`  OK    ${filename}  [+${newKeys.join(", ")}]`);
+      fs.mkdirSync(targetDir, { recursive: true });
+      fs.writeFileSync(targetSidecarPath, yaml.dump(effective, { lineWidth: 120 }), "utf8");
+      if (sidecarPath !== targetSidecarPath && fs.existsSync(sidecarPath)) {
+        fs.unlinkSync(sidecarPath);
+      }
+      if (prosePath && targetProsePath) {
+        moveFileIfNeeded(prosePath, targetProsePath);
+      }
+      const changes = [];
+      if (newKeys.length) changes.push(`+${newKeys.join(", ")}`);
+      if (needsMove) changes.push(`moved to ${path.relative(scenesDir, targetSidecarPath) || filename}`);
+      logger(`  OK    ${filename}${changes.length ? `  [${changes.join("; ")}]` : ""}`);
     }
+    if (needsMove) relocated++;
     updated++;
   }
 
   logger(`\n${"─".repeat(50)}`);
   logger(`Updated:   ${updated} sidecars${dryRun ? " (dry run)" : ""}`);
+  if (relocated) logger(`Relocated: ${relocated} scene file pair(s)`);
   logger(`Unchanged: ${unchanged} (already complete or no new data)`);
   if (skippedNoBracketId) logger(`Skipped:   ${skippedNoBracketId} (no bracket ID in filename)`);
   if (noData) logger(`No data:   ${noData} (no matching binder entry)`);
@@ -438,6 +525,7 @@ export function mergeScrivenerProjectMetadata({
     dryRun: Boolean(dryRun),
     sidecarFiles: sidecarFiles.length,
     updated,
+    relocated,
     unchanged,
     skippedNoBracketId,
     noData,

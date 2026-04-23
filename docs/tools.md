@@ -77,6 +77,7 @@ _No parameters._
 | `scenes_dir` | `string` | No | Absolute path to the scenes directory containing .meta.yaml sidecars. Overrides the path derived from project_id. Use this for non-standard sync layouts. |
 | `dry_run` | `boolean` | No | If true (default), reports planned merges without writing files. |
 | `auto_sync` | `boolean` | No | If true (default), runs sync() after a non-dry-run merge. |
+| `organize_by_chapters` | `boolean` | No | If true (default false), relocate scene files into chapter-based folder hierarchies (e.g., chapter-7-harbor/). Chapter metadata is always extracted to sidecars regardless of this flag. |
 
 ---
 
@@ -106,6 +107,7 @@ _No parameters._
 | `scenes_dir` | `string` | No | Absolute path to the scenes directory containing .meta.yaml sidecars. Overrides the path derived from project_id. |
 | `dry_run` | `boolean` | No | If true (default), reports planned merges without writing files. |
 | `auto_sync` | `boolean` | No | If true, runs sync() after a non-dry-run async merge finishes. |
+| `organize_by_chapters` | `boolean` | No | If true (default false), relocate scene files into chapter-based folder hierarchies. Chapter metadata is always extracted to sidecars. |
 
 ---
 

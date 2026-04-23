@@ -66,6 +66,8 @@ Provide a supported beta capability that can be called intentionally and safely.
 3. Full support promise across all historical/future Scrivener versions
 4. Implicit writes outside scene sidecars
 
+Note: Optional scene relocation into chapter-based folders may be exposed as an explicit opt-in (`organize_by_chapters`). It must remain off by default and never run implicitly.
+
 ## Feature Parity Requirements
 
 Direct extraction must reach functional parity with the stable importer in safety and operational behavior before any graduation discussion.

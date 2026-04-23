@@ -11,6 +11,7 @@
  * Options:
  *   --project <id>    Project ID (default: derived from mcp-sync-dir name)
  *   --dry-run         Show what would change without writing anything
+ *   --organize-by-chapters  Relocate scene files into part/chapter folders
  *
  * What it merges into scene sidecars:
  *   synopsis          - from Files/Data/<UUID>/synopsis.txt
@@ -34,13 +35,14 @@ import { mergeScrivenerProjectMetadata } from "../scrivener-direct.js";
 // ---------------------------------------------------------------------------
 const args = process.argv.slice(2);
 if (args.length < 2 || args[0] === "--help") {
-  console.log("Usage: node scripts/merge-scrivx.js <path-to.scriv> <mcp-sync-dir> [--project <id>] [--dry-run]");
+  console.log("Usage: node scripts/merge-scrivx.js <path-to.scriv> <mcp-sync-dir> [--project <id>] [--dry-run] [--organize-by-chapters]");
   process.exit(args[0] === "--help" ? 0 : 1);
 }
 
 const scrivPath  = path.resolve(args[0]);
 const mcpSyncDir = path.resolve(args[1]);
 const dryRun     = args.includes("--dry-run");
+const organizeByChapters = args.includes("--organize-by-chapters");
 const projectIdx = args.indexOf("--project");
 const projectId  = projectIdx !== -1
   ? args[projectIdx + 1]
@@ -58,6 +60,7 @@ try {
     mcpSyncDir,
     projectId,
     dryRun,
+    organizeByChapters,
     logger: line => console.log(line),
   });
 } catch (err) {

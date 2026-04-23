@@ -69,10 +69,10 @@ export function inferScenePositionFromPath(syncDir, filePath) {
   let chapter = null;
 
   for (const segment of parts) {
-    const partMatch = segment.match(/^part-(\d+)$/i);
+    const partMatch = segment.match(/^part-(\d+)(?:-.+)?$/i);
     if (partMatch) part = parseInt(partMatch[1], 10);
 
-    const chapterMatch = segment.match(/^chapter-(\d+)$/i);
+    const chapterMatch = segment.match(/^chapter-(\d+)(?:-.+)?$/i);
     if (chapterMatch) chapter = parseInt(chapterMatch[1], 10);
   }
 
@@ -480,15 +480,16 @@ export function indexSceneFile(db, syncDir, file, meta, prose) {
 
   db.prepare(`
     INSERT INTO scenes (
-      scene_id, project_id, title, part, chapter, pov, logline, scene_change,
+      scene_id, project_id, title, part, chapter, chapter_title, pov, logline, scene_change,
       causality, stakes, scene_functions,
       save_the_cat_beat, timeline_position, story_time, word_count,
       file_path, prose_checksum, metadata_stale, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT (scene_id, project_id) DO UPDATE SET
       title = excluded.title,
       part = excluded.part,
       chapter = excluded.chapter,
+      chapter_title = excluded.chapter_title,
       pov = excluded.pov,
       logline = excluded.logline,
       scene_change = excluded.scene_change,
@@ -505,7 +506,7 @@ export function indexSceneFile(db, syncDir, file, meta, prose) {
       updated_at = excluded.updated_at
   `).run(
     meta.scene_id, project_id,
-    meta.title ?? null, meta.part ?? null, meta.chapter ?? null,
+    meta.title ?? null, meta.part ?? null, meta.chapter ?? null, meta.chapter_title ?? null,
     meta.pov ?? null, meta.logline ?? meta.synopsis ?? null,
     meta.scene_change ?? meta.change ?? null,
     meta.causality ?? null, meta.stakes ?? null,
