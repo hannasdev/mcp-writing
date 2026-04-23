@@ -34,29 +34,46 @@ function isPlainObject(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
-function summarizeWarnings(warnings) {
-  const summary = {};
+const KNOWN_CUSTOM_FIELD_IDS = new Set([
+  "savethecat!",
+  "causality",
+  "stakes",
+  "change",
+  "f:character",
+  "f:mood",
+  "f:theme",
+]);
 
-  for (const warning of warnings) {
-    if (!summary[warning.code]) {
-      summary[warning.code] = { count: 0, examples: [] };
-    }
+const MAX_RETURNED_WARNINGS = 25;
 
-    const entry = summary[warning.code];
-    entry.count++;
-
-    if (entry.examples.length < 5) {
-      const example = { message: warning.message };
-      for (const key of ["file", "sync_number", "field_id", "value", "uuid"]) {
-        if (warning[key] !== undefined && warning[key] !== null) {
-          example[key] = warning[key];
-        }
-      }
-      entry.examples.push(example);
-    }
+function recordWarning(summary, warning) {
+  if (!summary[warning.code]) {
+    summary[warning.code] = { count: 0, examples: [] };
   }
 
-  return summary;
+  const entry = summary[warning.code];
+  entry.count++;
+
+  if (entry.examples.length < 5) {
+    const example = { message: warning.message };
+    for (const key of ["file", "sync_number", "field_id", "value", "uuid"]) {
+      if (warning[key] !== undefined && warning[key] !== null) {
+        example[key] = warning[key];
+      }
+    }
+    entry.examples.push(example);
+  }
+}
+
+function pushWarning(warnings, warningSummary, warning) {
+  recordWarning(warningSummary, warning);
+
+  if (warnings.length < MAX_RETURNED_WARNINGS) {
+    warnings.push(warning);
+    return false;
+  }
+
+  return true;
 }
 
 function buildMergeDataFromProject(projectData, uuid) {
@@ -71,15 +88,6 @@ function buildMergeDataFromProject(projectData, uuid) {
   }
 
   const out = {};
-  const knownCustomFieldIds = new Set([
-    "savethecat!",
-    "causality",
-    "stakes",
-    "change",
-    "f:character",
-    "f:mood",
-    "f:theme",
-  ]);
 
   if (part !== null) out.part = part;
   if (chapter !== null) out.chapter = chapter;
@@ -88,7 +96,7 @@ function buildMergeDataFromProject(projectData, uuid) {
   if (versions?.length) out.versions = versions;
 
   for (const [fieldId, value] of Object.entries(customFields ?? {})) {
-    if (!knownCustomFieldIds.has(fieldId) && String(value ?? "").trim()) {
+    if (!KNOWN_CUSTOM_FIELD_IDS.has(fieldId) && String(value ?? "").trim()) {
       warnings.push({
         code: "ignored_custom_field",
         message: `Ignored unsupported Scrivener custom field '${fieldId}'.`,
@@ -343,6 +351,8 @@ export function mergeScrivenerProjectMetadata({
   const fieldAddCounts = {};
   const previewChanges = [];
   const warnings = [];
+  const warningSummary = {};
+  let warningsTruncated = false;
 
   for (const sidecarPath of sidecarFiles) {
     const filename = path.basename(sidecarPath);
@@ -350,11 +360,11 @@ export function mergeScrivenerProjectMetadata({
     if (!match) {
       logger(`  SKIP  (no bracket ID) ${filename}`);
       skippedNoBracketId++;
-      warnings.push({
+      warningsTruncated = pushWarning(warnings, warningSummary, {
         code: "missing_bracket_id",
         message: "Skipped sidecar because filename does not include a Scrivener sync number in brackets.",
         file: filename,
-      });
+      }) || warningsTruncated;
       continue;
     }
 
@@ -363,18 +373,18 @@ export function mergeScrivenerProjectMetadata({
     if (!uuid) {
       logger(`  SKIP  (no UUID for [${syncNum}]) ${filename}`);
       noData++;
-      warnings.push({
+      warningsTruncated = pushWarning(warnings, warningSummary, {
         code: "missing_uuid_mapping",
         message: `Skipped sidecar because Scrivener sync number [${syncNum}] has no UUID mapping in the project.`,
         file: filename,
         sync_number: syncNum,
-      });
+      }) || warningsTruncated;
       continue;
     }
 
     const { mergeData, warnings: mergeWarnings } = buildMergeDataFromProject(projectData, uuid);
     for (const warning of mergeWarnings) {
-      warnings.push({ ...warning, file: filename });
+      warningsTruncated = pushWarning(warnings, warningSummary, { ...warning, file: filename }) || warningsTruncated;
     }
 
     if (!mergeData) {
@@ -434,7 +444,8 @@ export function mergeScrivenerProjectMetadata({
     fieldAddCounts,
     previewChanges,
     warnings,
-    warningSummary: summarizeWarnings(warnings),
+    warningsTruncated,
+    warningSummary,
     stats: {
       syncMapEntries: Object.keys(projectData.syncNumToUUID).length,
       keywordMapEntries: Object.keys(projectData.keywordMap).length,

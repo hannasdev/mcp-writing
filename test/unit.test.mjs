@@ -1378,6 +1378,32 @@ describe("Scrivener direct metadata merge", () => {
     }
   });
 
+  test("mergeScrivenerProjectMetadata caps returned warnings but keeps full summary counts", () => {
+    const scrivDir = createScrivenerProjectFixture();
+    const extraSidecars = Array.from({ length: 30 }, (_, index) => ({
+      name: `${String(index + 2).padStart(3, "0")} Missing Mapping [${index + 100}].meta.yaml`,
+      data: { scene_id: `sc-${index + 100}` },
+    }));
+    const { syncRoot } = createSyncSidecarFixture("test-import", extraSidecars);
+
+    try {
+      const result = mergeScrivenerProjectMetadata({
+        scrivPath: scrivDir,
+        mcpSyncDir: syncRoot,
+        projectId: "test-import",
+        dryRun: true,
+      });
+
+      assert.equal(result.warningSummary.missing_uuid_mapping.count, 30);
+      assert.equal(result.warnings.length, 25);
+      assert.equal(result.warningsTruncated, true);
+      assert.ok(result.warnings.every(w => w.code === "missing_uuid_mapping"));
+    } finally {
+      fs.rmSync(scrivDir, { recursive: true, force: true });
+      fs.rmSync(syncRoot, { recursive: true, force: true });
+    }
+  });
+
   test("mergeScrivenerProjectMetadata rejects invalid project_id shape", () => {
     const scrivDir = createScrivenerProjectFixture();
     const { syncRoot } = createSyncSidecarFixture();
