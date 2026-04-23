@@ -23,6 +23,9 @@ function children(el, tag) {
 
 function walkYamls(dir, list = []) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (entry.isDirectory() && /^(projects|universes)$/i.test(entry.name)) {
+      continue;
+    }
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) walkYamls(full, list);
     else if (entry.name.endsWith(".meta.yaml")) list.push(full);
@@ -119,7 +122,7 @@ function recordWarning(summary, warning) {
 
   if (entry.examples.length < 5) {
     const example = { message: warning.message };
-    for (const key of ["file", "sync_number", "field_id", "value", "uuid"]) {
+    for (const key of ["file", "sync_number", "field_id", "value", "uuid", "from_path", "to_path", "moved_to"]) {
       if (warning[key] !== undefined && warning[key] !== null) {
         example[key] = warning[key];
       }

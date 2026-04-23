@@ -107,8 +107,8 @@ const UNIVERSE_PROJECT_ROOT_CACHE = new Map();
 function isProjectStructuralDir(name) {
   const normalized = String(name ?? "").toLowerCase();
   return PROJECT_STRUCTURAL_DIRS.has(normalized)
-    || /^part-\d+$/.test(normalized)
-    || /^chapter-\d+$/.test(normalized);
+    || /^part-\d+(?:-.+)?$/.test(normalized)
+    || /^chapter-\d+(?:-.+)?$/.test(normalized);
 }
 
 function isBookSlug(name) {

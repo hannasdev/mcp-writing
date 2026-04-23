@@ -365,6 +365,20 @@ describe("inferProjectAndUniverse", () => {
       fs.rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  test("projects/ two-segment layout supports named part/chapter structural dirs", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "infer-structural-named-"));
+    try {
+      fs.mkdirSync(path.join(dir, "universes", "universe-1", "book-1", "chapter-1-arrival"), { recursive: true });
+      const result = inferProjectAndUniverse(
+        dir,
+        path.join(dir, "projects", "universe-1", "book-1", "chapter-1-arrival", "sc-001.txt")
+      );
+      assert.deepEqual(result, { universe_id: "universe-1", project_id: "universe-1/book-1" });
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -1458,6 +1472,9 @@ describe("Scrivener direct metadata merge", () => {
       assert.equal(fs.existsSync(originalSidecarPath), true, "Original sidecar should be kept in place");
       assert.equal(fs.existsSync(prosePath), true, "Original prose should be kept in place");
       assert.equal(result.warningSummary.relocate_sidecar_destination_exists.count, 1);
+      const relocateExample = result.warningSummary.relocate_sidecar_destination_exists.examples[0];
+      assert.equal(relocateExample.from_path, originalSidecarPath);
+      assert.equal(relocateExample.to_path, targetSidecarPath);
       assert.equal(originalSidecar.chapter, 1);
       assert.equal(originalSidecar.chapter_title, "Harbor Arrival");
       assert.equal(targetSidecar.scene_id, "sc-existing-target", "Existing destination sidecar must not be overwritten");
@@ -1549,6 +1566,33 @@ describe("Scrivener direct metadata merge", () => {
       assert.equal(result.warnings.length, 25);
       assert.equal(result.warningsTruncated, true);
       assert.ok(result.warnings.every(w => w.code === "missing_uuid_mapping"));
+    } finally {
+      fs.rmSync(scrivDir, { recursive: true, force: true });
+      fs.rmSync(syncRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("mergeScrivenerProjectMetadata skips nested projects/universes mirror directories", () => {
+    const scrivDir = createScrivenerProjectFixture();
+    const { syncRoot, scenesDir } = createSyncSidecarFixture();
+    const mirrorProjectsDir = path.join(scenesDir, "projects", "mirror", "scenes");
+    const mirrorUniversesDir = path.join(scenesDir, "universes", "mirror", "book", "scenes");
+    fs.mkdirSync(mirrorProjectsDir, { recursive: true });
+    fs.mkdirSync(mirrorUniversesDir, { recursive: true });
+    fs.writeFileSync(path.join(mirrorProjectsDir, "Loose Mirror.meta.yaml"), "scene_id: sc-mirror-1\n", "utf8");
+    fs.writeFileSync(path.join(mirrorUniversesDir, "999 Mirror Missing [999].meta.yaml"), "scene_id: sc-mirror-2\n", "utf8");
+
+    try {
+      const result = mergeScrivenerProjectMetadata({
+        scrivPath: scrivDir,
+        mcpSyncDir: syncRoot,
+        projectId: "test-import",
+        dryRun: true,
+      });
+
+      assert.equal(result.updated, 1);
+      assert.ok(!("missing_bracket_id" in result.warningSummary));
+      assert.ok(!("missing_uuid_mapping" in result.warningSummary));
     } finally {
       fs.rmSync(scrivDir, { recursive: true, force: true });
       fs.rmSync(syncRoot, { recursive: true, force: true });
