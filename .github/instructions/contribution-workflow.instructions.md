@@ -1,20 +1,24 @@
+---
+applyTo: "**"
+---
+
 # Contribution Workflow
 
 How to structure branches and PRs for this project.
 
 ## Branch Naming Convention
 
-Branch names must use semantic prefixes matching [conventional commits](https://www.conventionalcommits.org/):
+Branch names should use semantic prefixes aligned with [conventional commits](https://www.conventionalcommits.org/):
 
-| Prefix | Use Case | Example | Version Impact |
-|--------|----------|---------|-----------------|
-| `feat/` | New feature | `feat/embeddings-search` | minor |
-| `fix/` | Bug fix | `fix/scene-staleness-check` | patch |
-| `docs/` | Documentation only | `docs/copilot-instructions` | patch |
-| `chore/` | Maintenance, deps, tooling | `chore/update-eslint` | patch |
-| `refactor/` | Code restructuring (no behavior change) | `refactor/metadata-types` | patch |
+| Prefix | Use Case | Example |
+|--------|----------|---------|
+| `feat/` | New feature | `feat/embeddings-search` |
+| `fix/` | Bug fix | `fix/scene-staleness-check` |
+| `docs/` | Documentation only | `docs/copilot-instructions` |
+| `chore/` | Maintenance, deps, tooling | `chore/update-eslint` |
+| `refactor/` | Code restructuring (no behavior change) | `refactor/metadata-types` |
 
-**Important**: These prefixes determine the semantic version bump. See [MAINTAINERS.md](../../MAINTAINERS.md) for how `release.yml` infers version from commit messages.
+**Important**: Version bumps are inferred from conventional commit messages, not branch names. See [MAINTAINERS.md](../../MAINTAINERS.md) for how `release.yml` determines version increments.
 
 ## Workflow
 
