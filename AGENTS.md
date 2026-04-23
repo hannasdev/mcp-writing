@@ -1,4 +1,4 @@
-# AGENT.md
+# AGENTS.md
 
 Purpose: Persist project-specific operating context for future AI sessions.
 
