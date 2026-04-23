@@ -53,6 +53,7 @@ Provide a supported beta capability that can be called intentionally and safely.
 2. Keep the existing stable sync-folder import unchanged
 3. Parse and merge at least:
    - Scrivener keywords
+   - Preserve keyword assignments as raw tags/keyword graph entries; do not infer semantic meaning (for example, auto-mapping keywords into `characters` or `versions`) in Phase 1
    - synopsis/card summary
    - selected custom metadata fields (initial allowlist)
 4. Preserve identity/reconciliation behavior compatible with current scene IDs and external IDs
@@ -93,6 +94,7 @@ Direct extraction must reach functional parity with the stable importer in safet
 Direct extraction should unlock metadata quality improvements not available from text export alone.
 
 1. Keyword graph from Scrivener keyword assignments
+   - Maintain source fidelity: keyword values should be stored and exposed verbatim (subject to normalization like trimming/dedup), without interpretation-based remapping
 2. Synopsis from Scrivener synopsis files
 3. Binder hierarchy metadata for more reliable structural mapping
 4. Custom metadata fields (via explicit mapping contract)

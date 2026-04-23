@@ -1315,8 +1315,7 @@ describe("Scrivener direct metadata merge", () => {
       assert.equal(data.syncNumToUUID["1"], "UUID-1");
       assert.equal(data.keywordMap["kw-character"], "Elena Voss");
       assert.equal(data.metaByUUID["UUID-1"].synopsis, "Elena returns to the harbor.");
-      assert.deepEqual(data.metaByUUID["UUID-1"].characters, ["Elena Voss"]);
-      assert.deepEqual(data.metaByUUID["UUID-1"].versions, ["v1.2"]);
+      assert.deepEqual(data.metaByUUID["UUID-1"].tags, ["Elena Voss", "v1.2"]);
       assert.equal(data.chapterByUUID["UUID-1"], 1);
       assert.equal(data.partByUUID["UUID-1"], 1);
       assert.equal(data.chapterTitleByUUID["UUID-1"], "Arrival");
@@ -1353,6 +1352,7 @@ describe("Scrivener direct metadata merge", () => {
       assert.equal(fs.existsSync(prosePath), false);
       assert.equal(sidecar.chapter, 1);
       assert.equal(sidecar.chapter_title, "Harbor Arrival");
+      assert.deepEqual(sidecar.tags, ["Elena Voss", "v1.2"]);
     } finally {
       fs.rmSync(scrivDir, { recursive: true, force: true });
       fs.rmSync(syncRoot, { recursive: true, force: true });
@@ -1521,8 +1521,7 @@ describe("Scrivener direct metadata merge", () => {
       assert.equal(sidecar.chapter, 1);
       assert.equal(sidecar.chapter_title, "Arrival");
       assert.equal(sidecar.synopsis, "Elena returns to the harbor.");
-      assert.deepEqual(sidecar.characters, ["Elena Voss"]);
-      assert.deepEqual(sidecar.versions, ["v1.2"]);
+      assert.deepEqual(sidecar.tags, ["Elena Voss", "v1.2"]);
       assert.equal(sidecar.save_the_cat_beat, "Setup");
       assert.equal(sidecar.causality, 2);
       assert.equal(sidecar.stakes, 3);

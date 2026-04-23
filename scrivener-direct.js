@@ -119,13 +119,13 @@ function pushWarning(warnings, warningSummary, warning) {
 
 function buildMergeDataFromProject(projectData, uuid) {
   const { metaByUUID, partByUUID, chapterByUUID, chapterTitleByUUID } = projectData;
-  const { customFields, characters, versions, synopsis } = metaByUUID[uuid] ?? {};
+  const { customFields, tags, synopsis } = metaByUUID[uuid] ?? {};
   const part = partByUUID[uuid] ?? null;
   const chapter = chapterByUUID[uuid] ?? null;
   const chapterTitle = chapterTitleByUUID[uuid] ?? null;
   const warnings = [];
 
-  if (!customFields && !characters && !versions && !synopsis && part === null && chapter === null && !chapterTitle) {
+  if (!customFields && !tags && !synopsis && part === null && chapter === null && !chapterTitle) {
     return { mergeData: null, warnings };
   }
 
@@ -135,8 +135,7 @@ function buildMergeDataFromProject(projectData, uuid) {
   if (chapter !== null) out.chapter = chapter;
   if (chapterTitle) out.chapter_title = chapterTitle;
   if (synopsis) out.synopsis = synopsis;
-  if (characters?.length) out.characters = characters;
-  if (versions?.length) out.versions = versions;
+  if (tags?.length) out.tags = tags;
 
   for (const [fieldId, value] of Object.entries(customFields ?? {})) {
     if (!KNOWN_CUSTOM_FIELD_IDS.has(fieldId) && String(value ?? "").trim()) {
@@ -267,15 +266,13 @@ export function loadScrivenerProjectData(scrivPath) {
       }
     }
 
-    const characters = [];
-    const versions = [];
+    const tags = [];
     const kwEl = children(item, "Keywords")[0];
     if (kwEl) {
       for (const kwId of children(kwEl, "KeywordID")) {
         const name = keywordMap[text(kwId)];
         if (!name) continue;
-        if (/^v\d[\d.a-z]*$/i.test(name)) versions.push(name);
-        else characters.push(name);
+        tags.push(name);
       }
     }
 
@@ -286,7 +283,11 @@ export function loadScrivenerProjectData(scrivPath) {
       if (candidate) synopsis = candidate;
     }
 
-    metaByUUID[uuid] = { customFields, characters, versions, synopsis };
+    metaByUUID[uuid] = {
+      customFields,
+      tags: [...new Set(tags)],
+      synopsis,
+    };
   }
 
   const partByUUID = {};

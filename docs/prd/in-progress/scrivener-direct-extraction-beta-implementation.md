@@ -22,6 +22,81 @@ Use focused PRs with one concern each. Do not combine milestones unless explicit
 4. PR-3: Ownership and parity hardening
 5. PR-4: Docs, compatibility matrix, and beta operational guidance
 
+## Next PR Sequence (Concrete)
+
+Use this as the execution plan for remaining work. Keep each PR narrowly scoped.
+
+### PR-3a: Ownership Enforcement
+
+Scope:
+- Enforce importer-authoritative write boundaries in beta merge.
+- Keep additive-only behavior for non-authoritative fields.
+- Make overwrite/skip decisions explicit in result payloads and warnings.
+
+Acceptance checks:
+- Beta merge never silently overwrites agent-authoritative fields.
+- Attempted writes to importer-authoritative fields follow explicit policy and are reported.
+- Unit tests cover allowed write, blocked write, and no-op merge outcomes.
+- Integration tests verify stable importer behavior remains unchanged.
+
+Exit signal:
+- Close checklist items:
+  - Enforce importer-authoritative field boundaries during merge
+  - No silent overwrite of agent-authoritative fields
+  - Ownership-safe merge policy implementation
+
+### PR-3b: Ambiguity Conflicts + Warning Taxonomy
+
+Scope:
+- Define and document ambiguous mapping conditions (e.g., unresolved identity ties, contradictory source metadata, ambiguous folder-derived structure).
+- Add dedicated conflict/warning codes for each condition.
+- Ensure warnings are stable, summarized, and test-covered.
+
+Acceptance checks:
+- Warning taxonomy documented in this file and reflected in tool/runtime outputs.
+- Ambiguous mapping scenarios emit deterministic conflict/warning codes.
+- Unit/integration tests cover each new code and summary behavior.
+
+Exit signal:
+- Close checklist items:
+  - Add conflict/warning reporting for ambiguous mappings
+  - Warning taxonomy is stable and documented
+
+### PR-4b: Compatibility Matrix Expansion
+
+Scope:
+- Add and validate fixtures B/C/D:
+  - B: missing optional metadata files
+  - C: custom metadata-heavy project
+  - D: reordered binder hierarchy
+- Record tested-version coverage and warning profile outcomes.
+
+Acceptance checks:
+- Each fixture has parse success + merge success + sidecar preservation checks.
+- Warning profile reviewed and recorded for each fixture.
+- Compatibility notes updated with tested-version details and known constraints.
+
+Exit signal:
+- Close checklist items:
+  - Compatibility matrix expansion beyond baseline fixture
+  - Tested-version coverage documentation partial -> complete
+  - Compatibility matrix representative coverage
+
+### PR-4c: Graduation Gate Validation
+
+Scope:
+- Validate fallback to stable importer in automated tests as an explicit gate.
+- Summarize release-window risk posture for data-loss class bugs.
+
+Acceptance checks:
+- Automated tests assert fallback guidance path on beta failure conditions.
+- Graduation criteria checklist updated with concrete evidence links.
+
+Exit signal:
+- Close checklist items:
+  - Fallback path to stable importer validated in automated tests
+  - Milestones M1-M4 complete
+
 ---
 
 ## Phase A — Parser Core Extraction (M1) ✅
