@@ -507,6 +507,8 @@ export function mergeScrivenerProjectMetadata({
       });
     }
 
+    let didRelocate = false;
+
     if (dryRun) {
       logger(`  DRY   ${filename}`);
       for (const key of newKeys) {
@@ -515,15 +517,16 @@ export function mergeScrivenerProjectMetadata({
       if (needsMove) {
         logger(`        -> ${path.relative(scenesDir, targetSidecarPath) || filename}`);
       }
+      didRelocate = needsMove;
     } else {
-      fs.mkdirSync(targetDir, { recursive: true });
-      fs.writeFileSync(targetSidecarPath, yaml.dump(effective, { lineWidth: 120 }), "utf8");
-      if (path.resolve(sidecarPath) !== path.resolve(targetSidecarPath) && fs.existsSync(sidecarPath)) {
-        fs.unlinkSync(sidecarPath);
-      }
+      let proseMoveWarning = null;
+      let shouldRelocateSidecar = true;
+
       if (prosePath && targetProsePath) {
         const moveResult = moveFileIfNeeded(prosePath, targetProsePath);
         if (moveResult?.warning) {
+          proseMoveWarning = moveResult.warning;
+          shouldRelocateSidecar = false;
           warningsTruncated = pushWarning(
             warnings,
             warningSummary,
@@ -534,12 +537,30 @@ export function mergeScrivenerProjectMetadata({
           ) || warningsTruncated;
         }
       }
+
+      const finalSidecarPath = shouldRelocateSidecar ? targetSidecarPath : sidecarPath;
+      fs.mkdirSync(path.dirname(finalSidecarPath), { recursive: true });
+      fs.writeFileSync(finalSidecarPath, yaml.dump(effective, { lineWidth: 120 }), "utf8");
+      if (
+        shouldRelocateSidecar
+        && path.resolve(sidecarPath) !== path.resolve(targetSidecarPath)
+        && fs.existsSync(sidecarPath)
+      ) {
+        fs.unlinkSync(sidecarPath);
+      }
+
       const changes = [];
       if (newKeys.length) changes.push(`+${newKeys.join(", ")}`);
-      if (needsMove) changes.push(`moved to ${path.relative(scenesDir, targetSidecarPath) || filename}`);
+      if (needsMove && shouldRelocateSidecar) {
+        changes.push(`moved to ${path.relative(scenesDir, targetSidecarPath) || filename}`);
+      }
+      if (proseMoveWarning) {
+        changes.push("sidecar kept in place (prose move skipped)");
+      }
       logger(`  OK    ${filename}${changes.length ? `  [${changes.join("; ")}]` : ""}`);
+      didRelocate = needsMove && shouldRelocateSidecar;
     }
-    if (needsMove) relocated++;
+    if (didRelocate) relocated++;
     updated++;
   }
 
