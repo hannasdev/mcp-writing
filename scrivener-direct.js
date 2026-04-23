@@ -485,8 +485,10 @@ export function mergeScrivenerProjectMetadata({
       effective.chapter_title ?? null,
       organizeByChapters,
     );
-    const targetSidecarPath = path.join(targetDir, filename);
-    const targetProsePath = prosePath ? path.join(targetDir, path.basename(prosePath)) : null;
+    const targetSidecarPath = organizeByChapters ? path.join(targetDir, filename) : sidecarPath;
+    const targetProsePath = prosePath
+      ? (organizeByChapters ? path.join(targetDir, path.basename(prosePath)) : prosePath)
+      : null;
     const needsMove = path.resolve(sidecarPath) !== path.resolve(targetSidecarPath)
       || (prosePath && targetProsePath && path.resolve(prosePath) !== path.resolve(targetProsePath));
 
@@ -520,9 +522,28 @@ export function mergeScrivenerProjectMetadata({
       didRelocate = needsMove;
     } else {
       let proseMoveWarning = null;
-      let shouldRelocateSidecar = true;
+      let shouldRelocateSidecar = organizeByChapters;
 
-      if (prosePath && targetProsePath) {
+      if (
+        shouldRelocateSidecar
+        && path.resolve(sidecarPath) !== path.resolve(targetSidecarPath)
+        && fs.existsSync(targetSidecarPath)
+      ) {
+        shouldRelocateSidecar = false;
+        warningsTruncated = pushWarning(
+          warnings,
+          warningSummary,
+          {
+            code: "relocate_sidecar_destination_exists",
+            message: "Skipped relocating sidecar because destination already exists.",
+            from_path: sidecarPath,
+            to_path: targetSidecarPath,
+            file: filename,
+          }
+        ) || warningsTruncated;
+      }
+
+      if (shouldRelocateSidecar && prosePath && targetProsePath) {
         const moveResult = moveFileIfNeeded(prosePath, targetProsePath);
         if (moveResult?.warning) {
           proseMoveWarning = moveResult.warning;

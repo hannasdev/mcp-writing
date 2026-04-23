@@ -1391,6 +1391,82 @@ describe("Scrivener direct metadata merge", () => {
     }
   });
 
+  test("mergeScrivenerProjectMetadata with organize_by_chapters: false does not flatten nested scene paths", () => {
+    const scrivDir = createScrivenerProjectFixture({ chapterTitle: "Harbor Arrival" });
+    const { syncRoot, scenesDir } = createSyncSidecarFixture();
+
+    const nestedDir = path.join(scenesDir, "legacy", "nested");
+    fs.mkdirSync(nestedDir, { recursive: true });
+
+    const originalSidecarPath = path.join(scenesDir, "001 Scene Arrival [1].meta.yaml");
+    const nestedSidecarPath = path.join(nestedDir, "001 Scene Arrival [1].meta.yaml");
+    fs.renameSync(originalSidecarPath, nestedSidecarPath);
+
+    const nestedProsePath = path.join(nestedDir, "001 Scene Arrival [1].txt");
+    fs.writeFileSync(nestedProsePath, "Scene prose.\n", "utf8");
+
+    try {
+      const result = mergeScrivenerProjectMetadata({
+        scrivPath: scrivDir,
+        mcpSyncDir: syncRoot,
+        projectId: "test-import",
+        dryRun: false,
+        organizeByChapters: false,
+      });
+
+      const sidecar = yaml.load(fs.readFileSync(nestedSidecarPath, "utf8"));
+
+      assert.equal(result.updated, 1);
+      assert.equal(result.relocated, 0, "No relocation should occur when organize_by_chapters is false");
+      assert.equal(fs.existsSync(nestedSidecarPath), true, "Nested sidecar should remain in place");
+      assert.equal(fs.existsSync(nestedProsePath), true, "Nested prose should remain in place");
+      assert.equal(fs.existsSync(path.join(scenesDir, "001 Scene Arrival [1].meta.yaml")), false, "Sidecar should not be flattened back to scenes root");
+      assert.equal(sidecar.chapter, 1);
+      assert.equal(sidecar.chapter_title, "Harbor Arrival");
+    } finally {
+      fs.rmSync(scrivDir, { recursive: true, force: true });
+      fs.rmSync(syncRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("mergeScrivenerProjectMetadata keeps sidecar in place when relocation destination exists", () => {
+    const scrivDir = createScrivenerProjectFixture({ chapterTitle: "Harbor Arrival" });
+    const { syncRoot, scenesDir } = createSyncSidecarFixture();
+    const prosePath = path.join(scenesDir, "001 Scene Arrival [1].txt");
+    fs.writeFileSync(prosePath, "Scene prose.\n", "utf8");
+
+    const targetDir = path.join(scenesDir, "part-1", "chapter-1-harbor-arrival");
+    fs.mkdirSync(targetDir, { recursive: true });
+    const targetSidecarPath = path.join(targetDir, "001 Scene Arrival [1].meta.yaml");
+    fs.writeFileSync(targetSidecarPath, yaml.dump({ scene_id: "sc-existing-target", title: "Existing" }), "utf8");
+
+    try {
+      const result = mergeScrivenerProjectMetadata({
+        scrivPath: scrivDir,
+        mcpSyncDir: syncRoot,
+        projectId: "test-import",
+        dryRun: false,
+        organizeByChapters: true,
+      });
+
+      const originalSidecarPath = path.join(scenesDir, "001 Scene Arrival [1].meta.yaml");
+      const originalSidecar = yaml.load(fs.readFileSync(originalSidecarPath, "utf8"));
+      const targetSidecar = yaml.load(fs.readFileSync(targetSidecarPath, "utf8"));
+
+      assert.ok(result.updated >= 1, "At least one sidecar should be updated");
+      assert.equal(result.relocated, 0, "Sidecar should not relocate when destination exists");
+      assert.equal(fs.existsSync(originalSidecarPath), true, "Original sidecar should be kept in place");
+      assert.equal(fs.existsSync(prosePath), true, "Original prose should be kept in place");
+      assert.equal(result.warningSummary.relocate_sidecar_destination_exists.count, 1);
+      assert.equal(originalSidecar.chapter, 1);
+      assert.equal(originalSidecar.chapter_title, "Harbor Arrival");
+      assert.equal(targetSidecar.scene_id, "sc-existing-target", "Existing destination sidecar must not be overwritten");
+    } finally {
+      fs.rmSync(scrivDir, { recursive: true, force: true });
+      fs.rmSync(syncRoot, { recursive: true, force: true });
+    }
+  });
+
   test("mergeScrivenerProjectMetadata dry run reports updates without writing", () => {
     const scrivDir = createScrivenerProjectFixture();
     const { syncRoot, scenesDir } = createSyncSidecarFixture();
