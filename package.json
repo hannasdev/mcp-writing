@@ -6,6 +6,7 @@
   "main": "index.js",
   "files": [
     "index.js",
+    "async-progress.js",
     "scrivener-direct.js",
     "importer.js",
     "db.js",
