@@ -55,7 +55,7 @@ For real projects, keep your manuscript sync folder outside this tool repository
 
 For manual Scrivener import and merge verification with real project data, keep both the copied `.scriv` bundle and the generated temp sync output outside the repository too. The current local convention is `$HOME/.mcp-writing-manual-data/`, and the reusable runner is `npm run manual:realtest -- --source-dir <external-sync-dir> --scriv-path <external-copied-project.scriv> --project-id <project-id>`.
 
-Maintainers: see `MAINTAINERS.md` for release and operational setup notes, and `AGENT.md` for persistent workflow conventions and release/recovery guidance.
+Maintainers: see `MAINTAINERS.md` for release and operational setup notes, and `AGENTS.md` for persistent workflow conventions and release/recovery guidance.
 
 ---
 

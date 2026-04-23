@@ -31,8 +31,4 @@ Local dry-run (optional):
 npm run release -- --ci --dry-run
 ```
 
-## Operational note
-
-- If a release job partially succeeds by pushing a tag before failing later, do not rerun that old workflow run.
-- The workflow fails fast when `package.json` is behind the latest tag, which indicates a stale rerun.
-- In that case, trigger the next release from current `main` instead of retrying the old run.
+For release incident debugging (failure modes, operator checklist), see [`.github/instructions/release-debugging.instructions.md`](.github/instructions/release-debugging.instructions.md).
