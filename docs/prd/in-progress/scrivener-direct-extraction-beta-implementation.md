@@ -32,18 +32,21 @@ Scope:
 - Enforce importer-authoritative write boundaries in beta merge.
 - Keep additive-only behavior for non-authoritative fields.
 - Make overwrite/skip decisions explicit in result payloads and warnings.
+- Align `walkYamls` in `scrivener-direct.js` to skip mirror subdirectories (`projects/`, `universes/`) consistent with `walkSidecarFiles` in `importer.js`, to prevent phantom `missing_bracket_id` warnings from nested mirror trees.
 
 Acceptance checks:
 - Beta merge never silently overwrites agent-authoritative fields.
 - Attempted writes to importer-authoritative fields follow explicit policy and are reported.
 - Unit tests cover allowed write, blocked write, and no-op merge outcomes.
 - Integration tests verify stable importer behavior remains unchanged.
+- `walkYamls` skips mirror subdirectories; test confirms no phantom warnings from nested mirrors.
 
 Exit signal:
 - Close checklist items:
   - Enforce importer-authoritative field boundaries during merge
   - No silent overwrite of agent-authoritative fields
   - Ownership-safe merge policy implementation
+  - `walkYamls` mirror-path guard parity with `walkSidecarFiles`
 
 ### PR-3b: Ambiguity Conflicts + Warning Taxonomy
 
@@ -190,6 +193,7 @@ This phase was identified during manual testing against a real 430+ file project
 
 - [ ] Enforce importer-authoritative field boundaries during merge
 - [x] Ensure non-authoritative sidecar fields are preserved
+- [ ] Align `walkYamls` (in `scrivener-direct.js`) to skip `projects/`/`universes/` mirror subdirectories, consistent with `walkSidecarFiles` in `importer.js`
 - [ ] Normalize handling for:
   - [x] missing UUID mappings
   - [x] missing synopsis files
