@@ -1,0 +1,42 @@
+name: PR Template Check
+
+on:
+  pull_request:
+    types:
+      - opened
+      - edited
+      - reopened
+      - ready_for_review
+
+jobs:
+  validate-pr-body:
+    name: Validate PR body sections
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+
+    steps:
+      - name: Check required sections
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = context.payload.pull_request.body || "";
+            const requiredSections = [
+              "**What changed:**",
+              "**Why:**",
+              "**Review focus:**",
+              "**Testing:**",
+            ];
+
+            const missing = requiredSections.filter((section) => !body.includes(section));
+
+            if (missing.length > 0) {
+              core.setFailed(
+                [
+                  "PR body is missing required template sections:",
+                  ...missing.map((section) => `- ${section}`),
+                  "",
+                  "Use .github/PULL_REQUEST_TEMPLATE.md as the source of truth.",
+                ].join("\n")
+              );
+            }
