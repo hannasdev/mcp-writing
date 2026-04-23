@@ -72,7 +72,29 @@ function findProsePathForSidecar(sidecarPath) {
 function moveFileIfNeeded(fromPath, toPath) {
   if (!fromPath || fromPath === toPath) return;
   fs.mkdirSync(path.dirname(toPath), { recursive: true });
-  fs.renameSync(fromPath, toPath);
+  if (fs.existsSync(toPath)) {
+    return {
+      moved: false,
+      warning: {
+        code: "relocate_destination_exists",
+        message: "Skipped moving prose file because destination already exists.",
+        from_path: fromPath,
+        to_path: toPath,
+      },
+    };
+  }
+
+  try {
+    fs.renameSync(fromPath, toPath);
+  } catch (error) {
+    if (!error || typeof error !== "object" || error.code !== "EXDEV") {
+      throw error;
+    }
+    fs.copyFileSync(fromPath, toPath);
+    fs.unlinkSync(fromPath);
+  }
+
+  return { moved: true };
 }
 
 const KNOWN_CUSTOM_FIELD_IDS = new Set([
@@ -496,11 +518,21 @@ export function mergeScrivenerProjectMetadata({
     } else {
       fs.mkdirSync(targetDir, { recursive: true });
       fs.writeFileSync(targetSidecarPath, yaml.dump(effective, { lineWidth: 120 }), "utf8");
-      if (sidecarPath !== targetSidecarPath && fs.existsSync(sidecarPath)) {
+      if (path.resolve(sidecarPath) !== path.resolve(targetSidecarPath) && fs.existsSync(sidecarPath)) {
         fs.unlinkSync(sidecarPath);
       }
       if (prosePath && targetProsePath) {
-        moveFileIfNeeded(prosePath, targetProsePath);
+        const moveResult = moveFileIfNeeded(prosePath, targetProsePath);
+        if (moveResult?.warning) {
+          warningsTruncated = pushWarning(
+            warnings,
+            warningSummary,
+            {
+              ...moveResult.warning,
+              file: filename,
+            }
+          ) || warningsTruncated;
+        }
       }
       const changes = [];
       if (newKeys.length) changes.push(`+${newKeys.join(", ")}`);

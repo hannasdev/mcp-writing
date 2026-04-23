@@ -66,6 +66,9 @@ function normalizeMergeResult(mergeResult) {
       no_data: mergeResult.noData,
       field_add_counts: mergeResult.fieldAddCounts,
       preview_changes: mergeResult.previewChanges,
+      warnings: mergeResult.warnings,
+      warnings_truncated: mergeResult.warningsTruncated,
+      warning_summary: mergeResult.warningSummary,
       stats: {
         sync_map_entries: mergeResult.stats.syncMapEntries,
         keyword_map_entries: mergeResult.stats.keywordMapEntries,

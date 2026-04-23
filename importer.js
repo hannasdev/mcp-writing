@@ -113,6 +113,9 @@ function walkSidecarFiles(dir, fileList = []) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) {
+      // Skip nested mirror trees under scenes/ (e.g. scenes/projects/... or scenes/universes/...)
+      // to avoid accidental reconciliation against duplicated sidecars.
+      if (/^(projects|universes)$/i.test(entry.name)) continue;
       walkSidecarFiles(full, fileList);
     } else if (entry.isFile() && entry.name.endsWith(".meta.yaml")) {
       fileList.push(full);
