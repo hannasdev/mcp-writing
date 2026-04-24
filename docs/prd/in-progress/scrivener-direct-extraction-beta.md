@@ -39,7 +39,7 @@ Because internal schema may change, direct extraction is an opt-in beta feature,
 ### Prototype/Hidden Today
 
 - `scripts/merge-scrivx.js` and `scrivener-direct.js` parse `.scrivx` + project data to merge metadata into scene sidecars
-- Official MCP beta tools exist: `merge_scrivener_project_beta` and `merge_scrivener_project_beta_async`
+- Official MCP beta tool exists: `merge_scrivener_project_beta` (async job-based)
 - Documented as an opt-in beta ingestion mode with explicit stable fallback guidance
 - Covered by focused unit and integration tests, including dry-run behavior, fallback messaging, `scenes_dir` precedence, async completion, warning surfaces, and rerun idempotency
 
