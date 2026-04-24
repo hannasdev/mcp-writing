@@ -64,7 +64,7 @@ Once this is working, you can come back to:
 - **[docs/tools.md](tools.md)** for the full tool catalog
 - **[README.md](../README.md#usage-scenarios)** for workflow ideas
 
-If you later want richer metadata from a full `.scriv` bundle, add the **Direct Scrivener project merge (beta)** step after the stable import has already created your scene sidecars.
+If you later want richer metadata from a full `.scriv` bundle, add the **Direct Scrivener project merge** step after the stable import has already created your scene sidecars.
 
 ---
 
@@ -75,13 +75,13 @@ There are two supported Scrivener ingestion paths, and they are not equally stab
 | Path | Stability | Use when | Tooling |
 | --- | --- | --- | --- |
 | External Folder Sync export | Stable default | First-time setup, routine imports, safest long-term path | `import_scrivener_sync`, `import_scrivener_sync_async` |
-| Direct `.scriv` project merge | Beta / opt-in | You already imported scenes and want extra metadata from Scrivener internals | `merge_scrivener_project_beta` (async) |
+| Direct `.scriv` project merge | Opt-in | You already imported scenes and want extra metadata from Scrivener internals | `merge_scrivener_project_beta` (async) |
 
 Recommendation:
 
 1. Start with the stable External Folder Sync path.
 2. Confirm your scene sidecars and indexing are correct.
-3. Use the beta direct-merge path only if you need metadata that plain-text sync cannot provide, such as Scrivener keywords, synopsis files, or selected custom fields.
+3. Use the direct-merge path only if you need metadata that plain-text sync cannot provide, such as Scrivener keywords, synopsis files, or selected custom fields.
 
 ---
 
@@ -167,11 +167,11 @@ This exits with a non-zero code if it finds errors. Warnings (for example `UNKNO
 
 ---
 
-## Direct Scrivener project merge (beta)
+## Direct Scrivener project merge
 
 Use this only after the stable import path has already created your scene sidecars.
 
-What this beta path is for:
+What this path is for:
 
 - pull Scrivener keywords into sidecars
 - merge synopsis text from `Files/Data/<UUID>/synopsis.txt`
@@ -181,12 +181,11 @@ What it is not for:
 
 - first-time scene creation
 - replacing `import_scrivener_sync` as the default path
-- broad compatibility guarantees across all Scrivener schema variations
 
-Recommended beta flow:
+Recommended flow:
 
 1. Run the stable `import_scrivener_sync` flow first.
-2. Run the beta merge as a dry run.
+2. Run the merge as a dry run.
 3. Inspect `merge.preview_changes`, `merge.warnings`, and `merge.warning_summary`.
 4. Re-run with `dry_run: false` only if the preview looks correct.
 
@@ -216,36 +215,30 @@ Use `scenes_dir` instead of `project_id` when your sidecars live in a non-standa
 
 ---
 
-## Beta compatibility and fallback
+## Compatibility notes and fallback
 
-Current beta posture:
+Current posture:
 
 - Runtime requirement: Node.js 22.6.0 or newer
 - Stable fallback remains: Scrivener External Folder Sync plus `import_scrivener_sync`
-- Current automated bundle coverage includes a baseline `.scriv` fixture with:
-  - `.scrivx` sync-number mapping
-  - Scrivener keywords
-  - synopsis files
-  - selected custom metadata fields
-  - `scenes_dir` override coverage
-- Not yet declared as broadly compatible:
-  - historical Scrivener versions as a published matrix
-  - custom-metadata-heavy projects
-  - reordered binder hierarchies beyond current fixture coverage
+- Validated fixture coverage:
+  - Baseline `.scriv` project (`.scrivx` sync-number mapping, Scrivener keywords, synopsis files, selected custom metadata fields, `scenes_dir` override)
+  - Projects with missing optional metadata files
+  - Custom-metadata-heavy projects
+  - Reordered binder hierarchies
+- Historical Scrivener version compatibility is not published as a formal matrix; report regressions if you encounter them.
 
-Treat direct `.scriv` parsing as version-fragile until the beta coverage matrix expands.
-
-If the beta merge fails:
+If the merge fails:
 
 1. Confirm `source_project_dir` points to the `.scriv` bundle directory itself, not the `.scrivx` file.
 2. Re-run with `dry_run: true` first.
 3. If you get `SCRIVENER_DIRECT_BETA_FAILED`, fall back to `import_scrivener_sync` from an External Folder Sync export.
 
-If the beta merge returns warnings:
+If the merge returns warnings:
 
 1. `missing_bracket_id`: the sidecar filename does not contain a Scrivener sync number like `[123]`; re-import via the stable path if needed.
 2. `missing_uuid_mapping`: the sidecar sync number is not present in the `.scrivx` sync map; confirm the sidecars came from the same Scrivener project/export lineage.
-3. `ignored_custom_field`: the Scrivener project contains custom metadata that this beta path does not map yet.
+3. `ignored_custom_field`: the Scrivener project contains custom metadata that this tool does not map.
 4. `invalid_custom_field_value`: the source custom field value could not be normalized into the supported sidecar type and was ignored.
 
 ---
