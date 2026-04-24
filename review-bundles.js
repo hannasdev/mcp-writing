@@ -1,3 +1,7 @@
+import fs from "node:fs";
+import path from "node:path";
+import matter from "gray-matter";
+
 const MAX_SORT_VALUE = Number.MAX_SAFE_INTEGER;
 
 export const REVIEW_BUNDLE_PROFILES = ["outline_discussion", "editor_detailed"];
@@ -51,6 +55,26 @@ function slugifyBundleName(value) {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
   return slug || "review-bundle";
+}
+
+function escapeMarkdown(text) {
+  return String(text ?? "")
+    .replace(/\\/g, "\\\\")
+    .replace(/([*_`\[\]])/g, "\\$1");
+}
+
+function resolveOutputFilePath(outputDir, fileName) {
+  const normalizedOutputDir = path.resolve(outputDir);
+  const target = path.resolve(normalizedOutputDir, fileName);
+  const rel = path.relative(normalizedOutputDir, target);
+  if (rel.startsWith("..") || path.isAbsolute(rel)) {
+    throw new ReviewBundlePlanError(
+      "INVALID_OUTPUT_PATH",
+      `Output file '${fileName}' resolves outside output_dir.`,
+      { output_dir: normalizedOutputDir, file_name: fileName }
+    );
+  }
+  return target;
 }
 
 function assertProfile(profile) {
@@ -286,5 +310,186 @@ export function buildReviewBundlePlan(dbHandle, {
       `${safeBundleName}.md`,
       `${safeBundleName}.manifest.json`,
     ],
+  };
+}
+
+function loadBundleSceneRows(dbHandle, projectId, sceneIds) {
+  if (!Array.isArray(sceneIds) || sceneIds.length === 0) return [];
+  const placeholders = sceneIds.map(() => "?").join(",");
+  const rows = dbHandle.prepare(`
+    SELECT
+      scene_id,
+      project_id,
+      title,
+      part,
+      chapter,
+      timeline_position,
+      logline,
+      pov,
+      save_the_cat_beat,
+      file_path
+    FROM scenes
+    WHERE project_id = ? AND scene_id IN (${placeholders})
+  `).all(projectId, ...sceneIds);
+
+  const rowMap = new Map(rows.map(row => [row.scene_id, row]));
+  return sceneIds.map(sceneId => rowMap.get(sceneId)).filter(Boolean);
+}
+
+function readProse(filePath) {
+  try {
+    const raw = fs.readFileSync(filePath, "utf8");
+    return matter(raw).content.trim();
+  } catch {
+    return null;
+  }
+}
+
+function renderSceneBlock(scene, options) {
+  const {
+    profile,
+    includeSceneIds,
+    includeMetadataSidebar,
+    includeParagraphAnchors,
+  } = options;
+
+  const title = scene.title || scene.scene_id;
+  const sceneHeading = includeSceneIds
+    ? `## ${escapeMarkdown(title)} (${scene.scene_id})`
+    : `## ${escapeMarkdown(title)}`;
+
+  const parts = [sceneHeading];
+
+  if (profile === "outline_discussion") {
+    const summaryParts = [];
+    if (scene.pov) summaryParts.push(`POV: ${scene.pov}`);
+    if (scene.save_the_cat_beat) summaryParts.push(`Beat: ${scene.save_the_cat_beat}`);
+    if (scene.part != null) summaryParts.push(`Part: ${scene.part}`);
+    if (scene.chapter != null) summaryParts.push(`Chapter: ${scene.chapter}`);
+    if (summaryParts.length > 0) {
+      parts.push(`_${escapeMarkdown(summaryParts.join(" | "))}_`);
+    }
+    if (scene.logline) {
+      parts.push(scene.logline.trim());
+    }
+    return parts.join("\n\n");
+  }
+
+  if (includeMetadataSidebar) {
+    const sidebar = [
+      scene.part != null ? `part: ${scene.part}` : null,
+      scene.chapter != null ? `chapter: ${scene.chapter}` : null,
+      scene.timeline_position != null ? `timeline_position: ${scene.timeline_position}` : null,
+      scene.pov ? `pov: ${scene.pov}` : null,
+      scene.save_the_cat_beat ? `beat: ${scene.save_the_cat_beat}` : null,
+    ].filter(Boolean);
+    if (sidebar.length > 0) {
+      parts.push(`> ${sidebar.join("  \\\n> ")}`);
+    }
+  }
+
+  const prose = scene.prose ?? "";
+  if (!includeParagraphAnchors || prose.length === 0) {
+    parts.push(prose);
+    return parts.join("\n\n");
+  }
+
+  const paragraphs = prose
+    .split(/\n\s*\n/g)
+    .map(p => p.trim())
+    .filter(Boolean);
+  const anchoredParagraphs = paragraphs.map((paragraph, index) => {
+    return `<!-- ${scene.scene_id}:p${index + 1} -->\n${paragraph}`;
+  });
+  parts.push(anchoredParagraphs.join("\n\n"));
+  return parts.join("\n\n");
+}
+
+export function renderReviewBundleMarkdown(dbHandle, plan) {
+  const profile = plan.profile;
+  const includeSceneIds = Boolean(plan.resolved_scope?.options?.include_scene_ids);
+  const includeMetadataSidebar = Boolean(plan.resolved_scope?.options?.include_metadata_sidebar);
+  const includeParagraphAnchors = Boolean(plan.resolved_scope?.options?.include_paragraph_anchors);
+
+  const sceneIds = plan.ordering.map(row => row.scene_id);
+  const rows = loadBundleSceneRows(dbHandle, plan.resolved_scope.project_id, sceneIds);
+  const sections = [];
+
+  const headerLines = [
+    `# Review Bundle: ${escapeMarkdown(plan.resolved_scope.project_id)}`,
+    "",
+    `- Profile: ${profile}`,
+    `- Generated at: ${new Date().toISOString()}`,
+    `- Scene count: ${plan.summary.scene_count}`,
+  ];
+  sections.push(headerLines.join("\n"));
+
+  for (const scene of rows) {
+    const withProse = {
+      ...scene,
+      prose: profile === "editor_detailed" ? (readProse(scene.file_path) ?? "") : "",
+    };
+    sections.push(renderSceneBlock(withProse, {
+      profile,
+      includeSceneIds,
+      includeMetadataSidebar,
+      includeParagraphAnchors,
+    }));
+  }
+
+  return sections.join("\n\n---\n\n").trim() + "\n";
+}
+
+export function createReviewBundleArtifacts(dbHandle, {
+  plan,
+  output_dir,
+  source_commit = null,
+}) {
+  if (!output_dir) {
+    throw new ReviewBundlePlanError("INVALID_OUTPUT_DIR", "output_dir is required.");
+  }
+
+  const normalizedOutputDir = path.resolve(output_dir);
+  fs.mkdirSync(normalizedOutputDir, { recursive: true });
+
+  const markdownFileName = plan.planned_outputs.find(name => name.endsWith(".md"));
+  const manifestFileName = plan.planned_outputs.find(name => name.endsWith(".manifest.json"));
+  if (!markdownFileName || !manifestFileName) {
+    throw new ReviewBundlePlanError(
+      "INVALID_PLAN_OUTPUTS",
+      "Plan is missing expected markdown/manifest filenames."
+    );
+  }
+
+  const markdownPath = resolveOutputFilePath(normalizedOutputDir, markdownFileName);
+  const manifestPath = resolveOutputFilePath(normalizedOutputDir, manifestFileName);
+
+  const markdown = renderReviewBundleMarkdown(dbHandle, plan);
+  const generatedAt = new Date().toISOString();
+  const manifest = {
+    bundle_id: path.basename(markdownFileName, ".md"),
+    profile: plan.profile,
+    generated_at: generatedAt,
+    provenance: {
+      source_commit: source_commit ?? null,
+      project_id: plan.resolved_scope.project_id,
+    },
+    summary: plan.summary,
+    warning_summary: plan.warning_summary,
+    warnings: plan.warnings,
+    resolved_scope: plan.resolved_scope,
+    scene_ids: plan.ordering.map(row => row.scene_id),
+  };
+
+  fs.writeFileSync(markdownPath, markdown, "utf8");
+  fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n", "utf8");
+
+  return {
+    bundle_id: manifest.bundle_id,
+    output_paths: {
+      bundle_markdown: markdownPath,
+      manifest_json: manifestPath,
+    },
+    generated_at: generatedAt,
   };
 }

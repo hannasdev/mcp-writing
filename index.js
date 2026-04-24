@@ -13,7 +13,7 @@ import yaml from "js-yaml";
 import { z } from "zod";
 import { openDb } from "./db.js";
 import { syncAll, isSyncDirWritable, getSyncOwnershipDiagnostics, getFileWriteDiagnostics, writeMeta, readMeta, indexSceneFile, normalizeSceneMetaForPath, sidecarPath } from "./sync.js";
-import { isGitAvailable, isGitRepository, initGitRepository, createSnapshot, listSnapshots, getSceneProseAtCommit } from "./git.js";
+import { isGitAvailable, isGitRepository, initGitRepository, createSnapshot, listSnapshots, getSceneProseAtCommit, getHeadCommitHash } from "./git.js";
 import { renderCharacterArcTemplate, renderCharacterSheetTemplate, renderPlaceSheetTemplate, slugifyEntityName } from "./world-entity-templates.js";
 import { importScrivenerSync, validateProjectId } from "./importer.js";
 import { ASYNC_PROGRESS_PREFIX } from "./async-progress.js";
@@ -22,6 +22,7 @@ import {
   REVIEW_BUNDLE_STRICTNESS,
   ReviewBundlePlanError,
   buildReviewBundlePlan,
+  createReviewBundleArtifacts,
 } from "./review-bundles.js";
 
 const SYNC_DIR = process.env.WRITING_SYNC_DIR ?? "./sync";
@@ -1361,6 +1362,104 @@ function createMcpServer() {
         return errorResponse(
           "PREVIEW_FAILED",
           error instanceof Error ? error.message : "Failed to generate review bundle preview."
+        );
+      }
+    }
+  );
+
+  // ---- create_review_bundle -----------------------------------------------
+  s.tool(
+    "create_review_bundle",
+    "Generate markdown review bundle artifacts from planned scene scope. Writes files only under output_dir and returns manifest/provenance details.",
+    {
+      project_id: z.string().describe("Project ID to scope the review bundle (e.g. 'test-novel')."),
+      profile: z.enum(REVIEW_BUNDLE_PROFILES).describe("Bundle profile: outline_discussion or editor_detailed."),
+      output_dir: z.string().describe("Directory path to write bundle artifacts into."),
+      part: z.number().int().optional().describe("Optional part filter."),
+      chapter: z.number().int().optional().describe("Optional chapter filter."),
+      tag: z.string().optional().describe("Optional tag filter (exact match)."),
+      scene_ids: z.array(z.string()).optional().describe("Optional explicit scene_id allowlist. Intersects with other filters."),
+      strictness: z.enum(REVIEW_BUNDLE_STRICTNESS).optional().describe("Strictness mode: warn (default) or fail."),
+      include_scene_ids: z.boolean().optional().describe("Include scene IDs in markdown headings (default true)."),
+      include_metadata_sidebar: z.boolean().optional().describe("Include metadata sidebar in markdown output (default false)."),
+      include_paragraph_anchors: z.boolean().optional().describe("Include paragraph anchors in markdown output (default false)."),
+      bundle_name: z.string().optional().describe("Optional output bundle base name override (slugified in filenames)."),
+      source_commit: z.string().optional().describe("Optional explicit source commit for provenance. Defaults to current HEAD when available."),
+    },
+    async ({
+      project_id,
+      profile,
+      output_dir,
+      part,
+      chapter,
+      tag,
+      scene_ids,
+      strictness = "warn",
+      include_scene_ids = true,
+      include_metadata_sidebar = false,
+      include_paragraph_anchors = false,
+      bundle_name,
+      source_commit,
+    }) => {
+      const projectIdCheck = validateProjectId(project_id);
+      if (!projectIdCheck.ok) {
+        return errorResponse("INVALID_PROJECT_ID", projectIdCheck.reason, { project_id });
+      }
+
+      try {
+        const plan = buildReviewBundlePlan(db, {
+          project_id,
+          profile,
+          part,
+          chapter,
+          tag,
+          scene_ids,
+          strictness,
+          include_scene_ids,
+          include_metadata_sidebar,
+          include_paragraph_anchors,
+          bundle_name,
+        });
+
+        if (!plan.strictness_result.can_proceed) {
+          return errorResponse(
+            "STRICTNESS_BLOCKED",
+            "Bundle generation blocked by strictness policy.",
+            { strictness_result: plan.strictness_result, warning_summary: plan.warning_summary }
+          );
+        }
+
+        const provenanceCommit = source_commit ?? getHeadCommitHash(SYNC_DIR);
+        const artifacts = createReviewBundleArtifacts(db, {
+          plan,
+          output_dir,
+          source_commit: provenanceCommit,
+        });
+
+        return jsonResponse({
+          ok: true,
+          bundle_id: artifacts.bundle_id,
+          output_paths: artifacts.output_paths,
+          summary: {
+            scene_count: plan.summary.scene_count,
+            profile: plan.profile,
+            applied_filters: plan.resolved_scope.filters,
+          },
+          warnings: plan.warnings,
+          warning_summary: plan.warning_summary,
+          provenance: {
+            source_commit: provenanceCommit,
+            generated_at: artifacts.generated_at,
+            project_id: plan.resolved_scope.project_id,
+          },
+        });
+      } catch (error) {
+        if (error instanceof ReviewBundlePlanError) {
+          return errorResponse(error.code, error.message, error.details);
+        }
+        return errorResponse(
+          "CREATE_BUNDLE_FAILED",
+          error instanceof Error ? error.message : "Failed to create review bundle artifacts."
         );
       }
     }
