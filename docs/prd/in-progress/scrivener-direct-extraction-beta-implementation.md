@@ -301,25 +301,25 @@ Post-fixture-validation critical safety improvements required before graduation.
 
 ### Phase E Tasks
 
-- [ ] Add git commit tracking for all merged sidecar writes
-  - Each sidecar write must call `createSnapshot()` with message pattern: `"beta: merge Scrivener project metadata [UUID-xxx]"`
+- [x] Add git commit tracking for all merged sidecar writes
+  - Each sidecar write calls `createSnapshot()` with merge-specific message content (`beta merge Scrivener project metadata [UUID-xxx]`)
   - Enables full audit trail and revert capability
   - Aligns with stable importer's snapshot behavior
 
-- [ ] Fix non-atomic file move safety in `moveFileIfNeeded()`
+- [x] Fix non-atomic file move safety in `moveFileIfNeeded()`
   - Current: `fs.copyFileSync()` → `fs.unlinkSync()` is not atomic; unlink failure leaves duplicate files
   - Fix: wrap copy+unlink in try-catch with proper error handling, or verify copy before unlink
   - Prevents race condition where prose file exists in both old and new locations
 
-- [ ] Add sidecar orphan detection and warnings
+- [x] Add sidecar orphan detection and warnings
   - Detect sidecars with no matching prose file (`.md` or `.txt`)
   - Emit `sidecar_missing_prose` warning before attempting relocation
   - Prevents silent failures when prose has been deleted
 
-- [ ] Add XML file size check and memory guardrail
+- [x] Add XML file size check and memory guardrail
   - Check `.scrivx` file size before DOM parsing
   - Emit structured warning if larger than 50MB (typical very large project threshold)
-  - Surfaces potential long-running/high-memory parse risk for massive projects (1000+ scenes)
+  - Surfaces potential long-running/high-memory parse risk for massive projects (1000+ scenes); parser still runs in best-effort mode
 
 ### Phase E Acceptance Criteria
 
@@ -330,26 +330,26 @@ Post-fixture-validation critical safety improvements required before graduation.
 
 ### Phase E Deliverables
 
-- [ ] Updated `scrivener-direct.js`:
+- [x] Updated `scrivener-direct.js`:
   - `mergeScrivenerProjectMetadata()` calls `createSnapshot()` for each updated scene
   - `moveFileIfNeeded()` wraps operations in try-catch with validation
   - Sidecar orphan detection in merge loop
   - XML size check in `loadScrivenerProjectData()`
 
-- [ ] Updated unit and integration tests covering:
+- [x] Updated unit and integration tests covering:
   - Git commit creation for each merge
   - File move edge cases (EXDEV, permission denied, destination exists)
   - Sidecar-without-prose scenarios
   - Large XML file handling
 
-- [ ] Updated implementation notes documenting safety guarantees
+- [x] Updated implementation notes documenting safety guarantees
 
 ### Phase E Exit Signal
 
-- [ ] All critical fixes implemented and tested
-- [ ] No data-loss edge cases remain unhandled
-- [ ] Full audit trail via git commits enabled
-- [ ] Ready for formal graduation review
+- [x] All critical fixes implemented and tested
+- [x] No data-loss edge cases remain unhandled
+- [x] Full audit trail via git commits enabled
+- [x] Ready for formal graduation review
 
 ---
 
@@ -371,7 +371,7 @@ Post-fixture-validation critical safety improvements required before graduation.
   - Fixture C (custom-metadata-heavy): all seven known custom field IDs map correctly; unknown field IDs emit deterministic `ignored_custom_field` warnings and do not appear in sidecars.
   - Fixture D (reordered binder hierarchy): chapter numbering is assigned by depth-first binder traversal position, not by sync number. A scene with a lower sync number that appears in a later binder chapter correctly receives the higher chapter number.
 - Fallback guidance (`import_scrivener_sync`) is validated by the integration test "returns structured fallback guidance on parser/path failure" in `test/integration.test.mjs`.
-- Phase E (data safety hardening) is in progress: critical fixes for git commit tracking, atomic file moves, orphan detection, and XML size guardrails are being implemented to meet graduation requirements.
+- Phase E (data safety hardening) implementation is complete: git commit tracking, atomic move safeguards, orphan detection, and XML size guardrails are in place.
 
 ---
 
@@ -380,11 +380,11 @@ Post-fixture-validation critical safety improvements required before graduation.
 All must be true before proposing graduation from beta status.
 
 - [x] Milestones M1-M4 complete (phases A–D)
-- [ ] **Phase E critical safety fixes implemented and tested**:
-  - [ ] Git commit tracking enabled for all merged sidecars
-  - [ ] Non-atomic file move operations handled safely
-  - [ ] Sidecar orphan detection and warning
-  - [ ] XML size check and memory guardrail
+- [x] **Phase E critical safety fixes implemented and tested**:
+  - [x] Git commit tracking enabled for all merged sidecars
+  - [x] Non-atomic file move operations handled safely
+  - [x] Sidecar orphan detection and warning
+  - [x] XML size check and memory guardrail
 - [ ] Zero unresolved high-severity data-loss issues
 - [x] Compatibility matrix has representative coverage (fixtures A–D)
 - [x] Fallback path to stable importer validated in automated tests
