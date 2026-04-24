@@ -78,7 +78,10 @@ const OWNERSHIP_GUARD_MODE = OWNERSHIP_GUARD_MODE_RAW === "fail" || OWNERSHIP_GU
 const OWNERSHIP_GUARD_MODE_RAW_DISPLAY = JSON.stringify(OWNERSHIP_GUARD_MODE_RAW);
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, "package.json"), "utf8"));
+const pkg = readJsonIfExists(path.join(__dirname, "package.json")) ?? {};
+const MCP_SERVER_VERSION = typeof pkg.version === "string" && pkg.version.trim()
+  ? pkg.version
+  : "0.0.0";
 const asyncJobs = new Map();
 
 function pruneAsyncJobs() {
@@ -754,7 +757,7 @@ async function gracefulShutdown(signal) {
 // MCP server factory
 // ---------------------------------------------------------------------------
 function createMcpServer() {
-  const s = new McpServer({ name: "mcp-writing", version: pkg.version });
+  const s = new McpServer({ name: "mcp-writing", version: MCP_SERVER_VERSION });
 
   // ---- sync ----------------------------------------------------------------
   s.tool("sync", "Re-scan the sync folder and update the scene/character/place index from disk. Call this after making edits in Scrivener or updating sidecar files outside the MCP.", {}, async () => {
