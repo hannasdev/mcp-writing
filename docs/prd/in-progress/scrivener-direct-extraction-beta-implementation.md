@@ -9,7 +9,6 @@ This document translates the beta PRD into execution-ready tasks. It is intentio
 - M1: Parser and merge core extracted from legacy script ✅
 - M2: Official beta entrypoints (MCP + CLI) ✅
 - M2.5: Large-project UX (async jobs, warning aggregation, scoped parsing) ✅
-- M3: Safety and parity hardening
 - M3: Safety and parity hardening (ownership enforcement ✅, ambiguity conflicts pending)
 - M4: Docs, compatibility posture, and beta operations ✅ (baseline docs slice)
 
