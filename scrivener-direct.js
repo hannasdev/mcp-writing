@@ -421,7 +421,7 @@ export function loadScrivenerProjectData(scrivPath, options = {}) {
   if (scrivxStat.size > MAX_SCRIVX_SIZE) {
     onWarning?.({
       code: "large_scrivx_file",
-      message: `Scrivener project .scrivx file is unusually large (${Math.round(scrivxStat.size / 1024 / 1024)}MB). Parsing may take longer and use more memory.`,
+      message: `Scrivener project .scrivx file is unusually large (${Math.round(scrivxStat.size / 1024 / 1024)}MB). This is an advisory warning; parsing will continue but may take longer and use significantly more memory because XML is parsed in-memory.`,
       scrivx_path: scrivxPath,
       size_bytes: scrivxStat.size,
       threshold_bytes: MAX_SCRIVX_SIZE,
@@ -609,6 +609,7 @@ export function mergeScrivenerProjectMetadata({
   let relocated = 0;
   const fieldAddCounts = {};
   const previewChanges = [];
+  const canCreateSnapshots = !dryRun && isGitAvailable() && isGitRepository(mcpSyncDirAbs);
   for (const sidecarPath of sidecarFiles) {
     const filename = path.basename(sidecarPath);
     const prosePath = findProsePathForSidecar(sidecarPath);
@@ -714,7 +715,11 @@ export function mergeScrivenerProjectMetadata({
       if (needsMove) {
         logger(`        -> ${path.relative(scenesDir, targetSidecarPath) || filename}`);
       }
-      didRelocate = needsMove;
+      const dryRunRelocateEligible = desiredSidecarRelocation
+        && prosePath
+        && (!fs.existsSync(targetSidecarPath))
+        && (!targetProsePath || path.resolve(prosePath) === path.resolve(targetProsePath) || !fs.existsSync(targetProsePath));
+      didRelocate = needsMove && dryRunRelocateEligible;
     } else {
       let proseMoveWarning = null;
       let shouldRelocateSidecar = desiredSidecarRelocation;
@@ -771,7 +776,7 @@ export function mergeScrivenerProjectMetadata({
       }
 
       // Create git snapshot for audit trail (only on actual writes, not dry-run)
-      if (!dryRun && isGitAvailable() && isGitRepository(mcpSyncDirAbs)) {
+      if (canCreateSnapshots) {
         try {
           const sceneId = existing?.scene_id ?? `[${syncNum}]`;
           const commitMessage = `beta merge Scrivener project metadata [${uuid}]`;
@@ -782,7 +787,7 @@ export function mergeScrivenerProjectMetadata({
               snapshotPaths.push(prosePath, targetProsePath);
             }
           }
-          createSnapshot(mcpSyncDirAbs, snapshotPaths, sceneId, commitMessage);
+          createSnapshot(mcpSyncDirAbs, snapshotPaths, sceneId, commitMessage, { messagePrefix: null });
         } catch (err) {
           // Snapshot creation errors should not block the merge; log and continue
           logger(`  WARN  git snapshot creation failed for ${filename}: ${err.message}`);
