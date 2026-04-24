@@ -1406,6 +1406,27 @@ function createMcpServer() {
         return errorResponse("INVALID_PROJECT_ID", projectIdCheck.reason, { project_id });
       }
 
+      const resolvedOutputDir = path.resolve(output_dir);
+      if (!isPathInsideSyncDir(resolvedOutputDir)) {
+        return errorResponse(
+          "INVALID_OUTPUT_DIR",
+          "output_dir must be inside WRITING_SYNC_DIR.",
+          { output_dir: resolvedOutputDir, sync_dir: SYNC_DIR_ABS }
+        );
+      }
+      const outputDirSegments = path
+        .relative(SYNC_DIR_REAL, resolvedOutputDir)
+        .split(path.sep)
+        .filter(Boolean)
+        .map(segment => segment.toLowerCase());
+      if (outputDirSegments.includes("scenes")) {
+        return errorResponse(
+          "INVALID_OUTPUT_DIR",
+          "output_dir cannot be inside a scenes directory. Choose a dedicated export folder under WRITING_SYNC_DIR.",
+          { output_dir: resolvedOutputDir }
+        );
+      }
+
       try {
         const plan = buildReviewBundlePlan(db, {
           project_id,
@@ -1429,10 +1450,10 @@ function createMcpServer() {
           );
         }
 
-        const provenanceCommit = source_commit ?? getHeadCommitHash(SYNC_DIR);
+        const provenanceCommit = source_commit ?? (GIT_ENABLED ? getHeadCommitHash(SYNC_DIR) : null);
         const artifacts = createReviewBundleArtifacts(db, {
           plan,
-          output_dir,
+          output_dir: resolvedOutputDir,
           source_commit: provenanceCommit,
         });
 

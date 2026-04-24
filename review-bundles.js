@@ -315,22 +315,28 @@ export function buildReviewBundlePlan(dbHandle, {
 
 function loadBundleSceneRows(dbHandle, projectId, sceneIds) {
   if (!Array.isArray(sceneIds) || sceneIds.length === 0) return [];
-  const placeholders = sceneIds.map(() => "?").join(",");
-  const rows = dbHandle.prepare(`
-    SELECT
-      scene_id,
-      project_id,
-      title,
-      part,
-      chapter,
-      timeline_position,
-      logline,
-      pov,
-      save_the_cat_beat,
-      file_path
-    FROM scenes
-    WHERE project_id = ? AND scene_id IN (${placeholders})
-  `).all(projectId, ...sceneIds);
+  const rows = [];
+  const chunkSize = 900;
+  for (let offset = 0; offset < sceneIds.length; offset += chunkSize) {
+    const chunk = sceneIds.slice(offset, offset + chunkSize);
+    const placeholders = chunk.map(() => "?").join(",");
+    const chunkRows = dbHandle.prepare(`
+      SELECT
+        scene_id,
+        project_id,
+        title,
+        part,
+        chapter,
+        timeline_position,
+        logline,
+        pov,
+        save_the_cat_beat,
+        file_path
+      FROM scenes
+      WHERE project_id = ? AND scene_id IN (${placeholders})
+    `).all(projectId, ...chunk);
+    rows.push(...chunkRows);
+  }
 
   const rowMap = new Map(rows.map(row => [row.scene_id, row]));
   return sceneIds.map(sceneId => rowMap.get(sceneId)).filter(Boolean);
@@ -405,7 +411,7 @@ function renderSceneBlock(scene, options) {
   return parts.join("\n\n");
 }
 
-export function renderReviewBundleMarkdown(dbHandle, plan) {
+export function renderReviewBundleMarkdown(dbHandle, plan, { generatedAt } = {}) {
   const profile = plan.profile;
   const includeSceneIds = Boolean(plan.resolved_scope?.options?.include_scene_ids);
   const includeMetadataSidebar = Boolean(plan.resolved_scope?.options?.include_metadata_sidebar);
@@ -419,7 +425,7 @@ export function renderReviewBundleMarkdown(dbHandle, plan) {
     `# Review Bundle: ${escapeMarkdown(plan.resolved_scope.project_id)}`,
     "",
     `- Profile: ${profile}`,
-    `- Generated at: ${new Date().toISOString()}`,
+    `- Generated at: ${generatedAt ?? new Date().toISOString()}`,
     `- Scene count: ${plan.summary.scene_count}`,
   ];
   sections.push(headerLines.join("\n"));
@@ -464,8 +470,8 @@ export function createReviewBundleArtifacts(dbHandle, {
   const markdownPath = resolveOutputFilePath(normalizedOutputDir, markdownFileName);
   const manifestPath = resolveOutputFilePath(normalizedOutputDir, manifestFileName);
 
-  const markdown = renderReviewBundleMarkdown(dbHandle, plan);
   const generatedAt = new Date().toISOString();
+  const markdown = renderReviewBundleMarkdown(dbHandle, plan, { generatedAt });
   const manifest = {
     bundle_id: path.basename(markdownFileName, ".md"),
     profile: plan.profile,

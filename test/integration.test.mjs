@@ -1761,7 +1761,7 @@ describe("preview_review_bundle tool", () => {
 
 describe("create_review_bundle tool", () => {
   test("writes outline bundle markdown + manifest to output_dir", async () => {
-    const outDir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-writing-bundle-outline-"));
+    const outDir = fs.mkdtempSync(path.join(writeSyncDir, "review-bundles-outline-"));
     try {
       const text = await callWriteTool("create_review_bundle", {
         project_id: "test-novel",
@@ -1793,7 +1793,7 @@ describe("create_review_bundle tool", () => {
   });
 
   test("writes editor bundle with prose and paragraph anchors", async () => {
-    const outDir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-writing-bundle-editor-"));
+    const outDir = fs.mkdtempSync(path.join(writeSyncDir, "review-bundles-editor-"));
     try {
       const text = await callWriteTool("create_review_bundle", {
         project_id: "test-novel",
@@ -1818,7 +1818,7 @@ describe("create_review_bundle tool", () => {
     fs.writeFileSync(scenePath, `${before}\n\nStale marker line for create bundle strictness test.\n`, "utf8");
     await callWriteTool("sync");
 
-    const outDir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-writing-bundle-blocked-"));
+    const outDir = fs.mkdtempSync(path.join(writeSyncDir, "review-bundles-blocked-"));
     try {
       const text = await callWriteTool("create_review_bundle", {
         project_id: "test-novel",
@@ -1834,6 +1834,23 @@ describe("create_review_bundle tool", () => {
       fs.rmSync(outDir, { recursive: true, force: true });
       fs.writeFileSync(scenePath, before, "utf8");
       await callWriteTool("enrich_scene", { scene_id: "sc-002", project_id: "test-novel" });
+    }
+  });
+
+  test("returns INVALID_OUTPUT_DIR when output_dir is outside WRITING_SYNC_DIR", async () => {
+    const outDir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-writing-bundle-outside-"));
+    try {
+      const text = await callWriteTool("create_review_bundle", {
+        project_id: "test-novel",
+        profile: "outline_discussion",
+        output_dir: outDir,
+      });
+      const parsed = JSON.parse(text);
+
+      assert.equal(parsed.ok, false);
+      assert.equal(parsed.error.code, "INVALID_OUTPUT_DIR");
+    } finally {
+      fs.rmSync(outDir, { recursive: true, force: true });
     }
   });
 });
