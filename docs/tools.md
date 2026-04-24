@@ -14,6 +14,7 @@
 - [`list_async_jobs`](#list_async_jobs)
 - [`cancel_async_job`](#cancel_async_job)
 - [`get_runtime_config`](#get_runtime_config)
+- [`preview_review_bundle`](#preview_review_bundle)
 - [`find_scenes`](#find_scenes)
 - [`get_scene_prose`](#get_scene_prose)
 - [`get_chapter_prose`](#get_chapter_prose)
@@ -150,6 +151,26 @@ Cancel a running asynchronous job. Use this when an import/merge/batch run was s
 Show the active runtime paths and capabilities for this server instance (sync dir, database path, writability, permission diagnostics, and git availability). Use this to verify which manuscript location is currently connected.
 
 _No parameters._
+
+---
+
+## preview_review_bundle
+
+Dry-run planning tool for review bundles. Resolves scene scope, deterministic ordering, warnings, and planned output filenames without writing files.
+
+| Parameter | Type | Required | Description |
+| --- | --- | :---: | --- |
+| `project_id` | `string` | Yes | Project ID to scope the review bundle (e.g. 'test-novel'). |
+| `profile` | `enum` | Yes | Bundle profile: outline_discussion or editor_detailed. |
+| `part` | `integer` | No | Optional part filter. |
+| `chapter` | `integer` | No | Optional chapter filter. |
+| `tag` | `string` | No | Optional tag filter (exact match). |
+| `scene_ids` | `string[]` | No | Optional explicit scene_id allowlist. Intersects with other filters. |
+| `strictness` | `enum` | No | Strictness mode: warn (default) or fail. |
+| `include_scene_ids` | `boolean` | No | Include scene IDs in planned output structure (default true). |
+| `include_metadata_sidebar` | `boolean` | No | Include metadata sidebar in profile-aware output planning (default false). |
+| `include_paragraph_anchors` | `boolean` | No | Include paragraph anchors in profile-aware output planning (default false). |
+| `bundle_name` | `string` | No | Optional output bundle base name override (slugified in planned outputs). |
 
 ---
 
