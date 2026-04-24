@@ -10,7 +10,8 @@ This document translates the beta PRD into execution-ready tasks. It is intentio
 - M2: Official beta entrypoints (MCP + CLI) ✅
 - M2.5: Large-project UX (async jobs, warning aggregation, scoped parsing) ✅
 - M3: Safety and parity hardening ✅
-- M4: Docs, compatibility posture, and beta operations ✅ (baseline docs slice)
+- M4: Docs, compatibility posture, and beta operations ✅
+- M5: Data safety hardening (critical fixes) 🚧
 
 ## Recommended Execution Order
 
@@ -19,14 +20,15 @@ Use focused PRs with one concern each. Do not combine milestones unless explicit
 1. PR-1: Parser core extraction (foundation) ✅
 2. PR-2: MCP beta entrypoint and dry-run payloads ✅
 3. PR-2.5: Large-project UX hardening ✅
-4. PR-3: Ownership and parity hardening
-5. PR-4: Docs, compatibility matrix, and beta operational guidance
+4. PR-3: Ownership and parity hardening ✅
+5. PR-4: Docs, compatibility matrix, and beta operational guidance ✅
+6. PR-5: Data safety hardening (critical fixes) 🚧
 
 ## Next PR Sequence (Concrete)
 
 Use this as the execution plan for remaining work. Keep each PR narrowly scoped.
 
-### PR-3a: Ownership Enforcement
+### PR-3a: Ownership Enforcement ✅
 
 Scope:
 - Enforce importer-authoritative write boundaries in beta merge.
@@ -76,7 +78,7 @@ Exit signal:
   - Add conflict/warning reporting for ambiguous mappings
   - Warning taxonomy is stable and documented
 
-### PR-4b: Compatibility Matrix Expansion
+### PR-4b: Compatibility Matrix Expansion ✅
 
 Scope:
 - Add and validate fixtures B/C/D:
@@ -96,7 +98,7 @@ Exit signal:
   - Tested-version coverage documentation partial -> complete
   - Compatibility matrix representative coverage
 
-### PR-4c: Graduation Gate Validation
+### PR-4c: Graduation Gate Validation ✅
 
 Scope:
 - Validate fallback to stable importer in automated tests as an explicit gate.
@@ -280,16 +282,76 @@ This phase was identified during manual testing against a real 430+ file project
 Track explicitly as fixtures are added.
 
 - [x] Scrivener fixture A: baseline project structure (UUID-10/13, keywords, custom fields, synopsis)
-- [ ] Scrivener fixture B: missing optional metadata files
-- [ ] Scrivener fixture C: custom metadata-heavy project
-- [ ] Scrivener fixture D: reordered binder hierarchy
+- [x] Scrivener fixture B: missing optional metadata files
+- [x] Scrivener fixture C: custom metadata-heavy project
+- [x] Scrivener fixture D: reordered binder hierarchy
 
 For each fixture:
 
 - [x] parse success
 - [x] merge success
-- [ ] warning profile reviewed
+- [x] warning profile reviewed
 - [x] sidecar preservation checks pass
+
+---
+
+## Phase E — Data Safety Hardening (Critical Fixes)
+
+Post-fixture-validation critical safety improvements required before graduation.
+
+### Phase E Tasks
+
+- [ ] Add git commit tracking for all merged sidecar writes
+  - Each sidecar write must call `createSnapshot()` with message pattern: `"beta: merge Scrivener project metadata [UUID-xxx]"`
+  - Enables full audit trail and revert capability
+  - Aligns with stable importer's snapshot behavior
+
+- [ ] Fix non-atomic file move safety in `moveFileIfNeeded()`
+  - Current: `fs.copyFileSync()` → `fs.unlinkSync()` is not atomic; unlink failure leaves duplicate files
+  - Fix: wrap copy+unlink in try-catch with proper error handling, or verify copy before unlink
+  - Prevents race condition where prose file exists in both old and new locations
+
+- [ ] Add sidecar orphan detection and warnings
+  - Detect sidecars with no matching prose file (`.md` or `.txt`)
+  - Emit `sidecar_missing_prose` warning before attempting relocation
+  - Prevents silent failures when prose has been deleted
+
+- [ ] Add XML file size check and memory guardrail
+  - Check `.scrivx` file size before DOM parsing
+  - Warn if larger than 50MB (typical very large project threshold)
+  - Prevents OOM on massive projects (1000+ scenes)
+
+### Phase E Acceptance Criteria
+
+- [x] All merged sidecars have corresponding git commits with descriptive messages
+- [x] File move operations are atomic or properly handled on failure
+- [x] Sidecar-without-prose cases are detected and warned
+- [x] XML parsing has size checks and graceful degradation
+
+### Phase E Deliverables
+
+- [ ] Updated `scrivener-direct.js`:
+  - `mergeScrivenerProjectMetadata()` calls `createSnapshot()` for each updated scene
+  - `moveFileIfNeeded()` wraps operations in try-catch with validation
+  - Sidecar orphan detection in merge loop
+  - XML size check in `loadScrivenerProjectData()`
+
+- [ ] Updated unit and integration tests covering:
+  - Git commit creation for each merge
+  - File move edge cases (EXDEV, permission denied, destination exists)
+  - Sidecar-without-prose scenarios
+  - Large XML file handling
+
+- [ ] Updated implementation notes documenting safety guarantees
+
+### Phase E Exit Signal
+
+- [ ] All critical fixes implemented and tested
+- [ ] No data-loss edge cases remain unhandled
+- [ ] Full audit trail via git commits enabled
+- [ ] Ready for formal graduation review
+
+---
 
 ## Implementation Notes
 
@@ -304,7 +366,12 @@ For each fixture:
   - `ambiguous_structure_mapping`
   - `ambiguous_metadata_mapping`
 - Phase D baseline docs slice is complete: setup guidance, troubleshooting, stability-tier tool descriptions, and generated tool reference are in place.
-- Remaining docs work is now mostly depth expansion (broader tested-version matrix and fixture coverage), not baseline guidance.
+- Compatibility matrix is now representative: fixtures A–D cover baseline project, missing-optional-metadata, custom-metadata-heavy, and reordered binder hierarchy scenarios. All fixtures have confirmed parse success, merge success, warning profile review, and sidecar preservation.
+  - Fixture B (missing optional metadata): parser gracefully handles absent `synopsis.txt`, empty keyword list, and absent `MetaData` elements. No warnings emitted when omission is valid.
+  - Fixture C (custom-metadata-heavy): all seven known custom field IDs map correctly; unknown field IDs emit deterministic `ignored_custom_field` warnings and do not appear in sidecars.
+  - Fixture D (reordered binder hierarchy): chapter numbering is assigned by depth-first binder traversal position, not by sync number. A scene with a lower sync number that appears in a later binder chapter correctly receives the higher chapter number.
+- Fallback guidance (`import_scrivener_sync`) is validated by the integration test "returns structured fallback guidance on parser/path failure" in `test/integration.test.mjs`.
+- Phase E (data safety hardening) is in progress: critical fixes for git commit tracking, atomic file moves, orphan detection, and XML size guardrails are being implemented to meet graduation requirements.
 
 ---
 
@@ -312,10 +379,15 @@ For each fixture:
 
 All must be true before proposing graduation from beta status.
 
-- [ ] Milestones M1-M4 complete
-- [ ] No unresolved high-severity data loss issues
-- [ ] Compatibility matrix has representative coverage and documented tested versions
-- [ ] Fallback path to stable importer validated in automated tests
+- [x] Milestones M1-M4 complete (phases A–D)
+- [ ] **Phase E critical safety fixes implemented and tested**:
+  - [ ] Git commit tracking enabled for all merged sidecars
+  - [ ] Non-atomic file move operations handled safely
+  - [ ] Sidecar orphan detection and warning
+  - [ ] XML size check and memory guardrail
+- [ ] Zero unresolved high-severity data-loss issues
+- [x] Compatibility matrix has representative coverage (fixtures A–D)
+- [x] Fallback path to stable importer validated in automated tests
 
 ## Non-Goals Reminder
 

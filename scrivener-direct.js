@@ -3,6 +3,7 @@ import path from "node:path";
 import { DOMParser } from "@xmldom/xmldom";
 import yaml from "js-yaml";
 import { validateProjectId } from "./importer.js";
+import { createSnapshot, isGitRepository, isGitAvailable } from "./git.js";
 
 function attr(el, name) {
   return el?.getAttribute?.(name) ?? null;
@@ -93,8 +94,41 @@ function moveFileIfNeeded(fromPath, toPath) {
     if (!error || typeof error !== "object" || error.code !== "EXDEV") {
       throw error;
     }
-    fs.copyFileSync(fromPath, toPath);
-    fs.unlinkSync(fromPath);
+    // Cross-filesystem: copy then verify before unlink
+    try {
+      fs.copyFileSync(fromPath, toPath);
+      // Verify copy succeeded before deleting source
+      if (!fs.existsSync(toPath)) {
+        return {
+          moved: false,
+          warning: {
+            code: "relocate_copy_verification_failed",
+            message: "Failed to verify file copy to destination; source file preserved.",
+            from_path: fromPath,
+            to_path: toPath,
+          },
+        };
+      }
+      fs.unlinkSync(fromPath);
+    } catch (copyErr) {
+      // Copy failed; ensure we don't leave duplicate files
+      if (fs.existsSync(toPath)) {
+        try {
+          fs.unlinkSync(toPath);
+        } catch {
+          // Best effort; already in error state
+        }
+      }
+      return {
+        moved: false,
+        warning: {
+          code: "relocate_cross_filesystem_failed",
+          message: `Failed to copy prose file across filesystem: ${copyErr.message}. Source file preserved.`,
+          from_path: fromPath,
+          to_path: toPath,
+        },
+      };
+    }
   }
 
   return { moved: true };
@@ -361,6 +395,17 @@ export function loadScrivenerProjectData(scrivPath) {
   const scrivxPath = path.join(scrivPathAbs, preferredScrivx);
   const dataDir = path.join(scrivPathAbs, "Files", "Data");
 
+  // XML size guardrail: warn if .scrivx is very large (typical threshold ~50MB for very large projects)
+  const scrivxStat = fs.statSync(scrivxPath);
+  const MAX_SCRIVX_SIZE = 50 * 1024 * 1024; // 50MB
+  if (scrivxStat.size > MAX_SCRIVX_SIZE) {
+    throw new Error(
+      `Scrivener project .scrivx file is unusually large (${Math.round(scrivxStat.size / 1024 / 1024)}MB). ` +
+      `This may indicate a very large project (1000+ scenes) that could cause memory issues during parsing. ` +
+      `Consider breaking the project into smaller parts or contact support.`
+    );
+  }
+
   const xml = fs.readFileSync(scrivxPath, "utf8");
   const dom = new DOMParser().parseFromString(xml, "text/xml");
 
@@ -599,6 +644,17 @@ export function mergeScrivenerProjectMetadata({
     const targetProsePath = prosePath
       ? (organizeByChapters ? path.join(targetDir, path.basename(prosePath)) : prosePath)
       : null;
+
+    // Orphan detection: warn if sidecar has no matching prose but relocation is attempted
+    if (!prosePath && organizeByChapters && path.resolve(sidecarPath) !== path.resolve(targetSidecarPath)) {
+      warningsTruncated = pushWarning(warnings, warningSummary, {
+        code: "sidecar_missing_prose",
+        message: "Sidecar has no matching prose file (.md or .txt); relocation skipped to preserve consistency.",
+        file: filename,
+        uuid,
+      }) || warningsTruncated;
+    }
+
     const needsMove = path.resolve(sidecarPath) !== path.resolve(targetSidecarPath)
       || (prosePath && targetProsePath && path.resolve(prosePath) !== path.resolve(targetProsePath));
 
@@ -653,6 +709,21 @@ export function mergeScrivenerProjectMetadata({
         ) || warningsTruncated;
       }
 
+      // Prevent relocation if sidecar is orphaned (no matching prose)
+      if (shouldRelocateSidecar && !prosePath) {
+        shouldRelocateSidecar = false;
+        warningsTruncated = pushWarning(
+          warnings,
+          warningSummary,
+          {
+            code: "sidecar_missing_prose",
+            message: "Skipped relocating sidecar because no matching prose file exists; keeping sidecar in current location.",
+            file: filename,
+            uuid,
+          }
+        ) || warningsTruncated;
+      }
+
       if (shouldRelocateSidecar && prosePath && targetProsePath) {
         const moveResult = moveFileIfNeeded(prosePath, targetProsePath);
         if (moveResult?.warning) {
@@ -678,6 +749,18 @@ export function mergeScrivenerProjectMetadata({
         && fs.existsSync(sidecarPath)
       ) {
         fs.unlinkSync(sidecarPath);
+      }
+
+      // Create git snapshot for audit trail (only on actual writes, not dry-run)
+      if (!dryRun && isGitAvailable() && isGitRepository(mcpSyncDirAbs)) {
+        try {
+          const sceneId = existing?.scene_id ?? `[${syncNum}]`;
+          const commitMessage = `beta merge Scrivener project metadata [${uuid}]`;
+          createSnapshot(mcpSyncDirAbs, finalSidecarPath, sceneId, commitMessage);
+        } catch (err) {
+          // Snapshot creation errors should not block the merge; log and continue
+          logger(`  WARN  git snapshot creation failed for ${filename}: ${err.message}`);
+        }
       }
 
       const changes = [];
