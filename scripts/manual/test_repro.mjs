@@ -1,5 +1,4 @@
 import test from "node:test";
-import assert from "node:assert";
 import path from "node:path";
 import fs from "node:fs/promises";
 import { fileURLToPath } from "node:url";
