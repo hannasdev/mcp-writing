@@ -1,4 +1,4 @@
-import { execSync } from "node:child_process";
+import { execFileSync, execSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -14,7 +14,7 @@ export function isGitRepository(dirPath) {
       stdio: "pipe",
       encoding: "utf8",
     }).trim();
-    return path.resolve(gitRoot) === path.resolve(dirPath);
+    return fs.realpathSync(gitRoot) === fs.realpathSync(dirPath);
   } catch {
     return false;
   }
@@ -52,26 +52,35 @@ export function isGitAvailable() {
 }
 
 /**
- * Create a git commit for a scene file (pre-edit snapshot)
+ * Create a git commit for one or more scene-related files
  * Returns { commit_hash: string, commit_message: string }
  */
-export function createSnapshot(dirPath, filePath, sceneId, instruction) {
+export function createSnapshot(dirPath, filePath, sceneId, instruction, options = {}) {
   try {
-    const relPath = path.relative(dirPath, filePath);
-    execSync(`git add "${relPath}"`, { cwd: dirPath, stdio: "pipe" });
+    const { messagePrefix = "pre-edit snapshot" } = options;
+    const inputPaths = Array.isArray(filePath) ? filePath : [filePath];
+    const relPaths = [...new Set(inputPaths
+      .filter(Boolean)
+      .map(p => path.relative(dirPath, p)))];
+    if (!relPaths.length) {
+      throw new Error("No file paths provided for snapshot");
+    }
+    // Use -A so removed/renamed paths are staged as part of relocation snapshots.
+    execFileSync("git", ["add", "-A", "--", ...relPaths], { cwd: dirPath, stdio: "pipe" });
 
-    const commitMessage = `pre-edit snapshot: ${sceneId} — ${instruction}`;
-    // Use 2>&1 so git's stderr (where it prints "[branch hash] msg") is captured in stdout
-    const output = execSync(`git commit -m "${commitMessage.replace(/"/g, '\\"')}" 2>&1`, {
+    const commitMessage = messagePrefix
+      ? `${messagePrefix}: ${sceneId} — ${instruction}`
+      : String(instruction);
+
+    execFileSync("git", ["commit", "-m", commitMessage], {
       cwd: dirPath,
-      encoding: "utf8",
       stdio: "pipe",
     });
-
-    // git outputs "[branch hash] message" to stderr; redirect 2>&1 captures it in stdout
-    // Regex handles any branch name, with or without (root-commit)
-    const match = output.match(/\[\S+(?:\s+\(root-commit\))?\s+([a-f0-9]+)\]/);
-    const commitHash = match ? match[1] : null;
+    const commitHash = execFileSync("git", ["rev-parse", "HEAD"], {
+      cwd: dirPath,
+      stdio: "pipe",
+      encoding: "utf8",
+    }).trim();
 
     return {
       commit_hash: commitHash,
@@ -79,7 +88,10 @@ export function createSnapshot(dirPath, filePath, sceneId, instruction) {
     };
   } catch (err) {
     // Check if nothing changed (no error, just no commit)
-    if (err.message.includes("nothing to commit") || err.status === 1) {
+    const stderr = err?.stderr ? String(err.stderr) : "";
+    const stdout = err?.stdout ? String(err.stdout) : "";
+    const text = `${stderr}\n${stdout}\n${err?.message ?? ""}`;
+    if (text.includes("nothing to commit") || err.status === 1) {
       return {
         commit_hash: null,
         commit_message: null,

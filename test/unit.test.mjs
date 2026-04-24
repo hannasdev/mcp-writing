@@ -4,7 +4,7 @@ import os from "node:os";
 import fs from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { spawnSync } from "node:child_process";
+import { execSync, spawnSync } from "node:child_process";
 import yaml from "js-yaml";
 import {
   checksumProse,
@@ -1294,7 +1294,7 @@ describe("Scrivener direct metadata merge", () => {
     return scrivDir;
   }
 
-  function createSyncSidecarFixture(projectId = "test-import", extraSidecars = []) {
+  function createSyncSidecarFixture(projectId = "test-import", extraSidecars = [], includeProse = false) {
     const syncRoot = fs.mkdtempSync(path.join(os.tmpdir(), "scriv-merge-sync-"));
     const scenesDir = path.join(syncRoot, "projects", projectId, "scenes");
     fs.mkdirSync(scenesDir, { recursive: true });
@@ -1303,6 +1303,14 @@ describe("Scrivener direct metadata merge", () => {
       yaml.dump({ scene_id: "sc-001-arrival", logline: "Preserve this existing value." }),
       "utf8"
     );
+    // Only create matching prose file if explicitly requested (for relocation tests)
+    if (includeProse) {
+      fs.writeFileSync(
+        path.join(scenesDir, "001 Scene Arrival [1].md"),
+        "Elena arrives at the station and scans for familiar faces.\n",
+        "utf8"
+      );
+    }
 
     for (const extraSidecar of extraSidecars) {
       fs.writeFileSync(path.join(scenesDir, extraSidecar.name), yaml.dump(extraSidecar.data), "utf8");
@@ -1437,9 +1445,7 @@ describe("Scrivener direct metadata merge", () => {
 
   test("mergeScrivenerProjectMetadata relocates scene files into named chapter folders", () => {
     const scrivDir = createScrivenerProjectFixture({ chapterTitle: "Harbor Arrival" });
-    const { syncRoot, scenesDir } = createSyncSidecarFixture();
-    const prosePath = path.join(scenesDir, "001 Scene Arrival [1].txt");
-    fs.writeFileSync(prosePath, "Scene prose.\n", "utf8");
+    const { syncRoot, scenesDir } = createSyncSidecarFixture("test-import", [], true);
 
     try {
       const result = mergeScrivenerProjectMetadata({
@@ -1452,7 +1458,7 @@ describe("Scrivener direct metadata merge", () => {
 
       const targetDir = path.join(scenesDir, "part-1", "chapter-1-harbor-arrival");
       const relocatedSidecar = path.join(targetDir, "001 Scene Arrival [1].meta.yaml");
-      const relocatedProse = path.join(targetDir, "001 Scene Arrival [1].txt");
+      const relocatedProse = path.join(targetDir, "001 Scene Arrival [1].md");
       const sidecar = yaml.load(fs.readFileSync(relocatedSidecar, "utf8"));
 
       assert.equal(result.updated, 1);
@@ -1460,7 +1466,7 @@ describe("Scrivener direct metadata merge", () => {
       assert.equal(fs.existsSync(relocatedSidecar), true);
       assert.equal(fs.existsSync(relocatedProse), true);
       assert.equal(fs.existsSync(path.join(scenesDir, "001 Scene Arrival [1].meta.yaml")), false);
-      assert.equal(fs.existsSync(prosePath), false);
+      assert.equal(fs.existsSync(path.join(scenesDir, "001 Scene Arrival [1].md")), false);
       assert.equal(sidecar.chapter, 1);
       assert.equal(sidecar.chapter_title, "Harbor Arrival");
       assert.deepEqual(sidecar.tags, ["Elena Voss", "v1.2"]);
@@ -1766,9 +1772,557 @@ describe("Scrivener direct metadata merge", () => {
     }
   });
 
+  // -------------------------------------------------------------------------
+  // Compatibility matrix fixture tests (B, C, D)
+  // -------------------------------------------------------------------------
+
+  test("fixture B: project with no synopsis, no keywords, and no custom fields parses and merges without crash", () => {
+    // Fixture B tests that absent optional metadata files (synopsis.txt absent,
+    // empty keyword list, no MetaData elements) do not cause parser or merge errors.
+    const scrivDir = fs.mkdtempSync(path.join(os.tmpdir(), "scriv-fixture-b-"));
+    const scrivxPath = path.join(scrivDir, "Novel.scrivx");
+    fs.writeFileSync(
+      scrivxPath,
+      `<?xml version="1.0" encoding="UTF-8"?>
+<ScrivenerProject>
+  <ExternalSyncMap>
+    <SyncItem ID="UUID-B1">1</SyncItem>
+  </ExternalSyncMap>
+  <Keywords/>
+  <Binder>
+    <BinderItem Type="DraftFolder" UUID="draft-root">
+      <Children>
+        <BinderItem Type="Folder" UUID="part-b1">
+          <Title>Part One</Title>
+          <Children>
+            <BinderItem Type="Folder" UUID="chapter-b1">
+              <Title>Chapter One</Title>
+              <Children>
+                <BinderItem Type="Text" UUID="UUID-B1">
+                  <Title>Sparse Scene</Title>
+                </BinderItem>
+              </Children>
+            </BinderItem>
+          </Children>
+        </BinderItem>
+      </Children>
+    </BinderItem>
+  </Binder>
+</ScrivenerProject>`,
+      "utf8"
+    );
+    // Intentionally no Files/Data/UUID-B1/synopsis.txt — tests graceful absence handling.
+
+    const syncRoot = fs.mkdtempSync(path.join(os.tmpdir(), "scriv-fixture-b-sync-"));
+    const scenesDir = path.join(syncRoot, "projects", "fixture-b", "scenes");
+    fs.mkdirSync(scenesDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(scenesDir, "001 Sparse Scene [1].meta.yaml"),
+      yaml.dump({ scene_id: "sc-b-001", logline: "Preserved logline fixture B." }),
+      "utf8"
+    );
+
+    try {
+      const result = mergeScrivenerProjectMetadata({
+        scrivPath: scrivDir,
+        mcpSyncDir: syncRoot,
+        projectId: "fixture-b",
+        dryRun: true,
+      });
+
+      // Parse and merge must succeed (no throws)
+      assert.equal(typeof result, "object");
+
+      // Binder structure (part > chapter > text) provides chapter/part info;
+      // the scene is updated with those structural fields.
+      assert.equal(result.updated, 1);
+      assert.equal(result.unchanged, 0);
+
+      // No synopsis/tags/custom-field warnings expected
+      assert.deepEqual(result.warnings, []);
+      assert.deepEqual(result.warningSummary, {});
+
+      // Structural metadata should be added
+      assert.ok(result.fieldAddCounts.chapter >= 1, "chapter should be added");
+      assert.ok(result.fieldAddCounts.chapter_title >= 1, "chapter_title should be added");
+
+      // Existing sidecar fields preserved
+      const sidecar = yaml.load(
+        fs.readFileSync(path.join(scenesDir, "001 Sparse Scene [1].meta.yaml"), "utf8")
+      );
+      assert.equal(sidecar.scene_id, "sc-b-001");
+      assert.equal(sidecar.logline, "Preserved logline fixture B.");
+
+      // No tags, synopsis, or custom fields written (they were absent in the project)
+      assert.equal("tags" in sidecar, false);
+      assert.equal("synopsis" in sidecar, false);
+      assert.equal("save_the_cat_beat" in sidecar, false);
+    } finally {
+      fs.rmSync(scrivDir, { recursive: true, force: true });
+      fs.rmSync(syncRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("fixture C: custom-metadata-heavy project maps all known fields and warns on unknown fields", () => {
+    // Fixture C tests a project that uses all known custom metadata fields plus
+    // unknown fields that should be reported as ignored_custom_field warnings.
+    const scrivDir = fs.mkdtempSync(path.join(os.tmpdir(), "scriv-fixture-c-"));
+    const scrivxPath = path.join(scrivDir, "Novel.scrivx");
+    fs.writeFileSync(
+      scrivxPath,
+      `<?xml version="1.0" encoding="UTF-8"?>
+<ScrivenerProject>
+  <ExternalSyncMap>
+    <SyncItem ID="UUID-C1">1</SyncItem>
+    <SyncItem ID="UUID-C2">2</SyncItem>
+  </ExternalSyncMap>
+  <Keywords>
+    <Keyword ID="kw-c1"><Title>Protagonist</Title></Keyword>
+    <Keyword ID="kw-c2"><Title>Conflict</Title></Keyword>
+    <Keyword ID="kw-c3"><Title>v2.0</Title></Keyword>
+  </Keywords>
+  <Binder>
+    <BinderItem Type="DraftFolder" UUID="draft-root">
+      <Children>
+        <BinderItem Type="Folder" UUID="part-c1">
+          <Title>Act One</Title>
+          <Children>
+            <BinderItem Type="Folder" UUID="chapter-c1">
+              <Title>The Inciting Incident</Title>
+              <Children>
+                <BinderItem Type="Text" UUID="UUID-C1">
+                  <Keywords>
+                    <KeywordID>kw-c1</KeywordID>
+                    <KeywordID>kw-c2</KeywordID>
+                    <KeywordID>kw-c3</KeywordID>
+                  </Keywords>
+                  <MetaData>
+                    <MetaDataItem><FieldID>savethecat!</FieldID><Value>Catalyst</Value></MetaDataItem>
+                    <MetaDataItem><FieldID>causality</FieldID><Value>4</Value></MetaDataItem>
+                    <MetaDataItem><FieldID>stakes</FieldID><Value>5</Value></MetaDataItem>
+                    <MetaDataItem><FieldID>change</FieldID><Value>Crosses the threshold</Value></MetaDataItem>
+                    <MetaDataItem><FieldID>f:character</FieldID><Value>Yes</Value></MetaDataItem>
+                    <MetaDataItem><FieldID>f:mood</FieldID><Value>Yes</Value></MetaDataItem>
+                    <MetaDataItem><FieldID>f:theme</FieldID><Value>Yes</Value></MetaDataItem>
+                    <MetaDataItem><FieldID>custom:research-note</FieldID><Value>Check historical dates</Value></MetaDataItem>
+                    <MetaDataItem><FieldID>custom:editor-flag</FieldID><Value>Needs revision</Value></MetaDataItem>
+                  </MetaData>
+                </BinderItem>
+                <BinderItem Type="Text" UUID="UUID-C2">
+                  <MetaData>
+                    <MetaDataItem><FieldID>stakes</FieldID><Value>2</Value></MetaDataItem>
+                  </MetaData>
+                </BinderItem>
+              </Children>
+            </BinderItem>
+          </Children>
+        </BinderItem>
+      </Children>
+    </BinderItem>
+  </Binder>
+</ScrivenerProject>`,
+      "utf8"
+    );
+    fs.mkdirSync(path.join(scrivDir, "Files", "Data", "UUID-C1"), { recursive: true });
+    fs.mkdirSync(path.join(scrivDir, "Files", "Data", "UUID-C2"), { recursive: true });
+    fs.writeFileSync(
+      path.join(scrivDir, "Files", "Data", "UUID-C1", "synopsis.txt"),
+      "The protagonist steps into the unknown.",
+      "utf8"
+    );
+    fs.writeFileSync(
+      path.join(scrivDir, "Files", "Data", "UUID-C2", "synopsis.txt"),
+      "A quieter scene to contrast the catalyst.",
+      "utf8"
+    );
+
+    const syncRoot = fs.mkdtempSync(path.join(os.tmpdir(), "scriv-fixture-c-sync-"));
+    const scenesDir = path.join(syncRoot, "projects", "fixture-c", "scenes");
+    fs.mkdirSync(scenesDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(scenesDir, "001 Heavy Scene [1].meta.yaml"),
+      yaml.dump({ scene_id: "sc-c-001", logline: "Preserved logline C1." }),
+      "utf8"
+    );
+    fs.writeFileSync(
+      path.join(scenesDir, "002 Light Scene [2].meta.yaml"),
+      yaml.dump({ scene_id: "sc-c-002", logline: "Preserved logline C2." }),
+      "utf8"
+    );
+
+    try {
+      const result = mergeScrivenerProjectMetadata({
+        scrivPath: scrivDir,
+        mcpSyncDir: syncRoot,
+        projectId: "fixture-c",
+        dryRun: false,
+      });
+
+      assert.equal(result.updated, 2);
+      assert.equal(result.unchanged, 0);
+
+      // Unknown custom fields should produce ignored_custom_field warnings
+      assert.ok(result.warningSummary.ignored_custom_field, "expected ignored_custom_field in warningSummary");
+      assert.equal(result.warningSummary.ignored_custom_field.count, 2);
+      assert.ok(
+        result.warnings.some(w => w.code === "ignored_custom_field" && w.field_id === "custom:research-note"),
+        "expected warning for custom:research-note"
+      );
+      assert.ok(
+        result.warnings.some(w => w.code === "ignored_custom_field" && w.field_id === "custom:editor-flag"),
+        "expected warning for custom:editor-flag"
+      );
+
+      // All known fields should be written to scene C1's sidecar
+      const sidecar1 = yaml.load(
+        fs.readFileSync(path.join(scenesDir, "001 Heavy Scene [1].meta.yaml"), "utf8")
+      );
+      assert.equal(sidecar1.scene_id, "sc-c-001");
+      assert.equal(sidecar1.logline, "Preserved logline C1.");
+      assert.equal(sidecar1.save_the_cat_beat, "Catalyst");
+      assert.equal(sidecar1.causality, 4);
+      assert.equal(sidecar1.stakes, 5);
+      assert.equal(sidecar1.scene_change, "Crosses the threshold");
+      assert.deepEqual(sidecar1.scene_functions, ["character", "mood", "theme"]);
+      assert.equal(sidecar1.synopsis, "The protagonist steps into the unknown.");
+      assert.deepEqual(sidecar1.tags.sort(), ["Conflict", "Protagonist", "v2.0"]);
+      assert.equal(sidecar1.chapter, 1);
+      assert.equal(sidecar1.part, 1);
+
+      // Unknown fields must not appear in the sidecar
+      assert.equal("custom:research-note" in sidecar1, false);
+      assert.equal("custom:editor-flag" in sidecar1, false);
+
+      // Scene C2 gets stakes from custom metadata and structural info
+      const sidecar2 = yaml.load(
+        fs.readFileSync(path.join(scenesDir, "002 Light Scene [2].meta.yaml"), "utf8")
+      );
+      assert.equal(sidecar2.scene_id, "sc-c-002");
+      assert.equal(sidecar2.logline, "Preserved logline C2.");
+      assert.equal(sidecar2.stakes, 2);
+      assert.equal(sidecar2.synopsis, "A quieter scene to contrast the catalyst.");
+    } finally {
+      fs.rmSync(scrivDir, { recursive: true, force: true });
+      fs.rmSync(syncRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("fixture D: reordered binder hierarchy assigns chapter numbers by binder position, not sync number order", () => {
+    // Fixture D tests that chapter assignment is derived from binder traversal order,
+    // not from the sync number embedded in the filename. A scene with a lower sync
+    // number that appears in a later chapter must receive the higher chapter number.
+    const scrivDir = fs.mkdtempSync(path.join(os.tmpdir(), "scriv-fixture-d-"));
+    const scrivxPath = path.join(scrivDir, "Novel.scrivx");
+    fs.writeFileSync(
+      scrivxPath,
+      `<?xml version="1.0" encoding="UTF-8"?>
+<ScrivenerProject>
+  <ExternalSyncMap>
+    <SyncItem ID="UUID-D1">1</SyncItem>
+    <SyncItem ID="UUID-D2">2</SyncItem>
+  </ExternalSyncMap>
+  <Keywords/>
+  <Binder>
+    <BinderItem Type="DraftFolder" UUID="draft-root">
+      <Children>
+        <BinderItem Type="Folder" UUID="part-d1">
+          <Title>Part One</Title>
+          <Children>
+            <BinderItem Type="Folder" UUID="chapter-d1">
+              <Title>First Chapter</Title>
+              <Children>
+                <BinderItem Type="Text" UUID="UUID-D2">
+                  <Title>Scene Beta</Title>
+                </BinderItem>
+              </Children>
+            </BinderItem>
+            <BinderItem Type="Folder" UUID="chapter-d2">
+              <Title>Second Chapter</Title>
+              <Children>
+                <BinderItem Type="Text" UUID="UUID-D1">
+                  <Title>Scene Alpha</Title>
+                </BinderItem>
+              </Children>
+            </BinderItem>
+          </Children>
+        </BinderItem>
+      </Children>
+    </BinderItem>
+  </Binder>
+</ScrivenerProject>`,
+      "utf8"
+    );
+    // No synopsis files — testing structure-only merge
+
+    const syncRoot = fs.mkdtempSync(path.join(os.tmpdir(), "scriv-fixture-d-sync-"));
+    const scenesDir = path.join(syncRoot, "projects", "fixture-d", "scenes");
+    fs.mkdirSync(scenesDir, { recursive: true });
+    // Scene Alpha has the lower sync number [1] but lives in Chapter 2 in the binder
+    fs.writeFileSync(
+      path.join(scenesDir, "001 Scene Alpha [1].meta.yaml"),
+      yaml.dump({ scene_id: "sc-d-alpha" }),
+      "utf8"
+    );
+    // Scene Beta has the higher sync number [2] but lives in Chapter 1 in the binder
+    fs.writeFileSync(
+      path.join(scenesDir, "002 Scene Beta [2].meta.yaml"),
+      yaml.dump({ scene_id: "sc-d-beta" }),
+      "utf8"
+    );
+
+    try {
+      const result = mergeScrivenerProjectMetadata({
+        scrivPath: scrivDir,
+        mcpSyncDir: syncRoot,
+        projectId: "fixture-d",
+        dryRun: false,
+      });
+
+      assert.equal(result.updated, 2);
+      assert.deepEqual(result.warnings, []);
+
+      // Alpha [sync=1] is in Second Chapter (chapter 2) — binder position wins
+      const sidecarAlpha = yaml.load(
+        fs.readFileSync(path.join(scenesDir, "001 Scene Alpha [1].meta.yaml"), "utf8")
+      );
+      assert.equal(sidecarAlpha.chapter, 2, "Scene Alpha (sync 1) should be in chapter 2 per binder position");
+      assert.equal(sidecarAlpha.chapter_title, "Second Chapter");
+      assert.equal(sidecarAlpha.part, 1);
+
+      // Beta [sync=2] is in First Chapter (chapter 1) — binder position wins
+      const sidecarBeta = yaml.load(
+        fs.readFileSync(path.join(scenesDir, "002 Scene Beta [2].meta.yaml"), "utf8")
+      );
+      assert.equal(sidecarBeta.chapter, 1, "Scene Beta (sync 2) should be in chapter 1 per binder position");
+      assert.equal(sidecarBeta.chapter_title, "First Chapter");
+      assert.equal(sidecarBeta.part, 1);
+    } finally {
+      fs.rmSync(scrivDir, { recursive: true, force: true });
+      fs.rmSync(syncRoot, { recursive: true, force: true });
+    }
+  });
+
+  // -------------------------------------------------------------------------
+  // Phase E: Data Safety Hardening Tests
+  // -------------------------------------------------------------------------
+
+  test("mergeScrivenerProjectMetadata emits sidecar_missing_prose warning when prose cannot be found during relocation", () => {
+    const scrivDir = fs.mkdtempSync(path.join(os.tmpdir(), "scriv-orphan-"));
+    const scrivxPath = path.join(scrivDir, "Novel.scrivx");
+    fs.writeFileSync(
+      scrivxPath,
+      `<?xml version="1.0" encoding="UTF-8"?>
+<ScrivenerProject>
+  <ExternalSyncMap>
+    <SyncItem ID="UUID-E1">1</SyncItem>
+  </ExternalSyncMap>
+  <Keywords/>
+  <Binder>
+    <BinderItem Type="DraftFolder" UUID="draft-root">
+      <Children>
+        <BinderItem Type="Folder" UUID="part-e1">
+          <Title>Part One</Title>
+          <Children>
+            <BinderItem Type="Folder" UUID="chapter-e1">
+              <Title>Chapter One</Title>
+              <Children>
+                <BinderItem Type="Text" UUID="UUID-E1">
+                  <Title>Scene One</Title>
+                </BinderItem>
+              </Children>
+            </BinderItem>
+          </Children>
+        </BinderItem>
+      </Children>
+    </BinderItem>
+  </Binder>
+</ScrivenerProject>`,
+      "utf8"
+    );
+    // No Files/Data directory or synopsis — prose is missing
+
+    const syncRoot = fs.mkdtempSync(path.join(os.tmpdir(), "scriv-orphan-sync-"));
+    const scenesDir = path.join(syncRoot, "projects", "fixture-e", "scenes");
+    fs.mkdirSync(scenesDir, { recursive: true });
+    // Sidecar exists but no matching prose file; set part/chapter to different values
+    // so the merge will try to relocate it
+    fs.writeFileSync(
+      path.join(scenesDir, "001 Scene One [1].meta.yaml"),
+      yaml.dump({ scene_id: "sc-e-001", part: 99, chapter: 99 }),
+      "utf8"
+    );
+
+    try {
+      const result = mergeScrivenerProjectMetadata({
+        scrivPath: scrivDir,
+        mcpSyncDir: syncRoot,
+        projectId: "fixture-e",
+        dryRun: true,
+        organizeByChapters: true,
+      });
+
+      // Merge should issue sidecar_missing_prose warning
+      assert.ok(
+        result.warningSummary.sidecar_missing_prose,
+        "Expected sidecar_missing_prose warning in summary"
+      );
+      assert.equal(result.warningSummary.sidecar_missing_prose.count, 1);
+      assert.ok(
+        result.warnings.some(w => w.code === "sidecar_missing_prose"),
+        "Expected sidecar_missing_prose in warnings list"
+      );
+    } finally {
+      fs.rmSync(scrivDir, { recursive: true, force: true });
+      fs.rmSync(syncRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("mergeScrivenerProjectMetadata emits sidecar_missing_prose warning once in non-dry-run mode", () => {
+    const scrivDir = fs.mkdtempSync(path.join(os.tmpdir(), "scriv-orphan-live-"));
+    const scrivxPath = path.join(scrivDir, "Novel.scrivx");
+    fs.writeFileSync(
+      scrivxPath,
+      `<?xml version="1.0" encoding="UTF-8"?>
+<ScrivenerProject>
+  <ExternalSyncMap>
+    <SyncItem ID="UUID-E2">1</SyncItem>
+  </ExternalSyncMap>
+  <Keywords/>
+  <Binder>
+    <BinderItem Type="DraftFolder" UUID="draft-root">
+      <Children>
+        <BinderItem Type="Folder" UUID="part-e2">
+          <Title>Part One</Title>
+          <Children>
+            <BinderItem Type="Folder" UUID="chapter-e2">
+              <Title>Chapter One</Title>
+              <Children>
+                <BinderItem Type="Text" UUID="UUID-E2">
+                  <Title>Scene One</Title>
+                </BinderItem>
+              </Children>
+            </BinderItem>
+          </Children>
+        </BinderItem>
+      </Children>
+    </BinderItem>
+  </Binder>
+</ScrivenerProject>`,
+      "utf8"
+    );
+
+    const syncRoot = fs.mkdtempSync(path.join(os.tmpdir(), "scriv-orphan-live-sync-"));
+    const scenesDir = path.join(syncRoot, "projects", "fixture-e-live", "scenes");
+    fs.mkdirSync(scenesDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(scenesDir, "001 Scene One [1].meta.yaml"),
+      yaml.dump({ scene_id: "sc-e-002", part: 99, chapter: 99 }),
+      "utf8"
+    );
+
+    try {
+      const result = mergeScrivenerProjectMetadata({
+        scrivPath: scrivDir,
+        mcpSyncDir: syncRoot,
+        projectId: "fixture-e-live",
+        dryRun: false,
+        organizeByChapters: true,
+      });
+
+      assert.ok(result.warningSummary.sidecar_missing_prose);
+      assert.equal(result.warningSummary.sidecar_missing_prose.count, 1);
+    } finally {
+      fs.rmSync(scrivDir, { recursive: true, force: true });
+      fs.rmSync(syncRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("relocation snapshots stage deletion of original sidecar path", () => {
+    const scrivDir = createScrivenerProjectFixture({ chapterTitle: "Harbor Arrival" });
+    const { syncRoot } = createSyncSidecarFixture("test-import", [], true);
+
+    try {
+      execSync("git init", { cwd: syncRoot, stdio: "pipe" });
+      execSync("git config user.email writing-mcp@local", { cwd: syncRoot, stdio: "pipe" });
+      execSync("git config user.name writing-mcp", { cwd: syncRoot, stdio: "pipe" });
+      execSync("git add -A", { cwd: syncRoot, stdio: "pipe" });
+      execSync("git commit -m \"seed\"", { cwd: syncRoot, stdio: "pipe" });
+
+      const result = mergeScrivenerProjectMetadata({
+        scrivPath: scrivDir,
+        mcpSyncDir: syncRoot,
+        projectId: "test-import",
+        dryRun: false,
+        organizeByChapters: true,
+      });
+
+      assert.equal(result.relocated, 1);
+      const porcelain = execSync("git status --porcelain", { cwd: syncRoot, encoding: "utf8" }).trim();
+      assert.equal(porcelain, "", "Expected clean git working tree after relocation snapshot");
+    } finally {
+      fs.rmSync(scrivDir, { recursive: true, force: true });
+      fs.rmSync(syncRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("XML size check warns for .scrivx files larger than 50MB and continues", () => {
+    const scrivDir = fs.mkdtempSync(path.join(os.tmpdir(), "scriv-huge-"));
+    const scrivxPath = path.join(scrivDir, "Huge.scrivx");
+    
+    // Ensure Data directory exists for validation to proceed further
+    fs.mkdirSync(path.join(scrivDir, "Files", "Data"), { recursive: true });
+
+    // Create a valid .scrivx XML header followed by a huge comment to exceed 50MB
+    const validHeader = `<?xml version="1.0" encoding="UTF-8"?>
+<ScrivenerProject>
+  <ExternalSyncMap/>
+  <Keywords/>
+  <Binder/>
+<!-- `;
+    const trailer = " -->\n</ScrivenerProject>";
+
+    fs.writeFileSync(scrivxPath, validHeader, "utf8");
+    const fd = fs.openSync(scrivxPath, "a");
+    try {
+      const chunk = Buffer.alloc(1024 * 1024, "x");
+      for (let i = 0; i < 52; i++) {
+        fs.writeSync(fd, chunk);
+      }
+      fs.writeSync(fd, trailer);
+    } finally {
+      fs.closeSync(fd);
+    }
+
+    const syncRoot = fs.mkdtempSync(path.join(os.tmpdir(), "scriv-huge-sync-"));
+    const scenesDir = path.join(syncRoot, "projects", "fixture-huge", "scenes");
+    fs.mkdirSync(scenesDir, { recursive: true });
+
+    try {
+      const result = mergeScrivenerProjectMetadata({
+        scrivPath: scrivDir,
+        mcpSyncDir: syncRoot,
+        projectId: "fixture-huge",
+        dryRun: true,
+      });
+
+      assert.ok(
+        result.warningSummary.large_scrivx_file,
+        "Expected large_scrivx_file warning in summary"
+      );
+      assert.equal(result.warningSummary.large_scrivx_file.count, 1);
+      assert.ok(
+        result.warnings.some(w => w.code === "large_scrivx_file"),
+        "Expected large_scrivx_file warning in warnings list"
+      );
+    } finally {
+      fs.rmSync(scrivDir, { recursive: true, force: true });
+      fs.rmSync(syncRoot, { recursive: true, force: true });
+    }
+  });
+
   test("scripts/merge-scrivx.js remains runnable and writes merged metadata", () => {
     const scrivDir = createScrivenerProjectFixture();
-    const { syncRoot, scenesDir } = createSyncSidecarFixture();
+    const { syncRoot, scenesDir } = createSyncSidecarFixture("test-import", [], true);
 
     try {
       const result = spawnSync(

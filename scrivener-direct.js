@@ -3,6 +3,7 @@ import path from "node:path";
 import { DOMParser } from "@xmldom/xmldom";
 import yaml from "js-yaml";
 import { validateProjectId } from "./importer.js";
+import { createSnapshot, isGitRepository, isGitAvailable } from "./git.js";
 
 function attr(el, name) {
   return el?.getAttribute?.(name) ?? null;
@@ -93,8 +94,60 @@ function moveFileIfNeeded(fromPath, toPath) {
     if (!error || typeof error !== "object" || error.code !== "EXDEV") {
       throw error;
     }
-    fs.copyFileSync(fromPath, toPath);
-    fs.unlinkSync(fromPath);
+    // Cross-filesystem: copy then verify before unlink
+    try {
+      fs.copyFileSync(fromPath, toPath);
+      // Verify copy succeeded before deleting source
+      if (!fs.existsSync(toPath)) {
+        return {
+          moved: false,
+          warning: {
+            code: "relocate_copy_verification_failed",
+            message: "Failed to verify file copy to destination; source file preserved.",
+            from_path: fromPath,
+            to_path: toPath,
+          },
+        };
+      }
+      try {
+        fs.unlinkSync(fromPath);
+      } catch (unlinkErr) {
+        if (fs.existsSync(toPath)) {
+          try {
+            fs.unlinkSync(toPath);
+          } catch {
+            // Best effort; already in error state
+          }
+        }
+        return {
+          moved: false,
+          warning: {
+            code: "relocate_cross_filesystem_unlink_failed",
+            message: `Copied prose file but failed to remove source file: ${unlinkErr.message}. Source file preserved.`,
+            from_path: fromPath,
+            to_path: toPath,
+          },
+        };
+      }
+    } catch (copyErr) {
+      // Copy failed; ensure we don't leave partial destination files
+      if (fs.existsSync(toPath)) {
+        try {
+          fs.unlinkSync(toPath);
+        } catch {
+          // Best effort; already in error state
+        }
+      }
+      return {
+        moved: false,
+        warning: {
+          code: "relocate_cross_filesystem_copy_failed",
+          message: `Failed to copy prose file across filesystem: ${copyErr.message}. Source file preserved.`,
+          from_path: fromPath,
+          to_path: toPath,
+        },
+      };
+    }
   }
 
   return { moved: true };
@@ -339,7 +392,8 @@ export function mergeSidecarData(existing, mergeData) {
   };
 }
 
-export function loadScrivenerProjectData(scrivPath) {
+export function loadScrivenerProjectData(scrivPath, options = {}) {
+  const { onWarning } = options;
   const scrivPathAbs = path.resolve(scrivPath);
   if (!fs.existsSync(scrivPathAbs)) {
     throw new Error(`Scrivener bundle not found: ${scrivPathAbs}`);
@@ -360,6 +414,19 @@ export function loadScrivenerProjectData(scrivPath) {
     ?? scrivxFilesSorted[0];
   const scrivxPath = path.join(scrivPathAbs, preferredScrivx);
   const dataDir = path.join(scrivPathAbs, "Files", "Data");
+
+  // XML size guardrail: surface warning if .scrivx is very large.
+  const scrivxStat = fs.statSync(scrivxPath);
+  const MAX_SCRIVX_SIZE = 50 * 1024 * 1024; // 50MB
+  if (scrivxStat.size > MAX_SCRIVX_SIZE) {
+    onWarning?.({
+      code: "large_scrivx_file",
+      message: `Scrivener project .scrivx file is unusually large (${Math.round(scrivxStat.size / 1024 / 1024)}MB). This is an advisory warning; parsing will continue but may take longer and use significantly more memory because XML is parsed in-memory.`,
+      scrivx_path: scrivxPath,
+      size_bytes: scrivxStat.size,
+      threshold_bytes: MAX_SCRIVX_SIZE,
+    });
+  }
 
   const xml = fs.readFileSync(scrivxPath, "utf8");
   const dom = new DOMParser().parseFromString(xml, "text/xml");
@@ -517,7 +584,16 @@ export function mergeScrivenerProjectMetadata({
     throw new Error(`Scenes directory not found or not a directory: ${scenesDir}`);
   }
 
-  const projectData = loadScrivenerProjectData(scrivPath);
+  const warnings = [];
+  const warningSummary = {};
+  let warningsTruncated = false;
+
+  const projectData = loadScrivenerProjectData(scrivPath, {
+    onWarning: (warning) => {
+      warningsTruncated = pushWarning(warnings, warningSummary, warning) || warningsTruncated;
+      logger(`  WARN  ${warning.message}`);
+    },
+  });
   logger(`Sync map: ${Object.keys(projectData.syncNumToUUID).length} entries`);
   logger(`Keyword map: ${Object.keys(projectData.keywordMap).length} entries`);
   logger(`Binder items collected: ${Object.keys(projectData.metaByUUID).length}`);
@@ -533,10 +609,7 @@ export function mergeScrivenerProjectMetadata({
   let relocated = 0;
   const fieldAddCounts = {};
   const previewChanges = [];
-  const warnings = [];
-  const warningSummary = {};
-  let warningsTruncated = false;
-
+  const canCreateSnapshots = !dryRun && isGitAvailable() && isGitRepository(mcpSyncDirAbs);
   for (const sidecarPath of sidecarFiles) {
     const filename = path.basename(sidecarPath);
     const prosePath = findProsePathForSidecar(sidecarPath);
@@ -599,7 +672,20 @@ export function mergeScrivenerProjectMetadata({
     const targetProsePath = prosePath
       ? (organizeByChapters ? path.join(targetDir, path.basename(prosePath)) : prosePath)
       : null;
-    const needsMove = path.resolve(sidecarPath) !== path.resolve(targetSidecarPath)
+    const desiredSidecarRelocation = organizeByChapters
+      && path.resolve(sidecarPath) !== path.resolve(targetSidecarPath);
+
+    // Orphan detection: warn once if sidecar has no matching prose and relocation would be attempted.
+    if (!prosePath && desiredSidecarRelocation) {
+      warningsTruncated = pushWarning(warnings, warningSummary, {
+        code: "sidecar_missing_prose",
+        message: "Sidecar has no matching prose file (.md or .txt); relocation skipped to preserve consistency.",
+        file: filename,
+        uuid,
+      }) || warningsTruncated;
+    }
+
+    const needsMove = desiredSidecarRelocation
       || (prosePath && targetProsePath && path.resolve(prosePath) !== path.resolve(targetProsePath));
 
     if (!changed && !needsMove) {
@@ -629,10 +715,14 @@ export function mergeScrivenerProjectMetadata({
       if (needsMove) {
         logger(`        -> ${path.relative(scenesDir, targetSidecarPath) || filename}`);
       }
-      didRelocate = needsMove;
+      const dryRunRelocateEligible = desiredSidecarRelocation
+        && prosePath
+        && (!fs.existsSync(targetSidecarPath))
+        && (!targetProsePath || path.resolve(prosePath) === path.resolve(targetProsePath) || !fs.existsSync(targetProsePath));
+      didRelocate = needsMove && dryRunRelocateEligible;
     } else {
       let proseMoveWarning = null;
-      let shouldRelocateSidecar = organizeByChapters;
+      let shouldRelocateSidecar = desiredSidecarRelocation;
 
       if (
         shouldRelocateSidecar
@@ -651,6 +741,11 @@ export function mergeScrivenerProjectMetadata({
             file: filename,
           }
         ) || warningsTruncated;
+      }
+
+      // Prevent relocation if sidecar is orphaned (no matching prose)
+      if (shouldRelocateSidecar && !prosePath) {
+        shouldRelocateSidecar = false;
       }
 
       if (shouldRelocateSidecar && prosePath && targetProsePath) {
@@ -678,6 +773,25 @@ export function mergeScrivenerProjectMetadata({
         && fs.existsSync(sidecarPath)
       ) {
         fs.unlinkSync(sidecarPath);
+      }
+
+      // Create git snapshot for audit trail (only on actual writes, not dry-run)
+      if (canCreateSnapshots) {
+        try {
+          const sceneId = existing?.scene_id ?? `[${syncNum}]`;
+          const commitMessage = `beta merge Scrivener project metadata [${uuid}]`;
+          let snapshotPaths = finalSidecarPath;
+          if (shouldRelocateSidecar) {
+            snapshotPaths = [finalSidecarPath, sidecarPath];
+            if (prosePath && targetProsePath && path.resolve(prosePath) !== path.resolve(targetProsePath)) {
+              snapshotPaths.push(prosePath, targetProsePath);
+            }
+          }
+          createSnapshot(mcpSyncDirAbs, snapshotPaths, sceneId, commitMessage, { messagePrefix: null });
+        } catch (err) {
+          // Snapshot creation errors should not block the merge; log and continue
+          logger(`  WARN  git snapshot creation failed for ${filename}: ${err.message}`);
+        }
       }
 
       const changes = [];
