@@ -339,15 +339,87 @@ function loadBundleSceneRows(dbHandle, projectId, sceneIds) {
   }
 
   const rowMap = new Map(rows.map(row => [row.scene_id, row]));
-  return sceneIds.map(sceneId => rowMap.get(sceneId)).filter(Boolean);
+  const orderedRows = [];
+  const missingSceneIds = [];
+
+  for (const sceneId of sceneIds) {
+    const row = rowMap.get(sceneId);
+    if (row) {
+      orderedRows.push(row);
+    } else {
+      missingSceneIds.push(sceneId);
+    }
+  }
+
+  if (missingSceneIds.length > 0) {
+    throw new ReviewBundlePlanError(
+      "MISSING_SCENE_ROWS",
+      `Bundle includes ${missingSceneIds.length} scene(s) that could not be loaded from the database.`,
+      {
+        project_id: projectId,
+        missing_scene_ids: missingSceneIds,
+        requested_scene_count: sceneIds.length,
+        resolved_scene_count: orderedRows.length,
+      }
+    );
+  }
+
+  return orderedRows;
 }
 
-function readProse(filePath) {
+function normalizeRelativePath(inputPath) {
+  return String(inputPath).replace(/\\/g, "/").replace(/^\.\//, "");
+}
+
+function resolveSceneFilePath(filePath, { syncDir } = {}) {
+  if (!filePath) return null;
+
+  const normalizedSyncDir = syncDir ? path.resolve(syncDir) : null;
+  const candidates = [];
+
+  if (path.isAbsolute(filePath)) {
+    candidates.push(filePath);
+  } else {
+    candidates.push(path.resolve(filePath));
+    if (normalizedSyncDir) {
+      const rel = normalizeRelativePath(filePath);
+      candidates.push(path.resolve(normalizedSyncDir, rel));
+      if (rel === "sync" || rel.startsWith("sync/")) {
+        candidates.push(path.resolve(normalizedSyncDir, rel.replace(/^sync\/?/, "")));
+      }
+    }
+  }
+
+  for (const candidate of candidates) {
+    if (candidate && fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  return candidates[0] ?? null;
+}
+
+function readProse(filePath, { syncDir } = {}) {
+  const resolvedPath = resolveSceneFilePath(filePath, { syncDir });
+  if (!resolvedPath) return null;
   try {
-    const raw = fs.readFileSync(filePath, "utf8");
+    const raw = fs.readFileSync(resolvedPath, "utf8");
     return matter(raw).content.trim();
-  } catch {
-    return null;
+  } catch (error) {
+    const errorCode = error && typeof error === "object" && "code" in error && typeof error.code === "string"
+      ? error.code
+      : null;
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    throw new ReviewBundlePlanError(
+      "SCENE_PROSE_READ_FAILED",
+      `Failed to read scene prose from ${resolvedPath}.`,
+      {
+        file_path: filePath,
+        resolved_path: resolvedPath,
+        error_code: errorCode,
+        cause: errorMessage,
+      }
+    );
   }
 }
 
@@ -376,7 +448,7 @@ function renderSceneBlock(scene, options) {
       parts.push(`_${escapeMarkdown(summaryParts.join(" | "))}_`);
     }
     if (scene.logline) {
-      parts.push(scene.logline.trim());
+      parts.push(escapeMarkdown(scene.logline.trim()));
     }
     return parts.join("\n\n");
   }
@@ -416,6 +488,7 @@ export function renderReviewBundleMarkdown(dbHandle, plan, { generatedAt } = {})
   const includeSceneIds = Boolean(plan.resolved_scope?.options?.include_scene_ids);
   const includeMetadataSidebar = Boolean(plan.resolved_scope?.options?.include_metadata_sidebar);
   const includeParagraphAnchors = Boolean(plan.resolved_scope?.options?.include_paragraph_anchors);
+  const syncDir = process.env.WRITING_SYNC_DIR;
 
   const sceneIds = plan.ordering.map(row => row.scene_id);
   const rows = loadBundleSceneRows(dbHandle, plan.resolved_scope.project_id, sceneIds);
@@ -433,7 +506,7 @@ export function renderReviewBundleMarkdown(dbHandle, plan, { generatedAt } = {})
   for (const scene of rows) {
     const withProse = {
       ...scene,
-      prose: profile === "editor_detailed" ? (readProse(scene.file_path) ?? "") : "",
+      prose: profile === "editor_detailed" ? (readProse(scene.file_path, { syncDir }) ?? "") : "",
     };
     sections.push(renderSceneBlock(withProse, {
       profile,

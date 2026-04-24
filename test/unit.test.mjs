@@ -33,7 +33,7 @@ import {
   mergeSidecarData,
 } from "../scrivener-direct.js";
 import { runSceneCharacterBatch } from "../scene-character-batch.js";
-import { buildReviewBundlePlan } from "../review-bundles.js";
+import { buildReviewBundlePlan, renderReviewBundleMarkdown, ReviewBundlePlanError } from "../review-bundles.js";
 
 function insertTestScene(db, {
   sceneId,
@@ -195,6 +195,116 @@ describe("buildReviewBundlePlan", () => {
       assert.equal(plan.strictness_result.can_proceed, false);
       assert.equal(plan.strictness_result.blockers[0].code, "STALE_METADATA");
       assert.ok(plan.warning_summary.metadata_stale);
+    } finally {
+      db.close();
+    }
+  });
+
+  test("renderReviewBundleMarkdown escapes outline loglines with markdown metacharacters", () => {
+    const db = setupReviewBundleTestDb();
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "bundle-outline-"));
+    const scenePath = path.join(tempDir, "sc-001.md");
+    fs.writeFileSync(scenePath, "Plain prose body.\n", "utf8");
+
+    try {
+      const now = new Date().toISOString();
+      db.prepare(`
+        INSERT INTO scenes (
+          scene_id, project_id, title, part, chapter, timeline_position, word_count,
+          logline, file_path, prose_checksum, metadata_stale, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        "sc-001",
+        "test-novel",
+        "Markdown Test",
+        1,
+        1,
+        1,
+        10,
+        "A *bold* [link] `code` logline",
+        scenePath,
+        "deadbeef",
+        0,
+        now
+      );
+
+      const plan = buildReviewBundlePlan(db, {
+        project_id: "test-novel",
+        profile: "outline_discussion",
+      });
+      const markdown = renderReviewBundleMarkdown(db, plan, { generatedAt: "2026-01-01T00:00:00.000Z" });
+
+      assert.ok(markdown.includes("A \\*bold\\* \\[link\\] \\`code\\` logline"));
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+      db.close();
+    }
+  });
+
+  test("renderReviewBundleMarkdown throws when planned scene rows are missing", () => {
+    const db = setupReviewBundleTestDb();
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "bundle-missing-rows-"));
+    const scenePath = path.join(tempDir, "sc-001.md");
+    fs.writeFileSync(scenePath, "Plain prose body.\n", "utf8");
+
+    try {
+      const now = new Date().toISOString();
+      db.prepare(`
+        INSERT INTO scenes (
+          scene_id, project_id, title, part, chapter, timeline_position, word_count,
+          file_path, prose_checksum, metadata_stale, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        "sc-001",
+        "test-novel",
+        "Missing Row Test",
+        1,
+        1,
+        1,
+        10,
+        scenePath,
+        "deadbeef",
+        0,
+        now
+      );
+
+      const plan = buildReviewBundlePlan(db, {
+        project_id: "test-novel",
+        profile: "editor_detailed",
+      });
+
+      db.prepare(`DELETE FROM scenes WHERE scene_id = ? AND project_id = ?`).run("sc-001", "test-novel");
+
+      assert.throws(
+        () => renderReviewBundleMarkdown(db, plan, { generatedAt: "2026-01-01T00:00:00.000Z" }),
+        error => error instanceof ReviewBundlePlanError && error.code === "MISSING_SCENE_ROWS"
+      );
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+      db.close();
+    }
+  });
+
+  test("renderReviewBundleMarkdown throws when scene prose cannot be read", () => {
+    const db = setupReviewBundleTestDb();
+    try {
+      insertTestScene(db, {
+        sceneId: "sc-001",
+        part: 1,
+        chapter: 1,
+        timelinePosition: 1,
+        wordCount: 10,
+      });
+
+      const plan = buildReviewBundlePlan(db, {
+        project_id: "test-novel",
+        profile: "editor_detailed",
+      });
+
+      assert.throws(
+        () => renderReviewBundleMarkdown(db, plan, { generatedAt: "2026-01-01T00:00:00.000Z" }),
+        error => error instanceof ReviewBundlePlanError && error.code === "SCENE_PROSE_READ_FAILED"
+      );
     } finally {
       db.close();
     }

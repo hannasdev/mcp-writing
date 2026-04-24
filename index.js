@@ -51,6 +51,38 @@ function isPathInsideSyncDir(candidatePath) {
   return !(rel.startsWith("..") || path.isAbsolute(rel));
 }
 
+function resolveOutputDirWithinSync(outputDir) {
+  let resolvedOutputDir = path.resolve(outputDir);
+  let existingAncestor = resolvedOutputDir;
+
+  while (!fs.existsSync(existingAncestor)) {
+    const parentDir = path.dirname(existingAncestor);
+    if (parentDir === existingAncestor) {
+      throw new ReviewBundlePlanError(
+        "INVALID_OUTPUT_DIR",
+        "output_dir must be inside WRITING_SYNC_DIR.",
+        { output_dir: resolvedOutputDir, sync_dir: SYNC_DIR_ABS }
+      );
+    }
+    existingAncestor = parentDir;
+  }
+
+  const realExistingAncestor = fs.realpathSync.native(existingAncestor);
+  const relativeFromAncestor = path.relative(existingAncestor, resolvedOutputDir);
+  resolvedOutputDir = path.resolve(realExistingAncestor, relativeFromAncestor);
+
+  const relativeToSyncDir = path.relative(SYNC_DIR_REAL, resolvedOutputDir);
+  if (relativeToSyncDir.startsWith("..") || path.isAbsolute(relativeToSyncDir)) {
+    throw new ReviewBundlePlanError(
+      "INVALID_OUTPUT_DIR",
+      "output_dir must be inside WRITING_SYNC_DIR.",
+      { output_dir: resolvedOutputDir, sync_dir: SYNC_DIR_ABS }
+    );
+  }
+
+  return { resolvedOutputDir, relativeToSyncDir };
+}
+
 function parsePositiveIntEnv(rawValue, defaultValue) {
   const parsed = parseInt(rawValue ?? String(defaultValue), 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : defaultValue;
@@ -1406,28 +1438,20 @@ function createMcpServer() {
         return errorResponse("INVALID_PROJECT_ID", projectIdCheck.reason, { project_id });
       }
 
-      const resolvedOutputDir = path.resolve(output_dir);
-      if (!isPathInsideSyncDir(resolvedOutputDir)) {
-        return errorResponse(
-          "INVALID_OUTPUT_DIR",
-          "output_dir must be inside WRITING_SYNC_DIR.",
-          { output_dir: resolvedOutputDir, sync_dir: SYNC_DIR_ABS }
-        );
-      }
-      const outputDirSegments = path
-        .relative(SYNC_DIR_REAL, resolvedOutputDir)
-        .split(path.sep)
-        .filter(Boolean)
-        .map(segment => segment.toLowerCase());
-      if (outputDirSegments.includes("scenes")) {
-        return errorResponse(
-          "INVALID_OUTPUT_DIR",
-          "output_dir cannot be inside a scenes directory. Choose a dedicated export folder under WRITING_SYNC_DIR.",
-          { output_dir: resolvedOutputDir }
-        );
-      }
-
       try {
+        const { resolvedOutputDir, relativeToSyncDir } = resolveOutputDirWithinSync(output_dir);
+        const outputDirSegments = relativeToSyncDir
+          .split(path.sep)
+          .filter(Boolean)
+          .map(segment => segment.toLowerCase());
+        if (outputDirSegments.includes("scenes")) {
+          return errorResponse(
+            "INVALID_OUTPUT_DIR",
+            "output_dir cannot be inside a scenes directory. Choose a dedicated export folder under WRITING_SYNC_DIR.",
+            { output_dir: resolvedOutputDir }
+          );
+        }
+
         const plan = buildReviewBundlePlan(db, {
           project_id,
           profile,

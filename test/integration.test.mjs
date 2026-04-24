@@ -1853,6 +1853,27 @@ describe("create_review_bundle tool", () => {
       fs.rmSync(outDir, { recursive: true, force: true });
     }
   });
+
+  test("returns INVALID_OUTPUT_DIR when output_dir routes through a symlink outside WRITING_SYNC_DIR", async () => {
+    const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-writing-bundle-symlink-outside-"));
+    const symlinkDir = path.join(writeSyncDir, "exports-link");
+    try {
+      fs.symlinkSync(outsideDir, symlinkDir, "dir");
+
+      const text = await callWriteTool("create_review_bundle", {
+        project_id: "test-novel",
+        profile: "outline_discussion",
+        output_dir: path.join(symlinkDir, "nested-output"),
+      });
+      const parsed = JSON.parse(text);
+
+      assert.equal(parsed.ok, false);
+      assert.equal(parsed.error.code, "INVALID_OUTPUT_DIR");
+    } finally {
+      fs.rmSync(symlinkDir, { recursive: true, force: true });
+      fs.rmSync(outsideDir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("get_scene_prose tool", () => {
