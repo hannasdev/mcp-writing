@@ -126,6 +126,73 @@ const KNOWN_CUSTOM_FIELD_IDS = new Set([
 ]);
 
 const MAX_RETURNED_WARNINGS = 25;
+const STRUCTURE_MAPPING_FIELDS = new Set(["part", "chapter", "chapter_title"]);
+
+function normalizeComparisonValue(key, value) {
+  if ((key === "tags" || key === "scene_functions") && Array.isArray(value)) {
+    return [...new Set(value.map(item => String(item)))].sort();
+  }
+  return value;
+}
+
+function valuesEquivalentForMerge(key, a, b) {
+  return JSON.stringify(normalizeComparisonValue(key, a)) === JSON.stringify(normalizeComparisonValue(key, b));
+}
+
+function collectAmbiguityWarnings(existing, mergeData, { file, uuid }) {
+  const out = [];
+
+  const externalSource = existing?.external_source;
+  if (externalSource !== undefined && externalSource !== null && externalSource !== "scrivener") {
+    out.push({
+      code: "ambiguous_identity_tie",
+      message: "Existing sidecar identity source conflicts with Scrivener mapping; keeping existing sidecar identity.",
+      reason: "external_source_conflict",
+      external_source: String(externalSource),
+      file,
+      uuid,
+    });
+  }
+  if (externalSource === "scrivener" && (existing?.external_id === undefined || existing?.external_id === null || String(existing.external_id).trim() === "")) {
+    out.push({
+      code: "ambiguous_identity_tie",
+      message: "Existing sidecar identity is marked as Scrivener but missing external_id; keeping existing sidecar identity.",
+      reason: "missing_external_id",
+      file,
+      uuid,
+    });
+  }
+
+  for (const [key, scrivenerValue] of Object.entries(mergeData)) {
+    if (!Object.hasOwn(existing, key)) continue;
+    if (valuesEquivalentForMerge(key, existing[key], scrivenerValue)) continue;
+
+    if (STRUCTURE_MAPPING_FIELDS.has(key)) {
+      out.push({
+        code: "ambiguous_structure_mapping",
+        message: `Existing sidecar field '${key}' conflicts with Scrivener-derived structure; keeping existing value.`,
+        field: key,
+        existing_value: existing[key],
+        scrivener_value: scrivenerValue,
+        file,
+        uuid,
+      });
+      continue;
+    }
+
+    out.push({
+      code: "ambiguous_metadata_mapping",
+      message: `Existing sidecar field '${key}' conflicts with Scrivener metadata; keeping existing value.`,
+      field: key,
+      existing_value: existing[key],
+      scrivener_value: scrivenerValue,
+      file,
+      uuid,
+    });
+  }
+
+  return out;
+}
 
 function recordWarning(summary, warning) {
   if (!summary[warning.code]) {
@@ -137,7 +204,21 @@ function recordWarning(summary, warning) {
 
   if (entry.examples.length < 5) {
     const example = { message: warning.message };
-    for (const key of ["file", "sync_number", "field_id", "value", "uuid", "from_path", "to_path", "moved_to"]) {
+    for (const key of [
+      "file",
+      "sync_number",
+      "field",
+      "field_id",
+      "value",
+      "reason",
+      "external_source",
+      "existing_value",
+      "scrivener_value",
+      "uuid",
+      "from_path",
+      "to_path",
+      "moved_to",
+    ]) {
       if (warning[key] !== undefined && warning[key] !== null) {
         example[key] = warning[key];
       }
@@ -500,6 +581,11 @@ export function mergeScrivenerProjectMetadata({
       throw new Error(`Invalid sidecar YAML mapping at ${sidecarPath}`);
     }
     const existing = existingRaw ?? {};
+    const ambiguityWarnings = collectAmbiguityWarnings(existing, mergeData, { file: filename, uuid });
+    for (const warning of ambiguityWarnings) {
+      warningsTruncated = pushWarning(warnings, warningSummary, warning) || warningsTruncated;
+    }
+
     const { merged, changed, newKeys } = mergeSidecarData(existing, mergeData);
     const effective = changed ? merged : existing;
     const targetDir = sceneContainerDir(
