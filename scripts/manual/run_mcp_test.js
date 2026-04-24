@@ -3,11 +3,20 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import path from "path";
 import process from "process";
 
+function usage() {
+  console.log("Usage: node scripts/manual/run_mcp_test.js <source_project_dir> [project_id] [sync_dir]");
+  console.log("Example: node scripts/manual/run_mcp_test.js ~/Novel.scriv demo-project ~/sync-root");
+}
+
 async function runCase(env, args) {
   const transport = new StdioClientTransport({
-    command: "node",
-    args: [path.join(process.cwd(), "index.js")],
-    env: { ...process.env, ...env }
+    command: process.execPath,
+    args: ["--experimental-sqlite", path.join(process.cwd(), "index.js")],
+    env: {
+      ...process.env,
+      MCP_TRANSPORT: "stdio",
+      ...env,
+    }
   });
 
   const client = new Client({
@@ -41,11 +50,11 @@ async function runCase(env, args) {
     console.log(`Job started: ${jobId}`);
 
     // Poll for completion (with timeout)
-    let completed = false;
+    let settled = false;
     let attempts = 0;
     const maxAttempts = 120; // 120 * 500ms = 60 seconds
 
-    while (!completed && attempts < maxAttempts) {
+    while (!settled && attempts < maxAttempts) {
       await new Promise(resolve => setTimeout(resolve, 500));
       
       const statusResult = await client.callTool({
@@ -54,11 +63,20 @@ async function runCase(env, args) {
       });
 
       const statusData = JSON.parse(statusResult.content[0].text);
-      
-      if (statusData.ok && statusData.job.status === "completed") {
-        completed = true;
+
+      if (!statusData.ok) {
+        console.log(`error.code/message: ${statusData.error?.code || "unknown"}`);
+        settled = true;
+      }
+
+      const terminalStatuses = new Set(["completed", "failed", "cancelled"]);
+      if (!settled && terminalStatuses.has(statusData.job?.status)) {
+        settled = true;
+      }
+
+      if (statusData.job?.status === "completed") {
         const result = statusData.job.result;
-        
+
         if (!result.ok) {
           console.log(`error.code/message: ${result.error?.code}`);
         } else {
@@ -68,11 +86,16 @@ async function runCase(env, args) {
           if (merge.updated) console.log(`updated: ${merge.updated}`);
         }
       }
+
+      if (statusData.job?.status === "failed" || statusData.job?.status === "cancelled") {
+        const details = statusData.job?.result?.error?.code || statusData.job?.status;
+        console.log(`error.code/message: ${details}`);
+      }
       
       attempts++;
     }
 
-    if (!completed) {
+    if (!settled) {
       console.log("error: job timeout");
     }
   } catch (e) {
@@ -81,18 +104,16 @@ async function runCase(env, args) {
 }
 
 async function main() {
-  console.log("Case A:");
-  await runCase({ WRITING_SYNC_DIR: '/Users/hanna/Code/writing' }, {
-    source_project_dir: '/Users/hanna/Documents/writing/mira nystrom/Sebastian the Vampire.scriv',
-    project_id: 'book-1-the-lamb',
-    dry_run: true
-  });
+  const [sourceProjectDir, projectId = "demo-project", syncDir = process.env.WRITING_SYNC_DIR || "./sync"] = process.argv.slice(2);
+  if (!sourceProjectDir) {
+    usage();
+    process.exit(1);
+  }
 
-  console.log("\nCase B:");
-  await runCase({ WRITING_SYNC_DIR: '/tmp/mcp-writing-PCUj6B' }, {
-    source_project_dir: '/Users/hanna/Documents/writing/mira nystrom/Sebastian the Vampire.scriv',
-    project_id: 'demo-mira',
-    dry_run: true
+  await runCase({ WRITING_SYNC_DIR: syncDir }, {
+    source_project_dir: sourceProjectDir,
+    project_id: projectId,
+    dry_run: true,
   });
   
   process.exit(0);

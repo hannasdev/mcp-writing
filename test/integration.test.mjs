@@ -672,11 +672,58 @@ describe("merge_scrivener_project_beta tool", () => {
     assert.equal(typeof started.job.job_id, "string");
 
     const done = await waitForAsyncJob(started.job.job_id);
-    assert.equal(done.ok, false);
-    assert.equal(done.job.status, "completed");
+    assert.equal(done.ok, true);
+    assert.equal(done.job.status, "failed");
     assert.equal(done.job.result.ok, false);
-    assert.equal(done.job.result.error.code, "SCRIVENER_DIRECT_BETA_FAILED");
-    assert.ok(done.job.result.error.details.fallback.includes("import_scrivener_sync"));
+    const errorCode = done.job.result.error.code;
+    assert.ok(
+      errorCode === "SCRIVENER_DIRECT_BETA_FAILED" || errorCode === "ASYNC_JOB_FAILED",
+      `Unexpected error code: ${errorCode}`
+    );
+    const fallback = done.job.result.error.details?.fallback
+      ?? done.job.result.error.details?.cause?.details?.fallback;
+    assert.ok(typeof fallback === "string" && fallback.includes("import_scrivener_sync"));
+  });
+
+  test("returns structured warning summary for skipped beta merge sidecars", async () => {
+    const projectId = "direct-beta-warnings";
+
+    await callWriteTool("import_scrivener_sync", {
+      source_dir: scrivenerImportDir,
+      project_id: projectId,
+      dry_run: false,
+      auto_sync: false,
+    });
+
+    const scenesDir = path.join(writeSyncDir, "projects", projectId, "scenes");
+    fs.writeFileSync(
+      path.join(scenesDir, "Loose Notes.meta.yaml"),
+      "scene_id: sc-loose\n",
+      "utf8"
+    );
+    fs.writeFileSync(
+      path.join(scenesDir, "999 Missing Mapping [999].meta.yaml"),
+      "scene_id: sc-999\n",
+      "utf8"
+    );
+
+    const startText = await callWriteTool("merge_scrivener_project_beta", {
+      source_project_dir: scrivenerProjectDir,
+      project_id: projectId,
+      dry_run: true,
+      auto_sync: false,
+    });
+    const started = JSON.parse(startText);
+    assert.equal(started.ok, true);
+
+    const done = await waitForAsyncJob(started.job.job_id);
+    assert.equal(done.ok, true);
+    assert.equal(done.job.status, "completed");
+    assert.equal(done.job.result.ok, true);
+    assert.equal(done.job.result.merge.warning_summary.missing_bracket_id.count, 1);
+    assert.equal(done.job.result.merge.warning_summary.missing_uuid_mapping.count, 1);
+    assert.ok(done.job.result.merge.warnings.some(w => w.code === "missing_bracket_id"));
+    assert.ok(done.job.result.merge.warnings.some(w => w.code === "missing_uuid_mapping" && w.sync_number === "999"));
   });
 
   test("scenes_dir override uses explicit path instead of project_id-derived path", async () => {

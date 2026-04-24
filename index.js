@@ -1177,7 +1177,7 @@ function createMcpServer() {
 
   s.tool(
     "get_async_job_status",
-    "Get status and result for an asynchronous job started by async tools such as import_scrivener_sync_async, merge_scrivener_project_beta, or enrich_scene_characters_batch. Use this to poll job progress after receiving a job_id. Common next step: if status is still running, call this tool again; if completed, inspect result and optionally run sync().",
+    "Get status and result for an asynchronous job started by async tools such as import_scrivener_sync_async, merge_scrivener_project_beta, or enrich_scene_characters_batch. Use this to poll job progress after receiving a job_id. Common next step: if status is still running, call this tool again; if status is completed inspect result, and if status is failed or cancelled inspect job/result diagnostics.",
     {
       job_id: z.string().describe("Job ID returned by an async start tool."),
       include_result: z.boolean().optional().describe("If true (default), includes completed result payload when available."),
