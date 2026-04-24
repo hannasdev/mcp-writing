@@ -2279,10 +2279,19 @@ describe("Scrivener direct metadata merge", () => {
   <Keywords/>
   <Binder/>
 <!-- `;
-    const hugeContent = "x".repeat(52 * 1024 * 1024);
     const trailer = " -->\n</ScrivenerProject>";
-    
-    fs.writeFileSync(scrivxPath, validHeader + hugeContent + trailer, "utf8");
+
+    fs.writeFileSync(scrivxPath, validHeader, "utf8");
+    const fd = fs.openSync(scrivxPath, "a");
+    try {
+      const chunk = Buffer.alloc(1024 * 1024, "x");
+      for (let i = 0; i < 52; i++) {
+        fs.writeSync(fd, chunk);
+      }
+      fs.writeSync(fd, trailer);
+    } finally {
+      fs.closeSync(fd);
+    }
 
     const syncRoot = fs.mkdtempSync(path.join(os.tmpdir(), "scriv-huge-sync-"));
     const scenesDir = path.join(syncRoot, "projects", "fixture-huge", "scenes");
