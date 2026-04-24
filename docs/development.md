@@ -149,7 +149,7 @@ Common causes:
 Fix:
 
 1. Confirm you passed the `.scriv` directory path itself.
-2. Re-run `merge_scrivener_project_beta` with `dry_run: true` and inspect `merge.warnings` / `merge.warning_summary` if present.
+2. Re-run `merge_scrivener_project_beta` with `dry_run: true` and poll the job with `get_async_job_status` to inspect `result.merge.warnings` / `result.merge.warning_summary` if present.
 3. If the parser still fails, use the stable fallback path: External Folder Sync plus `import_scrivener_sync`.
 
 Beta direct parsing is intentionally opt-in. A parser/schema mismatch should not block the stable sync-folder workflow.

@@ -75,7 +75,7 @@ There are two supported Scrivener ingestion paths, and they are not equally stab
 | Path | Stability | Use when | Tooling |
 | --- | --- | --- | --- |
 | External Folder Sync export | Stable default | First-time setup, routine imports, safest long-term path | `import_scrivener_sync`, `import_scrivener_sync_async` |
-| Direct `.scriv` project merge | Beta / opt-in | You already imported scenes and want extra metadata from Scrivener internals | `merge_scrivener_project_beta`, `merge_scrivener_project_beta_async` |
+| Direct `.scriv` project merge | Beta / opt-in | You already imported scenes and want extra metadata from Scrivener internals | `merge_scrivener_project_beta` (async) |
 
 Recommendation:
 
