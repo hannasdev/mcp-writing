@@ -14,7 +14,7 @@ export function isGitRepository(dirPath) {
       stdio: "pipe",
       encoding: "utf8",
     }).trim();
-    return path.resolve(gitRoot) === path.resolve(dirPath);
+    return fs.realpathSync(gitRoot) === fs.realpathSync(dirPath);
   } catch {
     return false;
   }
@@ -57,8 +57,16 @@ export function isGitAvailable() {
  */
 export function createSnapshot(dirPath, filePath, sceneId, instruction) {
   try {
-    const relPath = path.relative(dirPath, filePath);
-    execSync(`git add "${relPath}"`, { cwd: dirPath, stdio: "pipe" });
+    const inputPaths = Array.isArray(filePath) ? filePath : [filePath];
+    const relPaths = [...new Set(inputPaths
+      .filter(Boolean)
+      .map(p => path.relative(dirPath, p)))];
+    if (!relPaths.length) {
+      throw new Error("No file paths provided for snapshot");
+    }
+    const quotedPaths = relPaths.map(p => `"${String(p).replace(/"/g, '\\"')}"`).join(" ");
+    // Use -A so removed/renamed paths are staged as part of relocation snapshots.
+    execSync(`git add -A -- ${quotedPaths}`, { cwd: dirPath, stdio: "pipe" });
 
     const commitMessage = `pre-edit snapshot: ${sceneId} — ${instruction}`;
     // Use 2>&1 so git's stderr (where it prints "[branch hash] msg") is captured in stdout

@@ -109,9 +109,28 @@ function moveFileIfNeeded(fromPath, toPath) {
           },
         };
       }
-      fs.unlinkSync(fromPath);
+      try {
+        fs.unlinkSync(fromPath);
+      } catch (unlinkErr) {
+        if (fs.existsSync(toPath)) {
+          try {
+            fs.unlinkSync(toPath);
+          } catch {
+            // Best effort; already in error state
+          }
+        }
+        return {
+          moved: false,
+          warning: {
+            code: "relocate_cross_filesystem_unlink_failed",
+            message: `Copied prose file but failed to remove source file: ${unlinkErr.message}. Source file preserved.`,
+            from_path: fromPath,
+            to_path: toPath,
+          },
+        };
+      }
     } catch (copyErr) {
-      // Copy failed; ensure we don't leave duplicate files
+      // Copy failed; ensure we don't leave partial destination files
       if (fs.existsSync(toPath)) {
         try {
           fs.unlinkSync(toPath);
@@ -122,7 +141,7 @@ function moveFileIfNeeded(fromPath, toPath) {
       return {
         moved: false,
         warning: {
-          code: "relocate_cross_filesystem_failed",
+          code: "relocate_cross_filesystem_copy_failed",
           message: `Failed to copy prose file across filesystem: ${copyErr.message}. Source file preserved.`,
           from_path: fromPath,
           to_path: toPath,
@@ -652,9 +671,11 @@ export function mergeScrivenerProjectMetadata({
     const targetProsePath = prosePath
       ? (organizeByChapters ? path.join(targetDir, path.basename(prosePath)) : prosePath)
       : null;
+    const desiredSidecarRelocation = organizeByChapters
+      && path.resolve(sidecarPath) !== path.resolve(targetSidecarPath);
 
-    // Orphan detection: warn if sidecar has no matching prose but relocation is attempted
-    if (!prosePath && organizeByChapters && path.resolve(sidecarPath) !== path.resolve(targetSidecarPath)) {
+    // Orphan detection: warn once if sidecar has no matching prose and relocation would be attempted.
+    if (!prosePath && desiredSidecarRelocation) {
       warningsTruncated = pushWarning(warnings, warningSummary, {
         code: "sidecar_missing_prose",
         message: "Sidecar has no matching prose file (.md or .txt); relocation skipped to preserve consistency.",
@@ -663,7 +684,7 @@ export function mergeScrivenerProjectMetadata({
       }) || warningsTruncated;
     }
 
-    const needsMove = path.resolve(sidecarPath) !== path.resolve(targetSidecarPath)
+    const needsMove = desiredSidecarRelocation
       || (prosePath && targetProsePath && path.resolve(prosePath) !== path.resolve(targetProsePath));
 
     if (!changed && !needsMove) {
@@ -696,7 +717,7 @@ export function mergeScrivenerProjectMetadata({
       didRelocate = needsMove;
     } else {
       let proseMoveWarning = null;
-      let shouldRelocateSidecar = organizeByChapters;
+      let shouldRelocateSidecar = desiredSidecarRelocation;
 
       if (
         shouldRelocateSidecar
@@ -720,16 +741,6 @@ export function mergeScrivenerProjectMetadata({
       // Prevent relocation if sidecar is orphaned (no matching prose)
       if (shouldRelocateSidecar && !prosePath) {
         shouldRelocateSidecar = false;
-        warningsTruncated = pushWarning(
-          warnings,
-          warningSummary,
-          {
-            code: "sidecar_missing_prose",
-            message: "Skipped relocating sidecar because no matching prose file exists; keeping sidecar in current location.",
-            file: filename,
-            uuid,
-          }
-        ) || warningsTruncated;
       }
 
       if (shouldRelocateSidecar && prosePath && targetProsePath) {
@@ -764,7 +775,14 @@ export function mergeScrivenerProjectMetadata({
         try {
           const sceneId = existing?.scene_id ?? `[${syncNum}]`;
           const commitMessage = `beta merge Scrivener project metadata [${uuid}]`;
-          createSnapshot(mcpSyncDirAbs, finalSidecarPath, sceneId, commitMessage);
+          let snapshotPaths = finalSidecarPath;
+          if (shouldRelocateSidecar) {
+            snapshotPaths = [finalSidecarPath, sidecarPath];
+            if (prosePath && targetProsePath && path.resolve(prosePath) !== path.resolve(targetProsePath)) {
+              snapshotPaths.push(prosePath, targetProsePath);
+            }
+          }
+          createSnapshot(mcpSyncDirAbs, snapshotPaths, sceneId, commitMessage);
         } catch (err) {
           // Snapshot creation errors should not block the merge; log and continue
           logger(`  WARN  git snapshot creation failed for ${filename}: ${err.message}`);

@@ -4,7 +4,7 @@ import os from "node:os";
 import fs from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { spawnSync } from "node:child_process";
+import { execSync, spawnSync } from "node:child_process";
 import yaml from "js-yaml";
 import {
   checksumProse,
@@ -2171,6 +2171,94 @@ describe("Scrivener direct metadata merge", () => {
         result.warnings.some(w => w.code === "sidecar_missing_prose"),
         "Expected sidecar_missing_prose in warnings list"
       );
+    } finally {
+      fs.rmSync(scrivDir, { recursive: true, force: true });
+      fs.rmSync(syncRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("mergeScrivenerProjectMetadata emits sidecar_missing_prose warning once in non-dry-run mode", () => {
+    const scrivDir = fs.mkdtempSync(path.join(os.tmpdir(), "scriv-orphan-live-"));
+    const scrivxPath = path.join(scrivDir, "Novel.scrivx");
+    fs.writeFileSync(
+      scrivxPath,
+      `<?xml version="1.0" encoding="UTF-8"?>
+<ScrivenerProject>
+  <ExternalSyncMap>
+    <SyncItem ID="UUID-E2">1</SyncItem>
+  </ExternalSyncMap>
+  <Keywords/>
+  <Binder>
+    <BinderItem Type="DraftFolder" UUID="draft-root">
+      <Children>
+        <BinderItem Type="Folder" UUID="part-e2">
+          <Title>Part One</Title>
+          <Children>
+            <BinderItem Type="Folder" UUID="chapter-e2">
+              <Title>Chapter One</Title>
+              <Children>
+                <BinderItem Type="Text" UUID="UUID-E2">
+                  <Title>Scene One</Title>
+                </BinderItem>
+              </Children>
+            </BinderItem>
+          </Children>
+        </BinderItem>
+      </Children>
+    </BinderItem>
+  </Binder>
+</ScrivenerProject>`,
+      "utf8"
+    );
+
+    const syncRoot = fs.mkdtempSync(path.join(os.tmpdir(), "scriv-orphan-live-sync-"));
+    const scenesDir = path.join(syncRoot, "projects", "fixture-e-live", "scenes");
+    fs.mkdirSync(scenesDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(scenesDir, "001 Scene One [1].meta.yaml"),
+      yaml.dump({ scene_id: "sc-e-002", part: 99, chapter: 99 }),
+      "utf8"
+    );
+
+    try {
+      const result = mergeScrivenerProjectMetadata({
+        scrivPath: scrivDir,
+        mcpSyncDir: syncRoot,
+        projectId: "fixture-e-live",
+        dryRun: false,
+        organizeByChapters: true,
+      });
+
+      assert.ok(result.warningSummary.sidecar_missing_prose);
+      assert.equal(result.warningSummary.sidecar_missing_prose.count, 1);
+    } finally {
+      fs.rmSync(scrivDir, { recursive: true, force: true });
+      fs.rmSync(syncRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("relocation snapshots stage deletion of original sidecar path", () => {
+    const scrivDir = createScrivenerProjectFixture({ chapterTitle: "Harbor Arrival" });
+    const { syncRoot } = createSyncSidecarFixture("test-import", [], true);
+
+    try {
+      execSync("git init", { cwd: syncRoot, stdio: "pipe" });
+      execSync("git config user.email writing-mcp@local", { cwd: syncRoot, stdio: "pipe" });
+      execSync("git config user.name writing-mcp", { cwd: syncRoot, stdio: "pipe" });
+      execSync("git add -A", { cwd: syncRoot, stdio: "pipe" });
+      execSync("git commit -m \"seed\"", { cwd: syncRoot, stdio: "pipe" });
+
+      const result = mergeScrivenerProjectMetadata({
+        scrivPath: scrivDir,
+        mcpSyncDir: syncRoot,
+        projectId: "test-import",
+        dryRun: false,
+        organizeByChapters: true,
+      });
+
+      assert.equal(result.relocated, 1);
+      const porcelain = execSync("git status --porcelain", { cwd: syncRoot, encoding: "utf8" }).trim();
+      assert.equal(porcelain, "", "Expected clean git working tree after relocation snapshot");
     } finally {
       fs.rmSync(scrivDir, { recursive: true, force: true });
       fs.rmSync(syncRoot, { recursive: true, force: true });
