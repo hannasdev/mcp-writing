@@ -16,7 +16,6 @@ import { syncAll, isSyncDirWritable, getSyncOwnershipDiagnostics, getFileWriteDi
 import { isGitAvailable, isGitRepository, initGitRepository, createSnapshot, listSnapshots, getSceneProseAtCommit } from "./git.js";
 import { renderCharacterArcTemplate, renderCharacterSheetTemplate, renderPlaceSheetTemplate, slugifyEntityName } from "./world-entity-templates.js";
 import { importScrivenerSync, validateProjectId } from "./importer.js";
-import { mergeScrivenerProjectMetadata } from "./scrivener-direct.js";
 import { ASYNC_PROGRESS_PREFIX } from "./async-progress.js";
 
 const SYNC_DIR = process.env.WRITING_SYNC_DIR ?? "./sync";
