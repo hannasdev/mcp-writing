@@ -27,6 +27,7 @@ import { lintMetadataInSyncDir, validateMetadataObject } from "../metadata-lint.
 import { openDb } from "../db.js";
 import { importScrivenerSync } from "../importer.js";
 import {
+  IMPORTER_AUTHORITATIVE_FIELDS,
   loadScrivenerProjectData,
   mergeScrivenerProjectMetadata,
   mergeSidecarData,
@@ -1320,6 +1321,102 @@ describe("Scrivener direct metadata merge", () => {
     assert.deepEqual(result.newKeys, ["chapter", "characters"]);
     assert.equal(result.merged.title, "Keep title");
     assert.equal(result.merged.chapter, 2);
+  });
+
+  test("mergeSidecarData blocks importer-authoritative fields and reports them", () => {
+    const existing = {};
+    const mergeData = {
+      scene_id: "sc-should-not-write",
+      external_source: "scrivener",
+      external_id: "42",
+      title: "Should not write",
+      timeline_position: 5,
+      chapter: 2,
+    };
+
+    const result = mergeSidecarData(existing, mergeData);
+
+    assert.equal(result.changed, true);
+    assert.deepEqual(result.newKeys, ["chapter"]);
+    assert.deepEqual(result.blockedKeys.sort(), ["external_id", "external_source", "scene_id", "timeline_position", "title"]);
+    assert.equal("scene_id" in result.merged, false);
+    assert.equal("external_source" in result.merged, false);
+    assert.equal("external_id" in result.merged, false);
+    assert.equal("title" in result.merged, false);
+    assert.equal("timeline_position" in result.merged, false);
+    assert.equal(result.merged.chapter, 2);
+  });
+
+  test("mergeSidecarData returns empty blockedKeys when no authoritative fields attempted", () => {
+    const existing = { chapter: 1 };
+    const mergeData = { synopsis: "A new synopsis", tags: ["action"] };
+
+    const result = mergeSidecarData(existing, mergeData);
+
+    assert.deepEqual(result.blockedKeys, []);
+    assert.equal(result.changed, true);
+    assert.deepEqual(result.newKeys, ["synopsis", "tags"]);
+  });
+
+  test("mergeSidecarData no-op when all fields already present and none blocked", () => {
+    const existing = { chapter: 1, synopsis: "Keep this" };
+    const mergeData = { chapter: 99, synopsis: "New synopsis" };
+
+    const result = mergeSidecarData(existing, mergeData);
+
+    assert.equal(result.changed, false);
+    assert.deepEqual(result.newKeys, []);
+    assert.deepEqual(result.blockedKeys, []);
+    assert.equal(result.merged.chapter, 1);
+    assert.equal(result.merged.synopsis, "Keep this");
+  });
+
+  test("IMPORTER_AUTHORITATIVE_FIELDS contains expected identity fields", () => {
+    for (const field of ["scene_id", "external_source", "external_id", "title", "timeline_position"]) {
+      assert.ok(IMPORTER_AUTHORITATIVE_FIELDS.includes(field), `Expected ${field} to be authoritative`);
+    }
+    assert.ok(!IMPORTER_AUTHORITATIVE_FIELDS.includes("chapter"), "chapter should not be authoritative");
+    assert.ok(!IMPORTER_AUTHORITATIVE_FIELDS.includes("synopsis"), "synopsis should not be authoritative");
+    assert.ok(!IMPORTER_AUTHORITATIVE_FIELDS.includes("save_the_cat_beat"), "save_the_cat_beat should not be authoritative");
+    assert.ok(Object.isFrozen(IMPORTER_AUTHORITATIVE_FIELDS), "authoritative field list should be immutable");
+  });
+
+  test("walkYamls skips projects/ and universes/ mirror subdirectories", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "walkyamls-mirror-"));
+    try {
+      // Real sidecar in scenes/
+      fs.writeFileSync(path.join(root, "no-bracket.meta.yaml"), "scene_id: sc-001\n", "utf8");
+
+      // Mirror subdirectories that should be skipped
+      const projectsMirror = path.join(root, "projects", "my-novel", "scenes");
+      const universesMirror = path.join(root, "universes", "aether", "book-one", "scenes");
+      fs.mkdirSync(projectsMirror, { recursive: true });
+      fs.mkdirSync(universesMirror, { recursive: true });
+      fs.writeFileSync(path.join(projectsMirror, "no-bracket.meta.yaml"), "scene_id: sc-001\n", "utf8");
+      fs.writeFileSync(path.join(universesMirror, "no-bracket.meta.yaml"), "scene_id: sc-001\n", "utf8");
+
+      // mergeScrivenerProjectMetadata reports sidecarFiles: the count of files walkYamls found.
+      // If mirror dirs leaked through, sidecarFiles would be 3 instead of 1.
+      const scrivDir = createScrivenerProjectFixture();
+      try {
+        const result = mergeScrivenerProjectMetadata({
+          scrivPath: scrivDir,
+          mcpSyncDir: root,
+          projectId: "my-novel",
+          scenesDir: root,
+          dryRun: true,
+        });
+
+        // Only the single real sidecar should be seen (no bracket → skippedNoBracketId=1).
+        // If mirror dirs leaked through, sidecarFiles would be 3 instead of 1.
+        assert.equal(result.sidecarFiles, 1, "Mirror subdirectory sidecars must not be visited by walkYamls");
+        assert.equal(result.skippedNoBracketId, 1, "The one sidecar with no bracket ID should be reported");
+      } finally {
+        fs.rmSync(scrivDir, { recursive: true, force: true });
+      }
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
   });
 
   test("loadScrivenerProjectData parses sync map and metadata", () => {

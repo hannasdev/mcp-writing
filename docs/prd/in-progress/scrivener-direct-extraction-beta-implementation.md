@@ -9,7 +9,7 @@ This document translates the beta PRD into execution-ready tasks. It is intentio
 - M1: Parser and merge core extracted from legacy script ✅
 - M2: Official beta entrypoints (MCP + CLI) ✅
 - M2.5: Large-project UX (async jobs, warning aggregation, scoped parsing) ✅
-- M3: Safety and parity hardening
+- M3: Safety and parity hardening (ownership enforcement ✅, ambiguity conflicts pending)
 - M4: Docs, compatibility posture, and beta operations ✅ (baseline docs slice)
 
 ## Recommended Execution Order
@@ -191,9 +191,9 @@ This phase was identified during manual testing against a real 430+ file project
 
 ### Phase C Tasks
 
-- [ ] Enforce importer-authoritative field boundaries during merge
+- [x] Enforce importer-authoritative field boundaries during merge
 - [x] Ensure non-authoritative sidecar fields are preserved
-- [ ] Align `walkYamls` (in `scrivener-direct.js`) to skip `projects/`/`universes/` mirror subdirectories, consistent with `walkSidecarFiles` in `importer.js`
+- [x] Align `walkYamls` (in `scrivener-direct.js`) to skip `projects/`/`universes/` mirror subdirectories, consistent with `walkSidecarFiles` in `importer.js`
 - [ ] Normalize handling for:
   - [x] missing UUID mappings
   - [x] missing synopsis files
@@ -205,12 +205,12 @@ This phase was identified during manual testing against a real 430+ file project
 ### Phase C Acceptance Criteria
 
 - [x] No duplicate logical scenes created due to ordering or path changes in source
-- [ ] No silent overwrite of agent-authoritative fields
+- [x] No silent overwrite of agent-authoritative fields
 - [ ] Warning taxonomy is stable and documented
 
 ### Phase C Deliverables
 
-- [ ] Ownership-safe merge policy implementation
+- [x] Ownership-safe merge policy implementation
 - [x] Structured warnings and error codes
 
 ---
@@ -287,6 +287,9 @@ For each fixture:
 - Unknown Scrivener custom fields are ignored unless explicitly mapped into supported sidecar fields.
 - Invalid numeric Scrivener custom field values are ignored with structured warnings rather than hard-failing the merge.
 - Remaining Phase C work is concentrated in explicit ownership policy and conflict reporting for ambiguous mappings.
+- Ownership boundaries are enforced via `IMPORTER_AUTHORITATIVE_FIELDS` (exported from `scrivener-direct.js`). Fields in this set (`scene_id`, `external_source`, `external_id`, `title`, `timeline_position`) are silently skipped by beta merge and reported as `blockedKeys` in the `mergeSidecarData` return value.
+- `save_the_cat_beat` is intentionally **not** importer-authoritative. It can be written by the beta path (from the `savethecat!` Scrivener custom metadata field) or by the importer (from beat marker filenames). Additive-only semantics mean whichever runs first wins. A future docs task (PR-4) should explain how to set up the `savethecat!` custom metadata field in Scrivener to benefit from this mapping.
+- Remaining Phase C work is concentrated in conflict reporting for ambiguous mappings (PR-3b).
 - Phase D baseline docs slice is complete: setup guidance, troubleshooting, stability-tier tool descriptions, and generated tool reference are in place.
 - Remaining docs work is now mostly depth expansion (broader tested-version matrix and fixture coverage), not baseline guidance.
 

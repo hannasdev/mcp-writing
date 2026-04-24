@@ -100,6 +100,21 @@ function moveFileIfNeeded(fromPath, toPath) {
   return { moved: true };
 }
 
+// Fields that are exclusively owned by the stable Scrivener sync-folder importer.
+// The beta merge must never write these fields, even additively, because the
+// importer derives them from the source filename and project structure in ways
+// the beta merge path cannot reliably replicate (e.g. scene_id slug, timeline
+// position from file sequence, external identity).
+export const IMPORTER_AUTHORITATIVE_FIELDS = Object.freeze([
+  "scene_id",
+  "external_source",
+  "external_id",
+  "title",
+  "timeline_position",
+]);
+
+const IMPORTER_AUTHORITATIVE_FIELD_SET = new Set(IMPORTER_AUTHORITATIVE_FIELDS);
+
 const KNOWN_CUSTOM_FIELD_IDS = new Set([
   "savethecat!",
   "causality",
@@ -222,8 +237,13 @@ function buildMergeDataFromProject(projectData, uuid) {
 export function mergeSidecarData(existing, mergeData) {
   const merged = { ...existing };
   const newKeys = [];
+  const blockedKeys = [];
 
   for (const [key, value] of Object.entries(mergeData)) {
+    if (IMPORTER_AUTHORITATIVE_FIELD_SET.has(key)) {
+      blockedKeys.push(key);
+      continue;
+    }
     if (!(key in merged)) {
       merged[key] = value;
       newKeys.push(key);
@@ -234,6 +254,7 @@ export function mergeSidecarData(existing, mergeData) {
     merged,
     changed: newKeys.length > 0,
     newKeys,
+    blockedKeys,
   };
 }
 
