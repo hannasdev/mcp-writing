@@ -652,6 +652,7 @@ describe("merge_scrivener_project_beta tool", () => {
     assert.equal(done.ok, true);
     assert.equal(done.job.status, "completed");
     assert.equal(done.job.result.ok, true);
+    assert.equal(done.job.result.beta, undefined);
     assert.equal(done.job.result.merge.project_id, projectId);
     assert.equal(done.job.result.merge.dry_run, true);
     assert.equal(done.job.result.merge.sidecar_files, 2);

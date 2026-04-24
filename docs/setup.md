@@ -5,8 +5,8 @@
 - [First-time setup path (recommended)](#first-time-setup-path-recommended)
 - [Choosing a Scrivener path](#choosing-a-scrivener-path)
 - [Quick start with Scrivener (stable default)](#quick-start-with-scrivener-stable-default)
-- [Direct Scrivener project merge (beta)](#direct-scrivener-project-merge-beta)
-- [Beta compatibility and fallback](#beta-compatibility-and-fallback)
+- [Direct Scrivener project merge](#direct-scrivener-project-merge)
+- [Compatibility notes and fallback](#compatibility-notes-and-fallback)
 - [Advanced: Native sync format](#advanced-native-sync-format)
 - [Data ownership model](data-ownership.md)
 
@@ -232,7 +232,7 @@ If the merge fails:
 
 1. Confirm `source_project_dir` points to the `.scriv` bundle directory itself, not the `.scrivx` file.
 2. Re-run with `dry_run: true` first.
-3. If you get `SCRIVENER_DIRECT_BETA_FAILED`, fall back to `import_scrivener_sync` from an External Folder Sync export.
+3. If you get `SCRIVENER_DIRECT_BETA_FAILED` (legacy error code name), fall back to `import_scrivener_sync` from an External Folder Sync export.
 
 If the merge returns warnings:
 

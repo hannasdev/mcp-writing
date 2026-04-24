@@ -52,7 +52,6 @@ function normalizeImportResult(importResult) {
 function normalizeMergeResult(mergeResult) {
   return {
     ok: true,
-    beta: true,
     merge: {
       source_project_dir: mergeResult.scrivPath,
       sync_dir: mergeResult.mcpSyncDir,
@@ -77,10 +76,7 @@ function normalizeMergeResult(mergeResult) {
       },
     },
     sync: null,
-    warnings: [
-      "BETA_FEATURE: Direct Scrivener project parsing may be sensitive to Scrivener internal format changes.",
-      "If this fails, use import_scrivener_sync with an External Folder Sync export as the stable fallback.",
-    ],
+    warnings: [],
   };
 }
 
