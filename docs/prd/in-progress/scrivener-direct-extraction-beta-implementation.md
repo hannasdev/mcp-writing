@@ -9,7 +9,7 @@ This document translates the beta PRD into execution-ready tasks. It is intentio
 - M1: Parser and merge core extracted from legacy script ✅
 - M2: Official beta entrypoints (MCP + CLI) ✅
 - M2.5: Large-project UX (async jobs, warning aggregation, scoped parsing) ✅
-- M3: Safety and parity hardening (ownership enforcement ✅, ambiguity conflicts pending)
+- M3: Safety and parity hardening ✅
 - M4: Docs, compatibility posture, and beta operations ✅ (baseline docs slice)
 
 ## Recommended Execution Order
@@ -48,12 +48,23 @@ Exit signal:
   - Ownership-safe merge policy implementation
   - `walkYamls` mirror-path guard parity with `walkSidecarFiles`
 
-### PR-3b: Ambiguity Conflicts + Warning Taxonomy
+### PR-3b: Ambiguity Conflicts + Warning Taxonomy ✅
 
 Scope:
 - Define and document ambiguous mapping conditions (e.g., unresolved identity ties, contradictory source metadata, ambiguous folder-derived structure).
 - Add dedicated conflict/warning codes for each condition.
 - Ensure warnings are stable, summarized, and test-covered.
+
+Warning taxonomy (implemented):
+- `ambiguous_identity_tie`:
+  Trigger: sidecar identity context conflicts with Scrivener mapping assumptions (for example, existing `external_source` is non-`scrivener`, or `external_source: scrivener` is missing `external_id`).
+  Behavior: keep existing sidecar identity fields; emit warning with `reason` details.
+- `ambiguous_structure_mapping`:
+  Trigger: existing sidecar `part`/`chapter`/`chapter_title` differs from Scrivener-derived structure for the same mapped scene.
+  Behavior: keep existing sidecar structure field; emit warning with `field`, `existing_value`, `scrivener_value`.
+- `ambiguous_metadata_mapping`:
+  Trigger: existing non-structure sidecar metadata field differs from Scrivener-extracted metadata for the same mapped scene.
+  Behavior: keep existing sidecar field; emit warning with `field`, `existing_value`, `scrivener_value`.
 
 Acceptance checks:
 - Warning taxonomy documented in this file and reflected in tool/runtime outputs.
@@ -194,19 +205,19 @@ This phase was identified during manual testing against a real 430+ file project
 - [x] Enforce importer-authoritative field boundaries during merge
 - [x] Ensure non-authoritative sidecar fields are preserved
 - [x] Align `walkYamls` (in `scrivener-direct.js`) to skip `projects/`/`universes/` mirror subdirectories, consistent with `walkSidecarFiles` in `importer.js`
-- [ ] Normalize handling for:
+- [x] Normalize handling for:
   - [x] missing UUID mappings
   - [x] missing synopsis files
   - [x] unknown custom fields
   - [x] malformed metadata values
-- [ ] Add conflict/warning reporting for ambiguous mappings
+- [x] Add conflict/warning reporting for ambiguous mappings
 - [x] Preserve scene identity and reconciliation assumptions from current importer model
 
 ### Phase C Acceptance Criteria
 
 - [x] No duplicate logical scenes created due to ordering or path changes in source
 - [x] No silent overwrite of agent-authoritative fields
-- [ ] Warning taxonomy is stable and documented
+- [x] Warning taxonomy is stable and documented
 
 ### Phase C Deliverables
 
@@ -286,10 +297,12 @@ For each fixture:
 - Missing UUID mappings are skipped with structured warning payloads, and missing synopsis files are tolerated without failing the merge.
 - Unknown Scrivener custom fields are ignored unless explicitly mapped into supported sidecar fields.
 - Invalid numeric Scrivener custom field values are ignored with structured warnings rather than hard-failing the merge.
-- Remaining Phase C work is concentrated in explicit ownership policy and conflict reporting for ambiguous mappings.
 - Ownership boundaries are enforced via `IMPORTER_AUTHORITATIVE_FIELDS` (exported from `scrivener-direct.js`). Fields in this set (`scene_id`, `external_source`, `external_id`, `title`, `timeline_position`) are silently skipped by beta merge and reported as `blockedKeys` in the `mergeSidecarData` return value.
 - `save_the_cat_beat` is intentionally **not** importer-authoritative. It can be written by the beta path (from the `savethecat!` Scrivener custom metadata field) or by the importer (from beat marker filenames). Additive-only semantics mean whichever runs first wins. A future docs task (PR-4) should explain how to set up the `savethecat!` custom metadata field in Scrivener to benefit from this mapping.
-- Remaining Phase C work is concentrated in conflict reporting for ambiguous mappings (PR-3b).
+- PR-3b ambiguity taxonomy is now implemented and surfaced in `warningSummary` / `warnings` outputs with deterministic codes:
+  - `ambiguous_identity_tie`
+  - `ambiguous_structure_mapping`
+  - `ambiguous_metadata_mapping`
 - Phase D baseline docs slice is complete: setup guidance, troubleshooting, stability-tier tool descriptions, and generated tool reference are in place.
 - Remaining docs work is now mostly depth expansion (broader tested-version matrix and fixture coverage), not baseline guidance.
 

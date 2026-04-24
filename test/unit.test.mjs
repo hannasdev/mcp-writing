@@ -1643,6 +1643,56 @@ describe("Scrivener direct metadata merge", () => {
     }
   });
 
+  test("mergeScrivenerProjectMetadata emits deterministic ambiguity warning codes", () => {
+    const scrivDir = createScrivenerProjectFixture();
+    const { syncRoot, scenesDir } = createSyncSidecarFixture();
+    const sidecarPath = path.join(scenesDir, "001 Scene Arrival [1].meta.yaml");
+    const existing = yaml.load(fs.readFileSync(sidecarPath, "utf8"));
+    fs.writeFileSync(
+      sidecarPath,
+      yaml.dump(
+        {
+          ...existing,
+          chapter: 9,
+          synopsis: "Conflicting synopsis from sidecar.",
+          external_source: "manual",
+        },
+        { lineWidth: 120 }
+      ),
+      "utf8"
+    );
+
+    try {
+      const result = mergeScrivenerProjectMetadata({
+        scrivPath: scrivDir,
+        mcpSyncDir: syncRoot,
+        projectId: "test-import",
+        dryRun: true,
+      });
+
+      assert.equal(result.warningSummary.ambiguous_identity_tie.count, 1);
+      assert.equal(result.warningSummary.ambiguous_structure_mapping.count, 1);
+      assert.equal(result.warningSummary.ambiguous_metadata_mapping.count, 1);
+
+      const identityWarning = result.warnings.find(w => w.code === "ambiguous_identity_tie");
+      assert.equal(identityWarning.reason, "external_source_conflict");
+      assert.equal(identityWarning.external_source, "manual");
+
+      const structureWarning = result.warnings.find(w => w.code === "ambiguous_structure_mapping");
+      assert.equal(structureWarning.field, "chapter");
+      assert.equal(structureWarning.existing_value, 9);
+      assert.equal(structureWarning.scrivener_value, 1);
+
+      const metadataWarning = result.warnings.find(w => w.code === "ambiguous_metadata_mapping");
+      assert.equal(metadataWarning.field, "synopsis");
+      assert.equal(metadataWarning.existing_value, "Conflicting synopsis from sidecar.");
+      assert.equal(metadataWarning.scrivener_value, "Elena returns to the harbor.");
+    } finally {
+      fs.rmSync(scrivDir, { recursive: true, force: true });
+      fs.rmSync(syncRoot, { recursive: true, force: true });
+    }
+  });
+
   test("mergeScrivenerProjectMetadata caps returned warnings but keeps full summary counts", () => {
     const scrivDir = createScrivenerProjectFixture();
     const extraSidecars = Array.from({ length: 30 }, (_, index) => ({

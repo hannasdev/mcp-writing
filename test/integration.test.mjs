@@ -11,6 +11,7 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 import fs from "node:fs";
 import os from "node:os";
+import yaml from "js-yaml";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
@@ -724,6 +725,53 @@ describe("merge_scrivener_project_beta tool", () => {
     assert.equal(done.job.result.merge.warning_summary.missing_uuid_mapping.count, 1);
     assert.ok(done.job.result.merge.warnings.some(w => w.code === "missing_bracket_id"));
     assert.ok(done.job.result.merge.warnings.some(w => w.code === "missing_uuid_mapping" && w.sync_number === "999"));
+  });
+
+  test("returns ambiguity warning taxonomy for conflicting sidecar mappings", async () => {
+    const projectId = "direct-beta-ambiguity";
+
+    await callWriteTool("import_scrivener_sync", {
+      source_dir: scrivenerImportDir,
+      project_id: projectId,
+      dry_run: false,
+      auto_sync: false,
+    });
+
+    const scenesDir = path.join(writeSyncDir, "projects", projectId, "scenes");
+    const primarySidecarFilename = fs.readdirSync(scenesDir).find(name => /\[\d+\]\.meta\.yaml$/.test(name));
+    assert.ok(primarySidecarFilename, "Expected imported sidecar with bracketed sync marker");
+    const primarySidecarPath = path.join(scenesDir, primarySidecarFilename);
+    const primarySidecar = yaml.load(fs.readFileSync(primarySidecarPath, "utf8"));
+    fs.writeFileSync(
+      primarySidecarPath,
+      yaml.dump(
+        {
+          ...primarySidecar,
+          chapter: 9,
+          synopsis: "Conflicting sidecar synopsis",
+          external_source: "manual",
+        },
+        { lineWidth: 120 }
+      ),
+      "utf8"
+    );
+
+    const startText = await callWriteTool("merge_scrivener_project_beta", {
+      source_project_dir: scrivenerProjectDir,
+      project_id: projectId,
+      dry_run: true,
+      auto_sync: false,
+    });
+    const started = JSON.parse(startText);
+    assert.equal(started.ok, true);
+
+    const done = await waitForAsyncJob(started.job.job_id);
+    assert.equal(done.ok, true);
+    assert.equal(done.job.status, "completed");
+    assert.equal(done.job.result.ok, true);
+    assert.equal(done.job.result.merge.warning_summary.ambiguous_identity_tie.count, 1);
+    assert.equal(done.job.result.merge.warning_summary.ambiguous_structure_mapping.count, 1);
+    assert.equal(done.job.result.merge.warning_summary.ambiguous_metadata_mapping.count, 1);
   });
 
   test("scenes_dir override uses explicit path instead of project_id-derived path", async () => {
