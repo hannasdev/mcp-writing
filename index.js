@@ -1313,7 +1313,7 @@ function createMcpServer() {
 
   s.tool(
     "list_async_jobs",
-    "List asynchronous jobs currently known to this server. Use this when you lost a job_id or need a dashboard view of running/completed jobs. Returns an array of job envelopes sorted by newest first.",
+    "List asynchronous jobs currently known to this server. Use this when you lost a job_id or need a dashboard view of running/completed jobs. Returns an object envelope containing a "jobs" array of job objects sorted by newest first.",
     {
       include_results: z.boolean().optional().describe("If true, includes completed result payloads."),
     },
