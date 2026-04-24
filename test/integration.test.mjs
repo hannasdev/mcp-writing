@@ -814,6 +814,8 @@ describe("merge_scrivener_project_beta tool", () => {
     assert.equal(secondDone.ok, true);
     assert.equal(secondDone.job.result.merge.updated, 0);
     assert.equal(secondDone.job.result.merge.unchanged, secondDone.job.result.merge.sidecar_files);
+    assert.deepEqual(secondDone.job.result.merge.field_add_counts, {});
+    assert.deepEqual(secondDone.job.result.merge.preview_changes, []);
   });
 
   test("organize_by_chapters: true relocates scenes into chapter folders", async () => {
@@ -888,7 +890,9 @@ describe("merge_scrivener_project_beta tool", () => {
       "scenes",
       "001 Scene Arrival [10].txt"
     );
+    const originalMetaPath = originalScenePath.replace(/\.txt$/, ".meta.yaml");
     assert.equal(fs.existsSync(originalScenePath), true);
+    assert.equal(fs.existsSync(originalMetaPath), true);
 
     const scenesText = await callWriteTool("find_scenes", { project_id: projectId });
     const scenes = JSON.parse(scenesText);

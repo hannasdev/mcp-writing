@@ -62,7 +62,20 @@ async function runCase(env, args) {
         arguments: { job_id: jobId, include_result: true }
       });
 
-      const statusData = JSON.parse(statusResult.content[0].text);
+      if (statusResult.isError) {
+        console.log(`error.code/message: ${statusResult.content?.[0]?.text || "status query failed"}`);
+        settled = true;
+        break;
+      }
+
+      let statusData;
+      try {
+        statusData = JSON.parse(statusResult.content[0].text);
+      } catch (parseError) {
+        console.log(`error.code/message: invalid status payload: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
+        settled = true;
+        break;
+      }
 
       if (!statusData.ok) {
         console.log(`error.code/message: ${statusData.error?.code || "unknown"}`);

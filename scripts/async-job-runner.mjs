@@ -166,7 +166,7 @@ try {
   const resultPath = process.argv[3];
   const requestPath = process.argv[2];
   if (resultPath) {
-    const errorCode = error && typeof error === "object" && typeof error.code === "string"
+    const baseErrorCode = error && typeof error === "object" && typeof error.code === "string"
       ? error.code
       : "ASYNC_JOB_FAILED";
     let requestKind = null;
@@ -178,6 +178,10 @@ try {
         requestKind = null;
       }
     }
+
+    const errorCode = requestKind === "merge_scrivener_project_beta" && baseErrorCode === "ASYNC_JOB_FAILED"
+      ? "SCRIVENER_DIRECT_BETA_FAILED"
+      : baseErrorCode;
 
     const errorDetails = {
       ...(error && typeof error === "object" && error.pattern ? { pattern: error.pattern } : {}),
