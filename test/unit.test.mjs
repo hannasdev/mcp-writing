@@ -27,12 +27,10 @@ import { lintMetadataInSyncDir, validateMetadataObject } from "../metadata-lint.
 import { openDb } from "../db.js";
 import { importScrivenerSync } from "../importer.js";
 import {
+  IMPORTER_AUTHORITATIVE_FIELDS,
   loadScrivenerProjectData,
   mergeScrivenerProjectMetadata,
   mergeSidecarData,
-} from "../scrivener-direct.js";
-import {
-  IMPORTER_AUTHORITATIVE_FIELDS,
 } from "../scrivener-direct.js";
 import { runSceneCharacterBatch } from "../scene-character-batch.js";
 
@@ -1375,11 +1373,12 @@ describe("Scrivener direct metadata merge", () => {
 
   test("IMPORTER_AUTHORITATIVE_FIELDS contains expected identity fields", () => {
     for (const field of ["scene_id", "external_source", "external_id", "title", "timeline_position"]) {
-      assert.ok(IMPORTER_AUTHORITATIVE_FIELDS.has(field), `Expected ${field} to be authoritative`);
+      assert.ok(IMPORTER_AUTHORITATIVE_FIELDS.includes(field), `Expected ${field} to be authoritative`);
     }
-    assert.ok(!IMPORTER_AUTHORITATIVE_FIELDS.has("chapter"), "chapter should not be authoritative");
-    assert.ok(!IMPORTER_AUTHORITATIVE_FIELDS.has("synopsis"), "synopsis should not be authoritative");
-    assert.ok(!IMPORTER_AUTHORITATIVE_FIELDS.has("save_the_cat_beat"), "save_the_cat_beat should not be authoritative");
+    assert.ok(!IMPORTER_AUTHORITATIVE_FIELDS.includes("chapter"), "chapter should not be authoritative");
+    assert.ok(!IMPORTER_AUTHORITATIVE_FIELDS.includes("synopsis"), "synopsis should not be authoritative");
+    assert.ok(!IMPORTER_AUTHORITATIVE_FIELDS.includes("save_the_cat_beat"), "save_the_cat_beat should not be authoritative");
+    assert.ok(Object.isFrozen(IMPORTER_AUTHORITATIVE_FIELDS), "authoritative field list should be immutable");
   });
 
   test("walkYamls skips projects/ and universes/ mirror subdirectories", () => {
@@ -1399,19 +1398,22 @@ describe("Scrivener direct metadata merge", () => {
       // mergeScrivenerProjectMetadata reports sidecarFiles: the count of files walkYamls found.
       // If mirror dirs leaked through, sidecarFiles would be 3 instead of 1.
       const scrivDir = createScrivenerProjectFixture();
-      const result = mergeScrivenerProjectMetadata({
-        scrivPath: scrivDir,
-        mcpSyncDir: root,
-        projectId: "my-novel",
-        scenesDir: root,
-        dryRun: true,
-      });
-      fs.rmSync(scrivDir, { recursive: true, force: true });
+      try {
+        const result = mergeScrivenerProjectMetadata({
+          scrivPath: scrivDir,
+          mcpSyncDir: root,
+          projectId: "my-novel",
+          scenesDir: root,
+          dryRun: true,
+        });
 
-      // Only the single real sidecar should be seen (no bracket → skippedNoBracketId=1).
-      // If mirror dirs leaked through, sidecarFiles would be 3 instead of 1.
-      assert.equal(result.sidecarFiles, 1, "Mirror subdirectory sidecars must not be visited by walkYamls");
-      assert.equal(result.skippedNoBracketId, 1, "The one sidecar with no bracket ID should be reported");
+        // Only the single real sidecar should be seen (no bracket → skippedNoBracketId=1).
+        // If mirror dirs leaked through, sidecarFiles would be 3 instead of 1.
+        assert.equal(result.sidecarFiles, 1, "Mirror subdirectory sidecars must not be visited by walkYamls");
+        assert.equal(result.skippedNoBracketId, 1, "The one sidecar with no bracket ID should be reported");
+      } finally {
+        fs.rmSync(scrivDir, { recursive: true, force: true });
+      }
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }

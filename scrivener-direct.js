@@ -105,13 +105,15 @@ function moveFileIfNeeded(fromPath, toPath) {
 // importer derives them from the source filename and project structure in ways
 // the beta merge path cannot reliably replicate (e.g. scene_id slug, timeline
 // position from file sequence, external identity).
-export const IMPORTER_AUTHORITATIVE_FIELDS = new Set([
+export const IMPORTER_AUTHORITATIVE_FIELDS = Object.freeze([
   "scene_id",
   "external_source",
   "external_id",
   "title",
   "timeline_position",
 ]);
+
+const IMPORTER_AUTHORITATIVE_FIELD_SET = new Set(IMPORTER_AUTHORITATIVE_FIELDS);
 
 const KNOWN_CUSTOM_FIELD_IDS = new Set([
   "savethecat!",
@@ -238,7 +240,7 @@ export function mergeSidecarData(existing, mergeData) {
   const blockedKeys = [];
 
   for (const [key, value] of Object.entries(mergeData)) {
-    if (IMPORTER_AUTHORITATIVE_FIELDS.has(key)) {
+    if (IMPORTER_AUTHORITATIVE_FIELD_SET.has(key)) {
       blockedKeys.push(key);
       continue;
     }
