@@ -1,6 +1,6 @@
 # Scrivener Direct Extraction (Beta)
 
-**Status:** 🚧 In Progress (Beta track)
+**Status:** ✅ Complete
 
 ## Goal
 

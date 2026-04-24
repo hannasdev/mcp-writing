@@ -645,13 +645,14 @@ describe("merge_scrivener_project_beta tool", () => {
 
     assert.equal(started.ok, true);
     assert.equal(started.async, true);
-    assert.equal(started.beta, true);
+    assert.equal(started.beta, undefined);
     assert.equal(typeof started.job.job_id, "string");
 
     const done = await waitForAsyncJob(started.job.job_id);
     assert.equal(done.ok, true);
     assert.equal(done.job.status, "completed");
     assert.equal(done.job.result.ok, true);
+    assert.equal(done.job.result.beta, undefined);
     assert.equal(done.job.result.merge.project_id, projectId);
     assert.equal(done.job.result.merge.dry_run, true);
     assert.equal(done.job.result.merge.sidecar_files, 2);

@@ -1,6 +1,6 @@
 # Scrivener Direct Extraction (Beta) — Implementation Checklist
 
-**Status:** 🚧 In Progress
+**Status:** ✅ Complete
 
 This document translates the beta PRD into execution-ready tasks. It is intentionally checklist-first to limit scope creep.
 
@@ -11,7 +11,7 @@ This document translates the beta PRD into execution-ready tasks. It is intentio
 - M2.5: Large-project UX (async jobs, warning aggregation, scoped parsing) ✅
 - M3: Safety and parity hardening ✅
 - M4: Docs, compatibility posture, and beta operations ✅
-- M5: Data safety hardening (critical fixes) 🚧
+- M5: Data safety hardening (critical fixes) ✅
 
 ## Recommended Execution Order
 
@@ -22,7 +22,7 @@ Use focused PRs with one concern each. Do not combine milestones unless explicit
 3. PR-2.5: Large-project UX hardening ✅
 4. PR-3: Ownership and parity hardening ✅
 5. PR-4: Docs, compatibility matrix, and beta operational guidance ✅
-6. PR-5: Data safety hardening (critical fixes) 🚧
+6. PR-5: Data safety hardening (critical fixes) ✅
 
 ## Next PR Sequence (Concrete)
 
@@ -385,7 +385,7 @@ All must be true before proposing graduation from beta status.
   - [x] Non-atomic file move operations handled safely
   - [x] Sidecar orphan detection and warning
   - [x] XML size check and memory guardrail
-- [ ] Zero unresolved high-severity data-loss issues
+- [x] Zero unresolved high-severity data-loss issues
 - [x] Compatibility matrix has representative coverage (fixtures A–D)
 - [x] Fallback path to stable importer validated in automated tests
 

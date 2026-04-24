@@ -980,7 +980,7 @@ function createMcpServer() {
 
   s.tool(
     "merge_scrivener_project_beta",
-    "[BETA] Merge metadata directly from a Scrivener .scriv project into existing scene sidecars by starting a background job. This path is opt-in, requires sidecars to already exist (for example, from import_scrivener_sync), and may be sensitive to Scrivener internal format changes. Returns immediately with a job_id to poll via get_async_job_status.",
+    "Merge metadata directly from a Scrivener .scriv project into existing scene sidecars by starting a background job. This path is opt-in and requires sidecars to already exist (for example, from import_scrivener_sync). Returns immediately with a job_id to poll via get_async_job_status.",
     {
       source_project_dir: z.string().describe("Path to a Scrivener .scriv bundle directory."),
       project_id: z.string().optional().describe("Project ID containing existing sidecars (e.g. 'the-lamb' or 'universe-1/book-1-the-lamb')."),
@@ -1052,7 +1052,6 @@ function createMcpServer() {
       return jsonResponse({
         ok: true,
         async: true,
-        beta: true,
         job: toPublicJob(job, false),
         next_step: "Call get_async_job_status with job_id until status is 'completed' or 'failed'.",
       });

@@ -82,7 +82,7 @@ _No parameters._
 
 ## merge_scrivener_project_beta
 
-[BETA] Merge metadata directly from a Scrivener .scriv project into existing scene sidecars by starting a background job. This path is opt-in, requires sidecars to already exist (for example, from import_scrivener_sync), and may be sensitive to Scrivener internal format changes. Returns immediately with a job_id to poll via get_async_job_status.
+Merge metadata directly from a Scrivener .scriv project into existing scene sidecars by starting a background job. This path is opt-in and requires sidecars to already exist (for example, from import_scrivener_sync). Returns immediately with a job_id to poll via get_async_job_status.
 
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |
