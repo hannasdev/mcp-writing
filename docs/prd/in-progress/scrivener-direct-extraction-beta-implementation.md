@@ -149,7 +149,7 @@ This phase was identified during manual testing against a real 430+ file project
 
 - [x] Async job infrastructure: `startAsyncJob`, `toPublicJob`, TTL-based pruning
 - [x] `import_scrivener_sync_async` — non-blocking import, returns `job_id` immediately
-- [x] `merge_scrivener_project_beta_async` — non-blocking merge, returns `job_id` immediately
+- [x] `merge_scrivener_project_beta` — non-blocking merge, returns `job_id` immediately
 - [x] `get_async_job_status` — poll job by ID, returns status + result payload
 - [x] `list_async_jobs` — list all known jobs with optional result payloads
 - [x] `cancel_async_job` — SIGTERM worker process, marks job cancelled
@@ -182,7 +182,7 @@ This phase was identified during manual testing against a real 430+ file project
 ### Phase B.5 Deliverables
 
 - [x] `scripts/async-job-runner.mjs` — worker process
-- [x] 5 new MCP tools: `import_scrivener_sync_async`, `merge_scrivener_project_beta_async`, `get_async_job_status`, `list_async_jobs`, `cancel_async_job`
+- [x] 5 new MCP tools: `import_scrivener_sync_async`, `merge_scrivener_project_beta`, `get_async_job_status`, `list_async_jobs`, `cancel_async_job`
 - [x] Integration tests: async import completes, async merge completes, preflight no-write, `ignore_patterns` count
 
 ---

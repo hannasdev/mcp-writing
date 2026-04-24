@@ -76,7 +76,7 @@ Write-capable MCP tool with preview mode and asynchronous execution.
 
 The operation should run as an async job rather than a synchronous MCP response.
 
-Implementation direction: reuse the existing async job framework already used by `import_scrivener_sync_async` and `merge_scrivener_project_beta_async`.
+Implementation direction: reuse the existing async job framework already used by `import_scrivener_sync_async` and `merge_scrivener_project_beta`.
 
 Requirements:
 

@@ -16,7 +16,6 @@ import { syncAll, isSyncDirWritable, getSyncOwnershipDiagnostics, getFileWriteDi
 import { isGitAvailable, isGitRepository, initGitRepository, createSnapshot, listSnapshots, getSceneProseAtCommit } from "./git.js";
 import { renderCharacterArcTemplate, renderCharacterSheetTemplate, renderPlaceSheetTemplate, slugifyEntityName } from "./world-entity-templates.js";
 import { importScrivenerSync, validateProjectId } from "./importer.js";
-import { mergeScrivenerProjectMetadata } from "./scrivener-direct.js";
 import { ASYNC_PROGRESS_PREFIX } from "./async-progress.js";
 
 const SYNC_DIR = process.env.WRITING_SYNC_DIR ?? "./sync";
@@ -894,124 +893,6 @@ function createMcpServer() {
     }
   );
 
-  // ---- merge_scrivener_project_beta --------------------------------------
-  s.tool(
-    "merge_scrivener_project_beta",
-    "[BETA] Merge metadata directly from a Scrivener .scriv project into existing scene sidecars. This path is opt-in, requires sidecars to already exist (for example, from import_scrivener_sync), and may be sensitive to Scrivener internal format changes.",
-    {
-      source_project_dir: z.string().describe("Path to a Scrivener .scriv bundle directory."),
-      project_id: z.string().optional().describe("Project ID containing existing sidecars (e.g. 'the-lamb' or 'universe-1/book-1-the-lamb'). Defaults to a slug derived from WRITING_SYNC_DIR."),
-      scenes_dir: z.string().optional().describe("Absolute path to the scenes directory containing .meta.yaml sidecars. Overrides the path derived from project_id. Use this for non-standard sync layouts."),
-      dry_run: z.boolean().optional().describe("If true (default), reports planned merges without writing files."),
-      auto_sync: z.boolean().optional().describe("If true (default), runs sync() after a non-dry-run merge."),
-      organize_by_chapters: z.boolean().optional().describe("If true (default false), relocate scene files into chapter-based folder hierarchies (e.g., chapter-7-harbor/). Chapter metadata is always extracted to sidecars regardless of this flag."),
-    },
-    async ({ source_project_dir, project_id, scenes_dir, dry_run = true, auto_sync = true, organize_by_chapters = false }) => {
-      if (project_id !== undefined) {
-        const projectIdCheck = validateProjectId(project_id);
-        if (!projectIdCheck.ok) {
-          return errorResponse("INVALID_PROJECT_ID", projectIdCheck.reason, { project_id });
-        }
-      }
-
-      if (!dry_run && !SYNC_DIR_WRITABLE) {
-        return errorResponse(
-          "SYNC_DIR_NOT_WRITABLE",
-          "Cannot merge Scrivener metadata because WRITING_SYNC_DIR is not writable in this runtime.",
-          { sync_dir: SYNC_DIR_ABS }
-        );
-      }
-
-      const resolvedScenesDir = scenes_dir
-        ?? (project_id ? path.join(resolveProjectRoot(project_id), "scenes") : undefined);
-      const normalizedScenesDir = resolvedScenesDir ? path.resolve(resolvedScenesDir) : undefined;
-
-      if (normalizedScenesDir) {
-        if (!isPathInsideSyncDir(normalizedScenesDir)) {
-          return errorResponse(
-            "INVALID_SCENES_DIR",
-            "scenes_dir must be inside WRITING_SYNC_DIR.",
-            { scenes_dir: normalizedScenesDir, sync_dir: SYNC_DIR_ABS, sync_dir_real: SYNC_DIR_REAL }
-          );
-        }
-      }
-
-      let mergeResult;
-      try {
-        mergeResult = mergeScrivenerProjectMetadata({
-          scrivPath: source_project_dir,
-          mcpSyncDir: SYNC_DIR,
-          projectId: project_id,
-          scenesDir: normalizedScenesDir,
-          dryRun: Boolean(dry_run),
-          organizeByChapters: Boolean(organize_by_chapters),
-        });
-      } catch (error) {
-        return errorResponse(
-          "SCRIVENER_DIRECT_BETA_FAILED",
-          error instanceof Error ? error.message : "Scrivener direct beta merge failed.",
-          {
-            source_project_dir,
-            sync_dir: SYNC_DIR_ABS,
-            project_id: project_id ?? null,
-            fallback: "Use import_scrivener_sync with a Scrivener External Folder Sync export as the stable default path.",
-          }
-        );
-      }
-
-      let syncResult = null;
-      if (!dry_run && auto_sync) {
-        syncResult = syncAll(db, SYNC_DIR, { writable: SYNC_DIR_WRITABLE });
-      }
-
-      return jsonResponse({
-        ok: true,
-        beta: true,
-        merge: {
-          source_project_dir: mergeResult.scrivPath,
-          sync_dir: mergeResult.mcpSyncDir,
-          scenes_dir: mergeResult.scenesDir,
-          project_id: mergeResult.projectId,
-          dry_run: mergeResult.dryRun,
-          sidecar_files: mergeResult.sidecarFiles,
-          updated: mergeResult.updated,
-          relocated: mergeResult.relocated,
-          unchanged: mergeResult.unchanged,
-          no_data: mergeResult.noData,
-          field_add_counts: mergeResult.fieldAddCounts,
-          preview_changes: mergeResult.previewChanges,
-          warnings: mergeResult.warnings,
-          warnings_truncated: mergeResult.warningsTruncated,
-          warning_summary: mergeResult.warningSummary,
-          stats: {
-            sync_map_entries: mergeResult.stats.syncMapEntries,
-            keyword_map_entries: mergeResult.stats.keywordMapEntries,
-            binder_items: mergeResult.stats.binderItems,
-            part_chapter_assignments: mergeResult.stats.partChapterAssignments,
-          },
-        },
-        sync: syncResult
-          ? {
-            indexed: syncResult.indexed,
-            stale_marked: syncResult.staleMarked,
-            sidecars_migrated: syncResult.sidecarsMigrated,
-            skipped: syncResult.skipped,
-            warning_summary: syncResult.warningSummary,
-          }
-          : null,
-        next_step: dry_run
-          ? "Dry run complete. Re-run with dry_run=false to write metadata merges."
-          : auto_sync
-            ? "Beta merge and sync complete."
-            : "Beta merge complete. Run sync() to refresh index.",
-        warnings: [
-          "BETA_FEATURE: Direct Scrivener project parsing may be sensitive to Scrivener internal format changes.",
-          "If this fails, use import_scrivener_sync with an External Folder Sync export as the stable fallback.",
-        ],
-      });
-    }
-  );
-
   // ---- async import/merge jobs --------------------------------------------
   s.tool(
     "import_scrivener_sync_async",
@@ -1094,8 +975,8 @@ function createMcpServer() {
   );
 
   s.tool(
-    "merge_scrivener_project_beta_async",
-    "[BETA] Start an asynchronous Scrivener metadata merge job from a `.scriv` project into existing scene sidecars. Use this only after the stable import path has created sidecars. Returns immediately with a job_id to poll via get_async_job_status.",
+    "merge_scrivener_project_beta",
+    "[BETA] Merge metadata directly from a Scrivener .scriv project into existing scene sidecars by starting a background job. This path is opt-in, requires sidecars to already exist (for example, from import_scrivener_sync), and may be sensitive to Scrivener internal format changes. Returns immediately with a job_id to poll via get_async_job_status.",
     {
       source_project_dir: z.string().describe("Path to a Scrivener .scriv bundle directory."),
       project_id: z.string().optional().describe("Project ID containing existing sidecars (e.g. 'the-lamb' or 'universe-1/book-1-the-lamb')."),
@@ -1296,7 +1177,7 @@ function createMcpServer() {
 
   s.tool(
     "get_async_job_status",
-    "Get status and result for an asynchronous job started by async tools such as import_scrivener_sync_async, merge_scrivener_project_beta_async, or enrich_scene_characters_batch. Use this to poll job progress after receiving a job_id. Common next step: if status is still running, call this tool again; if completed, inspect result and optionally run sync().",
+    "Get status and result for an asynchronous job started by async tools such as import_scrivener_sync_async, merge_scrivener_project_beta, or enrich_scene_characters_batch. Use this to poll job progress after receiving a job_id. Common next step: if status is still running, call this tool again; if status is completed inspect result, and if status is failed or cancelled inspect job/result diagnostics.",
     {
       job_id: z.string().describe("Job ID returned by an async start tool."),
       include_result: z.boolean().optional().describe("If true (default), includes completed result payload when available."),

@@ -7,9 +7,8 @@
 
 - [`sync`](#sync)
 - [`import_scrivener_sync`](#import_scrivener_sync)
-- [`merge_scrivener_project_beta`](#merge_scrivener_project_beta)
 - [`import_scrivener_sync_async`](#import_scrivener_sync_async)
-- [`merge_scrivener_project_beta_async`](#merge_scrivener_project_beta_async)
+- [`merge_scrivener_project_beta`](#merge_scrivener_project_beta)
 - [`enrich_scene_characters_batch`](#enrich_scene_characters_batch)
 - [`get_async_job_status`](#get_async_job_status)
 - [`list_async_jobs`](#list_async_jobs)
@@ -66,21 +65,6 @@ _No parameters._
 
 ---
 
-## merge_scrivener_project_beta
-
-[BETA] Merge metadata directly from a Scrivener .scriv project into existing scene sidecars. This path is opt-in, requires sidecars to already exist (for example, from import_scrivener_sync), and may be sensitive to Scrivener internal format changes.
-
-| Parameter | Type | Required | Description |
-| --- | --- | :---: | --- |
-| `source_project_dir` | `string` | Yes | Path to a Scrivener .scriv bundle directory. |
-| `project_id` | `string` | No | Project ID containing existing sidecars (e.g. 'the-lamb' or 'universe-1/book-1-the-lamb'). Defaults to a slug derived from WRITING_SYNC_DIR. |
-| `scenes_dir` | `string` | No | Absolute path to the scenes directory containing .meta.yaml sidecars. Overrides the path derived from project_id. Use this for non-standard sync layouts. |
-| `dry_run` | `boolean` | No | If true (default), reports planned merges without writing files. |
-| `auto_sync` | `boolean` | No | If true (default), runs sync() after a non-dry-run merge. |
-| `organize_by_chapters` | `boolean` | No | If true (default false), relocate scene files into chapter-based folder hierarchies (e.g., chapter-7-harbor/). Chapter metadata is always extracted to sidecars regardless of this flag. |
-
----
-
 ## import_scrivener_sync_async
 
 [STABLE] Start an asynchronous Scrivener External Folder Sync import job. This is the recommended default import path when the sync tree is large. Returns immediately with a job_id to poll via get_async_job_status.
@@ -96,9 +80,9 @@ _No parameters._
 
 ---
 
-## merge_scrivener_project_beta_async
+## merge_scrivener_project_beta
 
-[BETA] Start an asynchronous Scrivener metadata merge job from a `.scriv` project into existing scene sidecars. Use this only after the stable import path has created sidecars. Returns immediately with a job_id to poll via get_async_job_status.
+[BETA] Merge metadata directly from a Scrivener .scriv project into existing scene sidecars by starting a background job. This path is opt-in, requires sidecars to already exist (for example, from import_scrivener_sync), and may be sensitive to Scrivener internal format changes. Returns immediately with a job_id to poll via get_async_job_status.
 
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |
@@ -132,7 +116,7 @@ Start an asynchronous batch job that infers scene character mentions and updates
 
 ## get_async_job_status
 
-Get status and result for an asynchronous job started by async tools such as import_scrivener_sync_async, merge_scrivener_project_beta_async, or enrich_scene_characters_batch. Use this to poll job progress after receiving a job_id. Common next step: if status is still running, call this tool again; if completed, inspect result and optionally run sync().
+Get status and result for an asynchronous job started by async tools such as import_scrivener_sync_async, merge_scrivener_project_beta, or enrich_scene_characters_batch. Use this to poll job progress after receiving a job_id. Common next step: if status is still running, call this tool again; if status is completed inspect result, and if status is failed or cancelled inspect job/result diagnostics.
 
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |

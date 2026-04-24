@@ -18,7 +18,7 @@ export default [
   },
   {
     // Test files — relax some rules
-    files: ["test/**/*.mjs", "test-scenarios.mjs"],
+    files: ["test/**/*.mjs", "scripts/manual/test-scenarios.mjs"],
     rules: {
       "no-unused-vars": "warn",
     },

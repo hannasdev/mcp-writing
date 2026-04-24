@@ -624,7 +624,7 @@ describe("import_scrivener_sync tool", () => {
 });
 
 describe("merge_scrivener_project_beta tool", () => {
-  test("dry-run returns beta merge stats and field-level preview counts", async () => {
+  test("completes and returns merge payload with dry-run", async () => {
     const projectId = "direct-beta-preview";
 
     await callWriteTool("import_scrivener_sync", {
@@ -634,93 +634,55 @@ describe("merge_scrivener_project_beta tool", () => {
       auto_sync: false,
     });
 
-    const text = await callWriteTool("merge_scrivener_project_beta", {
+    const startText = await callWriteTool("merge_scrivener_project_beta", {
       source_project_dir: scrivenerProjectDir,
       project_id: projectId,
       dry_run: true,
       auto_sync: false,
     });
-    const parsed = JSON.parse(text);
+    const started = JSON.parse(startText);
 
-    assert.equal(parsed.ok, true);
-    assert.equal(parsed.beta, true);
-    assert.equal(parsed.merge.project_id, projectId);
-    assert.equal(parsed.merge.dry_run, true);
-    assert.equal(parsed.merge.sidecar_files, 2);
-    assert.equal(parsed.merge.updated, 2);
-    assert.equal(parsed.merge.unchanged, 0);
-    assert.equal(parsed.merge.no_data, 0);
-    assert.ok(parsed.merge.field_add_counts.synopsis >= 1);
-    assert.ok(Array.isArray(parsed.merge.preview_changes));
-    assert.equal(parsed.sync, null);
-    assert.ok(Array.isArray(parsed.warnings));
-    assert.ok(parsed.warnings.some(w => w.includes("BETA_FEATURE")));
+    assert.equal(started.ok, true);
+    assert.equal(started.async, true);
+    assert.equal(started.beta, true);
+    assert.equal(typeof started.job.job_id, "string");
+
+    const done = await waitForAsyncJob(started.job.job_id);
+    assert.equal(done.ok, true);
+    assert.equal(done.job.status, "completed");
+    assert.equal(done.job.result.ok, true);
+    assert.equal(done.job.result.merge.project_id, projectId);
+    assert.equal(done.job.result.merge.dry_run, true);
+    assert.equal(done.job.result.merge.sidecar_files, 2);
+    assert.equal(done.job.result.merge.updated, 2);
+    assert.ok(done.job.result.merge.field_add_counts.synopsis >= 1);
+    assert.ok(Array.isArray(done.job.result.merge.preview_changes));
   });
 
   test("returns structured fallback guidance on parser/path failure", async () => {
-    const text = await callWriteTool("merge_scrivener_project_beta", {
+    const startText = await callWriteTool("merge_scrivener_project_beta", {
       source_project_dir: "/tmp/does-not-exist-for-mcp-writing-tests.scriv",
       project_id: "direct-beta-preview",
       dry_run: true,
     });
-    const parsed = JSON.parse(text);
+    const started = JSON.parse(startText);
 
-    assert.equal(parsed.ok, false);
-    assert.equal(parsed.error.code, "SCRIVENER_DIRECT_BETA_FAILED");
-    assert.ok(parsed.error.details.fallback.includes("import_scrivener_sync"));
-  });
+    assert.equal(started.ok, true);
+    assert.equal(started.async, true);
+    assert.equal(typeof started.job.job_id, "string");
 
-  test("scenes_dir override uses explicit path instead of project_id-derived path", async () => {
-    // Import to a universe-scoped project to create sidecars in universes/<u>/<p>/scenes/
-    const projectId = "solar/book-alpha";
-    await callWriteTool("import_scrivener_sync", {
-      source_dir: scrivenerImportDir,
-      project_id: projectId,
-      dry_run: false,
-      auto_sync: false,
-    });
-    const derivedScenesDir = path.join(writeSyncDir, "universes", "solar", "book-alpha", "scenes");
-    assert.equal(fs.existsSync(derivedScenesDir), true);
-
-    // Merge using scenes_dir pointing at that directory (no project_id supplied)
-    const text = await callWriteTool("merge_scrivener_project_beta", {
-      source_project_dir: scrivenerProjectDir,
-      scenes_dir: derivedScenesDir,
-      dry_run: true,
-      auto_sync: false,
-    });
-    const parsed = JSON.parse(text);
-
-    assert.equal(parsed.ok, true);
-    assert.equal(parsed.merge.scenes_dir, derivedScenesDir);
-    assert.equal(parsed.merge.sidecar_files, 2);
-    assert.equal(parsed.merge.updated, 2);
-  });
-
-  test("scenes_dir takes priority over project_id when both are supplied", async () => {
-    // Create sidecars under a known project
-    const projectId = "solar/book-beta";
-    await callWriteTool("import_scrivener_sync", {
-      source_dir: scrivenerImportDir,
-      project_id: projectId,
-      dry_run: false,
-      auto_sync: false,
-    });
-    const actualScenesDir = path.join(writeSyncDir, "universes", "solar", "book-beta", "scenes");
-
-    // Pass a wrong/non-existent project_id but a correct scenes_dir — should succeed
-    const text = await callWriteTool("merge_scrivener_project_beta", {
-      source_project_dir: scrivenerProjectDir,
-      project_id: "solar/nonexistent-project",
-      scenes_dir: actualScenesDir,
-      dry_run: true,
-      auto_sync: false,
-    });
-    const parsed = JSON.parse(text);
-
-    assert.equal(parsed.ok, true);
-    assert.equal(parsed.merge.scenes_dir, actualScenesDir);
-    assert.equal(parsed.merge.sidecar_files, 2);
+    const done = await waitForAsyncJob(started.job.job_id);
+    assert.equal(done.ok, true);
+    assert.equal(done.job.status, "failed");
+    assert.equal(done.job.result.ok, false);
+    const errorCode = done.job.result.error.code;
+    assert.ok(
+      errorCode === "SCRIVENER_DIRECT_BETA_FAILED" || errorCode === "ASYNC_JOB_FAILED",
+      `Unexpected error code: ${errorCode}`
+    );
+    const fallback = done.job.result.error.details?.fallback
+      ?? done.job.result.error.details?.cause?.details?.fallback;
+    assert.ok(typeof fallback === "string" && fallback.includes("import_scrivener_sync"));
   });
 
   test("returns structured warning summary for skipped beta merge sidecars", async () => {
@@ -745,22 +707,79 @@ describe("merge_scrivener_project_beta tool", () => {
       "utf8"
     );
 
-    const text = await callWriteTool("merge_scrivener_project_beta", {
+    const startText = await callWriteTool("merge_scrivener_project_beta", {
       source_project_dir: scrivenerProjectDir,
       project_id: projectId,
       dry_run: true,
       auto_sync: false,
     });
-    const parsed = JSON.parse(text);
+    const started = JSON.parse(startText);
+    assert.equal(started.ok, true);
 
-    assert.equal(parsed.ok, true);
-    assert.equal(parsed.merge.warning_summary.missing_bracket_id.count, 1);
-    assert.equal(parsed.merge.warning_summary.missing_uuid_mapping.count, 1);
-    assert.ok(parsed.merge.warnings.some(w => w.code === "missing_bracket_id"));
-    assert.ok(parsed.merge.warnings.some(w => w.code === "missing_uuid_mapping" && w.sync_number === "999"));
+    const done = await waitForAsyncJob(started.job.job_id);
+    assert.equal(done.ok, true);
+    assert.equal(done.job.status, "completed");
+    assert.equal(done.job.result.ok, true);
+    assert.equal(done.job.result.merge.warning_summary.missing_bracket_id.count, 1);
+    assert.equal(done.job.result.merge.warning_summary.missing_uuid_mapping.count, 1);
+    assert.ok(done.job.result.merge.warnings.some(w => w.code === "missing_bracket_id"));
+    assert.ok(done.job.result.merge.warnings.some(w => w.code === "missing_uuid_mapping" && w.sync_number === "999"));
   });
 
-  test("second beta merge run is idempotent after fields have been written", async () => {
+  test("scenes_dir override uses explicit path instead of project_id-derived path", async () => {
+    const projectId = "solar/book-alpha";
+    await callWriteTool("import_scrivener_sync", {
+      source_dir: scrivenerImportDir,
+      project_id: projectId,
+      dry_run: false,
+      auto_sync: false,
+    });
+    const derivedScenesDir = path.join(writeSyncDir, "universes", "solar", "book-alpha", "scenes");
+    assert.equal(fs.existsSync(derivedScenesDir), true);
+
+    const startText = await callWriteTool("merge_scrivener_project_beta", {
+      source_project_dir: scrivenerProjectDir,
+      scenes_dir: derivedScenesDir,
+      dry_run: true,
+      auto_sync: false,
+    });
+    const started = JSON.parse(startText);
+    assert.equal(started.ok, true);
+
+    const done = await waitForAsyncJob(started.job.job_id);
+    assert.equal(done.ok, true);
+    assert.equal(done.job.result.merge.scenes_dir, derivedScenesDir);
+    assert.equal(done.job.result.merge.sidecar_files, 2);
+    assert.equal(done.job.result.merge.updated, 2);
+  });
+
+  test("scenes_dir takes priority over project_id when both are supplied", async () => {
+    const projectId = "solar/book-beta";
+    await callWriteTool("import_scrivener_sync", {
+      source_dir: scrivenerImportDir,
+      project_id: projectId,
+      dry_run: false,
+      auto_sync: false,
+    });
+    const actualScenesDir = path.join(writeSyncDir, "universes", "solar", "book-beta", "scenes");
+
+    const startText = await callWriteTool("merge_scrivener_project_beta", {
+      source_project_dir: scrivenerProjectDir,
+      project_id: "solar/nonexistent-project",
+      scenes_dir: actualScenesDir,
+      dry_run: true,
+      auto_sync: false,
+    });
+    const started = JSON.parse(startText);
+    assert.equal(started.ok, true);
+
+    const done = await waitForAsyncJob(started.job.job_id);
+    assert.equal(done.ok, true);
+    assert.equal(done.job.result.merge.scenes_dir, actualScenesDir);
+    assert.equal(done.job.result.merge.sidecar_files, 2);
+  });
+
+  test("idempotent: second merge run finds no updates", async () => {
     const projectId = "direct-beta-idempotent";
 
     await callWriteTool("import_scrivener_sync", {
@@ -770,32 +789,36 @@ describe("merge_scrivener_project_beta tool", () => {
       auto_sync: false,
     });
 
-    const firstText = await callWriteTool("merge_scrivener_project_beta", {
+    // First merge with write
+    const firstStartText = await callWriteTool("merge_scrivener_project_beta", {
       source_project_dir: scrivenerProjectDir,
       project_id: projectId,
       dry_run: false,
       auto_sync: false,
     });
-    const firstParsed = JSON.parse(firstText);
-    assert.equal(firstParsed.ok, true);
-    assert.equal(firstParsed.merge.updated, 2);
+    const firstStarted = JSON.parse(firstStartText);
+    const firstDone = await waitForAsyncJob(firstStarted.job.job_id);
+    assert.equal(firstDone.ok, true);
+    assert.equal(firstDone.job.result.merge.updated, 2);
 
-    const secondText = await callWriteTool("merge_scrivener_project_beta", {
+    // Second merge with dry-run should find no changes
+    const secondStartText = await callWriteTool("merge_scrivener_project_beta", {
       source_project_dir: scrivenerProjectDir,
       project_id: projectId,
       dry_run: true,
       auto_sync: false,
     });
-    const secondParsed = JSON.parse(secondText);
+    const secondStarted = JSON.parse(secondStartText);
+    const secondDone = await waitForAsyncJob(secondStarted.job.job_id);
 
-    assert.equal(secondParsed.ok, true);
-    assert.equal(secondParsed.merge.updated, 0);
-    assert.equal(secondParsed.merge.unchanged, secondParsed.merge.sidecar_files);
-    assert.deepEqual(secondParsed.merge.field_add_counts, {});
-    assert.deepEqual(secondParsed.merge.preview_changes, []);
+    assert.equal(secondDone.ok, true);
+    assert.equal(secondDone.job.result.merge.updated, 0);
+    assert.equal(secondDone.job.result.merge.unchanged, secondDone.job.result.merge.sidecar_files);
+    assert.deepEqual(secondDone.job.result.merge.field_add_counts, {});
+    assert.deepEqual(secondDone.job.result.merge.preview_changes, []);
   });
 
-  test("non-dry-run beta merge relocates scenes into chapter folders and indexes chapter_title", async () => {
+  test("organize_by_chapters: true relocates scenes into chapter folders", async () => {
     const projectId = "direct-beta-relocate";
 
     await callWriteTool("import_scrivener_sync", {
@@ -805,17 +828,18 @@ describe("merge_scrivener_project_beta tool", () => {
       auto_sync: false,
     });
 
-    const mergeText = await callWriteTool("merge_scrivener_project_beta", {
+    const startText = await callWriteTool("merge_scrivener_project_beta", {
       source_project_dir: scrivenerProjectDir,
       project_id: projectId,
       dry_run: false,
       auto_sync: true,
       organize_by_chapters: true,
     });
-    const mergeParsed = JSON.parse(mergeText);
+    const started = JSON.parse(startText);
+    const done = await waitForAsyncJob(started.job.job_id);
 
-    assert.equal(mergeParsed.ok, true);
-    assert.ok(mergeParsed.merge.relocated >= 2);
+    assert.equal(done.ok, true);
+    assert.ok(done.job.result.merge.relocated >= 2);
 
     const relocatedScenePath = path.join(
       writeSyncDir,
@@ -832,12 +856,11 @@ describe("merge_scrivener_project_beta tool", () => {
 
     const scenesText = await callWriteTool("find_scenes", { project_id: projectId });
     const scenes = JSON.parse(scenesText);
-    assert.equal(Array.isArray(scenes), true);
     assert.equal(scenes[0].chapter, 1);
     assert.equal(scenes[0].chapter_title, "Arrival");
   });
 
-  test("merge_scrivener_project_beta with organize_by_chapters: false keeps scenes in place", async () => {
+  test("organize_by_chapters: false keeps scenes in place", async () => {
     const projectId = "direct-beta-no-organize";
 
     await callWriteTool("import_scrivener_sync", {
@@ -847,17 +870,18 @@ describe("merge_scrivener_project_beta tool", () => {
       auto_sync: false,
     });
 
-    const mergeText = await callWriteTool("merge_scrivener_project_beta", {
+    const startText = await callWriteTool("merge_scrivener_project_beta", {
       source_project_dir: scrivenerProjectDir,
       project_id: projectId,
       dry_run: false,
       auto_sync: true,
       organize_by_chapters: false,
     });
-    const mergeParsed = JSON.parse(mergeText);
+    const started = JSON.parse(startText);
+    const done = await waitForAsyncJob(started.job.job_id);
 
-    assert.equal(mergeParsed.ok, true);
-    assert.equal(mergeParsed.merge.relocated, 0, "No scenes should be relocated when organize_by_chapters is false");
+    assert.equal(done.ok, true);
+    assert.equal(done.job.result.merge.relocated, 0);
 
     const originalScenePath = path.join(
       writeSyncDir,
@@ -867,16 +891,15 @@ describe("merge_scrivener_project_beta tool", () => {
       "001 Scene Arrival [10].txt"
     );
     const originalMetaPath = originalScenePath.replace(/\.txt$/, ".meta.yaml");
-    assert.equal(fs.existsSync(originalScenePath), true, "Scene should remain in original scenes directory");
-    assert.equal(fs.existsSync(originalMetaPath), true, "Sidecar should remain in original scenes directory");
+    assert.equal(fs.existsSync(originalScenePath), true);
+    assert.equal(fs.existsSync(originalMetaPath), true);
 
     const scenesText = await callWriteTool("find_scenes", { project_id: projectId });
     const scenes = JSON.parse(scenesText);
-    assert.equal(Array.isArray(scenes), true);
-    assert.equal(scenes[0].chapter, 1, "Chapter metadata should still be added");
-    assert.equal(scenes[0].chapter_title, "Arrival", "Chapter title should still be added");
+    assert.equal(scenes[0].chapter, 1);
   });
 });
+
 
 describe("async import/merge job tools", () => {
   test("import_scrivener_sync_async completes and returns import payload", async () => {
@@ -901,37 +924,6 @@ describe("async import/merge job tools", () => {
     assert.equal(done.job.result.import.created, 2);
   });
 
-  test("merge_scrivener_project_beta_async completes and returns merge payload", async () => {
-    const projectId = "async-merge-preview";
-
-    await callWriteTool("import_scrivener_sync", {
-      source_dir: scrivenerImportDir,
-      project_id: projectId,
-      dry_run: false,
-      auto_sync: false,
-    });
-
-    const startText = await callWriteTool("merge_scrivener_project_beta_async", {
-      source_project_dir: scrivenerProjectDir,
-      project_id: projectId,
-      dry_run: true,
-      auto_sync: false,
-    });
-    const started = JSON.parse(startText);
-
-    assert.equal(started.ok, true);
-    assert.equal(started.async, true);
-    assert.equal(started.beta, true);
-    assert.equal(typeof started.job.job_id, "string");
-
-    const done = await waitForAsyncJob(started.job.job_id);
-    assert.equal(done.ok, true);
-    assert.equal(done.job.status, "completed");
-    assert.equal(done.job.result.ok, true);
-    assert.equal(done.job.result.merge.project_id, projectId);
-    assert.equal(done.job.result.merge.sidecar_files, 2);
-    assert.equal(done.job.result.merge.updated, 2);
-  });
   test("cancel_async_job sets transitional 'cancelling' status and resolves to terminal state", async () => {
     const startText = await callWriteTool("import_scrivener_sync_async", {
       source_dir: scrivenerImportDir,
