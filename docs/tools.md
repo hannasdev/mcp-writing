@@ -143,7 +143,7 @@ Get status and result for an asynchronous job started by async tools such as imp
 
 ## list_async_jobs
 
-List asynchronous jobs currently known to this server. Use this when you lost a job_id or need a dashboard view of running/completed jobs. Returns an object envelope containing a 
+List asynchronous jobs currently known to this server. Use this when you lost a job_id or need a dashboard view of running/completed jobs. Returns an object envelope containing a jobs array of job objects sorted by newest first.
 
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |
