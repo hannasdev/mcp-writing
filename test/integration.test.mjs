@@ -645,7 +645,7 @@ describe("merge_scrivener_project_beta tool", () => {
 
     assert.equal(started.ok, true);
     assert.equal(started.async, true);
-    assert.equal(started.beta, true);
+    assert.equal(started.beta, undefined);
     assert.equal(typeof started.job.job_id, "string");
 
     const done = await waitForAsyncJob(started.job.job_id);
