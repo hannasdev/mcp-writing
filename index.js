@@ -1296,7 +1296,7 @@ function createMcpServer() {
 
   s.tool(
     "get_async_job_status",
-    "Get status and result for an asynchronous job started by async tools such as import_scrivener_sync_async, merge_scrivener_project_beta_async, or enrich_scene_characters_batch.",
+    "Get status and result for an asynchronous job started by async tools such as import_scrivener_sync_async, merge_scrivener_project_beta_async, or enrich_scene_characters_batch. Use this to poll job progress after receiving a job_id. Common next step: if status is still running, call this tool again; if completed, inspect result and optionally run sync().",
     {
       job_id: z.string().describe("Job ID returned by an async start tool."),
       include_result: z.boolean().optional().describe("If true (default), includes completed result payload when available."),
@@ -1305,7 +1305,7 @@ function createMcpServer() {
       pruneAsyncJobs();
       const job = asyncJobs.get(job_id);
       if (!job) {
-        return errorResponse("NOT_FOUND", `Async job '${job_id}' was not found. It may have expired.`);
+        return errorResponse("NOT_FOUND", `Async job '${job_id}' was not found. It may have expired. Hint: call list_async_jobs to see currently tracked job IDs.`);
       }
       return jsonResponse({ ok: true, async: true, job: toPublicJob(job, include_result) });
     }
@@ -1313,7 +1313,7 @@ function createMcpServer() {
 
   s.tool(
     "list_async_jobs",
-    "List asynchronous jobs currently known to this server.",
+    "List asynchronous jobs currently known to this server. Use this when you lost a job_id or need a dashboard view of running/completed jobs. Returns an object envelope containing a jobs array of job objects sorted by newest first.",
     {
       include_results: z.boolean().optional().describe("If true, includes completed result payloads."),
     },
@@ -1328,7 +1328,7 @@ function createMcpServer() {
 
   s.tool(
     "cancel_async_job",
-    "Cancel a running asynchronous job.",
+    "Cancel a running asynchronous job. Use this when an import/merge/batch run was started with overly broad scope or is no longer needed. Returns the updated job state; cancellation is cooperative and may transition through 'cancelling' before 'cancelled'.",
     {
       job_id: z.string().describe("Job ID returned by an async start tool."),
     },
@@ -1336,7 +1336,7 @@ function createMcpServer() {
       pruneAsyncJobs();
       const job = asyncJobs.get(job_id);
       if (!job) {
-        return errorResponse("NOT_FOUND", `Async job '${job_id}' was not found. It may have expired.`);
+        return errorResponse("NOT_FOUND", `Async job '${job_id}' was not found. It may have expired. Hint: call list_async_jobs to find active IDs.`);
       }
 
       if (job.status !== "running") {
@@ -1461,7 +1461,7 @@ function createMcpServer() {
 
       const rows = db.prepare(query).all(...params);
       if (rows.length === 0) {
-        return errorResponse("NO_RESULTS", "No scenes match the given filters.");
+        return errorResponse("NO_RESULTS", "No scenes match the given filters. Hint: broaden filters or call search_metadata with a keyword first.");
       }
 
       const staleCount = rows.filter(r => r.metadata_stale).length;
@@ -1909,7 +1909,7 @@ function createMcpServer() {
   // ---- list_threads --------------------------------------------------------
   s.tool(
     "list_threads",
-    "List all subplot/storyline threads for a project. Returns a structured JSON envelope with results and total_count. Supports pagination via page/page_size.",
+    "List all subplot/storyline threads for a project. Returns a structured JSON envelope with results and total_count. Use this to discover valid thread_id values before calling get_thread_arc or upsert_thread_link. Supports pagination via page/page_size.",
     {
       project_id: z.string().describe("Project ID."),
       page: z.number().int().min(1).optional().describe("Optional page number for paginated responses (1-based)."),
@@ -1937,7 +1937,7 @@ function createMcpServer() {
   // ---- get_thread_arc ------------------------------------------------------
   s.tool(
     "get_thread_arc",
-    "Get ordered scene metadata for all scenes belonging to a thread, including the per-thread beat. Returns a structured JSON envelope with thread metadata, results, and total_count. Supports pagination via page/page_size.",
+    "Get ordered scene metadata for all scenes belonging to a thread, including the per-thread beat. Returns a structured JSON envelope with thread metadata, results, and total_count. Use list_threads first to find a valid thread_id, then call get_scene_prose for close reading of specific scenes. Supports pagination via page/page_size.",
     {
       thread_id: z.string().describe("Thread ID."),
       page: z.number().int().min(1).optional().describe("Optional page number for paginated responses (1-based)."),
@@ -1946,7 +1946,7 @@ function createMcpServer() {
     async ({ thread_id, page, page_size }) => {
       const thread = db.prepare(`SELECT * FROM threads WHERE thread_id = ?`).get(thread_id);
       if (!thread) {
-        return errorResponse("NOT_FOUND", `Thread '${thread_id}' not found.`);
+        return errorResponse("NOT_FOUND", `Thread '${thread_id}' not found. Hint: call list_threads with project_id to get valid thread IDs.`);
       }
 
       const rows = db.prepare(`
@@ -2326,7 +2326,7 @@ function createMcpServer() {
 
       const scene = db.prepare(`SELECT file_path FROM scenes WHERE scene_id = ?`).get(scene_id);
       if (!scene) {
-        return errorResponse("NOT_FOUND", `Scene '${scene_id}' not found.`);
+        return errorResponse("NOT_FOUND", `Scene '${scene_id}' not found. Hint: call find_scenes to get valid scene IDs.`);
       }
 
       try {
@@ -2397,7 +2397,7 @@ function createMcpServer() {
 
       const proposal = pendingProposals.get(proposal_id);
       if (!proposal) {
-        return errorResponse("PROPOSAL_NOT_FOUND", `Proposal '${proposal_id}' not found or has expired.`);
+        return errorResponse("PROPOSAL_NOT_FOUND", `Proposal '${proposal_id}' not found or has expired. Hint: call propose_edit again to create a fresh proposal_id.`);
       }
 
       if (proposal.scene_id !== scene_id) {

@@ -132,7 +132,7 @@ Start an asynchronous batch job that infers scene character mentions and updates
 
 ## get_async_job_status
 
-Get status and result for an asynchronous job started by async tools such as import_scrivener_sync_async, merge_scrivener_project_beta_async, or enrich_scene_characters_batch.
+Get status and result for an asynchronous job started by async tools such as import_scrivener_sync_async, merge_scrivener_project_beta_async, or enrich_scene_characters_batch. Use this to poll job progress after receiving a job_id. Common next step: if status is still running, call this tool again; if completed, inspect result and optionally run sync().
 
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |
@@ -143,7 +143,7 @@ Get status and result for an asynchronous job started by async tools such as imp
 
 ## list_async_jobs
 
-List asynchronous jobs currently known to this server.
+List asynchronous jobs currently known to this server. Use this when you lost a job_id or need a dashboard view of running/completed jobs. Returns an object envelope containing a jobs array of job objects sorted by newest first.
 
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |
@@ -153,7 +153,7 @@ List asynchronous jobs currently known to this server.
 
 ## cancel_async_job
 
-Cancel a running asynchronous job.
+Cancel a running asynchronous job. Use this when an import/merge/batch run was started with overly broad scope or is no longer needed. Returns the updated job state; cancellation is cooperative and may transition through 'cancelling' before 'cancelled'.
 
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |
@@ -307,7 +307,7 @@ Full-text search across scene titles, loglines (synopsis/logline text fields), a
 
 ## list_threads
 
-List all subplot/storyline threads for a project. Returns a structured JSON envelope with results and total_count. Supports pagination via page/page_size.
+List all subplot/storyline threads for a project. Returns a structured JSON envelope with results and total_count. Use this to discover valid thread_id values before calling get_thread_arc or upsert_thread_link. Supports pagination via page/page_size.
 
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |
@@ -319,7 +319,7 @@ List all subplot/storyline threads for a project. Returns a structured JSON enve
 
 ## get_thread_arc
 
-Get ordered scene metadata for all scenes belonging to a thread, including the per-thread beat. Returns a structured JSON envelope with thread metadata, results, and total_count. Supports pagination via page/page_size.
+Get ordered scene metadata for all scenes belonging to a thread, including the per-thread beat. Returns a structured JSON envelope with thread metadata, results, and total_count. Use list_threads first to find a valid thread_id, then call get_scene_prose for close reading of specific scenes. Supports pagination via page/page_size.
 
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |
