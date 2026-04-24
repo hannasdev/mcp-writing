@@ -156,7 +156,7 @@ _No parameters._
 
 ## preview_review_bundle
 
-Dry-run planning tool for review bundles. Resolves scene scope, deterministic ordering, warnings, and planned output filenames without writing files.
+Dry-run planning tool for review bundles. Resolves scene scope, deterministic ordering, warnings, and planned output filenames without writing files. Note: include_scene_ids/include_metadata_sidebar/include_paragraph_anchors are advisory placeholders in Phase 4A.1 and do not alter planning semantics yet.
 
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |
@@ -167,9 +167,9 @@ Dry-run planning tool for review bundles. Resolves scene scope, deterministic or
 | `tag` | `string` | No | Optional tag filter (exact match). |
 | `scene_ids` | `string[]` | No | Optional explicit scene_id allowlist. Intersects with other filters. |
 | `strictness` | `enum` | No | Strictness mode: warn (default) or fail. |
-| `include_scene_ids` | `boolean` | No | Include scene IDs in planned output structure (default true). |
-| `include_metadata_sidebar` | `boolean` | No | Include metadata sidebar in profile-aware output planning (default false). |
-| `include_paragraph_anchors` | `boolean` | No | Include paragraph anchors in profile-aware output planning (default false). |
+| `include_scene_ids` | `boolean` | No | Advisory placeholder for later rendering behavior (default true). Included in preview output options, but does not change planning results in Phase 4A.1. |
+| `include_metadata_sidebar` | `boolean` | No | Advisory placeholder for later rendering behavior (default false). Included in preview output options, but does not change planning results in Phase 4A.1. |
+| `include_paragraph_anchors` | `boolean` | No | Advisory placeholder for later rendering behavior (default false). Included in preview output options, but does not change planning results in Phase 4A.1. |
 | `bundle_name` | `string` | No | Optional output bundle base name override (slugified in planned outputs). |
 
 ---

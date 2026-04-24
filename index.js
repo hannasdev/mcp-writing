@@ -1307,7 +1307,7 @@ function createMcpServer() {
   // ---- preview_review_bundle ----------------------------------------------
   s.tool(
     "preview_review_bundle",
-    "Dry-run planning tool for review bundles. Resolves scene scope, deterministic ordering, warnings, and planned output filenames without writing files.",
+    "Dry-run planning tool for review bundles. Resolves scene scope, deterministic ordering, warnings, and planned output filenames without writing files. Note: include_scene_ids/include_metadata_sidebar/include_paragraph_anchors are advisory placeholders in Phase 4A.1 and do not alter planning semantics yet.",
     {
       project_id: z.string().describe("Project ID to scope the review bundle (e.g. 'test-novel')."),
       profile: z.enum(REVIEW_BUNDLE_PROFILES).describe("Bundle profile: outline_discussion or editor_detailed."),
@@ -1316,9 +1316,9 @@ function createMcpServer() {
       tag: z.string().optional().describe("Optional tag filter (exact match)."),
       scene_ids: z.array(z.string()).optional().describe("Optional explicit scene_id allowlist. Intersects with other filters."),
       strictness: z.enum(REVIEW_BUNDLE_STRICTNESS).optional().describe("Strictness mode: warn (default) or fail."),
-      include_scene_ids: z.boolean().optional().describe("Include scene IDs in planned output structure (default true)."),
-      include_metadata_sidebar: z.boolean().optional().describe("Include metadata sidebar in profile-aware output planning (default false)."),
-      include_paragraph_anchors: z.boolean().optional().describe("Include paragraph anchors in profile-aware output planning (default false)."),
+      include_scene_ids: z.boolean().optional().describe("Advisory placeholder for later rendering behavior (default true). Included in preview output options, but does not change planning results in Phase 4A.1."),
+      include_metadata_sidebar: z.boolean().optional().describe("Advisory placeholder for later rendering behavior (default false). Included in preview output options, but does not change planning results in Phase 4A.1."),
+      include_paragraph_anchors: z.boolean().optional().describe("Advisory placeholder for later rendering behavior (default false). Included in preview output options, but does not change planning results in Phase 4A.1."),
       bundle_name: z.string().optional().describe("Optional output bundle base name override (slugified in planned outputs)."),
     },
     async ({
