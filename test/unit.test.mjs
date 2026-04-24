@@ -2177,7 +2177,7 @@ describe("Scrivener direct metadata merge", () => {
     }
   });
 
-  test("XML size check rejects .scrivx files larger than 50MB", () => {
+  test("XML size check warns for .scrivx files larger than 50MB and continues", () => {
     const scrivDir = fs.mkdtempSync(path.join(os.tmpdir(), "scriv-huge-"));
     const scrivxPath = path.join(scrivDir, "Huge.scrivx");
     
@@ -2201,15 +2201,21 @@ describe("Scrivener direct metadata merge", () => {
     fs.mkdirSync(scenesDir, { recursive: true });
 
     try {
-      assert.throws(
-        () => mergeScrivenerProjectMetadata({
-          scrivPath: scrivDir,
-          mcpSyncDir: syncRoot,
-          projectId: "fixture-huge",
-          dryRun: true,
-        }),
-        /unusually large|memory issues/i,
-        "Expected error about large .scrivx file"
+      const result = mergeScrivenerProjectMetadata({
+        scrivPath: scrivDir,
+        mcpSyncDir: syncRoot,
+        projectId: "fixture-huge",
+        dryRun: true,
+      });
+
+      assert.ok(
+        result.warningSummary.large_scrivx_file,
+        "Expected large_scrivx_file warning in summary"
+      );
+      assert.equal(result.warningSummary.large_scrivx_file.count, 1);
+      assert.ok(
+        result.warnings.some(w => w.code === "large_scrivx_file"),
+        "Expected large_scrivx_file warning in warnings list"
       );
     } finally {
       fs.rmSync(scrivDir, { recursive: true, force: true });

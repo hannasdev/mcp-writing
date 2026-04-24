@@ -373,7 +373,8 @@ export function mergeSidecarData(existing, mergeData) {
   };
 }
 
-export function loadScrivenerProjectData(scrivPath) {
+export function loadScrivenerProjectData(scrivPath, options = {}) {
+  const { onWarning } = options;
   const scrivPathAbs = path.resolve(scrivPath);
   if (!fs.existsSync(scrivPathAbs)) {
     throw new Error(`Scrivener bundle not found: ${scrivPathAbs}`);
@@ -395,15 +396,17 @@ export function loadScrivenerProjectData(scrivPath) {
   const scrivxPath = path.join(scrivPathAbs, preferredScrivx);
   const dataDir = path.join(scrivPathAbs, "Files", "Data");
 
-  // XML size guardrail: warn if .scrivx is very large (typical threshold ~50MB for very large projects)
+  // XML size guardrail: surface warning if .scrivx is very large.
   const scrivxStat = fs.statSync(scrivxPath);
   const MAX_SCRIVX_SIZE = 50 * 1024 * 1024; // 50MB
   if (scrivxStat.size > MAX_SCRIVX_SIZE) {
-    throw new Error(
-      `Scrivener project .scrivx file is unusually large (${Math.round(scrivxStat.size / 1024 / 1024)}MB). ` +
-      `This may indicate a very large project (1000+ scenes) that could cause memory issues during parsing. ` +
-      `Consider breaking the project into smaller parts or contact support.`
-    );
+    onWarning?.({
+      code: "large_scrivx_file",
+      message: `Scrivener project .scrivx file is unusually large (${Math.round(scrivxStat.size / 1024 / 1024)}MB). Parsing may take longer and use more memory.`,
+      scrivx_path: scrivxPath,
+      size_bytes: scrivxStat.size,
+      threshold_bytes: MAX_SCRIVX_SIZE,
+    });
   }
 
   const xml = fs.readFileSync(scrivxPath, "utf8");
@@ -562,7 +565,16 @@ export function mergeScrivenerProjectMetadata({
     throw new Error(`Scenes directory not found or not a directory: ${scenesDir}`);
   }
 
-  const projectData = loadScrivenerProjectData(scrivPath);
+  const warnings = [];
+  const warningSummary = {};
+  let warningsTruncated = false;
+
+  const projectData = loadScrivenerProjectData(scrivPath, {
+    onWarning: (warning) => {
+      warningsTruncated = pushWarning(warnings, warningSummary, warning) || warningsTruncated;
+      logger(`  WARN  ${warning.message}`);
+    },
+  });
   logger(`Sync map: ${Object.keys(projectData.syncNumToUUID).length} entries`);
   logger(`Keyword map: ${Object.keys(projectData.keywordMap).length} entries`);
   logger(`Binder items collected: ${Object.keys(projectData.metaByUUID).length}`);
@@ -578,10 +590,6 @@ export function mergeScrivenerProjectMetadata({
   let relocated = 0;
   const fieldAddCounts = {};
   const previewChanges = [];
-  const warnings = [];
-  const warningSummary = {};
-  let warningsTruncated = false;
-
   for (const sidecarPath of sidecarFiles) {
     const filename = path.basename(sidecarPath);
     const prosePath = findProsePathForSidecar(sidecarPath);

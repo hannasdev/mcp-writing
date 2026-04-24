@@ -318,8 +318,8 @@ Post-fixture-validation critical safety improvements required before graduation.
 
 - [ ] Add XML file size check and memory guardrail
   - Check `.scrivx` file size before DOM parsing
-  - Warn if larger than 50MB (typical very large project threshold)
-  - Prevents OOM on massive projects (1000+ scenes)
+  - Emit structured warning if larger than 50MB (typical very large project threshold)
+  - Surfaces potential long-running/high-memory parse risk for massive projects (1000+ scenes)
 
 ### Phase E Acceptance Criteria
 
