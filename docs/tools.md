@@ -14,6 +14,7 @@
 - [`list_async_jobs`](#list_async_jobs)
 - [`cancel_async_job`](#cancel_async_job)
 - [`get_runtime_config`](#get_runtime_config)
+- [`preview_review_bundle`](#preview_review_bundle)
 - [`find_scenes`](#find_scenes)
 - [`get_scene_prose`](#get_scene_prose)
 - [`get_chapter_prose`](#get_chapter_prose)
@@ -150,6 +151,26 @@ Cancel a running asynchronous job. Use this when an import/merge/batch run was s
 Show the active runtime paths and capabilities for this server instance (sync dir, database path, writability, permission diagnostics, and git availability). Use this to verify which manuscript location is currently connected.
 
 _No parameters._
+
+---
+
+## preview_review_bundle
+
+Dry-run planning tool for review bundles. Resolves scene scope, deterministic ordering, warnings, and planned output filenames without writing files. Note: include_scene_ids/include_metadata_sidebar/include_paragraph_anchors are advisory placeholders in Phase 4A.1 and do not alter planning semantics yet.
+
+| Parameter | Type | Required | Description |
+| --- | --- | :---: | --- |
+| `project_id` | `string` | Yes | Project ID to scope the review bundle (e.g. 'test-novel'). |
+| `profile` | `enum` | Yes | Bundle profile: outline_discussion or editor_detailed. |
+| `part` | `integer` | No | Optional part filter. |
+| `chapter` | `integer` | No | Optional chapter filter. |
+| `tag` | `string` | No | Optional tag filter (exact match). |
+| `scene_ids` | `string[]` | No | Optional explicit scene_id allowlist. Intersects with other filters. |
+| `strictness` | `enum` | No | Strictness mode: warn (default) or fail. |
+| `include_scene_ids` | `boolean` | No | Advisory placeholder for later rendering behavior (default true). Included in preview output options, but does not change planning results in Phase 4A.1. |
+| `include_metadata_sidebar` | `boolean` | No | Advisory placeholder for later rendering behavior (default false). Included in preview output options, but does not change planning results in Phase 4A.1. |
+| `include_paragraph_anchors` | `boolean` | No | Advisory placeholder for later rendering behavior (default false). Included in preview output options, but does not change planning results in Phase 4A.1. |
+| `bundle_name` | `string` | No | Optional output bundle base name override (slugified in planned outputs). |
 
 ---
 
