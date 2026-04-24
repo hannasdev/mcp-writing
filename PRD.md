@@ -113,6 +113,16 @@ Index and search world-building notes, research, and continuity scratchpads.
 
 ---
 
+### 🧾 [Review Bundles for Editorial Workflows](docs/prd/todo/review-bundles.md) 📋
+
+Generate collaboration-focused bundles for conceptual discussion, detailed editorial reading, and personalized beta-reader feedback without expanding into typesetting/final-distribution scope.
+
+**Example:** "Create an outline-only chapter packet for story discussion" or "Generate a beta-reader draft with non-distribution notice and feedback form."
+
+**Status:** Proposed for Phase 4A. Scoped as review artifacts only (not publishing output).
+
+---
+
 ### 🚀 [OpenClaw Integration](docs/prd/in-progress/openclaw-integration.md) 🚧
 
 Deploy writing-mcp as a service in the OpenClaw runtime with the Writing World agent.
@@ -191,7 +201,7 @@ See [ideas-and-questions.md](docs/prd/inbox/ideas-and-questions.md) for:
 - **Phase 1** ✅ — Ask questions about your project (all tools implemented)
 - **Phase 2** ✅ — Answers stay accurate (metadata staleness, sidecar migration, enrichment)
 - **Phase 3** ✅ — AI helps edit prose (two-step proposals, git history, snapshots)
-- **Phase 4** 📋 — Semantic search & reference docs (pending evaluation)
+- **Phase 4** 📋 — Semantic search, reference docs, and review bundles (pending evaluation/scoping)
 - **Phase 5** 🚧 — OpenClaw integration (active planning and integration work underway)
 
 ---

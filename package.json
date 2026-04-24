@@ -14,6 +14,7 @@
     "git.js",
     "world-entity-templates.js",
     "metadata-lint.js",
+    "review-bundles.js",
     "scripts/",
     "README.md",
     "CHANGELOG.md"

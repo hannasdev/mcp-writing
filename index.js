@@ -17,6 +17,12 @@ import { isGitAvailable, isGitRepository, initGitRepository, createSnapshot, lis
 import { renderCharacterArcTemplate, renderCharacterSheetTemplate, renderPlaceSheetTemplate, slugifyEntityName } from "./world-entity-templates.js";
 import { importScrivenerSync, validateProjectId } from "./importer.js";
 import { ASYNC_PROGRESS_PREFIX } from "./async-progress.js";
+import {
+  REVIEW_BUNDLE_PROFILES,
+  REVIEW_BUNDLE_STRICTNESS,
+  ReviewBundlePlanError,
+  buildReviewBundlePlan,
+} from "./review-bundles.js";
 
 const SYNC_DIR = process.env.WRITING_SYNC_DIR ?? "./sync";
 const DB_PATH = process.env.DB_PATH ?? "./writing.db";
@@ -1295,6 +1301,68 @@ function createMcpServer() {
         runtime_warnings: RUNTIME_DIAGNOSTICS.warnings,
         setup_recommendations: RUNTIME_DIAGNOSTICS.recommendations,
       });
+    }
+  );
+
+  // ---- preview_review_bundle ----------------------------------------------
+  s.tool(
+    "preview_review_bundle",
+    "Dry-run planning tool for review bundles. Resolves scene scope, deterministic ordering, warnings, and planned output filenames without writing files.",
+    {
+      project_id: z.string().describe("Project ID to scope the review bundle (e.g. 'test-novel')."),
+      profile: z.enum(REVIEW_BUNDLE_PROFILES).describe("Bundle profile: outline_discussion or editor_detailed."),
+      part: z.number().int().optional().describe("Optional part filter."),
+      chapter: z.number().int().optional().describe("Optional chapter filter."),
+      tag: z.string().optional().describe("Optional tag filter (exact match)."),
+      scene_ids: z.array(z.string()).optional().describe("Optional explicit scene_id allowlist. Intersects with other filters."),
+      strictness: z.enum(REVIEW_BUNDLE_STRICTNESS).optional().describe("Strictness mode: warn (default) or fail."),
+      include_scene_ids: z.boolean().optional().describe("Include scene IDs in planned output structure (default true)."),
+      include_metadata_sidebar: z.boolean().optional().describe("Include metadata sidebar in profile-aware output planning (default false)."),
+      include_paragraph_anchors: z.boolean().optional().describe("Include paragraph anchors in profile-aware output planning (default false)."),
+      bundle_name: z.string().optional().describe("Optional output bundle base name override (slugified in planned outputs)."),
+    },
+    async ({
+      project_id,
+      profile,
+      part,
+      chapter,
+      tag,
+      scene_ids,
+      strictness = "warn",
+      include_scene_ids = true,
+      include_metadata_sidebar = false,
+      include_paragraph_anchors = false,
+      bundle_name,
+    }) => {
+      const projectIdCheck = validateProjectId(project_id);
+      if (!projectIdCheck.ok) {
+        return errorResponse("INVALID_PROJECT_ID", projectIdCheck.reason, { project_id });
+      }
+
+      try {
+        const plan = buildReviewBundlePlan(db, {
+          project_id,
+          profile,
+          part,
+          chapter,
+          tag,
+          scene_ids,
+          strictness,
+          include_scene_ids,
+          include_metadata_sidebar,
+          include_paragraph_anchors,
+          bundle_name,
+        });
+        return jsonResponse(plan);
+      } catch (error) {
+        if (error instanceof ReviewBundlePlanError) {
+          return errorResponse(error.code, error.message, error.details);
+        }
+        return errorResponse(
+          "PREVIEW_FAILED",
+          error instanceof Error ? error.message : "Failed to generate review bundle preview."
+        );
+      }
     }
   );
 

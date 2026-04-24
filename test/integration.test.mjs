@@ -1708,6 +1708,57 @@ describe("find_scenes tool", () => {
   });
 });
 
+describe("preview_review_bundle tool", () => {
+  test("returns dry-run plan for outline profile", async () => {
+    const text = await callTool("preview_review_bundle", {
+      project_id: "test-novel",
+      profile: "outline_discussion",
+    });
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.profile, "outline_discussion");
+    assert.equal(parsed.summary.scene_count, 3);
+    assert.equal(parsed.strictness_result.can_proceed, true);
+    assert.ok(Array.isArray(parsed.planned_outputs));
+    assert.ok(parsed.planned_outputs.some(name => name.endsWith(".md")));
+    assert.ok(parsed.planned_outputs.some(name => name.endsWith(".manifest.json")));
+  });
+
+  test("applies scene_ids as intersection with other filters", async () => {
+    const text = await callTool("preview_review_bundle", {
+      project_id: "test-novel",
+      profile: "outline_discussion",
+      chapter: 1,
+      scene_ids: ["sc-001", "sc-003"],
+    });
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.summary.scene_count, 1);
+    assert.deepEqual(parsed.ordering.map(row => row.scene_id), ["sc-001"]);
+    assert.deepEqual(parsed.summary.excluded_scene_ids, ["sc-003"]);
+  });
+
+  test("strictness fail reports blockers when stale metadata exists", async () => {
+    const scenePath = path.join(writeSyncDir, "projects", "test-novel", "part-1", "chapter-1", "sc-001.md");
+    const before = fs.readFileSync(scenePath, "utf8");
+    fs.writeFileSync(scenePath, `${before}\n\nStale marker line for review bundle strictness test.\n`, "utf8");
+    await callWriteTool("sync");
+
+    const text = await callWriteTool("preview_review_bundle", {
+      project_id: "test-novel",
+      profile: "editor_detailed",
+      strictness: "fail",
+    });
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.strictness_result.can_proceed, false);
+    assert.ok(parsed.strictness_result.blockers.some(blocker => blocker.code === "STALE_METADATA"));
+  });
+});
+
 describe("get_scene_prose tool", () => {
   test("returns prose content for sc-001", async () => {
     const text = await callTool("get_scene_prose", { scene_id: "sc-001" });

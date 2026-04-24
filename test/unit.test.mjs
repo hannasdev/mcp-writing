@@ -33,6 +33,53 @@ import {
   mergeSidecarData,
 } from "../scrivener-direct.js";
 import { runSceneCharacterBatch } from "../scene-character-batch.js";
+import { buildReviewBundlePlan } from "../review-bundles.js";
+
+function insertTestScene(db, {
+  sceneId,
+  projectId = "test-novel",
+  title = null,
+  part = null,
+  chapter = null,
+  timelinePosition = null,
+  metadataStale = 0,
+  wordCount = null,
+}) {
+  const now = new Date().toISOString();
+  db.prepare(`
+    INSERT INTO scenes (
+      scene_id,
+      project_id,
+      title,
+      part,
+      chapter,
+      timeline_position,
+      word_count,
+      file_path,
+      prose_checksum,
+      metadata_stale,
+      updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    sceneId,
+    projectId,
+    title,
+    part,
+    chapter,
+    timelinePosition,
+    wordCount,
+    `/tmp/${sceneId}.md`,
+    "deadbeef",
+    metadataStale,
+    now
+  );
+}
+
+function setupReviewBundleTestDb() {
+  const db = openDb(":memory:");
+  db.prepare(`INSERT INTO projects (project_id, universe_id, name) VALUES (?, ?, ?)`).run("test-novel", null, "Test Novel");
+  return db;
+}
 
 // ---------------------------------------------------------------------------
 // checksumProse
@@ -49,6 +96,108 @@ describe("checksumProse", () => {
   test("returns a non-empty hex string", () => {
     const result = checksumProse("some prose");
     assert.match(result, /^[0-9a-f]+$/);
+  });
+});
+
+describe("buildReviewBundlePlan", () => {
+  test("orders scenes deterministically with timeline and scene_id fallback", () => {
+    const db = setupReviewBundleTestDb();
+    try {
+      insertTestScene(db, {
+        sceneId: "sc-002",
+        part: 1,
+        chapter: 1,
+        timelinePosition: 1,
+        wordCount: 400,
+      });
+      insertTestScene(db, {
+        sceneId: "sc-001",
+        part: 1,
+        chapter: 1,
+        timelinePosition: null,
+        wordCount: 500,
+      });
+      insertTestScene(db, {
+        sceneId: "sc-003",
+        part: 1,
+        chapter: 2,
+        timelinePosition: 1,
+        wordCount: 300,
+      });
+
+      const plan = buildReviewBundlePlan(db, {
+        project_id: "test-novel",
+        profile: "outline_discussion",
+      });
+
+      assert.equal(plan.ok, true);
+      assert.deepEqual(
+        plan.ordering.map(row => row.scene_id),
+        ["sc-002", "sc-001", "sc-003"]
+      );
+      assert.equal(plan.summary.estimated_word_count, 1200);
+      assert.ok(plan.warning_summary.missing_ordering_fields);
+    } finally {
+      db.close();
+    }
+  });
+
+  test("applies scene_ids as intersection with chapter filter", () => {
+    const db = setupReviewBundleTestDb();
+    try {
+      insertTestScene(db, {
+        sceneId: "sc-001",
+        part: 1,
+        chapter: 1,
+        timelinePosition: 1,
+        wordCount: 300,
+      });
+      insertTestScene(db, {
+        sceneId: "sc-003",
+        part: 1,
+        chapter: 2,
+        timelinePosition: 1,
+        wordCount: 350,
+      });
+
+      const plan = buildReviewBundlePlan(db, {
+        project_id: "test-novel",
+        profile: "outline_discussion",
+        chapter: 1,
+        scene_ids: ["sc-001", "sc-003"],
+      });
+
+      assert.deepEqual(plan.ordering.map(row => row.scene_id), ["sc-001"]);
+      assert.deepEqual(plan.summary.excluded_scene_ids, ["sc-003"]);
+      assert.ok(plan.warning_summary.requested_scene_ids_filtered_out);
+    } finally {
+      db.close();
+    }
+  });
+
+  test("strictness fail blocks when stale scenes are included", () => {
+    const db = setupReviewBundleTestDb();
+    try {
+      insertTestScene(db, {
+        sceneId: "sc-001",
+        part: 1,
+        chapter: 1,
+        timelinePosition: 1,
+        metadataStale: 1,
+      });
+
+      const plan = buildReviewBundlePlan(db, {
+        project_id: "test-novel",
+        profile: "editor_detailed",
+        strictness: "fail",
+      });
+
+      assert.equal(plan.strictness_result.can_proceed, false);
+      assert.equal(plan.strictness_result.blockers[0].code, "STALE_METADATA");
+      assert.ok(plan.warning_summary.metadata_stale);
+    } finally {
+      db.close();
+    }
   });
 });
 
