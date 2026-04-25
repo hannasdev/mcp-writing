@@ -174,19 +174,19 @@ In `strictness=warn` mode (default), the bundle is generated with a warning in t
 
 In `strictness=fail` mode, generation is blocked and the response includes a `blockers` list with the affected `scene_ids`.
 
-Fix: re-enrich stale scenes before generating the bundle.
+Fix: re-enrich each stale scene before generating the bundle. In `strictness=fail` mode, use the `scene_ids` returned in `strictness_result.blockers` and call `enrich_scene` for each one so metadata is re-derived and the stale flag is cleared.
 
 ```json
-{ "tool": "enrich_scene_characters_batch", "project_id": "your-project" }
+{ "tool": "enrich_scene", "scene_id": "sc-001-example" }
 ```
 
-Or run a full sync to pick up any external file changes:
+If prose or sidecars were edited outside this server, run a full sync first to refresh the index:
 
 ```json
 { "tool": "sync" }
 ```
 
-Then retry bundle generation.
+Then run `enrich_scene` for stale scenes and retry bundle generation.
 
 ### `create_review_bundle` returns warnings about missing ordering fields
 
@@ -199,15 +199,24 @@ In `strictness=fail` mode, generation is currently not blocked by missing orderi
 Fix: use `find_scenes` to identify scenes with null ordering fields, then update them:
 
 ```json
-{ "tool": "update_scene_metadata", "scene_id": "sc-001-example", "part": 1, "chapter": 2, "timeline_position": 3 }
+{
+	"tool": "update_scene_metadata",
+	"project_id": "my-project",
+	"scene_id": "sc-001-example",
+	"fields": {
+		"part": 1,
+		"chapter": 2,
+		"timeline_position": 3
+	}
+}
 ```
 
 ### `create_review_bundle` writes no files / `INVALID_OUTPUT_PATH`
 
-The `output_dir` path may not exist or the `bundle_name` contains characters that resolve outside the output directory.
+The `output_dir` path may be outside `WRITING_SYNC_DIR`, or the `bundle_name` contains characters that resolve outside the output directory.
 
 Fix:
 
-1. Create the output directory before calling the tool.
-2. Use a simple `bundle_name` with alphanumeric characters and hyphens — special characters are slugified but extreme values are rejected.
-3. Verify that `output_dir` is an absolute path pointing to a writable location outside the manuscript sync folder.
+1. Verify that `output_dir` is an absolute path pointing to a writable location inside the manuscript sync folder (`WRITING_SYNC_DIR`).
+2. You do not need to create the output directory first; the tool creates it if it does not already exist.
+3. Use a simple `bundle_name` with alphanumeric characters and hyphens — special characters are slugified to a safe name, and if nothing usable remains the tool falls back to `review-bundle`.
