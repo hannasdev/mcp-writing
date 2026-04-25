@@ -1256,7 +1256,7 @@ describe("runSceneCharacterBatch", () => {
 
   test("does not treat duplicate tokens in one name as ambiguous", async () => {
     const { dir } = makeBatchFixture();
-    const filePath = writeBatchScene(dir, "sc-001", "Luna appears in the doorway.", []);
+    const filePath = writeBatchScene(dir, "sc-001", "Luna Luna appears in the doorway.", []);
 
     const result = await runSceneCharacterBatch({
       syncDir: dir,
@@ -1276,6 +1276,33 @@ describe("runSceneCharacterBatch", () => {
     assert.equal(result.ok, true);
     assert.deepEqual(result.results[0].inferred_characters, ["luna"]);
     assert.deepEqual(result.results[0].match_details.ambiguous_tokens, []);
+
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  test("does not infer repeated-token names from a single token mention", async () => {
+    const { dir } = makeBatchFixture();
+    const filePath = writeBatchScene(dir, "sc-001", "Luna appears in the doorway.", []);
+
+    const result = await runSceneCharacterBatch({
+      syncDir: dir,
+      args: {
+        project_id: "test-novel",
+        dry_run: true,
+        replace_mode: "merge",
+        include_match_details: true,
+        target_scenes: [{ scene_id: "sc-001", project_id: "test-novel", file_path: filePath }],
+        character_rows: [
+          { character_id: "luna", name: "Luna Luna" },
+          { character_id: "marcus", name: "Marcus Hale" },
+        ],
+      },
+    });
+
+    assert.equal(result.ok, true);
+    assert.deepEqual(result.results[0].inferred_characters, []);
+    assert.deepEqual(result.results[0].match_details.ambiguous_tokens, []);
+    assert.equal(result.results[0].status, "unchanged");
 
     fs.rmSync(dir, { recursive: true, force: true });
   });

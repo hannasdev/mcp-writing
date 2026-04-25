@@ -30,14 +30,16 @@ function normalizeCharacterRows(rows) {
   const clean = rows
     .filter(row => row?.character_id && row?.name)
     .map(row => {
-      const tokens = [...new Set(String(row.name).toLowerCase().split(/\s+/).filter(Boolean))];
+      const phrase_tokens = String(row.name).toLowerCase().split(/\s+/).filter(Boolean);
+      const tokens = [...new Set(phrase_tokens)];
       return {
         character_id: row.character_id,
         name: String(row.name).trim(),
+        phrase_tokens,
         tokens,
         informative_tokens: tokens.filter(isDistinctiveToken),
-        full_name_regex: tokens.length > 1
-          ? new RegExp(`\\b${tokens.map(escapeRegex).join("\\s+")}\\b`, "i")
+        full_name_regex: phrase_tokens.length > 1
+          ? new RegExp(`\\b${phrase_tokens.map(escapeRegex).join("\\s+")}\\b`, "i")
           : null,
       };
     })
@@ -78,7 +80,7 @@ function inferCharactersFromProse(prose, characterRows) {
     }
 
     // Precision-first v1 policy: multi-token names require a full phrase match.
-    if (row.tokens.length !== 1) {
+    if (row.phrase_tokens.length !== 1) {
       continue;
     }
 
