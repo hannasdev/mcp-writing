@@ -118,7 +118,9 @@ Default exclusions:
 ## Output Format (Phase 4A)
 
 Primary output:
-- Markdown bundle (single-file default)
+- PDF bundle (single-file default)
+- Markdown bundle (optional via `format` parameter)
+- Both PDF and Markdown (optional via `format: both`)
 
 Companion outputs:
 - `manifest.json`
@@ -127,7 +129,7 @@ Companion outputs:
 
 Potential extensions (not required in Phase 4A):
 - optional DOCX adapter built from the same intermediate representation
-- optional PDF adapter built from the same intermediate representation
+- richer PDF typography/layout controls built from the same intermediate representation
 
 ## Tool Surface (Proposed)
 
