@@ -1771,6 +1771,15 @@ describe("preview_review_bundle tool", () => {
     assert.equal(parsed.resolved_scope.options.recipient_name, "Jordan Example");
     assert.ok(parsed.planned_outputs.some(name => name.endsWith(".notice.md")));
     assert.ok(parsed.planned_outputs.some(name => name.endsWith(".feedback-form.md")));
+    assert.ok(
+      parsed.planned_outputs.some(
+        name =>
+          name.endsWith(".md") &&
+          !name.endsWith(".notice.md") &&
+          !name.endsWith(".feedback-form.md")
+      )
+    );
+    assert.ok(parsed.planned_outputs.some(name => name.endsWith(".manifest.json")));
   });
 });
 
@@ -1844,6 +1853,7 @@ describe("create_review_bundle tool", () => {
       assert.ok(parsed.output_paths?.notice_md);
       assert.ok(parsed.output_paths?.feedback_form_md);
       assert.ok(fs.existsSync(parsed.output_paths.bundle_markdown));
+      assert.ok(fs.existsSync(parsed.output_paths.manifest_json));
       assert.ok(fs.existsSync(parsed.output_paths.notice_md));
       assert.ok(fs.existsSync(parsed.output_paths.feedback_form_md));
 
@@ -1852,6 +1862,8 @@ describe("create_review_bundle tool", () => {
       assert.ok(markdown.includes("- Recipient: Jordan Example"));
       assert.ok(markdown.includes("She was at the bottom of the gangway"));
 
+      const manifest = JSON.parse(fs.readFileSync(parsed.output_paths.manifest_json, "utf8"));
+
       const notice = fs.readFileSync(parsed.output_paths.notice_md, "utf8");
       assert.ok(notice.includes("Non-Distribution Notice"));
       assert.ok(notice.includes("Jordan Example"));
@@ -1859,6 +1871,7 @@ describe("create_review_bundle tool", () => {
       const feedback = fs.readFileSync(parsed.output_paths.feedback_form_md, "utf8");
       assert.ok(feedback.includes("Beta Reader Feedback Form"));
       assert.ok(feedback.includes("Jordan Example"));
+      assert.ok(feedback.includes(`- Date: ${manifest.generated_at.slice(0, 10)}`));
     } finally {
       fs.rmSync(outDir, { recursive: true, force: true });
     }

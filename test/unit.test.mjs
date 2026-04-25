@@ -219,7 +219,14 @@ describe("buildReviewBundlePlan", () => {
 
       assert.equal(plan.ok, true);
       assert.equal(plan.resolved_scope.options.recipient_name, "Alex Reader");
-      assert.ok(plan.planned_outputs.some(name => name.endsWith(".md")));
+      assert.ok(
+        plan.planned_outputs.some(
+          name =>
+            name.endsWith(".md") &&
+            !name.endsWith(".notice.md") &&
+            !name.endsWith(".feedback-form.md")
+        )
+      );
       assert.ok(plan.planned_outputs.some(name => name.endsWith(".notice.md")));
       assert.ok(plan.planned_outputs.some(name => name.endsWith(".feedback-form.md")));
       assert.ok(plan.planned_outputs.some(name => name.endsWith(".manifest.json")));
