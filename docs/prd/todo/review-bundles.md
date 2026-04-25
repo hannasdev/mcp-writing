@@ -125,8 +125,9 @@ Companion outputs:
 - `feedback-form.md` (for beta profile)
 - `notice.md` (for beta profile)
 
-Potential extension (not required in Phase 4A):
+Potential extensions (not required in Phase 4A):
 - optional DOCX adapter built from the same intermediate representation
+- optional PDF adapter built from the same intermediate representation
 
 ## Tool Surface (Proposed)
 
@@ -197,7 +198,7 @@ Optional async counterpart for large projects may be added if generation time be
 
 - Phase 4A.1: `outline_discussion` + `editor_detailed` in markdown only
 - Phase 4A.2: `beta_reader_personalized` (notice + feedback form templates)
-- Phase 4A.3: optional DOCX adapter if markdown adoption is strong
+- Phase 4A.3: optional DOCX/PDF adapters if markdown adoption is strong
 
 ## Open Questions
 

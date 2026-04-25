@@ -1,3 +1,7 @@
+import fs from "node:fs";
+import path from "node:path";
+import matter from "gray-matter";
+
 const MAX_SORT_VALUE = Number.MAX_SAFE_INTEGER;
 
 export const REVIEW_BUNDLE_PROFILES = ["outline_discussion", "editor_detailed"];
@@ -51,6 +55,26 @@ function slugifyBundleName(value) {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
   return slug || "review-bundle";
+}
+
+function escapeMarkdown(text) {
+  return String(text ?? "")
+    .replace(/\\/g, "\\\\")
+    .replace(/([*_`\[\]#])/g, "\\$1");
+}
+
+function resolveOutputFilePath(outputDir, fileName) {
+  const normalizedOutputDir = path.resolve(outputDir);
+  const target = path.resolve(normalizedOutputDir, fileName);
+  const rel = path.relative(normalizedOutputDir, target);
+  if (rel.startsWith("..") || path.isAbsolute(rel)) {
+    throw new ReviewBundlePlanError(
+      "INVALID_OUTPUT_PATH",
+      `Output file '${fileName}' resolves outside output_dir.`,
+      { output_dir: normalizedOutputDir, file_name: fileName }
+    );
+  }
+  return target;
 }
 
 function assertProfile(profile) {
@@ -287,4 +311,395 @@ export function buildReviewBundlePlan(dbHandle, {
       `${safeBundleName}.manifest.json`,
     ],
   };
+}
+
+function loadBundleSceneRows(dbHandle, projectId, sceneIds) {
+  if (!Array.isArray(sceneIds) || sceneIds.length === 0) return [];
+  const rows = [];
+  // 900 is safely below SQLite's per-query bound of 999 host parameters
+  // (one slot is used by the project_id binding, leaving 998 for scene_id placeholders;
+  // 900 gives extra headroom for any future additions to the query).
+  const chunkSize = 900;
+  for (let offset = 0; offset < sceneIds.length; offset += chunkSize) {
+    const chunk = sceneIds.slice(offset, offset + chunkSize);
+    const placeholders = chunk.map(() => "?").join(",");
+    const chunkRows = dbHandle.prepare(`
+      SELECT
+        scene_id,
+        project_id,
+        title,
+        part,
+        chapter,
+        timeline_position,
+        logline,
+        pov,
+        save_the_cat_beat,
+        file_path
+      FROM scenes
+      WHERE project_id = ? AND scene_id IN (${placeholders})
+    `).all(projectId, ...chunk);
+    rows.push(...chunkRows);
+  }
+
+  const rowMap = new Map(rows.map(row => [row.scene_id, row]));
+  const orderedRows = [];
+  const missingSceneIds = [];
+
+  for (const sceneId of sceneIds) {
+    const row = rowMap.get(sceneId);
+    if (row) {
+      orderedRows.push(row);
+    } else {
+      missingSceneIds.push(sceneId);
+    }
+  }
+
+  if (missingSceneIds.length > 0) {
+    throw new ReviewBundlePlanError(
+      "MISSING_SCENE_ROWS",
+      `Bundle includes ${missingSceneIds.length} scene(s) that could not be loaded from the database.`,
+      {
+        project_id: projectId,
+        missing_scene_ids: missingSceneIds,
+        requested_scene_count: sceneIds.length,
+        resolved_scene_count: orderedRows.length,
+      }
+    );
+  }
+
+  return orderedRows;
+}
+
+function normalizeRelativePath(inputPath) {
+  return String(inputPath).replace(/\\/g, "/").replace(/^\.\//, "");
+}
+
+function resolveSceneFilePath(filePath, { syncDir } = {}) {
+  if (!filePath || !syncDir) return null;
+
+  const normalizedSyncDir = path.resolve(syncDir);
+  let realSyncDir;
+  try {
+    realSyncDir = fs.realpathSync.native(normalizedSyncDir);
+  } catch {
+    return null;
+  }
+
+  const rel = normalizeRelativePath(filePath);
+  const candidates = [];
+
+  if (path.isAbsolute(filePath)) {
+    // Canonicalize the absolute path (resolve symlinks) so the boundary check
+    // works correctly even when syncDir itself contains a symlink component
+    // (e.g. macOS /var → /private/var or /tmp → /private/tmp).
+    const resolvedAbsolute = path.resolve(filePath);
+    let canonicalAbsolute;
+
+    if (fs.existsSync(resolvedAbsolute)) {
+      try {
+        canonicalAbsolute = fs.realpathSync.native(resolvedAbsolute);
+      } catch {
+        // Cannot canonicalize — skip this candidate.
+      }
+    } else {
+      // File doesn't exist yet; walk up to the nearest existing ancestor,
+      // canonicalize that, then reconstruct the full path.
+      let ancestor = resolvedAbsolute;
+      const segments = [];
+      while (!fs.existsSync(ancestor)) {
+        const parent = path.dirname(ancestor);
+        if (parent === ancestor) { ancestor = null; break; }
+        segments.unshift(path.basename(ancestor));
+        ancestor = parent;
+      }
+      if (ancestor) {
+        try {
+          const realAncestor = fs.realpathSync.native(ancestor);
+          canonicalAbsolute = path.resolve(realAncestor, ...segments);
+        } catch {
+          // Cannot canonicalize.
+        }
+      }
+    }
+
+    if (canonicalAbsolute) {
+      const relFromSync = path.relative(realSyncDir, canonicalAbsolute);
+      if (!relFromSync.startsWith("..") && !path.isAbsolute(relFromSync)) {
+        candidates.push(canonicalAbsolute);
+      }
+    }
+  } else {
+    candidates.push(path.resolve(realSyncDir, rel));
+    // Scrivener External Folder Sync sometimes stores paths prefixed with
+    // "sync/" (the name of the sync folder itself) relative to the project
+    // root. Strip that prefix so we can find the file within realSyncDir.
+    if (rel === "sync" || rel.startsWith("sync/")) {
+      candidates.push(path.resolve(realSyncDir, rel.replace(/^sync\/?/, "")));
+    }
+  }
+
+  for (const candidate of candidates) {
+    if (!fs.existsSync(candidate)) {
+      // Before returning a non-existent path, verify it is still inside realSyncDir.
+      // A relative filePath with .. segments could otherwise escape the boundary.
+      const relFromSync = path.relative(realSyncDir, candidate);
+      if (!relFromSync.startsWith("..") && !path.isAbsolute(relFromSync)) {
+        return candidate;
+      }
+      continue;
+    }
+
+    // File exists: validate realpath stays inside syncDir to catch symlink escapes.
+    // (For absolute paths this is already canonicalized; for relative paths, verify.)
+    try {
+      const realCandidate = fs.realpathSync.native(candidate);
+      const relReal = path.relative(realSyncDir, realCandidate);
+      if (!relReal.startsWith("..") && !path.isAbsolute(relReal)) {
+        return realCandidate;
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  return null;
+}
+
+function readProse(filePath, { syncDir } = {}) {
+  const resolvedPath = resolveSceneFilePath(filePath, { syncDir });
+  if (!resolvedPath) return null;
+  try {
+    const raw = fs.readFileSync(resolvedPath, "utf8");
+    return matter(raw).content.trim();
+  } catch (error) {
+    const errorCode = error && typeof error === "object" && "code" in error && typeof error.code === "string"
+      ? error.code
+      : null;
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    throw new ReviewBundlePlanError(
+      "SCENE_PROSE_READ_FAILED",
+      `Failed to read scene prose from ${resolvedPath}.`,
+      {
+        file_path: filePath,
+        resolved_path: resolvedPath,
+        error_code: errorCode,
+        cause: errorMessage,
+      }
+    );
+  }
+}
+
+function renderSceneBlock(scene, options) {
+  const {
+    profile,
+    includeSceneIds,
+    includeMetadataSidebar,
+    includeParagraphAnchors,
+  } = options;
+
+  const title = scene.title || scene.scene_id;
+  const sceneHeading = includeSceneIds
+    ? `## ${escapeMarkdown(title)} (${escapeMarkdown(scene.scene_id)})`
+    : `## ${escapeMarkdown(title)}`;
+
+  const parts = [sceneHeading];
+
+  if (profile === "outline_discussion") {
+    const summaryParts = [];
+    if (scene.pov) summaryParts.push(`POV: ${scene.pov}`);
+    if (scene.save_the_cat_beat) summaryParts.push(`Beat: ${scene.save_the_cat_beat}`);
+    if (scene.part != null) summaryParts.push(`Part: ${scene.part}`);
+    if (scene.chapter != null) summaryParts.push(`Chapter: ${scene.chapter}`);
+    if (summaryParts.length > 0) {
+      parts.push(`_${escapeMarkdown(summaryParts.join(" | "))}_`);
+    }
+    if (scene.logline) {
+      parts.push(escapeMarkdown(scene.logline.trim()));
+    }
+    return parts.join("\n\n");
+  }
+
+  if (includeMetadataSidebar) {
+    const sidebar = [
+      scene.part != null ? `part: ${scene.part}` : null,
+      scene.chapter != null ? `chapter: ${scene.chapter}` : null,
+      scene.timeline_position != null ? `timeline_position: ${scene.timeline_position}` : null,
+      scene.pov ? `pov: ${escapeMarkdown(scene.pov)}` : null,
+      scene.save_the_cat_beat ? `beat: ${escapeMarkdown(scene.save_the_cat_beat)}` : null,
+    ].filter(Boolean);
+    if (sidebar.length > 0) {
+      parts.push(`> ${sidebar.join("  \\\n> ")}`);
+    }
+  }
+
+  const prose = scene.prose ?? "";
+  if (!includeParagraphAnchors || prose.length === 0) {
+    parts.push(prose);
+    return parts.join("\n\n");
+  }
+
+  const paragraphs = prose
+    .split(/\n\s*\n/g)
+    .map(p => p.trim())
+    .filter(Boolean);
+  // Sanitize scene_id for safe embedding in an HTML comment: restrict to
+  // alphanumerics, hyphens, underscores, and dots to prevent "-->" or other
+  // sequences from prematurely terminating the comment.
+  const safeSceneId = scene.scene_id.replace(/[^a-zA-Z0-9\-_.]/g, "_");
+  const anchoredParagraphs = paragraphs.map((paragraph, index) => {
+    return `<!-- ${safeSceneId}:p${index + 1} -->\n${paragraph}`;
+  });
+  parts.push(anchoredParagraphs.join("\n\n"));
+  return parts.join("\n\n");
+}
+
+export function renderReviewBundleMarkdown(dbHandle, plan, { generatedAt, syncDir: syncDirOpt } = {}) {
+  const profile = plan.profile;
+  const includeSceneIds = Boolean(plan.resolved_scope?.options?.include_scene_ids);
+  const includeMetadataSidebar = Boolean(plan.resolved_scope?.options?.include_metadata_sidebar);
+  const includeParagraphAnchors = Boolean(plan.resolved_scope?.options?.include_paragraph_anchors);
+  // Prefer explicitly threaded syncDir; fall back to env (with "./sync" default matching index.js).
+  // Prefer explicitly threaded syncDir; fall back to env.
+  // No further fallback: if syncDir is null, resolveSceneFilePath returns null
+  // and SCENE_PROSE_READ_FAILED is thrown, making misconfiguration explicit.
+  const syncDir = syncDirOpt ?? process.env.WRITING_SYNC_DIR ?? null;
+
+  const sceneIds = plan.ordering.map(row => row.scene_id);
+  const rows = loadBundleSceneRows(dbHandle, plan.resolved_scope.project_id, sceneIds);
+  const sections = [];
+
+  const headerLines = [
+    `# Review Bundle: ${escapeMarkdown(plan.resolved_scope.project_id)}`,
+    "",
+    `- Profile: ${profile}`,
+    `- Generated at: ${generatedAt ?? new Date().toISOString()}`,
+    `- Scene count: ${plan.summary.scene_count}`,
+  ];
+  sections.push(headerLines.join("\n"));
+
+  for (const scene of rows) {
+    let prose = "";
+    if (profile === "editor_detailed") {
+      const resolved = readProse(scene.file_path, { syncDir });
+      if (resolved === null) {
+        throw new ReviewBundlePlanError(
+          "SCENE_PROSE_READ_FAILED",
+          `Scene prose is unavailable for scene ${scene.scene_id}: file_path is null or could not be resolved within syncDir.`,
+          {
+            scene_id: scene.scene_id,
+            file_path: scene.file_path ?? null,
+            sync_dir: syncDir,
+          }
+        );
+      }
+      prose = resolved;
+    }
+    const withProse = { ...scene, prose };
+    sections.push(renderSceneBlock(withProse, {
+      profile,
+      includeSceneIds,
+      includeMetadataSidebar,
+      includeParagraphAnchors,
+    }));
+  }
+
+  return sections.join("\n\n---\n\n").trim() + "\n";
+}
+
+export function createReviewBundleArtifacts(dbHandle, {
+  plan,
+  output_dir,
+  source_commit = null,
+  syncDir,
+}) {
+  if (!output_dir) {
+    throw new ReviewBundlePlanError("INVALID_OUTPUT_DIR", "output_dir is required.");
+  }
+
+  const normalizedOutputDir = path.resolve(output_dir);
+  if (fs.existsSync(normalizedOutputDir)) {
+    if (!fs.statSync(normalizedOutputDir).isDirectory()) {
+      throw new ReviewBundlePlanError(
+        "INVALID_OUTPUT_DIR",
+        `output_dir exists but is not a directory: ${normalizedOutputDir}`
+      );
+    }
+  } else {
+    fs.mkdirSync(normalizedOutputDir, { recursive: true });
+  }
+  try {
+    fs.accessSync(normalizedOutputDir, fs.constants.W_OK);
+  } catch {
+    throw new ReviewBundlePlanError(
+      "INVALID_OUTPUT_DIR",
+      `output_dir is not writable: ${normalizedOutputDir}`
+    );
+  }
+
+  const markdownFileName = plan.planned_outputs.find(name => name.endsWith(".md"));
+  const manifestFileName = plan.planned_outputs.find(name => name.endsWith(".manifest.json"));
+  if (!markdownFileName || !manifestFileName) {
+    throw new ReviewBundlePlanError(
+      "INVALID_PLAN_OUTPUTS",
+      "Plan is missing expected markdown/manifest filenames."
+    );
+  }
+
+  const markdownPath = resolveOutputFilePath(normalizedOutputDir, markdownFileName);
+  const manifestPath = resolveOutputFilePath(normalizedOutputDir, manifestFileName);
+
+  const generatedAt = new Date().toISOString();
+  const markdown = renderReviewBundleMarkdown(dbHandle, plan, { generatedAt, syncDir });
+  const manifest = {
+    bundle_id: path.basename(markdownFileName, ".md"),
+    profile: plan.profile,
+    generated_at: generatedAt,
+    provenance: {
+      source_commit: source_commit ?? null,
+      project_id: plan.resolved_scope.project_id,
+    },
+    summary: plan.summary,
+    warning_summary: plan.warning_summary,
+    warnings: plan.warnings,
+    resolved_scope: plan.resolved_scope,
+    scene_ids: plan.ordering.map(row => row.scene_id),
+  };
+
+  for (const outputPath of [markdownPath, manifestPath]) {
+    try {
+      const stat = fs.lstatSync(outputPath);
+      if (stat.isSymbolicLink()) {
+        throw new ReviewBundlePlanError(
+          "INVALID_OUTPUT_PATH",
+          `Refusing to write: target path is a symlink: ${outputPath}`
+        );
+      }
+      if (!stat.isFile()) {
+        throw new ReviewBundlePlanError(
+          "INVALID_OUTPUT_PATH",
+          `Refusing to write: target path exists but is not a regular file: ${outputPath}`
+        );
+      }
+    } catch (error) {
+      if (error instanceof ReviewBundlePlanError) throw error;
+      if (error?.code !== "ENOENT") throw error;
+      // ENOENT — file doesn't exist yet, which is the expected case.
+      // Note: there is an inherent TOCTOU window between this lstat check and the
+      // writeFileSync below. This is acceptable for a local tool where the caller
+      // controls the output directory.
+    }
+  }
+
+  fs.writeFileSync(markdownPath, markdown, "utf8");
+  fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n", "utf8");
+
+  return {
+    bundle_id: manifest.bundle_id,
+    output_paths: {
+      bundle_markdown: markdownPath,
+      manifest_json: manifestPath,
+    },
+    generated_at: generatedAt,
+  };
+
 }

@@ -33,7 +33,7 @@ import {
   mergeSidecarData,
 } from "../scrivener-direct.js";
 import { runSceneCharacterBatch } from "../scene-character-batch.js";
-import { buildReviewBundlePlan } from "../review-bundles.js";
+import { buildReviewBundlePlan, renderReviewBundleMarkdown, ReviewBundlePlanError } from "../review-bundles.js";
 
 function insertTestScene(db, {
   sceneId,
@@ -196,6 +196,169 @@ describe("buildReviewBundlePlan", () => {
       assert.equal(plan.strictness_result.blockers[0].code, "STALE_METADATA");
       assert.ok(plan.warning_summary.metadata_stale);
     } finally {
+      db.close();
+    }
+  });
+
+  test("renderReviewBundleMarkdown escapes outline loglines with markdown metacharacters", () => {
+    const db = setupReviewBundleTestDb();
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "bundle-outline-"));
+    const scenePath = path.join(tempDir, "sc-001.md");
+    fs.writeFileSync(scenePath, "Plain prose body.\n", "utf8");
+
+    try {
+      const now = new Date().toISOString();
+      db.prepare(`
+        INSERT INTO scenes (
+          scene_id, project_id, title, part, chapter, timeline_position, word_count,
+          logline, file_path, prose_checksum, metadata_stale, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        "sc-001",
+        "test-novel",
+        "Markdown Test",
+        1,
+        1,
+        1,
+        10,
+        "A *bold* [link] `code` logline",
+        scenePath,
+        "deadbeef",
+        0,
+        now
+      );
+
+      const plan = buildReviewBundlePlan(db, {
+        project_id: "test-novel",
+        profile: "outline_discussion",
+      });
+      const markdown = renderReviewBundleMarkdown(db, plan, { generatedAt: "2026-01-01T00:00:00.000Z" });
+
+      assert.ok(markdown.includes("A \\*bold\\* \\[link\\] \\`code\\` logline"));
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+      db.close();
+    }
+  });
+
+  test("renderReviewBundleMarkdown throws when planned scene rows are missing", () => {
+    const db = setupReviewBundleTestDb();
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "bundle-missing-rows-"));
+    const scenePath = path.join(tempDir, "sc-001.md");
+    fs.writeFileSync(scenePath, "Plain prose body.\n", "utf8");
+
+    try {
+      const now = new Date().toISOString();
+      db.prepare(`
+        INSERT INTO scenes (
+          scene_id, project_id, title, part, chapter, timeline_position, word_count,
+          file_path, prose_checksum, metadata_stale, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        "sc-001",
+        "test-novel",
+        "Missing Row Test",
+        1,
+        1,
+        1,
+        10,
+        scenePath,
+        "deadbeef",
+        0,
+        now
+      );
+
+      const plan = buildReviewBundlePlan(db, {
+        project_id: "test-novel",
+        profile: "editor_detailed",
+      });
+
+      db.prepare(`DELETE FROM scenes WHERE scene_id = ? AND project_id = ?`).run("sc-001", "test-novel");
+
+      assert.throws(
+        () => renderReviewBundleMarkdown(db, plan, { generatedAt: "2026-01-01T00:00:00.000Z" }),
+        error => error instanceof ReviewBundlePlanError && error.code === "MISSING_SCENE_ROWS"
+      );
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+      db.close();
+    }
+  });
+
+  test("renderReviewBundleMarkdown throws when scene prose cannot be read", () => {
+    const db = setupReviewBundleTestDb();
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "bundle-prose-read-"));
+    // Use the real path to avoid macOS /tmp → /private/tmp symlink discrepancy.
+    const realTempDir = fs.realpathSync.native(tempDir);
+    const prevSyncDir = process.env.WRITING_SYNC_DIR;
+    process.env.WRITING_SYNC_DIR = realTempDir;
+    // Deliberately do NOT create the file — readProse should throw SCENE_PROSE_READ_FAILED.
+    const scenePath = path.join(realTempDir, "sc-001.md");
+
+    try {
+      const now = new Date().toISOString();
+      db.prepare(`
+        INSERT INTO scenes (
+          scene_id, project_id, title, part, chapter, timeline_position, word_count,
+          file_path, prose_checksum, metadata_stale, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run("sc-001", "test-novel", "Prose Read Test", 1, 1, 1, 10, scenePath, "deadbeef", 0, now);
+
+      const plan = buildReviewBundlePlan(db, {
+        project_id: "test-novel",
+        profile: "editor_detailed",
+      });
+
+      assert.throws(
+        () => renderReviewBundleMarkdown(db, plan, { generatedAt: "2026-01-01T00:00:00.000Z" }),
+        error => error instanceof ReviewBundlePlanError && error.code === "SCENE_PROSE_READ_FAILED"
+      );
+    } finally {
+      if (prevSyncDir === undefined) {
+        delete process.env.WRITING_SYNC_DIR;
+      } else {
+        process.env.WRITING_SYNC_DIR = prevSyncDir;
+      }
+      fs.rmSync(tempDir, { recursive: true, force: true });
+      db.close();
+    }
+  });
+
+  test("renderReviewBundleMarkdown throws SCENE_PROSE_READ_FAILED when file_path is null", () => {
+    const db = setupReviewBundleTestDb();
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "bundle-null-path-"));
+    const realTempDir = fs.realpathSync.native(tempDir);
+    const prevSyncDir = process.env.WRITING_SYNC_DIR;
+    process.env.WRITING_SYNC_DIR = realTempDir;
+
+    try {
+      const now = new Date().toISOString();
+      // Use a path outside syncDir — resolveSceneFilePath returns null,
+      // which should trigger SCENE_PROSE_READ_FAILED rather than silent empty prose.
+      const outsidePath = "/nonexistent-outside-sync/scene.md";
+      db.prepare(`
+        INSERT INTO scenes (
+          scene_id, project_id, title, part, chapter, timeline_position, word_count,
+          file_path, prose_checksum, metadata_stale, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run("sc-001", "test-novel", "Null Path Scene", 1, 1, 1, 10, outsidePath, null, 0, now);
+
+      const plan = buildReviewBundlePlan(db, {
+        project_id: "test-novel",
+        profile: "editor_detailed",
+      });
+
+      assert.throws(
+        () => renderReviewBundleMarkdown(db, plan, { generatedAt: "2026-01-01T00:00:00.000Z" }),
+        error => error instanceof ReviewBundlePlanError && error.code === "SCENE_PROSE_READ_FAILED"
+      );
+    } finally {
+      if (prevSyncDir === undefined) {
+        delete process.env.WRITING_SYNC_DIR;
+      } else {
+        process.env.WRITING_SYNC_DIR = prevSyncDir;
+      }
+      fs.rmSync(tempDir, { recursive: true, force: true });
       db.close();
     }
   });

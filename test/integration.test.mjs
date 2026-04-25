@@ -1759,6 +1759,123 @@ describe("preview_review_bundle tool", () => {
   });
 });
 
+describe("create_review_bundle tool", () => {
+  test("writes outline bundle markdown + manifest to output_dir", async () => {
+    const outDir = fs.mkdtempSync(path.join(writeSyncDir, "review-bundles-outline-"));
+    try {
+      const text = await callWriteTool("create_review_bundle", {
+        project_id: "test-novel",
+        profile: "outline_discussion",
+        output_dir: outDir,
+        bundle_name: "editorial-outline",
+        source_commit: "test-commit-hash",
+      });
+      const parsed = JSON.parse(text);
+
+      assert.equal(parsed.ok, true);
+      assert.ok(parsed.output_paths?.bundle_markdown);
+      assert.ok(parsed.output_paths?.manifest_json);
+      assert.ok(fs.existsSync(parsed.output_paths.bundle_markdown));
+      assert.ok(fs.existsSync(parsed.output_paths.manifest_json));
+
+      const markdown = fs.readFileSync(parsed.output_paths.bundle_markdown, "utf8");
+      assert.ok(markdown.includes("# Review Bundle: test-novel"));
+      assert.ok(markdown.includes("## The Return"));
+      assert.ok(!markdown.includes("She was at the bottom of the gangway"));
+
+      const manifest = JSON.parse(fs.readFileSync(parsed.output_paths.manifest_json, "utf8"));
+      assert.equal(manifest.profile, "outline_discussion");
+      assert.equal(manifest.provenance.source_commit, "test-commit-hash");
+      assert.equal(manifest.summary.scene_count, 3);
+    } finally {
+      fs.rmSync(outDir, { recursive: true, force: true });
+    }
+  });
+
+  test("writes editor bundle with prose and paragraph anchors", async () => {
+    const outDir = fs.mkdtempSync(path.join(writeSyncDir, "review-bundles-editor-"));
+    try {
+      const text = await callWriteTool("create_review_bundle", {
+        project_id: "test-novel",
+        profile: "editor_detailed",
+        output_dir: outDir,
+        include_paragraph_anchors: true,
+      });
+      const parsed = JSON.parse(text);
+      assert.equal(parsed.ok, true);
+
+      const markdown = fs.readFileSync(parsed.output_paths.bundle_markdown, "utf8");
+      assert.ok(markdown.includes("<!-- sc-001:p1 -->"));
+      assert.ok(markdown.includes("She was at the bottom of the gangway"));
+    } finally {
+      fs.rmSync(outDir, { recursive: true, force: true });
+    }
+  });
+
+  test("returns STRICTNESS_BLOCKED when fail mode sees stale metadata", async () => {
+    const scenePath = path.join(writeSyncDir, "projects", "test-novel", "part-1", "chapter-1", "sc-002.md");
+    const before = fs.readFileSync(scenePath, "utf8");
+    fs.writeFileSync(scenePath, `${before}\n\nStale marker line for create bundle strictness test.\n`, "utf8");
+    await callWriteTool("sync");
+
+    const outDir = fs.mkdtempSync(path.join(writeSyncDir, "review-bundles-blocked-"));
+    try {
+      const text = await callWriteTool("create_review_bundle", {
+        project_id: "test-novel",
+        profile: "editor_detailed",
+        output_dir: outDir,
+        strictness: "fail",
+      });
+      const parsed = JSON.parse(text);
+
+      assert.equal(parsed.ok, false);
+      assert.equal(parsed.error.code, "STRICTNESS_BLOCKED");
+    } finally {
+      fs.rmSync(outDir, { recursive: true, force: true });
+      fs.writeFileSync(scenePath, before, "utf8");
+      await callWriteTool("enrich_scene", { scene_id: "sc-002", project_id: "test-novel" });
+    }
+  });
+
+  test("returns INVALID_OUTPUT_DIR when output_dir is outside WRITING_SYNC_DIR", async () => {
+    const outDir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-writing-bundle-outside-"));
+    try {
+      const text = await callWriteTool("create_review_bundle", {
+        project_id: "test-novel",
+        profile: "outline_discussion",
+        output_dir: outDir,
+      });
+      const parsed = JSON.parse(text);
+
+      assert.equal(parsed.ok, false);
+      assert.equal(parsed.error.code, "INVALID_OUTPUT_DIR");
+    } finally {
+      fs.rmSync(outDir, { recursive: true, force: true });
+    }
+  });
+
+  test("returns INVALID_OUTPUT_DIR when output_dir routes through a symlink outside WRITING_SYNC_DIR", async () => {
+    const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-writing-bundle-symlink-outside-"));
+    const symlinkDir = path.join(writeSyncDir, "exports-link");
+    try {
+      fs.symlinkSync(outsideDir, symlinkDir, "dir");
+
+      const text = await callWriteTool("create_review_bundle", {
+        project_id: "test-novel",
+        profile: "outline_discussion",
+        output_dir: path.join(symlinkDir, "nested-output"),
+      });
+      const parsed = JSON.parse(text);
+
+      assert.equal(parsed.ok, false);
+      assert.equal(parsed.error.code, "INVALID_OUTPUT_DIR");
+    } finally {
+      fs.rmSync(symlinkDir, { recursive: true, force: true });
+      fs.rmSync(outsideDir, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("get_scene_prose tool", () => {
   test("returns prose content for sc-001", async () => {
     const text = await callTool("get_scene_prose", { scene_id: "sc-001" });

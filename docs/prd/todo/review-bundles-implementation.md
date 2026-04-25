@@ -171,7 +171,7 @@ Write behavior:
 
 1. M2: `beta_reader_personalized` templates (`notice.md`, `feedback-form.md`).
 2. M3: optional async generation for large projects.
-3. M4: optional DOCX adapter.
+3. M4: optional DOCX/PDF adapters.
 
 ## Related
 
