@@ -157,7 +157,7 @@ _No parameters._
 
 ## preview_review_bundle
 
-Dry-run planning tool for review bundles. Resolves scene scope, deterministic ordering, warnings, and planned output filenames without writing files. Note: include_scene_ids/include_metadata_sidebar/include_paragraph_anchors are advisory placeholders in Phase 4A.1 and do not alter planning semantics yet.
+Dry-run planning tool for review bundles. Resolves scene scope, deterministic ordering, warnings, and planned output filenames without writing files. Rendering options are accepted for API consistency and reflected in resolved_scope.options, but do not change planning output.
 
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |
@@ -168,9 +168,9 @@ Dry-run planning tool for review bundles. Resolves scene scope, deterministic or
 | `tag` | `string` | No | Optional tag filter (exact match). |
 | `scene_ids` | `string[]` | No | Optional explicit scene_id allowlist. Intersects with other filters. |
 | `strictness` | `enum` | No | Strictness mode: warn (default) or fail. |
-| `include_scene_ids` | `boolean` | No | Include scene IDs in headings (default true). Applies to both PDF and markdown. |
-| `include_metadata_sidebar` | `boolean` | No | Include metadata sidebar in markdown output (default false). Markdown only — no effect on PDF. |
-| `include_paragraph_anchors` | `boolean` | No | Include paragraph anchors in markdown output (default false). Markdown only — no effect on PDF. |
+| `include_scene_ids` | `boolean` | No | Rendering option (default true). Included in resolved_scope.options for downstream rendering; does not change planning results. |
+| `include_metadata_sidebar` | `boolean` | No | Rendering option (default false). Included in resolved_scope.options for downstream rendering; does not change planning results. |
+| `include_paragraph_anchors` | `boolean` | No | Rendering option (default false). Included in resolved_scope.options for downstream rendering; does not change planning results. |
 | `recipient_name` | `string` | No | Optional recipient display name for beta_reader_personalized profile. |
 | `bundle_name` | `string` | No | Optional output bundle base name override (slugified in planned outputs). |
 | `format` | `enum("pdf","markdown","both")` | No | Output format: pdf (default), markdown, or both. |
