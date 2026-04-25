@@ -723,12 +723,17 @@ export function renderReviewBundlePdf(dbHandle, plan, { generatedAt, syncDir: sy
   const doc = new PDFDocument({
     size: "Letter",
     margin: 50,
-    bufferPages: true,
   });
 
-  // Collect all pages in a buffer
+  // Register data and error listeners before any content is written so
+  // pdfkit cannot emit an unhandled 'error' event during layout/rendering.
   const chunks = [];
   doc.on("data", chunk => chunks.push(chunk));
+
+  // We'll attach resolve/reject inside the Promise below; store them so
+  // the error listener can reach them.
+  let _reject;
+  doc.on("error", err => _reject?.(err));
 
   // Title and metadata
   doc.fontSize(24).font("Helvetica-Bold").text(`Review Bundle: ${plan.resolved_scope.project_id}`, { align: "left" });
@@ -746,10 +751,11 @@ export function renderReviewBundlePdf(dbHandle, plan, { generatedAt, syncDir: sy
   if (profile === "beta_reader_personalized") {
     doc.fontSize(12).font("Helvetica-Bold").text("Usage Notice", { align: "left" });
     doc.moveDown(0.3);
+    const noticeWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
     doc.fontSize(10).font("Helvetica");
     doc.text("This beta-reader draft is intended for private review and feedback. Please do not redistribute without explicit author permission.", {
       align: "left",
-      width: 495,
+      width: noticeWidth,
     });
     doc.moveDown();
   }
@@ -770,8 +776,9 @@ export function renderReviewBundlePdf(dbHandle, plan, { generatedAt, syncDir: sy
     if (scene.pov) metaParts.push(`POV: ${scene.pov}`);
     if (scene.save_the_cat_beat) metaParts.push(`Beat: ${scene.save_the_cat_beat}`);
     if (metaParts.length > 0) {
+      const metaWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
       doc.fontSize(9).font("Helvetica-Oblique");
-      doc.text(metaParts.join(" • "), { align: "left" });
+      doc.text(metaParts.join(" • "), { align: "left", width: metaWidth });
       doc.font("Helvetica");
       doc.moveDown(0.2);
     }
@@ -779,7 +786,8 @@ export function renderReviewBundlePdf(dbHandle, plan, { generatedAt, syncDir: sy
     // Logline
     if (scene.logline) {
       doc.fontSize(10).font("Helvetica-Oblique");
-      doc.text(`"${scene.logline}"`, { align: "left", width: 495 });
+      const textWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+      doc.text(`"${scene.logline}"`, { align: "left", width: textWidth });
       doc.moveDown(0.3);
     }
 
@@ -788,32 +796,36 @@ export function renderReviewBundlePdf(dbHandle, plan, { generatedAt, syncDir: sy
       let prose = "";
       const resolved = readProse(scene.file_path, { syncDir });
       if (resolved === null) {
-        prose = "[Scene prose unavailable]";
-      } else {
-        prose = resolved;
+        throw new ReviewBundlePlanError(
+          "SCENE_PROSE_UNAVAILABLE",
+          `Scene prose could not be resolved for profile "${profile}": ${scene.scene_id}`,
+          { sceneId: scene.scene_id, filePath: scene.file_path, profile, syncDir }
+        );
       }
+      prose = resolved;
 
+      const textWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
       doc.fontSize(10).font("Helvetica");
       doc.text(prose, {
         align: "left",
-        width: 495,
+        width: textWidth,
         lineGap: 3,
       });
     }
 
     doc.moveDown(0.5);
-    // Add page break if not on last scene
-    if (scene !== rows[rows.length - 1]) {
+    // Add page break between scenes only for prose-including profiles where
+    // clear scene separation matters. For outline_discussion, let content flow.
+    const includesProse = profile === "editor_detailed" || profile === "beta_reader_personalized";
+    if (includesProse && scene !== rows[rows.length - 1]) {
       doc.addPage();
     }
   }
 
   // Attach listeners before doc.end() to avoid missing early events
   return new Promise((resolve, reject) => {
-    doc.on("end", () => {
-      resolve(Buffer.concat(chunks));
-    });
-    doc.on("error", reject);
+    _reject = reject;
+    doc.on("end", () => resolve(Buffer.concat(chunks)));
     doc.end();
   });
 }

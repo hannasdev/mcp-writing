@@ -139,8 +139,12 @@ async function main() {
 
   // Sync the database first
   console.log("📇 Syncing project database...");
-  const db = await openDb(DB_PATH);
-  await syncAll(db, PROJECT_SYNC_DIR);
+  const syncDb = await openDb(DB_PATH);
+  try {
+    await syncAll(syncDb, PROJECT_SYNC_DIR);
+  } finally {
+    syncDb.close();
+  }
   console.log("   ✓ Sync complete\n");
 
   const results = [];
