@@ -6,7 +6,15 @@ import process from "process";
 async function main() {
   const [projectId, profile, outputDir, ...flags] = process.argv.slice(2);
   if (!projectId || !profile || !outputDir) {
-    console.log("Usage: node scripts/manual/run_create_review_bundle.js <project_id> <profile> <output_dir> [--anchors] [--bundle-name <name>]");
+    console.error("Usage: WRITING_SYNC_DIR=/path/to/sync node scripts/manual/run_create_review_bundle.js <project_id> <profile> <output_dir> [--anchors] [--bundle-name <name>]");
+    process.exit(1);
+  }
+
+  if (!process.env.WRITING_SYNC_DIR) {
+    console.error(
+      "WRITING_SYNC_DIR is required. Set it to the root of your sync directory.\n" +
+      "Usage: WRITING_SYNC_DIR=/path/to/sync node scripts/manual/run_create_review_bundle.js <project_id> <profile> <output_dir>"
+    );
     process.exit(1);
   }
 
@@ -20,7 +28,7 @@ async function main() {
     env: {
       ...process.env,
       MCP_TRANSPORT: "stdio",
-      WRITING_SYNC_DIR: process.env.WRITING_SYNC_DIR || path.dirname(path.resolve(outputDir))
+      WRITING_SYNC_DIR: process.env.WRITING_SYNC_DIR
     }
   });
 

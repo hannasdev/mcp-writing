@@ -17,19 +17,21 @@ async function main() {
 
   if (!projectId) {
     console.error(
-      "Usage: node run_mcp_and_review.js <projectId> [outputDir]\n" +
-      "Either provide outputDir explicitly or set WRITING_SYNC_DIR to derive a default output directory."
+      "Usage: WRITING_SYNC_DIR=/path/to/sync node scripts/manual/run_mcp_and_review.js <projectId> [outputDir]"
     );
     process.exit(1);
   }
 
-  if (!outputDirArg && !envWritingSyncDir) {
-    console.error("Missing output directory: provide [outputDir] or set WRITING_SYNC_DIR.");
+  if (!envWritingSyncDir) {
+    console.error(
+      "WRITING_SYNC_DIR is required. Set it to the root of your sync directory.\n" +
+      "Usage: WRITING_SYNC_DIR=/path/to/sync node scripts/manual/run_mcp_and_review.js <projectId> [outputDir]"
+    );
     process.exit(1);
   }
 
   const outputDir = outputDirArg || path.join(envWritingSyncDir, "exports");
-  const writingSyncDir = envWritingSyncDir || path.dirname(path.resolve(outputDir));
+  const writingSyncDir = envWritingSyncDir;
 
   const transport = new StdioClientTransport({
     command: process.execPath,
