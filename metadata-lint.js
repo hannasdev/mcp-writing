@@ -119,6 +119,23 @@ function validateUniqueArrays(meta, kind, issues) {
   }
 }
 
+function validateSceneCharacterReferenceStyle(meta, issues) {
+  if (!Array.isArray(meta.characters) || meta.characters.length === 0) return;
+
+  if (!meta.characters.every(value => typeof value === "string")) return;
+
+  const hasCanonicalIds = meta.characters.some(value => /^char-/.test(String(value).trim()));
+  const hasNonCanonicalEntries = meta.characters.some(value => !/^char-/.test(String(value).trim()));
+
+  if (!hasCanonicalIds || !hasNonCanonicalEntries) return;
+
+  issues.push({
+    level: "warning",
+    code: "MIXED_CHARACTER_REFERENCE_STYLE",
+    message: "Scene characters contain mixed canonical and non-canonical references. Prefer canonical character_id values only.",
+  });
+}
+
 export function validateMetadataObject(meta, { sourcePath, kindHint } = {}) {
   const issues = [];
   const kind = metadataKindSchema.parse(kindHint ?? detectMetadataKind(meta));
@@ -167,6 +184,10 @@ export function validateMetadataObject(meta, { sourcePath, kindHint } = {}) {
   }
 
   validateUniqueArrays(meta, kind, issues);
+
+  if (kind === "scene") {
+    validateSceneCharacterReferenceStyle(meta, issues);
+  }
 
   if (kind === "scene" && sourcePath) {
     const sidecar = sourcePath.endsWith(".meta.yaml");

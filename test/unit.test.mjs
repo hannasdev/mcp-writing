@@ -2940,6 +2940,45 @@ describe("metadata lint", () => {
     assert.equal(result.issues.length, 0);
   });
 
+  test("warns on mixed canonical and non-canonical scene character references", () => {
+    const result = validateMetadataObject({
+      scene_id: "sc-001",
+      title: "Arrival",
+      part: 1,
+      chapter: 1,
+      characters: ["char-elena", "Victor Sidorin"],
+    });
+
+    assert.equal(result.ok, true);
+    assert.ok(result.issues.some(i => i.code === "MIXED_CHARACTER_REFERENCE_STYLE"));
+  });
+
+  test("does not warn when scene character references are canonical only", () => {
+    const result = validateMetadataObject({
+      scene_id: "sc-001",
+      title: "Arrival",
+      part: 1,
+      chapter: 1,
+      characters: ["char-elena", "char-marcus"],
+    });
+
+    assert.equal(result.ok, true);
+    assert.ok(!result.issues.some(i => i.code === "MIXED_CHARACTER_REFERENCE_STYLE"));
+  });
+
+  test("does not warn when scene character references are non-canonical only", () => {
+    const result = validateMetadataObject({
+      scene_id: "sc-001",
+      title: "Arrival",
+      part: 1,
+      chapter: 1,
+      characters: ["Victor Sidorin", "Sebastian"],
+    });
+
+    assert.equal(result.ok, true);
+    assert.ok(!result.issues.some(i => i.code === "MIXED_CHARACTER_REFERENCE_STYLE"));
+  });
+
   test("flags schema errors and legacy keys", () => {
     const result = validateMetadataObject({
       scene_id: "sc-001",
