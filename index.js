@@ -24,6 +24,11 @@ import {
   resolveStyleguideConfig,
 } from "./prose-styleguide.js";
 import {
+  PROSE_STYLEGUIDE_SKILL_BASENAME,
+  PROSE_STYLEGUIDE_SKILL_DIRNAME,
+  buildProseStyleguideSkill,
+} from "./prose-styleguide-skill.js";
+import {
   REVIEW_BUNDLE_PROFILES,
   REVIEW_BUNDLE_STRICTNESS,
   ReviewBundlePlanError,
@@ -1509,6 +1514,90 @@ function createMcpServer() {
         next_step: resolved.setup_required
           ? "No prose-styleguide.config.yaml was found. Run setup to create one at sync root or project root."
           : "Config resolved successfully.",
+      });
+    }
+  );
+
+  s.tool(
+    "setup_prose_styleguide_skill",
+    "Generate skills/prose-styleguide.md from the resolved prose styleguide config and universal craft rules.",
+    {
+      project_id: z.string().optional().describe("Optional project ID for scoped config resolution (e.g. 'the-lamb' or 'universe-1/book-1')."),
+      overwrite: z.boolean().optional().describe("If true, replaces an existing skills/prose-styleguide.md file."),
+    },
+    async ({ project_id, overwrite = false }) => {
+      if (project_id !== undefined) {
+        const projectIdCheck = validateProjectId(project_id);
+        if (!projectIdCheck.ok) {
+          return errorResponse("INVALID_PROJECT_ID", projectIdCheck.reason, { project_id });
+        }
+      }
+
+      if (!SYNC_DIR_WRITABLE) {
+        return errorResponse(
+          "SYNC_DIR_NOT_WRITABLE",
+          "Cannot write prose styleguide skill because WRITING_SYNC_DIR is not writable in this runtime.",
+          { sync_dir: SYNC_DIR_ABS }
+        );
+      }
+
+      const resolved = resolveStyleguideConfig({
+        syncDir: SYNC_DIR,
+        projectId: project_id,
+      });
+      if (!resolved.ok) {
+        return errorResponse(
+          resolved.error.code,
+          resolved.error.message,
+          resolved.error.details
+        );
+      }
+      if (resolved.setup_required || !resolved.resolved_config) {
+        return errorResponse(
+          "STYLEGUIDE_CONFIG_REQUIRED",
+          "Cannot generate prose-styleguide.md before prose-styleguide.config.yaml is set up.",
+          {
+            project_id: project_id ?? null,
+            next_step: "Run setup_prose_styleguide_config first.",
+          }
+        );
+      }
+
+      const skillPath = path.join(SYNC_DIR, PROSE_STYLEGUIDE_SKILL_DIRNAME, PROSE_STYLEGUIDE_SKILL_BASENAME);
+      if (!isPathCandidateInsideSyncDir(skillPath)) {
+        return errorResponse(
+          "INVALID_SKILL_PATH",
+          "Resolved prose styleguide skill path must be inside WRITING_SYNC_DIR.",
+          { target_path: path.resolve(skillPath), sync_dir: SYNC_DIR_ABS }
+        );
+      }
+
+      if (fs.existsSync(skillPath) && !overwrite) {
+        return errorResponse(
+          "STYLEGUIDE_SKILL_EXISTS",
+          "skills/prose-styleguide.md already exists. Set overwrite=true to replace it.",
+          { target_path: path.resolve(skillPath) }
+        );
+      }
+
+      const generated = buildProseStyleguideSkill({
+        resolvedConfig: resolved.resolved_config,
+        sources: resolved.sources,
+        projectId: project_id ?? null,
+      });
+      if (!generated.ok) {
+        return errorResponse(generated.error.code, generated.error.message);
+      }
+
+      fs.mkdirSync(path.dirname(skillPath), { recursive: true });
+      fs.writeFileSync(skillPath, generated.markdown, "utf8");
+
+      return jsonResponse({
+        ok: true,
+        file_path: path.resolve(skillPath),
+        project_id: project_id ?? null,
+        injected_rules: generated.injected_rules,
+        source_count: resolved.sources.length,
       });
     }
   );

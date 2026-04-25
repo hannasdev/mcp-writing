@@ -16,6 +16,7 @@
 - [`get_runtime_config`](#get_runtime_config)
 - [`setup_prose_styleguide_config`](#setup_prose_styleguide_config)
 - [`get_prose_styleguide_config`](#get_prose_styleguide_config)
+- [`setup_prose_styleguide_skill`](#setup_prose_styleguide_skill)
 - [`preview_review_bundle`](#preview_review_bundle)
 - [`create_review_bundle`](#create_review_bundle)
 - [`find_scenes`](#find_scenes)
@@ -179,6 +180,17 @@ Resolve prose-styleguide.config.yaml with cascading precedence (sync root, then 
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |
 | `project_id` | `string` | No | Optional project ID for project-scoped resolution (e.g. 'the-lamb' or 'universe-1/book-1'). |
+
+---
+
+## setup_prose_styleguide_skill
+
+Generate skills/prose-styleguide.md from the resolved prose styleguide config and universal craft rules.
+
+| Parameter | Type | Required | Description |
+| --- | --- | :---: | --- |
+| `project_id` | `string` | No | Optional project ID for scoped config resolution (e.g. 'the-lamb' or 'universe-1/book-1'). |
+| `overwrite` | `boolean` | No | If true, replaces an existing skills/prose-styleguide.md file. |
 
 ---
 
