@@ -725,108 +725,117 @@ export function renderReviewBundlePdf(dbHandle, plan, { generatedAt, syncDir: sy
     margin: 50,
   });
 
-  // Register data and error listeners before any content is written so
-  // pdfkit cannot emit an unhandled 'error' event during layout/rendering.
+  // Register listeners before any content is written so render-time errors
+  // always reject the returned Promise.
   const chunks = [];
-  doc.on("data", chunk => chunks.push(chunk));
-
-  // We'll attach resolve/reject inside the Promise below; store them so
-  // the error listener can reach them.
-  let _reject;
-  doc.on("error", err => _reject?.(err));
-
-  // Title and metadata
-  doc.fontSize(24).font("Helvetica-Bold").text(`Review Bundle: ${plan.resolved_scope.project_id}`, { align: "left" });
-  doc.moveDown(0.5);
-  doc.fontSize(11).font("Helvetica");
-  doc.text(`Profile: ${profile}`, { align: "left" });
-  if (profile === "beta_reader_personalized") {
-    doc.text(`Recipient: ${recipientDisplayName}`, { align: "left" });
-  }
-  doc.text(`Generated: ${generatedAt ?? new Date().toISOString()}`, { align: "left" });
-  doc.text(`Scenes: ${plan.summary.scene_count}`, { align: "left" });
-  doc.moveDown();
-
-  // Usage notice for beta profile
-  if (profile === "beta_reader_personalized") {
-    doc.fontSize(12).font("Helvetica-Bold").text("Usage Notice", { align: "left" });
-    doc.moveDown(0.3);
-    const noticeWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
-    doc.fontSize(10).font("Helvetica");
-    doc.text("This beta-reader draft is intended for private review and feedback. Please do not redistribute without explicit author permission.", {
-      align: "left",
-      width: noticeWidth,
-    });
-    doc.moveDown();
-  }
-
-  // Render scenes
-  for (const scene of rows) {
-    // Scene heading
-    doc.fontSize(14).font("Helvetica-Bold");
-    let heading = scene.title || scene.scene_id;
-    if (includeSceneIds) {
-      heading += ` [${scene.scene_id}]`;
-    }
-    doc.text(heading, { align: "left" });
-    doc.moveDown(0.2);
-
-    // Scene metadata (one-liner)
-    const metaParts = [];
-    if (scene.pov) metaParts.push(`POV: ${scene.pov}`);
-    if (scene.save_the_cat_beat) metaParts.push(`Beat: ${scene.save_the_cat_beat}`);
-    if (metaParts.length > 0) {
-      const metaWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
-      doc.fontSize(9).font("Helvetica-Oblique");
-      doc.text(metaParts.join(" • "), { align: "left", width: metaWidth });
-      doc.font("Helvetica");
-      doc.moveDown(0.2);
-    }
-
-    // Logline
-    if (scene.logline) {
-      doc.fontSize(10).font("Helvetica-Oblique");
-      const textWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
-      doc.text(`"${scene.logline}"`, { align: "left", width: textWidth });
-      doc.moveDown(0.3);
-    }
-
-    // Prose (only for detailed/beta profiles)
-    if (profile === "editor_detailed" || profile === "beta_reader_personalized") {
-      let prose = "";
-      const resolved = readProse(scene.file_path, { syncDir });
-      if (resolved === null) {
-        throw new ReviewBundlePlanError(
-          "SCENE_PROSE_UNAVAILABLE",
-          `Scene prose could not be resolved for profile "${profile}": ${scene.scene_id}`,
-          { sceneId: scene.scene_id, filePath: scene.file_path, profile, syncDir }
-        );
-      }
-      prose = resolved;
-
-      const textWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
-      doc.fontSize(10).font("Helvetica");
-      doc.text(prose, {
-        align: "left",
-        width: textWidth,
-        lineGap: 3,
-      });
-    }
-
-    doc.moveDown(0.5);
-    // Add page break between scenes only for prose-including profiles where
-    // clear scene separation matters. For outline_discussion, let content flow.
-    const includesProse = profile === "editor_detailed" || profile === "beta_reader_personalized";
-    if (includesProse && scene !== rows[rows.length - 1]) {
-      doc.addPage();
-    }
-  }
-
-  // Attach listeners before doc.end() to avoid missing early events
   return new Promise((resolve, reject) => {
-    _reject = reject;
-    doc.on("end", () => resolve(Buffer.concat(chunks)));
-    doc.end();
+    let settled = false;
+    const fail = (err) => {
+      if (settled) return;
+      settled = true;
+      reject(err);
+    };
+
+    doc.on("data", chunk => chunks.push(chunk));
+    doc.on("error", fail);
+    doc.on("end", () => {
+      if (settled) return;
+      settled = true;
+      resolve(Buffer.concat(chunks));
+    });
+
+    try {
+      // Title and metadata
+      doc.fontSize(24).font("Helvetica-Bold").text(`Review Bundle: ${plan.resolved_scope.project_id}`, { align: "left" });
+      doc.moveDown(0.5);
+      doc.fontSize(11).font("Helvetica");
+      doc.text(`Profile: ${profile}`, { align: "left" });
+      if (profile === "beta_reader_personalized") {
+        doc.text(`Recipient: ${recipientDisplayName}`, { align: "left" });
+      }
+      doc.text(`Generated: ${generatedAt ?? new Date().toISOString()}`, { align: "left" });
+      doc.text(`Scenes: ${plan.summary.scene_count}`, { align: "left" });
+      doc.moveDown();
+
+      // Usage notice for beta profile
+      if (profile === "beta_reader_personalized") {
+        doc.fontSize(12).font("Helvetica-Bold").text("Usage Notice", { align: "left" });
+        doc.moveDown(0.3);
+        const noticeWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+        doc.fontSize(10).font("Helvetica");
+        doc.text("This beta-reader draft is intended for private review and feedback. Please do not redistribute without explicit author permission.", {
+          align: "left",
+          width: noticeWidth,
+        });
+        doc.moveDown();
+      }
+
+      // Render scenes
+      for (const scene of rows) {
+        // Scene heading
+        doc.fontSize(14).font("Helvetica-Bold");
+        let heading = scene.title || scene.scene_id;
+        if (includeSceneIds) {
+          heading += ` [${scene.scene_id}]`;
+        }
+        doc.text(heading, { align: "left" });
+        doc.moveDown(0.2);
+
+        // Scene metadata (one-liner)
+        const metaParts = [];
+        if (scene.pov) metaParts.push(`POV: ${scene.pov}`);
+        if (scene.save_the_cat_beat) metaParts.push(`Beat: ${scene.save_the_cat_beat}`);
+        if (metaParts.length > 0) {
+          const metaWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+          doc.fontSize(9).font("Helvetica-Oblique");
+          doc.text(metaParts.join(" • "), { align: "left", width: metaWidth });
+          doc.font("Helvetica");
+          doc.moveDown(0.2);
+        }
+
+        // Logline
+        if (scene.logline) {
+          doc.fontSize(10).font("Helvetica-Oblique");
+          const textWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+          doc.text(`"${scene.logline}"`, { align: "left", width: textWidth });
+          doc.moveDown(0.3);
+        }
+
+        // Prose (only for detailed/beta profiles)
+        if (profile === "editor_detailed" || profile === "beta_reader_personalized") {
+          let prose = "";
+          const resolved = readProse(scene.file_path, { syncDir });
+          if (resolved === null) {
+            throw new ReviewBundlePlanError(
+              "SCENE_PROSE_UNAVAILABLE",
+              `Scene prose could not be resolved for profile "${profile}": ${scene.scene_id}`,
+              { sceneId: scene.scene_id, filePath: scene.file_path, profile, syncDir }
+            );
+          }
+          prose = resolved;
+
+          const textWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+          doc.fontSize(10).font("Helvetica");
+          doc.text(prose, {
+            align: "left",
+            width: textWidth,
+            lineGap: 3,
+          });
+        }
+
+        doc.moveDown(0.5);
+        // Add page break between scenes only for prose-including profiles where
+        // clear scene separation matters. For outline_discussion, let content flow.
+        const includesProse = profile === "editor_detailed" || profile === "beta_reader_personalized";
+        if (includesProse && scene !== rows[rows.length - 1]) {
+          doc.addPage();
+        }
+      }
+
+      doc.end();
+    } catch (error) {
+      fail(error);
+    }
   });
 }
 
