@@ -154,6 +154,18 @@ function assertStrictness(strictness) {
   }
 }
 
+export const REVIEW_BUNDLE_FORMATS = ["pdf", "markdown", "both"];
+
+function assertFormat(format) {
+  if (!REVIEW_BUNDLE_FORMATS.includes(format)) {
+    throw new ReviewBundlePlanError(
+      "INVALID_FORMAT",
+      `Unsupported format '${format}'.`,
+      { supported_formats: REVIEW_BUNDLE_FORMATS }
+    );
+  }
+}
+
 function resolveRequestedSceneIds(dbHandle, projectId, sceneIds) {
   if (!Array.isArray(sceneIds) || sceneIds.length === 0) {
     return { requested: [], existing: new Set() };
@@ -191,6 +203,7 @@ export function buildReviewBundlePlan(dbHandle, {
 
   assertProfile(profile);
   assertStrictness(strictness);
+  assertFormat(format);
 
   const projectRow = dbHandle.prepare(`SELECT project_id FROM projects WHERE project_id = ?`).get(project_id);
   if (!projectRow) {
@@ -753,13 +766,13 @@ export function renderReviewBundlePdf(dbHandle, plan, { generatedAt, syncDir: sy
     doc.moveDown(0.2);
 
     // Scene metadata (one-liner)
-    doc.fontSize(9).font("Helvetica");
     const metaParts = [];
     if (scene.pov) metaParts.push(`POV: ${scene.pov}`);
-    if (scene.beat) metaParts.push(`Beat: ${scene.beat}`);
-    if (scene.tags && scene.tags.length > 0) metaParts.push(`Tags: ${scene.tags.join(", ")}`);
+    if (scene.save_the_cat_beat) metaParts.push(`Beat: ${scene.save_the_cat_beat}`);
     if (metaParts.length > 0) {
-      doc.text(metaParts.join(" • "), { align: "left", oblique: true });
+      doc.fontSize(9).font("Helvetica-Oblique");
+      doc.text(metaParts.join(" • "), { align: "left" });
+      doc.font("Helvetica");
       doc.moveDown(0.2);
     }
 
@@ -773,15 +786,11 @@ export function renderReviewBundlePdf(dbHandle, plan, { generatedAt, syncDir: sy
     // Prose (only for detailed/beta profiles)
     if (profile === "editor_detailed" || profile === "beta_reader_personalized") {
       let prose = "";
-      try {
-        const resolved = readProse(scene.file_path, { syncDir });
-        if (resolved === null) {
-          prose = "[Scene prose unavailable]";
-        } else {
-          prose = resolved;
-        }
-      } catch {
-        prose = "[Error loading scene prose]";
+      const resolved = readProse(scene.file_path, { syncDir });
+      if (resolved === null) {
+        prose = "[Scene prose unavailable]";
+      } else {
+        prose = resolved;
       }
 
       doc.fontSize(10).font("Helvetica");
@@ -799,14 +808,13 @@ export function renderReviewBundlePdf(dbHandle, plan, { generatedAt, syncDir: sy
     }
   }
 
-  // Finalize and collect buffer
-  doc.end();
-
+  // Attach listeners before doc.end() to avoid missing early events
   return new Promise((resolve, reject) => {
     doc.on("end", () => {
       resolve(Buffer.concat(chunks));
     });
     doc.on("error", reject);
+    doc.end();
   });
 }
 
@@ -815,7 +823,6 @@ export async function createReviewBundleArtifacts(dbHandle, {
   output_dir,
   source_commit = null,
   syncDir,
-  format = "pdf",
 }) {
   if (!output_dir) {
     throw new ReviewBundlePlanError("INVALID_OUTPUT_DIR", "output_dir is required.");
@@ -843,12 +850,12 @@ export async function createReviewBundleArtifacts(dbHandle, {
 
   const noticeFileName = plan.planned_outputs.find(name => name.endsWith(".notice.md")) ?? null;
   const feedbackFileName = plan.planned_outputs.find(name => name.endsWith(".feedback-form.md")) ?? null;
-  const markdownFileName = format === "markdown" || format === "both" 
-    ? plan.planned_outputs.find(name => name.endsWith(".md") && !name.endsWith(".notice.md") && !name.endsWith(".feedback-form.md"))
-    : null;
-  const pdfFileName = format === "pdf" || format === "both"
-    ? plan.planned_outputs.find(name => name.endsWith(".pdf"))
-    : null;
+  // Derive which outputs to write from the plan itself, not from the format param,
+  // so plan and artifacts always stay in sync.
+  const markdownFileName = plan.planned_outputs.find(
+    name => name.endsWith(".md") && !name.endsWith(".notice.md") && !name.endsWith(".feedback-form.md")
+  ) ?? null;
+  const pdfFileName = plan.planned_outputs.find(name => name.endsWith(".pdf")) ?? null;
   const manifestFileName = plan.planned_outputs.find(name => name.endsWith(".manifest.json"));
   
   if (!manifestFileName) {
@@ -861,7 +868,7 @@ export async function createReviewBundleArtifacts(dbHandle, {
   if (!markdownFileName && !pdfFileName) {
     throw new ReviewBundlePlanError(
       "INVALID_PLAN_OUTPUTS",
-      `Plan format mismatch: format='${format}' but no markdown or PDF filename in planned outputs.`
+      "Plan has no primary bundle output (neither .md nor .pdf) in planned_outputs."
     );
   }
 

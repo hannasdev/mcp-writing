@@ -168,9 +168,9 @@ Dry-run planning tool for review bundles. Resolves scene scope, deterministic or
 | `tag` | `string` | No | Optional tag filter (exact match). |
 | `scene_ids` | `string[]` | No | Optional explicit scene_id allowlist. Intersects with other filters. |
 | `strictness` | `enum` | No | Strictness mode: warn (default) or fail. |
-| `include_scene_ids` | `boolean` | No | Advisory placeholder for later rendering behavior (default true). Included in preview output options, but does not change planning results in Phase 4A.1. |
-| `include_metadata_sidebar` | `boolean` | No | Advisory placeholder for later rendering behavior (default false). Included in preview output options, but does not change planning results in Phase 4A.1. |
-| `include_paragraph_anchors` | `boolean` | No | Advisory placeholder for later rendering behavior (default false). Included in preview output options, but does not change planning results in Phase 4A.1. |
+| `include_scene_ids` | `boolean` | No | Include scene IDs in headings (default true). Applies to both PDF and markdown. |
+| `include_metadata_sidebar` | `boolean` | No | Include metadata sidebar in markdown output (default false). Markdown only — no effect on PDF. |
+| `include_paragraph_anchors` | `boolean` | No | Include paragraph anchors in markdown output (default false). Markdown only — no effect on PDF. |
 | `recipient_name` | `string` | No | Optional recipient display name for beta_reader_personalized profile. |
 | `bundle_name` | `string` | No | Optional output bundle base name override (slugified in planned outputs). |
 | `format` | `enum("pdf","markdown","both")` | No | Output format: pdf (default), markdown, or both. |
@@ -191,9 +191,9 @@ Generate review bundle artifacts (PDF/markdown) from planned scene scope. Writes
 | `tag` | `string` | No | Optional tag filter (exact match). |
 | `scene_ids` | `string[]` | No | Optional explicit scene_id allowlist. Intersects with other filters. |
 | `strictness` | `enum` | No | Strictness mode: warn (default) or fail. |
-| `include_scene_ids` | `boolean` | No | Include scene IDs in markdown headings (default true). |
-| `include_metadata_sidebar` | `boolean` | No | Include metadata sidebar in markdown output (default false). |
-| `include_paragraph_anchors` | `boolean` | No | Include paragraph anchors in markdown output (default false). |
+| `include_scene_ids` | `boolean` | No | Include scene IDs in headings (default true). Applies to both PDF and markdown. |
+| `include_metadata_sidebar` | `boolean` | No | Include metadata sidebar in markdown output (default false). Markdown only — no effect on PDF. |
+| `include_paragraph_anchors` | `boolean` | No | Include paragraph anchors in markdown output (default false). Markdown only — no effect on PDF. |
 | `recipient_name` | `string` | No | Optional recipient display name for beta_reader_personalized profile. |
 | `bundle_name` | `string` | No | Optional output bundle base name override (slugified in filenames). |
 | `source_commit` | `string` | No | Optional explicit source commit for provenance. Defaults to current HEAD when available. |

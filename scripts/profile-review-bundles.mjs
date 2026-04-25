@@ -8,7 +8,6 @@
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { fileURLToPath } from "node:url";
 import { openDb } from "../db.js";
 import { syncAll } from "../sync.js";
 import { isGitRepository, getHeadCommitHash } from "../git.js";
@@ -17,9 +16,8 @@ import {
   createReviewBundleArtifacts,
 } from "../review-bundles.js";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const PROJECT_SYNC_DIR = "/Users/hanna/Code/writing";
-const DB_PATH = process.env.DB_PATH ?? path.join(PROJECT_SYNC_DIR, ".mcp", "writing.db");
+const PROJECT_SYNC_DIR = process.env.WRITING_SYNC_DIR ?? process.argv[2] ?? null;
+const DB_PATH = process.env.DB_PATH ?? (PROJECT_SYNC_DIR ? path.join(PROJECT_SYNC_DIR, ".mcp", "writing.db") : null);
 const PROFILES = ["outline_discussion", "editor_detailed", "beta_reader_personalized"];
 
 /**
@@ -114,10 +112,17 @@ async function profileScenario(
     if (fs.existsSync(tmpDir)) {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
+    db.close();
   }
 }
 
 async function main() {
+  if (!PROJECT_SYNC_DIR) {
+    console.error("✗ WRITING_SYNC_DIR env var or a path argument is required.");
+    console.error("  Usage: WRITING_SYNC_DIR=/path/to/project node --experimental-sqlite scripts/profile-review-bundles.mjs");
+    process.exit(1);
+  }
+
   if (!fs.existsSync(PROJECT_SYNC_DIR)) {
     console.error(`✗ Project directory not found: ${PROJECT_SYNC_DIR}`);
     process.exit(1);

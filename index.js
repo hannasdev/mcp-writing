@@ -1358,9 +1358,9 @@ function createMcpServer() {
       tag: z.string().optional().describe("Optional tag filter (exact match)."),
       scene_ids: z.array(z.string()).optional().describe("Optional explicit scene_id allowlist. Intersects with other filters."),
       strictness: z.enum(REVIEW_BUNDLE_STRICTNESS).optional().describe("Strictness mode: warn (default) or fail."),
-      include_scene_ids: z.boolean().optional().describe("Advisory placeholder for later rendering behavior (default true). Included in preview output options, but does not change planning results in Phase 4A.1."),
-      include_metadata_sidebar: z.boolean().optional().describe("Advisory placeholder for later rendering behavior (default false). Included in preview output options, but does not change planning results in Phase 4A.1."),
-      include_paragraph_anchors: z.boolean().optional().describe("Advisory placeholder for later rendering behavior (default false). Included in preview output options, but does not change planning results in Phase 4A.1."),
+      include_scene_ids: z.boolean().optional().describe("Include scene IDs in headings (default true). Applies to both PDF and markdown."),
+      include_metadata_sidebar: z.boolean().optional().describe("Include metadata sidebar in markdown output (default false). Markdown only — no effect on PDF."),
+      include_paragraph_anchors: z.boolean().optional().describe("Include paragraph anchors in markdown output (default false). Markdown only — no effect on PDF."),
       recipient_name: z.string().optional().describe("Optional recipient display name for beta_reader_personalized profile."),
       bundle_name: z.string().optional().describe("Optional output bundle base name override (slugified in planned outputs)."),
       format: z.enum(["pdf", "markdown", "both"]).optional().describe("Output format: pdf (default), markdown, or both."),
@@ -1427,9 +1427,9 @@ function createMcpServer() {
       tag: z.string().optional().describe("Optional tag filter (exact match)."),
       scene_ids: z.array(z.string()).optional().describe("Optional explicit scene_id allowlist. Intersects with other filters."),
       strictness: z.enum(REVIEW_BUNDLE_STRICTNESS).optional().describe("Strictness mode: warn (default) or fail."),
-      include_scene_ids: z.boolean().optional().describe("Include scene IDs in markdown headings (default true)."),
-      include_metadata_sidebar: z.boolean().optional().describe("Include metadata sidebar in markdown output (default false)."),
-      include_paragraph_anchors: z.boolean().optional().describe("Include paragraph anchors in markdown output (default false)."),
+      include_scene_ids: z.boolean().optional().describe("Include scene IDs in headings (default true). Applies to both PDF and markdown."),
+      include_metadata_sidebar: z.boolean().optional().describe("Include metadata sidebar in markdown output (default false). Markdown only — no effect on PDF."),
+      include_paragraph_anchors: z.boolean().optional().describe("Include paragraph anchors in markdown output (default false). Markdown only — no effect on PDF."),
       recipient_name: z.string().optional().describe("Optional recipient display name for beta_reader_personalized profile."),
       bundle_name: z.string().optional().describe("Optional output bundle base name override (slugified in filenames)."),
       source_commit: z.string().optional().describe("Optional explicit source commit for provenance. Defaults to current HEAD when available."),
@@ -1501,7 +1501,6 @@ function createMcpServer() {
           output_dir: resolvedOutputDir,
           source_commit: provenanceCommit,
           syncDir: SYNC_DIR_ABS,
-          format,
         });
 
         return jsonResponse({

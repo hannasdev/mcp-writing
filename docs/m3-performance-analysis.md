@@ -2,7 +2,7 @@
 
 **Date**: 2026-04-25  
 **Project**: `universe-1/book-1-the-lamb` (104 scenes, ~71,400 words)  
-**Test Date**: Real manuscript project from `/Users/hanna/Code/writing/`
+**Test Date**: Real manuscript project (path redacted)
 
 ## Performance Results
 
