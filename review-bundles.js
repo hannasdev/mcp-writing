@@ -434,9 +434,13 @@ function resolveSceneFilePath(filePath, { syncDir } = {}) {
 
   for (const candidate of candidates) {
     if (!fs.existsSync(candidate)) {
-      // Path is inside syncDir but file is not on disk — return it so readProse
-      // can surface a meaningful SCENE_PROSE_READ_FAILED error.
-      return candidate;
+      // Before returning a non-existent path, verify it is still inside realSyncDir.
+      // A relative filePath with .. segments could otherwise escape the boundary.
+      const relFromSync = path.relative(realSyncDir, candidate);
+      if (!relFromSync.startsWith("..") && !path.isAbsolute(relFromSync)) {
+        return candidate;
+      }
+      continue;
     }
 
     // File exists: validate realpath stays inside syncDir to catch symlink escapes.
@@ -514,8 +518,8 @@ function renderSceneBlock(scene, options) {
       scene.part != null ? `part: ${scene.part}` : null,
       scene.chapter != null ? `chapter: ${scene.chapter}` : null,
       scene.timeline_position != null ? `timeline_position: ${scene.timeline_position}` : null,
-      scene.pov ? `pov: ${scene.pov}` : null,
-      scene.save_the_cat_beat ? `beat: ${scene.save_the_cat_beat}` : null,
+      scene.pov ? `pov: ${escapeMarkdown(scene.pov)}` : null,
+      scene.save_the_cat_beat ? `beat: ${escapeMarkdown(scene.save_the_cat_beat)}` : null,
     ].filter(Boolean);
     if (sidebar.length > 0) {
       parts.push(`> ${sidebar.join("  \\\n> ")}`);
@@ -539,12 +543,13 @@ function renderSceneBlock(scene, options) {
   return parts.join("\n\n");
 }
 
-export function renderReviewBundleMarkdown(dbHandle, plan, { generatedAt } = {}) {
+export function renderReviewBundleMarkdown(dbHandle, plan, { generatedAt, syncDir: syncDirOpt } = {}) {
   const profile = plan.profile;
   const includeSceneIds = Boolean(plan.resolved_scope?.options?.include_scene_ids);
   const includeMetadataSidebar = Boolean(plan.resolved_scope?.options?.include_metadata_sidebar);
   const includeParagraphAnchors = Boolean(plan.resolved_scope?.options?.include_paragraph_anchors);
-  const syncDir = process.env.WRITING_SYNC_DIR;
+  // Prefer explicitly threaded syncDir; fall back to env (with "./sync" default matching index.js).
+  const syncDir = syncDirOpt ?? process.env.WRITING_SYNC_DIR ?? "./sync";
 
   const sceneIds = plan.ordering.map(row => row.scene_id);
   const rows = loadBundleSceneRows(dbHandle, plan.resolved_scope.project_id, sceneIds);
@@ -579,6 +584,7 @@ export function createReviewBundleArtifacts(dbHandle, {
   plan,
   output_dir,
   source_commit = null,
+  syncDir,
 }) {
   if (!output_dir) {
     throw new ReviewBundlePlanError("INVALID_OUTPUT_DIR", "output_dir is required.");
@@ -617,7 +623,7 @@ export function createReviewBundleArtifacts(dbHandle, {
   const manifestPath = resolveOutputFilePath(normalizedOutputDir, manifestFileName);
 
   const generatedAt = new Date().toISOString();
-  const markdown = renderReviewBundleMarkdown(dbHandle, plan, { generatedAt });
+  const markdown = renderReviewBundleMarkdown(dbHandle, plan, { generatedAt, syncDir });
   const manifest = {
     bundle_id: path.basename(markdownFileName, ".md"),
     profile: plan.profile,
@@ -635,10 +641,17 @@ export function createReviewBundleArtifacts(dbHandle, {
 
   for (const outputPath of [markdownPath, manifestPath]) {
     try {
-      if (fs.lstatSync(outputPath).isSymbolicLink()) {
+      const stat = fs.lstatSync(outputPath);
+      if (stat.isSymbolicLink()) {
         throw new ReviewBundlePlanError(
           "INVALID_OUTPUT_PATH",
           `Refusing to write: target path is a symlink: ${outputPath}`
+        );
+      }
+      if (!stat.isFile()) {
+        throw new ReviewBundlePlanError(
+          "INVALID_OUTPUT_PATH",
+          `Refusing to write: target path exists but is not a regular file: ${outputPath}`
         );
       }
     } catch (error) {

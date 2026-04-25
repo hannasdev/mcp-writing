@@ -1479,6 +1479,7 @@ function createMcpServer() {
           plan,
           output_dir: resolvedOutputDir,
           source_commit: provenanceCommit,
+          syncDir: SYNC_DIR_ABS,
         });
 
         return jsonResponse({
