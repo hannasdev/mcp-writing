@@ -165,3 +165,58 @@ rm -rf node_modules package-lock.json
 npm install
 npm test
 ```
+
+### `preview_review_bundle` or `create_review_bundle` returns warnings about stale metadata
+
+One or more scenes have `metadata_stale: true`, meaning their prose changed after metadata was last indexed.
+
+In `strictness=warn` mode (default), the bundle is generated with a warning in the response and manifest.
+
+In `strictness=fail` mode, generation is blocked and the response includes a `blockers` list with the affected `scene_ids`.
+
+Fix: re-enrich each stale scene before generating the bundle. In `strictness=fail` mode, use the `scene_ids` returned in `strictness_result.blockers` and call `enrich_scene` for each one so metadata is re-derived and the stale flag is cleared.
+
+```json
+{ "tool": "enrich_scene", "scene_id": "sc-001-example" }
+```
+
+If prose or sidecars were edited outside this server, run a full sync first to refresh the index:
+
+```json
+{ "tool": "sync" }
+```
+
+Then run `enrich_scene` for stale scenes and retry bundle generation.
+
+### `create_review_bundle` returns warnings about missing ordering fields
+
+Some scenes are missing `part`, `chapter`, or `timeline_position` metadata. Deterministic ordering falls back to alphabetical `scene_id` sort for those scenes, and a `missing_ordering_fields` warning is included in the response.
+
+In `strictness=warn` mode, the bundle is generated with the fallback ordering applied.
+
+In `strictness=fail` mode, generation is currently not blocked by missing ordering fields alone — only stale metadata triggers a hard block. If you need strict ordering guarantees, update the affected scenes via `update_scene_metadata` before generating.
+
+Fix: use `find_scenes` to identify scenes with null ordering fields, then update them:
+
+```json
+{
+	"tool": "update_scene_metadata",
+	"project_id": "my-project",
+	"scene_id": "sc-001-example",
+	"fields": {
+		"part": 1,
+		"chapter": 2,
+		"timeline_position": 3
+	}
+}
+```
+
+### `create_review_bundle` writes no files / `INVALID_OUTPUT_PATH`
+
+The `output_dir` path may be outside `WRITING_SYNC_DIR`, or the `bundle_name` contains characters that resolve outside the output directory.
+
+Fix:
+
+1. Verify that `output_dir` is an absolute path pointing to a writable location inside the manuscript sync folder (`WRITING_SYNC_DIR`).
+2. You do not need to create the output directory first; the tool creates it if it does not already exist.
+3. Use a simple `bundle_name` with alphanumeric characters and hyphens — special characters are slugified to a safe name, and if nothing usable remains the tool falls back to `review-bundle`.

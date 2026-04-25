@@ -1,6 +1,6 @@
 # Review Bundles for Editorial Workflows
 
-**Status:** 📋 Proposed (Phase 4A)
+**Status:** ✅ M1 Delivered (Phase 4A.1) — M2 Pending (`beta_reader_personalized`)
 
 ## Goal
 
