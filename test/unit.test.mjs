@@ -33,6 +33,7 @@ import {
   mergeSidecarData,
 } from "../scrivener-direct.js";
 import { runSceneCharacterBatch } from "../scene-character-batch.js";
+import { buildCharacterNormalizationContext, isDistinctiveToken, normalizeSceneCharacters } from "../scene-character-normalization.js";
 import { buildReviewBundlePlan, renderReviewBundleMarkdown, ReviewBundlePlanError } from "../review-bundles.js";
 
 function insertTestScene(db, {
@@ -1461,6 +1462,102 @@ describe("runSceneCharacterBatch", () => {
     assert.deepEqual(result.results[0].removed, ["marcus"]);
 
     fs.rmSync(dir, { recursive: true, force: true });
+  });
+});
+
+describe("scene character normalization", () => {
+  test("treats exported distinctive-token helper as case-insensitive", () => {
+    assert.equal(isDistinctiveToken("The"), false);
+    assert.equal(isDistinctiveToken(" Victor "), true);
+  });
+
+  test("normalizes plain-name references to canonical ids", () => {
+    const context = buildCharacterNormalizationContext([
+      { character_id: "char-elena-vasquez", name: "Elena Vasquez" },
+      { character_id: "char-marcus-hale", name: "Marcus Hale" },
+    ]);
+
+    const result = normalizeSceneCharacters(["Elena Vasquez", "char-marcus-hale"], context);
+
+    assert.equal(result.changed, true);
+    assert.deepEqual(result.after, ["char-elena-vasquez", "char-marcus-hale"]);
+    assert.deepEqual(result.added, ["char-elena-vasquez"]);
+    assert.deepEqual(result.removed, ["Elena Vasquez"]);
+  });
+
+  test("prunes less-specific canonical ids when stronger non-canonical evidence resolves to a more specific id", () => {
+    const context = buildCharacterNormalizationContext([
+      { character_id: "char-victor-sidorin", name: "Victor Sidorin" },
+      { character_id: "char-victor-alexeyevich-sidorin", name: "Victor Alexeyevich Sidorin" },
+    ]);
+
+    const result = normalizeSceneCharacters(
+      ["char-victor-sidorin", "Victor Alexeyevich Sidorin"],
+      context
+    );
+
+    assert.equal(result.changed, true);
+    assert.deepEqual(result.after, ["char-victor-alexeyevich-sidorin"]);
+    assert.deepEqual(result.added, ["char-victor-alexeyevich-sidorin"]);
+    assert.deepEqual(result.removed, ["char-victor-sidorin", "Victor Alexeyevich Sidorin"]);
+  });
+
+  test("preserves co-occurring canonical ids without stronger evidence", () => {
+    const context = buildCharacterNormalizationContext([
+      { character_id: "char-victor-sidorin", name: "Victor Sidorin" },
+      { character_id: "char-victor-alexeyevich-sidorin", name: "Victor Alexeyevich Sidorin" },
+    ]);
+
+    const result = normalizeSceneCharacters(
+      ["char-victor-sidorin", "char-victor-alexeyevich-sidorin"],
+      context
+    );
+
+    assert.equal(result.changed, false);
+    assert.deepEqual(result.after, ["char-victor-sidorin", "char-victor-alexeyevich-sidorin"]);
+    assert.deepEqual(result.removed, []);
+  });
+
+  test("does not prune one-token overlap canonical ids", () => {
+    const context = buildCharacterNormalizationContext([
+      { character_id: "char-victor", name: "Victor" },
+      { character_id: "char-victor-sidorin", name: "Victor Sidorin" },
+    ]);
+
+    const result = normalizeSceneCharacters(
+      ["char-victor", "char-victor-sidorin"],
+      context
+    );
+
+    assert.equal(result.changed, false);
+    assert.deepEqual(result.after, ["char-victor", "char-victor-sidorin"]);
+    assert.deepEqual(result.removed, []);
+  });
+
+  test("keeps unresolved values unchanged when mapping is ambiguous", () => {
+    const context = buildCharacterNormalizationContext([
+      { character_id: "char-victor-sidorin", name: "Victor Sidorin" },
+      { character_id: "char-victor-ivanov", name: "Victor Ivanov" },
+    ]);
+
+    const result = normalizeSceneCharacters(["Victor"], context);
+
+    assert.equal(result.changed, false);
+    assert.deepEqual(result.after, ["Victor"]);
+  });
+
+  test("normalize-scene-characters CLI reports missing option values clearly", () => {
+    const result = spawnSync(
+      process.execPath,
+      ["--experimental-sqlite", "scripts/normalize-scene-characters.mjs", "--limit"],
+      {
+        cwd: path.resolve("."),
+        encoding: "utf8",
+      }
+    );
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /--limit requires a value\./);
   });
 });
 
