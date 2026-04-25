@@ -122,6 +122,8 @@ function validateUniqueArrays(meta, kind, issues) {
 function validateSceneCharacterReferenceStyle(meta, issues) {
   if (!Array.isArray(meta.characters) || meta.characters.length === 0) return;
 
+  if (!meta.characters.every(value => typeof value === "string")) return;
+
   const hasCanonicalIds = meta.characters.some(value => /^char-/.test(String(value).trim()));
   const hasNonCanonicalEntries = meta.characters.some(value => !/^char-/.test(String(value).trim()));
 
@@ -130,7 +132,7 @@ function validateSceneCharacterReferenceStyle(meta, issues) {
   issues.push({
     level: "warning",
     code: "MIXED_CHARACTER_REFERENCE_STYLE",
-    message: "Scene characters contains mixed canonical and non-canonical references. Prefer canonical character_id values only.",
+    message: "Scene characters contain mixed canonical and non-canonical references. Prefer canonical character_id values only.",
   });
 }
 
