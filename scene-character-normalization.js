@@ -1,4 +1,4 @@
-const NON_DISTINCTIVE_TOKENS = new Set([
+export const NON_DISTINCTIVE_TOKENS = new Set([
   "the",
   "and",
   "for",
@@ -14,7 +14,11 @@ const NON_DISTINCTIVE_TOKENS = new Set([
   "around",
 ]);
 
-function isDistinctiveToken(token) {
+function escapeRegex(text) {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+export function isDistinctiveToken(token) {
   return Boolean(token) && token.length >= 3 && !NON_DISTINCTIVE_TOKENS.has(token);
 }
 
@@ -39,27 +43,39 @@ export function buildCharacterNormalizationContext(rows) {
     .map(row => {
       const character_id = String(row.character_id).trim();
       const name = String(row.name).trim();
-      const tokens = [...new Set(name.toLowerCase().split(/\s+/).filter(Boolean))];
+      const phrase_tokens = name.toLowerCase().split(/\s+/).filter(Boolean);
+      const tokens = [...new Set(phrase_tokens)];
       return {
         character_id,
         name,
+        phrase_tokens,
         tokens,
         informative_tokens: tokens.filter(isDistinctiveToken),
+        full_name_regex: phrase_tokens.length > 1
+          ? new RegExp(`\\b${phrase_tokens.map(escapeRegex).join("\\s+")}\\b`, "i")
+          : null,
       };
     })
     .filter(row => row.character_id.length > 0 && row.name.length > 0);
 
   const byId = new Map();
   const nameMap = new Map();
+  const tokenMap = new Map();
   for (const row of clean) {
     byId.set(row.character_id, row);
     const normalizedName = row.name.toLowerCase();
     const ids = nameMap.get(normalizedName) ?? [];
     ids.push(row.character_id);
     nameMap.set(normalizedName, ids);
+
+    for (const token of row.informative_tokens) {
+      const tokenIds = tokenMap.get(token) ?? [];
+      tokenIds.push(row.character_id);
+      tokenMap.set(token, tokenIds);
+    }
   }
 
-  return { clean, byId, nameMap };
+  return { clean, byId, nameMap, tokenMap };
 }
 
 export function resolveCharacterReference(value, context) {

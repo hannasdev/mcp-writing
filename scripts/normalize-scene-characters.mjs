@@ -51,6 +51,8 @@ function usage() {
     "  --limit, -n      Process at most N scenes",
     "  --write          Apply changes (default: dry-run)",
     "  --json           Emit machine-readable JSON summary",
+    "",
+    "Note: Uses an in-memory sqlite index for analysis; no mcp.sqlite file is created in sync_dir.",
   ].join("\n");
 }
 
@@ -92,8 +94,7 @@ function resolveScenes(db, projectId, limit) {
 }
 
 function runNormalization({ syncDir, projectId, write, limit }) {
-  const dbPath = path.join(syncDir, "mcp.sqlite");
-  const db = openDb(dbPath);
+  const db = openDb(":memory:");
   try {
     // Refresh index so character/name resolution uses current canonical sheets and sidecars.
     syncAll(db, syncDir, { quiet: true, writable: false });

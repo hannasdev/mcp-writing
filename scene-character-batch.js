@@ -1,69 +1,14 @@
 import fs from "node:fs";
 import matter from "gray-matter";
+import { buildCharacterNormalizationContext, resolveCharacterReference } from "./scene-character-normalization.js";
 import { normalizeSceneMetaForPath, readMeta, writeMeta } from "./sync.js";
-
-const NON_DISTINCTIVE_TOKENS = new Set([
-  "the",
-  "and",
-  "for",
-  "with",
-  "from",
-  "into",
-  "onto",
-  "over",
-  "under",
-  "after",
-  "before",
-  "about",
-  "around",
-]);
 
 function escapeRegex(text) {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-function isDistinctiveToken(token) {
-  return Boolean(token) && token.length >= 3 && !NON_DISTINCTIVE_TOKENS.has(token);
-}
-
 function normalizeCharacterRows(rows) {
-  const clean = rows
-    .filter(row => row?.character_id && row?.name)
-    .map(row => {
-      const phrase_tokens = String(row.name).toLowerCase().split(/\s+/).filter(Boolean);
-      const tokens = [...new Set(phrase_tokens)];
-      return {
-        character_id: row.character_id,
-        name: String(row.name).trim(),
-        phrase_tokens,
-        tokens,
-        informative_tokens: tokens.filter(isDistinctiveToken),
-        full_name_regex: phrase_tokens.length > 1
-          ? new RegExp(`\\b${phrase_tokens.map(escapeRegex).join("\\s+")}\\b`, "i")
-          : null,
-      };
-    })
-    .filter(row => row.name.length > 0);
-
-  const tokenMap = new Map();
-  const byId = new Map();
-  const nameMap = new Map();
-  for (const row of clean) {
-    byId.set(row.character_id, row);
-
-    const normalizedName = row.name.toLowerCase();
-    const exactNameIds = nameMap.get(normalizedName) ?? [];
-    exactNameIds.push(row.character_id);
-    nameMap.set(normalizedName, exactNameIds);
-
-    for (const token of row.informative_tokens) {
-      const ids = tokenMap.get(token) ?? [];
-      ids.push(row.character_id);
-      tokenMap.set(token, ids);
-    }
-  }
-
-  return { clean, tokenMap, byId, nameMap };
+  return buildCharacterNormalizationContext(rows);
 }
 
 function inferCharactersFromProse(prose, characterRows) {
@@ -113,32 +58,7 @@ function inferCharactersFromProse(prose, characterRows) {
 }
 
 function resolveCharacterEntry(entry, characterRows) {
-  const value = String(entry ?? "").trim();
-  if (!value) return null;
-
-  if (characterRows.byId.has(value)) {
-    return value;
-  }
-
-  const exactNameIds = characterRows.nameMap.get(value.toLowerCase());
-  if (exactNameIds?.length === 1) {
-    return exactNameIds[0];
-  }
-
-  const words = value.toLowerCase().split(/\s+/).filter(isDistinctiveToken);
-  if (words.length === 0) {
-    return value;
-  }
-
-  const matches = characterRows.clean.filter(row =>
-    words.every(word => row.informative_tokens.includes(word))
-  );
-
-  if (matches.length === 1) {
-    return matches[0].character_id;
-  }
-
-  return value;
+  return resolveCharacterReference(entry, characterRows);
 }
 
 function pruneLessSpecificCharacters(characterIds, fullNameMatches, characterRows) {
