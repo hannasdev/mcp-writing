@@ -13,10 +13,14 @@ Describe the key technical decisions.
 
 ## Testing
 
+List validation performed.
+
+Examples:
+
 - `npm test`
 - `npm run lint`
-- Manual test of <specific workflow>
-- Not run: <reason>
+- Manual test of `<specific workflow>`
+- Not run: `<reason>`
 
 ## Risks and tradeoffs
 
@@ -24,4 +28,4 @@ Call out anything reviewers should pay attention to.
 
 ## Follow-up
 
-List any known follow-up work, or write None.
+`None`
