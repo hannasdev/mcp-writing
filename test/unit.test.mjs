@@ -235,6 +235,29 @@ describe("buildReviewBundlePlan", () => {
     }
   });
 
+  test("beta profile normalizes recipient_name in resolved options", () => {
+    const db = setupReviewBundleTestDb();
+    try {
+      insertTestScene(db, {
+        sceneId: "sc-011",
+        part: 1,
+        chapter: 1,
+        timelinePosition: 1,
+        wordCount: 250,
+      });
+
+      const plan = buildReviewBundlePlan(db, {
+        project_id: "test-novel",
+        profile: "beta_reader_personalized",
+        recipient_name: "  Jordan\n\tExample  ",
+      });
+
+      assert.equal(plan.resolved_scope.options.recipient_name, "Jordan Example");
+    } finally {
+      db.close();
+    }
+  });
+
   test("renderReviewBundleMarkdown escapes outline loglines with markdown metacharacters", () => {
     const db = setupReviewBundleTestDb();
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "bundle-outline-"));

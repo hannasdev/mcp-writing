@@ -64,7 +64,13 @@ function escapeMarkdown(text) {
 }
 
 function normalizeRecipientDisplayName(recipientName) {
-  return recipientName?.trim() || "Beta Reader";
+  const normalized = String(recipientName ?? "")
+    .replace(/[\x00-\x1f\x7f]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 100);
+
+  return normalized || "Beta Reader";
 }
 
 function renderBetaNoticeMarkdown({ projectId, recipientName }) {
@@ -315,6 +321,9 @@ export function buildReviewBundlePlan(dbHandle, {
     const count = Number(row.word_count);
     return sum + (Number.isFinite(count) ? count : 0);
   }, 0);
+  const resolvedRecipientName = profile === "beta_reader_personalized"
+    ? normalizeRecipientDisplayName(recipient_name)
+    : undefined;
 
   const safeBundleName = slugifyBundleName(bundle_name || `${project_id}-${profile}`);
   const appliedFilters = {
@@ -334,7 +343,7 @@ export function buildReviewBundlePlan(dbHandle, {
         include_scene_ids: Boolean(include_scene_ids),
         include_metadata_sidebar: Boolean(include_metadata_sidebar),
         include_paragraph_anchors: Boolean(include_paragraph_anchors),
-        ...(recipient_name ? { recipient_name } : {}),
+        ...(resolvedRecipientName ? { recipient_name: resolvedRecipientName } : {}),
       },
     },
     ordering: rows.map(row => ({
