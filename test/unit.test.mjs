@@ -323,6 +323,45 @@ describe("buildReviewBundlePlan", () => {
       db.close();
     }
   });
+
+  test("renderReviewBundleMarkdown throws SCENE_PROSE_READ_FAILED when file_path is null", () => {
+    const db = setupReviewBundleTestDb();
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "bundle-null-path-"));
+    const realTempDir = fs.realpathSync.native(tempDir);
+    const prevSyncDir = process.env.WRITING_SYNC_DIR;
+    process.env.WRITING_SYNC_DIR = realTempDir;
+
+    try {
+      const now = new Date().toISOString();
+      // Use a path outside syncDir — resolveSceneFilePath returns null,
+      // which should trigger SCENE_PROSE_READ_FAILED rather than silent empty prose.
+      const outsidePath = "/nonexistent-outside-sync/scene.md";
+      db.prepare(`
+        INSERT INTO scenes (
+          scene_id, project_id, title, part, chapter, timeline_position, word_count,
+          file_path, prose_checksum, metadata_stale, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run("sc-001", "test-novel", "Null Path Scene", 1, 1, 1, 10, outsidePath, null, 0, now);
+
+      const plan = buildReviewBundlePlan(db, {
+        project_id: "test-novel",
+        profile: "editor_detailed",
+      });
+
+      assert.throws(
+        () => renderReviewBundleMarkdown(db, plan, { generatedAt: "2026-01-01T00:00:00.000Z" }),
+        error => error instanceof ReviewBundlePlanError && error.code === "SCENE_PROSE_READ_FAILED"
+      );
+    } finally {
+      if (prevSyncDir === undefined) {
+        delete process.env.WRITING_SYNC_DIR;
+      } else {
+        process.env.WRITING_SYNC_DIR = prevSyncDir;
+      }
+      fs.rmSync(tempDir, { recursive: true, force: true });
+      db.close();
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------

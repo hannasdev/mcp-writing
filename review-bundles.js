@@ -316,6 +316,9 @@ export function buildReviewBundlePlan(dbHandle, {
 function loadBundleSceneRows(dbHandle, projectId, sceneIds) {
   if (!Array.isArray(sceneIds) || sceneIds.length === 0) return [];
   const rows = [];
+  // 900 is safely below SQLite's per-query bound of 999 host parameters
+  // (one slot is used by the project_id binding, leaving 998 for scene_id placeholders;
+  // 900 gives extra headroom for any future additions to the query).
   const chunkSize = 900;
   for (let offset = 0; offset < sceneIds.length; offset += chunkSize) {
     const chunk = sceneIds.slice(offset, offset + chunkSize);
@@ -427,6 +430,9 @@ function resolveSceneFilePath(filePath, { syncDir } = {}) {
     }
   } else {
     candidates.push(path.resolve(realSyncDir, rel));
+    // Scrivener External Folder Sync sometimes stores paths prefixed with
+    // "sync/" (the name of the sync folder itself) relative to the project
+    // root. Strip that prefix so we can find the file within realSyncDir.
     if (rel === "sync" || rel.startsWith("sync/")) {
       candidates.push(path.resolve(realSyncDir, rel.replace(/^sync\/?/, "")));
     }
@@ -565,10 +571,23 @@ export function renderReviewBundleMarkdown(dbHandle, plan, { generatedAt, syncDi
   sections.push(headerLines.join("\n"));
 
   for (const scene of rows) {
-    const withProse = {
-      ...scene,
-      prose: profile === "editor_detailed" ? (readProse(scene.file_path, { syncDir }) ?? "") : "",
-    };
+    let prose = "";
+    if (profile === "editor_detailed") {
+      const resolved = readProse(scene.file_path, { syncDir });
+      if (resolved === null) {
+        throw new ReviewBundlePlanError(
+          "SCENE_PROSE_READ_FAILED",
+          `Scene prose is unavailable for scene ${scene.scene_id}: file_path is null or could not be resolved within syncDir.`,
+          {
+            scene_id: scene.scene_id,
+            file_path: scene.file_path ?? null,
+            sync_dir: syncDir,
+          }
+        );
+      }
+      prose = resolved;
+    }
+    const withProse = { ...scene, prose };
     sections.push(renderSceneBlock(withProse, {
       profile,
       includeSceneIds,
@@ -671,4 +690,5 @@ export function createReviewBundleArtifacts(dbHandle, {
     },
     generated_at: generatedAt,
   };
+
 }
