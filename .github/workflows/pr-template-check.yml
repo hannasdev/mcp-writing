@@ -30,7 +30,8 @@ jobs:
               "## Follow-up",
             ];
 
-            const missing = requiredSections.filter((section) => !body.includes(section));
+            const bodyLower = body.toLowerCase();
+            const missing = requiredSections.filter((section) => !bodyLower.includes(section.toLowerCase()));
 
             const testingMatch = body.match(/## Testing\s*([\s\S]*?)(?=\n##\s|$)/i);
             const testingContent = testingMatch ? testingMatch[1] : "";
