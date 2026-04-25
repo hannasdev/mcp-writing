@@ -29,6 +29,7 @@
     "manual:test": "node scripts/manual/test.mjs",
     "manual:scenarios": "node scripts/manual/test-scenarios.mjs",
     "manual:merge-beta-test": "node scripts/manual/run_mcp_test.js",
+    "manual:review-bundle": "node scripts/manual/run_create_review_bundle.js",
     "setup:openclaw-env": "sh scripts/setup-openclaw-env.sh",
     "release": "release-it",
     "lint": "eslint index.js importer.js db.js sync.js metadata-lint.js scripts/",
