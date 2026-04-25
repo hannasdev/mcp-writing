@@ -18,6 +18,12 @@ import { renderCharacterArcTemplate, renderCharacterSheetTemplate, renderPlaceSh
 import { importScrivenerSync, validateProjectId } from "./importer.js";
 import { ASYNC_PROGRESS_PREFIX } from "./async-progress.js";
 import {
+  STYLEGUIDE_CONFIG_BASENAME,
+  STYLEGUIDE_ENUMS,
+  buildStyleguideConfigDraft,
+  resolveStyleguideConfig,
+} from "./prose-styleguide.js";
+import {
   REVIEW_BUNDLE_PROFILES,
   REVIEW_BUNDLE_STRICTNESS,
   ReviewBundlePlanError,
@@ -48,6 +54,31 @@ function isPathInsideSyncDir(candidatePath) {
   })();
 
   const rel = path.relative(SYNC_DIR_REAL, canonicalCandidate);
+  return !(rel.startsWith("..") || path.isAbsolute(rel));
+}
+
+// Like isPathInsideSyncDir, but works for paths that do not yet exist by
+// walking up to the nearest existing ancestor before canonicalising.
+function isPathCandidateInsideSyncDir(candidatePath) {
+  const resolvedCandidate = path.resolve(candidatePath);
+
+  let existingAncestor = resolvedCandidate;
+  while (!fs.existsSync(existingAncestor)) {
+    const parent = path.dirname(existingAncestor);
+    if (parent === existingAncestor) break;
+    existingAncestor = parent;
+  }
+
+  const canonicalBase = (() => {
+    try {
+      return fs.realpathSync(existingAncestor);
+    } catch {
+      return existingAncestor;
+    }
+  })();
+
+  const canonical = path.resolve(canonicalBase, path.relative(existingAncestor, resolvedCandidate));
+  const rel = path.relative(SYNC_DIR_REAL, canonical);
   return !(rel.startsWith("..") || path.isAbsolute(rel));
 }
 
@@ -1342,6 +1373,142 @@ function createMcpServer() {
         http_port: HTTP_PORT,
         runtime_warnings: RUNTIME_DIAGNOSTICS.warnings,
         setup_recommendations: RUNTIME_DIAGNOSTICS.recommendations,
+      });
+    }
+  );
+
+  // ---- prose styleguide ---------------------------------------------------
+  s.tool(
+    "setup_prose_styleguide_config",
+    "Create prose-styleguide.config.yaml at sync root or project root using language defaults plus optional explicit overrides.",
+    {
+      scope: z.enum(["sync_root", "project_root"]).optional().describe("Config write target scope. Defaults to project_root when project_id is supplied, otherwise sync_root."),
+      project_id: z.string().optional().describe("Project ID when writing project_root config (e.g. 'the-lamb' or 'universe-1/book-1')."),
+      language: z.enum(STYLEGUIDE_ENUMS.language).describe("Primary writing language. Seeds language-specific defaults."),
+      overrides: z.object({
+        spelling: z.enum(STYLEGUIDE_ENUMS.spelling).optional(),
+        quotation_style: z.enum(STYLEGUIDE_ENUMS.quotation_style).optional(),
+        quotation_style_nested: z.enum(STYLEGUIDE_ENUMS.quotation_style_nested).optional(),
+        em_dash_spacing: z.enum(STYLEGUIDE_ENUMS.em_dash_spacing).optional(),
+        ellipsis_style: z.enum(STYLEGUIDE_ENUMS.ellipsis_style).optional(),
+        abbreviation_periods: z.enum(STYLEGUIDE_ENUMS.abbreviation_periods).optional(),
+        oxford_comma: z.enum(STYLEGUIDE_ENUMS.oxford_comma).optional(),
+        numbers: z.enum(STYLEGUIDE_ENUMS.numbers).optional(),
+        date_format: z.enum(STYLEGUIDE_ENUMS.date_format).optional(),
+        time_format: z.enum(STYLEGUIDE_ENUMS.time_format).optional(),
+        tense: z.string().optional(),
+        pov: z.enum(STYLEGUIDE_ENUMS.pov).optional(),
+        dialogue_tags: z.enum(STYLEGUIDE_ENUMS.dialogue_tags).optional(),
+        sentence_fragments: z.enum(STYLEGUIDE_ENUMS.sentence_fragments).optional(),
+      }).optional().describe("Optional overrides layered on top of language defaults."),
+      voice_notes: z.string().optional().describe("Optional freeform voice notes to include in config."),
+      overwrite: z.boolean().optional().describe("If true, replaces an existing config file at the target location."),
+    },
+    async ({ scope, project_id, language, overrides = {}, voice_notes, overwrite = false }) => {
+      const resolvedScope = scope ?? (project_id ? "project_root" : "sync_root");
+
+      if (project_id !== undefined) {
+        const projectIdCheck = validateProjectId(project_id);
+        if (!projectIdCheck.ok) {
+          return errorResponse("INVALID_PROJECT_ID", projectIdCheck.reason, { project_id });
+        }
+      }
+
+      if (resolvedScope === "project_root" && !project_id) {
+        return errorResponse(
+          "PROJECT_ID_REQUIRED",
+          "project_id is required when scope=project_root."
+        );
+      }
+
+      if (!SYNC_DIR_WRITABLE) {
+        return errorResponse(
+          "SYNC_DIR_NOT_WRITABLE",
+          "Cannot write styleguide config because WRITING_SYNC_DIR is not writable in this runtime.",
+          { sync_dir: SYNC_DIR_ABS }
+        );
+      }
+
+      const targetPath = resolvedScope === "sync_root"
+        ? path.join(SYNC_DIR, STYLEGUIDE_CONFIG_BASENAME)
+        : path.join(resolveProjectRoot(project_id), STYLEGUIDE_CONFIG_BASENAME);
+
+      if (!isPathCandidateInsideSyncDir(targetPath)) {
+        return errorResponse(
+          "INVALID_CONFIG_PATH",
+          "Resolved styleguide config path must be inside WRITING_SYNC_DIR.",
+          { target_path: path.resolve(targetPath), sync_dir: SYNC_DIR_ABS }
+        );
+      }
+
+      if (fs.existsSync(targetPath) && !overwrite) {
+        return errorResponse(
+          "STYLEGUIDE_CONFIG_EXISTS",
+          "Styleguide config already exists at target path. Set overwrite=true to replace it.",
+          { target_path: path.resolve(targetPath) }
+        );
+      }
+
+      const draft = buildStyleguideConfigDraft({
+        language,
+        overrides,
+        voice_notes,
+      });
+      if (!draft.ok) {
+        return errorResponse(
+          draft.error.code,
+          draft.error.message,
+          draft.error.details
+        );
+      }
+
+      fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+      fs.writeFileSync(targetPath, yaml.dump(draft.config, { lineWidth: 120 }), "utf8");
+
+      return jsonResponse({
+        ok: true,
+        scope: resolvedScope,
+        file_path: path.resolve(targetPath),
+        config: draft.config,
+        inferred_defaults: draft.inferred_defaults,
+        warnings: draft.warnings,
+      });
+    }
+  );
+
+  s.tool(
+    "get_prose_styleguide_config",
+    "Resolve prose-styleguide.config.yaml with cascading precedence (sync root, then universe root, then project root). Applies language-derived defaults and nested quotation defaults when omitted.",
+    {
+      project_id: z.string().optional().describe("Optional project ID for project-scoped resolution (e.g. 'the-lamb' or 'universe-1/book-1')."),
+    },
+    async ({ project_id }) => {
+      if (project_id !== undefined) {
+        const projectIdCheck = validateProjectId(project_id);
+        if (!projectIdCheck.ok) {
+          return errorResponse("INVALID_PROJECT_ID", projectIdCheck.reason, { project_id });
+        }
+      }
+
+      const resolved = resolveStyleguideConfig({
+        syncDir: SYNC_DIR,
+        projectId: project_id,
+      });
+
+      if (!resolved.ok) {
+        return errorResponse(
+          resolved.error.code,
+          resolved.error.message,
+          resolved.error.details
+        );
+      }
+
+      return jsonResponse({
+        ok: true,
+        styleguide: resolved,
+        next_step: resolved.setup_required
+          ? "No prose-styleguide.config.yaml was found. Run setup to create one at sync root or project root."
+          : "Config resolved successfully.",
       });
     }
   );

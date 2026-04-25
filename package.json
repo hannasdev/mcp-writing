@@ -17,6 +17,7 @@
     "metadata-lint.js",
     "scene-character-normalization.js",
     "review-bundles.js",
+    "prose-styleguide.js",
     "scripts/",
     "README.md",
     "CHANGELOG.md"

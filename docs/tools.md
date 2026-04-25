@@ -14,6 +14,8 @@
 - [`list_async_jobs`](#list_async_jobs)
 - [`cancel_async_job`](#cancel_async_job)
 - [`get_runtime_config`](#get_runtime_config)
+- [`setup_prose_styleguide_config`](#setup_prose_styleguide_config)
+- [`get_prose_styleguide_config`](#get_prose_styleguide_config)
 - [`preview_review_bundle`](#preview_review_bundle)
 - [`create_review_bundle`](#create_review_bundle)
 - [`find_scenes`](#find_scenes)
@@ -152,6 +154,31 @@ Cancel a running asynchronous job. Use this when an import/merge/batch run was s
 Show the active runtime paths and capabilities for this server instance (sync dir, database path, writability, permission diagnostics, and git availability). Use this to verify which manuscript location is currently connected.
 
 _No parameters._
+
+---
+
+## setup_prose_styleguide_config
+
+Create prose-styleguide.config.yaml at sync root or project root using language defaults plus optional explicit overrides.
+
+| Parameter | Type | Required | Description |
+| --- | --- | :---: | --- |
+| `scope` | `enum("sync_root","project_root")` | No | Config write target scope. Defaults to project_root when project_id is supplied, otherwise sync_root. |
+| `project_id` | `string` | No | Project ID when writing project_root config (e.g. 'the-lamb' or 'universe-1/book-1'). |
+| `language` | `enum` | Yes | Primary writing language. Seeds language-specific defaults. |
+| `overrides` | `object` | No | Optional overrides layered on top of language defaults. |
+| `voice_notes` | `string` | No | Optional freeform voice notes to include in config. |
+| `overwrite` | `boolean` | No | If true, replaces an existing config file at the target location. |
+
+---
+
+## get_prose_styleguide_config
+
+Resolve prose-styleguide.config.yaml with cascading precedence (sync root, then universe root, then project root). Applies language-derived defaults and nested quotation defaults when omitted.
+
+| Parameter | Type | Required | Description |
+| --- | --- | :---: | --- |
+| `project_id` | `string` | No | Optional project ID for project-scoped resolution (e.g. 'the-lamb' or 'universe-1/book-1'). |
 
 ---
 

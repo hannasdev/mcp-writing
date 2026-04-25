@@ -35,6 +35,7 @@ import {
 import { runSceneCharacterBatch } from "../scene-character-batch.js";
 import { buildCharacterNormalizationContext, isDistinctiveToken, normalizeSceneCharacters } from "../scene-character-normalization.js";
 import { buildReviewBundlePlan, renderReviewBundleMarkdown, ReviewBundlePlanError } from "../review-bundles.js";
+import { buildStyleguideConfigDraft, resolveStyleguideConfig } from "../prose-styleguide.js";
 
 function insertTestScene(db, {
   sceneId,
@@ -97,6 +98,259 @@ describe("checksumProse", () => {
   test("returns a non-empty hex string", () => {
     const result = checksumProse("some prose");
     assert.match(result, /^[0-9a-f]+$/);
+  });
+});
+
+describe("resolveStyleguideConfig", () => {
+  test("returns setup_required when no config files are present", () => {
+    const syncDir = fs.mkdtempSync(path.join(os.tmpdir(), "styleguide-empty-"));
+    try {
+      const result = resolveStyleguideConfig({ syncDir });
+      assert.equal(result.ok, true);
+      assert.equal(result.setup_required, true);
+      assert.equal(result.config_found, false);
+      assert.equal(result.resolved_config, null);
+      assert.deepEqual(result.sources, []);
+    } finally {
+      fs.rmSync(syncDir, { recursive: true, force: true });
+    }
+  });
+
+  test("applies cascading precedence and language-derived defaults", () => {
+    const syncDir = fs.mkdtempSync(path.join(os.tmpdir(), "styleguide-cascade-"));
+    try {
+      fs.mkdirSync(path.join(syncDir, "universes", "aether", "book-one"), { recursive: true });
+
+      fs.writeFileSync(
+        path.join(syncDir, "prose-styleguide.config.yaml"),
+        [
+          "language: english_uk",
+          "voice_notes: |",
+          "  Root voice",
+        ].join("\n"),
+        "utf8"
+      );
+
+      fs.writeFileSync(
+        path.join(syncDir, "universes", "aether", "prose-styleguide.config.yaml"),
+        [
+          "dialogue_tags: expressive",
+          "pov: third_limited",
+        ].join("\n"),
+        "utf8"
+      );
+
+      fs.writeFileSync(
+        path.join(syncDir, "universes", "aether", "book-one", "prose-styleguide.config.yaml"),
+        [
+          "dialogue_tags: minimal",
+          "sentence_fragments: intentional",
+          "voice_notes: |",
+          "  Project voice",
+        ].join("\n"),
+        "utf8"
+      );
+
+      const result = resolveStyleguideConfig({
+        syncDir,
+        projectId: "aether/book-one",
+      });
+
+      assert.equal(result.ok, true);
+      assert.equal(result.setup_required, false);
+      assert.equal(result.config_found, true);
+      assert.equal(result.sources.length, 3);
+      assert.equal(result.resolved_config.language, "english_uk");
+      assert.equal(result.resolved_config.spelling, "uk");
+      assert.equal(result.resolved_config.quotation_style, "single");
+      assert.equal(result.resolved_config.quotation_style_nested, "double");
+      assert.equal(result.resolved_config.em_dash_spacing, "spaced");
+      assert.equal(result.resolved_config.abbreviation_periods, "without");
+      assert.equal(result.resolved_config.oxford_comma, "no");
+      assert.equal(result.resolved_config.date_format, "dmy");
+      assert.equal(result.resolved_config.dialogue_tags, "minimal");
+      assert.equal(result.resolved_config.pov, "third_limited");
+      assert.equal(result.resolved_config.sentence_fragments, "intentional");
+      assert.equal(result.resolved_config.voice_notes, "Project voice");
+    } finally {
+      fs.rmSync(syncDir, { recursive: true, force: true });
+    }
+  });
+
+  test("returns validation failure when config contains invalid enum value", () => {
+    const syncDir = fs.mkdtempSync(path.join(os.tmpdir(), "styleguide-invalid-"));
+    try {
+      fs.writeFileSync(
+        path.join(syncDir, "prose-styleguide.config.yaml"),
+        "quotation_style: invalid_style\n",
+        "utf8"
+      );
+
+      const result = resolveStyleguideConfig({ syncDir });
+      assert.equal(result.ok, false);
+      assert.equal(result.error.code, "INVALID_STYLEGUIDE_CONFIG");
+      assert.equal(result.error.details.issues[0].field, "quotation_style");
+    } finally {
+      fs.rmSync(syncDir, { recursive: true, force: true });
+    }
+  });
+
+  test("resolves a simple (non-universe) project ID to projects/ path", () => {
+    const syncDir = fs.mkdtempSync(path.join(os.tmpdir(), "styleguide-simple-proj-"));
+    try {
+      const projectDir = path.join(syncDir, "projects", "the-lamb");
+      fs.mkdirSync(projectDir, { recursive: true });
+
+      fs.writeFileSync(
+        path.join(syncDir, "prose-styleguide.config.yaml"),
+        "language: english_us\n",
+        "utf8"
+      );
+      fs.writeFileSync(
+        path.join(projectDir, "prose-styleguide.config.yaml"),
+        "tense: past\n",
+        "utf8"
+      );
+
+      const result = resolveStyleguideConfig({ syncDir, projectId: "the-lamb" });
+      assert.equal(result.ok, true);
+      assert.equal(result.sources.length, 2);
+      assert.equal(result.sources[0].scope, "sync_root");
+      assert.equal(result.sources[1].scope, "project_root");
+      assert.equal(result.resolved_config.language, "english_us");
+      assert.equal(result.resolved_config.tense, "past");
+    } finally {
+      fs.rmSync(syncDir, { recursive: true, force: true });
+    }
+  });
+
+  test("accepts escape-valve tense notation and normalizes to canonical value", () => {
+    const syncDir = fs.mkdtempSync(path.join(os.tmpdir(), "styleguide-tense-escape-"));
+    try {
+      fs.writeFileSync(
+        path.join(syncDir, "prose-styleguide.config.yaml"),
+        "tense: 'present (past for flashbacks)'\n",
+        "utf8"
+      );
+
+      const result = resolveStyleguideConfig({ syncDir });
+      assert.equal(result.ok, true);
+      // Escape-valve annotation is stripped; resolved tense is the canonical enum value.
+      assert.equal(result.resolved_config.tense, "present");
+    } finally {
+      fs.rmSync(syncDir, { recursive: true, force: true });
+    }
+  });
+
+  test("skips null/undefined values in config without error", () => {
+    const syncDir = fs.mkdtempSync(path.join(os.tmpdir(), "styleguide-null-"));
+    try {
+      // YAML null value: 'tense:' or 'tense: ~'
+      fs.writeFileSync(
+        path.join(syncDir, "prose-styleguide.config.yaml"),
+        "language: english_uk\ntense: ~\n",
+        "utf8"
+      );
+
+      const result = resolveStyleguideConfig({ syncDir });
+      assert.equal(result.ok, true);
+      assert.equal(result.resolved_config.language, "english_uk");
+      // null tense is treated as unset and absent from resolved_config
+      assert.equal(result.resolved_config.tense, undefined);
+    } finally {
+      fs.rmSync(syncDir, { recursive: true, force: true });
+    }
+  });
+
+  test("reports unknown fields but does not include them in resolved_config", () => {
+    const syncDir = fs.mkdtempSync(path.join(os.tmpdir(), "styleguide-unknown-field-"));
+    try {
+      fs.writeFileSync(
+        path.join(syncDir, "prose-styleguide.config.yaml"),
+        "language: english_us\nnonexistent_setting: yes\n",
+        "utf8"
+      );
+
+      const result = resolveStyleguideConfig({ syncDir });
+      assert.equal(result.ok, true);
+      assert.equal(result.resolved_config.language, "english_us");
+      assert.equal(result.warnings.unknown_fields.length, 1);
+      assert.equal(result.warnings.unknown_fields[0].field, "nonexistent_setting");
+      assert.equal(result.resolved_config.nonexistent_setting, undefined);
+    } finally {
+      fs.rmSync(syncDir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("buildStyleguideConfigDraft", () => {
+  test("builds a valid config from language defaults", () => {
+    const draft = buildStyleguideConfigDraft({ language: "english_us" });
+    assert.equal(draft.ok, true);
+    assert.equal(draft.config.language, "english_us");
+    assert.equal(draft.config.spelling, "us");
+    assert.equal(draft.config.quotation_style, "double");
+    assert.equal(draft.config.quotation_style_nested, "single");
+  });
+
+  test("accepts overrides and voice notes", () => {
+    const draft = buildStyleguideConfigDraft({
+      language: "english_uk",
+      overrides: {
+        quotation_style: "guillemets",
+        dialogue_tags: "expressive",
+      },
+      voice_notes: "Understated interiority.",
+    });
+
+    assert.equal(draft.ok, true);
+    assert.equal(draft.config.quotation_style, "guillemets");
+    assert.equal(draft.config.quotation_style_nested, "guillemets_single");
+    assert.equal(draft.config.dialogue_tags, "expressive");
+    assert.equal(draft.config.voice_notes, "Understated interiority.");
+  });
+
+  test("explicit language wins over any language field present in overrides", () => {
+    const draft = buildStyleguideConfigDraft({
+      language: "english_uk",
+      overrides: {
+        language: "english_us",
+        dialogue_tags: "expressive",
+      },
+    });
+
+    assert.equal(draft.ok, true);
+    assert.equal(draft.config.language, "english_uk");
+    assert.equal(draft.config.spelling, "uk");
+    assert.equal(draft.config.dialogue_tags, "expressive");
+  });
+
+  test("fails on invalid language", () => {
+    const draft = buildStyleguideConfigDraft({ language: "klingon" });
+    assert.equal(draft.ok, false);
+    assert.equal(draft.error.code, "INVALID_STYLEGUIDE_LANGUAGE");
+  });
+});
+
+describe("styleguide config hardening", () => {
+  test("treats __proto__ as an unknown field instead of mutating object prototypes", () => {
+    const syncDir = fs.mkdtempSync(path.join(os.tmpdir(), "styleguide-proto-"));
+    try {
+      fs.writeFileSync(
+        path.join(syncDir, "prose-styleguide.config.yaml"),
+        "__proto__:\n  polluted: yes\nlanguage: english_us\n",
+        "utf8"
+      );
+
+      const result = resolveStyleguideConfig({ syncDir });
+      assert.equal(result.ok, true);
+      assert.equal(result.resolved_config.language, "english_us");
+      assert.equal(result.warnings.unknown_fields.length, 1);
+      assert.equal(result.warnings.unknown_fields[0].field, "__proto__");
+      assert.equal({}.polluted, undefined);
+    } finally {
+      fs.rmSync(syncDir, { recursive: true, force: true });
+    }
   });
 });
 

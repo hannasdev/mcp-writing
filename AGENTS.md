@@ -49,18 +49,18 @@ All changes MUST follow this sequence:
 
 ### 4. Commit
 
-- MUST use `.github/skills/commit-writing/SKILL.md`
+- MUST use `skills/commit-writing/SKILL.md`
 - Do not proceed to PR until commits are clean and scoped
 
 ### 5. Pull Request (required)
 
 - ALWAYS open a PR after implementation and commit preparation (no direct merges)
-- MUST use `.github/skills/pr-description/SKILL.md`
+- MUST use `skills/pr-description/SKILL.md`
 - PR must accurately reflect the actual implementation
 
 ### 6. Review handling
 
-- MUST use `.github/skills/code-review/SKILL.md`
+- MUST use `skills/code-review/SKILL.md`
 - Do not blindly apply all feedback
 - Group feedback into:
   - correctness issues
@@ -88,9 +88,9 @@ A change is considered complete when:
 
 Use these specialized skills:
 
-- `.github/skills/commit-writing/SKILL.md` (used during Commit step)
-- `.github/skills/pr-description/SKILL.md` (used during Pull Request step)
-- `.github/skills/code-review/SKILL.md` (used during Review handling step)
+- `skills/commit-writing/SKILL.md` (used during Commit step)
+- `skills/pr-description/SKILL.md` (used during Pull Request step)
+- `skills/code-review/SKILL.md` (used during Review handling step)
 
 These define execution details. This file defines workflow and constraints.
 
