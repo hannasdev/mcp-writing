@@ -67,7 +67,16 @@ function resolveOutputDirWithinSync(outputDir) {
     existingAncestor = parentDir;
   }
 
-  const realExistingAncestor = fs.realpathSync.native(existingAncestor);
+  let realExistingAncestor;
+  try {
+    realExistingAncestor = fs.realpathSync.native(existingAncestor);
+  } catch (err) {
+    throw new ReviewBundlePlanError(
+      "INVALID_OUTPUT_DIR",
+      "output_dir ancestor could not be resolved: path may be inaccessible.",
+      { output_dir: outputDir, existing_ancestor: existingAncestor, cause: err.message }
+    );
+  }
   const relativeFromAncestor = path.relative(existingAncestor, resolvedOutputDir);
   resolvedOutputDir = path.resolve(realExistingAncestor, relativeFromAncestor);
 

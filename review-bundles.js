@@ -499,7 +499,7 @@ function renderSceneBlock(scene, options) {
 
   const title = scene.title || scene.scene_id;
   const sceneHeading = includeSceneIds
-    ? `## ${escapeMarkdown(title)} (${scene.scene_id})`
+    ? `## ${escapeMarkdown(title)} (${escapeMarkdown(scene.scene_id)})`
     : `## ${escapeMarkdown(title)}`;
 
   const parts = [sceneHeading];
@@ -542,8 +542,12 @@ function renderSceneBlock(scene, options) {
     .split(/\n\s*\n/g)
     .map(p => p.trim())
     .filter(Boolean);
+  // Sanitize scene_id for safe embedding in an HTML comment: restrict to
+  // alphanumerics, hyphens, underscores, and dots to prevent "-->" or other
+  // sequences from prematurely terminating the comment.
+  const safeSceneId = scene.scene_id.replace(/[^a-zA-Z0-9\-_.]/g, "_");
   const anchoredParagraphs = paragraphs.map((paragraph, index) => {
-    return `<!-- ${scene.scene_id}:p${index + 1} -->\n${paragraph}`;
+    return `<!-- ${safeSceneId}:p${index + 1} -->\n${paragraph}`;
   });
   parts.push(anchoredParagraphs.join("\n\n"));
   return parts.join("\n\n");
