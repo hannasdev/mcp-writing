@@ -33,7 +33,7 @@ import {
   mergeSidecarData,
 } from "../scrivener-direct.js";
 import { runSceneCharacterBatch } from "../scene-character-batch.js";
-import { buildCharacterNormalizationContext, normalizeSceneCharacters } from "../scene-character-normalization.js";
+import { buildCharacterNormalizationContext, isDistinctiveToken, normalizeSceneCharacters } from "../scene-character-normalization.js";
 import { buildReviewBundlePlan, renderReviewBundleMarkdown, ReviewBundlePlanError } from "../review-bundles.js";
 
 function insertTestScene(db, {
@@ -1466,6 +1466,11 @@ describe("runSceneCharacterBatch", () => {
 });
 
 describe("scene character normalization", () => {
+  test("treats exported distinctive-token helper as case-insensitive", () => {
+    assert.equal(isDistinctiveToken("The"), false);
+    assert.equal(isDistinctiveToken(" Victor "), true);
+  });
+
   test("normalizes plain-name references to canonical ids", () => {
     const context = buildCharacterNormalizationContext([
       { character_id: "char-elena-vasquez", name: "Elena Vasquez" },
@@ -1539,6 +1544,20 @@ describe("scene character normalization", () => {
 
     assert.equal(result.changed, false);
     assert.deepEqual(result.after, ["Victor"]);
+  });
+
+  test("normalize-scene-characters CLI reports missing option values clearly", () => {
+    const result = spawnSync(
+      process.execPath,
+      ["--experimental-sqlite", "scripts/normalize-scene-characters.mjs", "--limit"],
+      {
+        cwd: path.resolve("."),
+        encoding: "utf8",
+      }
+    );
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /--limit requires a value\./);
   });
 });
 

@@ -4,6 +4,14 @@ import { openDb } from "../db.js";
 import { buildCharacterNormalizationContext, normalizeSceneCharacters } from "../scene-character-normalization.js";
 import { normalizeSceneMetaForPath, readMeta, syncAll, writeMeta } from "../sync.js";
 
+function readRequiredValue(argv, index, option) {
+  const value = argv[index + 1];
+  if (value === undefined || value.startsWith("-")) {
+    throw new Error(`${option} requires a value.`);
+  }
+  return value;
+}
+
 function parseArgs(argv) {
   const opts = {
     syncDir: process.env.WRITING_SYNC_DIR ?? "./sync",
@@ -16,12 +24,15 @@ function parseArgs(argv) {
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
-    if ((arg === "--sync-dir" || arg === "-d") && argv[i + 1]) {
-      opts.syncDir = argv[++i];
-    } else if ((arg === "--project-id" || arg === "-p") && argv[i + 1]) {
-      opts.projectId = argv[++i];
-    } else if ((arg === "--limit" || arg === "-n") && argv[i + 1]) {
-      opts.limit = Number.parseInt(argv[++i], 10);
+    if (arg === "--sync-dir" || arg === "-d") {
+      opts.syncDir = readRequiredValue(argv, i, arg);
+      i++;
+    } else if (arg === "--project-id" || arg === "-p") {
+      opts.projectId = readRequiredValue(argv, i, arg);
+      i++;
+    } else if (arg === "--limit" || arg === "-n") {
+      opts.limit = Number.parseInt(readRequiredValue(argv, i, arg), 10);
+      i++;
     } else if (arg === "--write") {
       opts.write = true;
     } else if (arg === "--json") {

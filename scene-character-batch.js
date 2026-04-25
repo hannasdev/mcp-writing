@@ -1,11 +1,7 @@
 import fs from "node:fs";
 import matter from "gray-matter";
-import { buildCharacterNormalizationContext, resolveCharacterReference } from "./scene-character-normalization.js";
+import { buildCharacterNormalizationContext, escapeRegex, resolveCharacterReference } from "./scene-character-normalization.js";
 import { normalizeSceneMetaForPath, readMeta, writeMeta } from "./sync.js";
-
-function escapeRegex(text) {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
 
 function normalizeCharacterRows(rows) {
   return buildCharacterNormalizationContext(rows);

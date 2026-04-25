@@ -14,12 +14,13 @@ export const NON_DISTINCTIVE_TOKENS = new Set([
   "around",
 ]);
 
-function escapeRegex(text) {
+export function escapeRegex(text) {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 export function isDistinctiveToken(token) {
-  return Boolean(token) && token.length >= 3 && !NON_DISTINCTIVE_TOKENS.has(token);
+  const normalized = String(token ?? "").trim().toLowerCase();
+  return Boolean(normalized) && normalized.length >= 3 && !NON_DISTINCTIVE_TOKENS.has(normalized);
 }
 
 function normalizeRawCharacterValues(values) {
