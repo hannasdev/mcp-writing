@@ -1349,7 +1349,7 @@ function createMcpServer() {
   // ---- preview_review_bundle ----------------------------------------------
   s.tool(
     "preview_review_bundle",
-    "Dry-run planning tool for review bundles. Resolves scene scope, deterministic ordering, warnings, and planned output filenames without writing files. Note: include_scene_ids/include_metadata_sidebar/include_paragraph_anchors are advisory placeholders in Phase 4A.1 and do not alter planning semantics yet.",
+    "Dry-run planning tool for review bundles. Resolves scene scope, deterministic ordering, warnings, and planned output filenames without writing files. Rendering options are accepted for API consistency and reflected in resolved_scope.options, but do not change planning output.",
     {
       project_id: z.string().describe("Project ID to scope the review bundle (e.g. 'test-novel')."),
       profile: z.enum(REVIEW_BUNDLE_PROFILES).describe("Bundle profile: outline_discussion, editor_detailed, or beta_reader_personalized."),
@@ -1358,9 +1358,9 @@ function createMcpServer() {
       tag: z.string().optional().describe("Optional tag filter (exact match)."),
       scene_ids: z.array(z.string()).optional().describe("Optional explicit scene_id allowlist. Intersects with other filters."),
       strictness: z.enum(REVIEW_BUNDLE_STRICTNESS).optional().describe("Strictness mode: warn (default) or fail."),
-      include_scene_ids: z.boolean().optional().describe("Include scene IDs in headings (default true). Applies to both PDF and markdown."),
-      include_metadata_sidebar: z.boolean().optional().describe("Include metadata sidebar in markdown output (default false). Markdown only — no effect on PDF."),
-      include_paragraph_anchors: z.boolean().optional().describe("Include paragraph anchors in markdown output (default false). Markdown only — no effect on PDF."),
+      include_scene_ids: z.boolean().optional().describe("Rendering option (default true). Included in resolved_scope.options for downstream rendering; does not change planning results."),
+      include_metadata_sidebar: z.boolean().optional().describe("Rendering option (default false). Included in resolved_scope.options for downstream rendering; does not change planning results."),
+      include_paragraph_anchors: z.boolean().optional().describe("Rendering option (default false). Included in resolved_scope.options for downstream rendering; does not change planning results."),
       recipient_name: z.string().optional().describe("Optional recipient display name for beta_reader_personalized profile."),
       bundle_name: z.string().optional().describe("Optional output bundle base name override (slugified in planned outputs)."),
       format: z.enum(["pdf", "markdown", "both"]).optional().describe("Output format: pdf (default), markdown, or both."),

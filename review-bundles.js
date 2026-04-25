@@ -835,6 +835,11 @@ export function renderReviewBundlePdf(dbHandle, plan, { generatedAt, syncDir: sy
       doc.end();
     } catch (error) {
       fail(error);
+      try {
+        doc.end();
+      } catch {
+        // Ignore errors from end() during failure cleanup.
+      }
     }
   });
 }
@@ -878,14 +883,14 @@ export async function createReviewBundleArtifacts(dbHandle, {
   ) ?? null;
   const pdfFileName = plan.planned_outputs.find(name => name.endsWith(".pdf")) ?? null;
   const manifestFileName = plan.planned_outputs.find(name => name.endsWith(".manifest.json"));
-  
+
   if (!manifestFileName) {
     throw new ReviewBundlePlanError(
       "INVALID_PLAN_OUTPUTS",
       "Plan is missing expected manifest filename."
     );
   }
-  
+
   if (!markdownFileName && !pdfFileName) {
     throw new ReviewBundlePlanError(
       "INVALID_PLAN_OUTPUTS",
@@ -900,16 +905,16 @@ export async function createReviewBundleArtifacts(dbHandle, {
   const feedbackPath = feedbackFileName ? resolveOutputFilePath(normalizedOutputDir, feedbackFileName) : null;
 
   const generatedAt = new Date().toISOString();
-  
+
   // Render markdown if needed
   const markdown = markdownPath ? renderReviewBundleMarkdown(dbHandle, plan, { generatedAt, syncDir }) : null;
-  
+
   // Render PDF if needed
   let pdfBuffer = null;
   if (pdfPath) {
     pdfBuffer = await renderReviewBundlePdf(dbHandle, plan, { generatedAt, syncDir });
   }
-  
+
   const recipientName = plan.resolved_scope?.options?.recipient_name;
   const betaNotice = plan.profile === "beta_reader_personalized"
     ? renderBetaNoticeMarkdown({ projectId: plan.resolved_scope.project_id, recipientName })
@@ -917,7 +922,7 @@ export async function createReviewBundleArtifacts(dbHandle, {
   const betaFeedbackForm = plan.profile === "beta_reader_personalized"
     ? renderBetaFeedbackFormMarkdown({ projectId: plan.resolved_scope.project_id, recipientName, generatedAt })
     : null;
-  
+
   // Use the bundle ID from whichever primary file exists
   const bundleIdFileName = markdownFileName || pdfFileName;
   const manifest = {
