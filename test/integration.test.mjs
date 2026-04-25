@@ -235,7 +235,7 @@ No name. No explanation.
 
 She turned the card over. On the back, in smaller writing: *You know what happened to your father. We do too.*
 
-Elena sat down on the floor of the empty flat and stared at the card for a long time.
+Elena Voss sat down on the floor of the empty flat and stared at the card for a long time.
 `
   );
 

@@ -1280,6 +1280,32 @@ describe("runSceneCharacterBatch", () => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
+  test("does not infer multi-token names from a non-distinctive token", async () => {
+    const { dir } = makeBatchFixture();
+    const filePath = writeBatchScene(dir, "sc-001", "The airport crowd surges toward the gate.", []);
+
+    const result = await runSceneCharacterBatch({
+      syncDir: dir,
+      args: {
+        project_id: "test-novel",
+        dry_run: true,
+        replace_mode: "merge",
+        include_match_details: true,
+        target_scenes: [{ scene_id: "sc-001", project_id: "test-novel", file_path: filePath }],
+        character_rows: [
+          { character_id: "char-the-swarm", name: "The Swarm" },
+        ],
+      },
+    });
+
+    assert.equal(result.ok, true);
+    assert.deepEqual(result.results[0].inferred_characters, []);
+    assert.deepEqual(result.results[0].match_details.ambiguous_tokens, []);
+    assert.equal(result.results[0].status, "unchanged");
+
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
   test("keeps status unchanged when inferred matches coexist with ambiguous tokens", async () => {
     const { dir } = makeBatchFixture();
     const filePath = writeBatchScene(dir, "sc-001", "Elena Vasquez arrives after dark.", ["elena-v"]);
@@ -1329,6 +1355,57 @@ describe("runSceneCharacterBatch", () => {
     assert.deepEqual(result.results[0].after_characters.sort(), ["elena", "marcus"]);
     assert.deepEqual(result.results[0].added, ["elena"]);
     assert.deepEqual(result.results[0].removed, []);
+
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  test("merge mode normalizes legacy plain-name entries to canonical ids", async () => {
+    const { dir } = makeBatchFixture();
+    const filePath = writeBatchScene(dir, "sc-001", "No named character appears here.", ["Elena Vasquez"]);
+
+    const result = await runSceneCharacterBatch({
+      syncDir: dir,
+      args: {
+        project_id: "test-novel",
+        dry_run: true,
+        replace_mode: "merge",
+        target_scenes: [{ scene_id: "sc-001", project_id: "test-novel", file_path: filePath }],
+        character_rows: [
+          { character_id: "char-elena-vasquez", name: "Elena Vasquez" },
+        ],
+      },
+    });
+
+    assert.deepEqual(result.results[0].before_characters, ["Elena Vasquez"]);
+    assert.deepEqual(result.results[0].after_characters, ["char-elena-vasquez"]);
+    assert.deepEqual(result.results[0].added, ["char-elena-vasquez"]);
+    assert.deepEqual(result.results[0].removed, ["Elena Vasquez"]);
+
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  test("removes a less specific existing id when a more specific full-name match is inferred", async () => {
+    const { dir } = makeBatchFixture();
+    const filePath = writeBatchScene(dir, "sc-001", "Victor Alexeyevich Sidorin studies the report.", ["char-victor-sidorin"]);
+
+    const result = await runSceneCharacterBatch({
+      syncDir: dir,
+      args: {
+        project_id: "test-novel",
+        dry_run: true,
+        replace_mode: "merge",
+        target_scenes: [{ scene_id: "sc-001", project_id: "test-novel", file_path: filePath }],
+        character_rows: [
+          { character_id: "char-victor-sidorin", name: "Victor Sidorin" },
+          { character_id: "char-victor-alexeyevich-sidorin", name: "Victor Alexeyevich Sidorin" },
+        ],
+      },
+    });
+
+    assert.deepEqual(result.results[0].before_characters, ["char-victor-sidorin"]);
+    assert.deepEqual(result.results[0].after_characters, ["char-victor-alexeyevich-sidorin"]);
+    assert.deepEqual(result.results[0].added, ["char-victor-alexeyevich-sidorin"]);
+    assert.deepEqual(result.results[0].removed, ["char-victor-sidorin"]);
 
     fs.rmSync(dir, { recursive: true, force: true });
   });
