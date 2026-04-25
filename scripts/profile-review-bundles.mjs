@@ -70,9 +70,8 @@ async function profileScenario(
 
     // Time the artifact generation phase
     const createStart = performance.now();
-    let result;
     try {
-      result = await createReviewBundleArtifacts(db, {
+      await createReviewBundleArtifacts(db, {
         plan,
         output_dir: tmpDir,
         syncDir,

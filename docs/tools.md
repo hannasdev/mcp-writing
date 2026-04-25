@@ -173,12 +173,13 @@ Dry-run planning tool for review bundles. Resolves scene scope, deterministic or
 | `include_paragraph_anchors` | `boolean` | No | Advisory placeholder for later rendering behavior (default false). Included in preview output options, but does not change planning results in Phase 4A.1. |
 | `recipient_name` | `string` | No | Optional recipient display name for beta_reader_personalized profile. |
 | `bundle_name` | `string` | No | Optional output bundle base name override (slugified in planned outputs). |
+| `format` | `enum("pdf","markdown","both")` | No | Output format: pdf (default), markdown, or both. |
 
 ---
 
 ## create_review_bundle
 
-Generate markdown review bundle artifacts from planned scene scope. Writes files only under output_dir and returns manifest/provenance details.
+Generate review bundle artifacts (PDF/markdown) from planned scene scope. Writes files only under output_dir and returns manifest/provenance details.
 
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |
@@ -196,6 +197,7 @@ Generate markdown review bundle artifacts from planned scene scope. Writes files
 | `recipient_name` | `string` | No | Optional recipient display name for beta_reader_personalized profile. |
 | `bundle_name` | `string` | No | Optional output bundle base name override (slugified in filenames). |
 | `source_commit` | `string` | No | Optional explicit source commit for provenance. Defaults to current HEAD when available. |
+| `format` | `enum("pdf","markdown","both")` | No | Output format: pdf (default), markdown, or both. |
 
 ---
 
