@@ -162,7 +162,7 @@ Dry-run planning tool for review bundles. Resolves scene scope, deterministic or
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |
 | `project_id` | `string` | Yes | Project ID to scope the review bundle (e.g. 'test-novel'). |
-| `profile` | `enum` | Yes | Bundle profile: outline_discussion or editor_detailed. |
+| `profile` | `enum` | Yes | Bundle profile: outline_discussion, editor_detailed, or beta_reader_personalized. |
 | `part` | `integer` | No | Optional part filter. |
 | `chapter` | `integer` | No | Optional chapter filter. |
 | `tag` | `string` | No | Optional tag filter (exact match). |
@@ -171,6 +171,7 @@ Dry-run planning tool for review bundles. Resolves scene scope, deterministic or
 | `include_scene_ids` | `boolean` | No | Advisory placeholder for later rendering behavior (default true). Included in preview output options, but does not change planning results in Phase 4A.1. |
 | `include_metadata_sidebar` | `boolean` | No | Advisory placeholder for later rendering behavior (default false). Included in preview output options, but does not change planning results in Phase 4A.1. |
 | `include_paragraph_anchors` | `boolean` | No | Advisory placeholder for later rendering behavior (default false). Included in preview output options, but does not change planning results in Phase 4A.1. |
+| `recipient_name` | `string` | No | Optional recipient display name for beta_reader_personalized profile. |
 | `bundle_name` | `string` | No | Optional output bundle base name override (slugified in planned outputs). |
 
 ---
@@ -182,7 +183,7 @@ Generate markdown review bundle artifacts from planned scene scope. Writes files
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |
 | `project_id` | `string` | Yes | Project ID to scope the review bundle (e.g. 'test-novel'). |
-| `profile` | `enum` | Yes | Bundle profile: outline_discussion or editor_detailed. |
+| `profile` | `enum` | Yes | Bundle profile: outline_discussion, editor_detailed, or beta_reader_personalized. |
 | `output_dir` | `string` | Yes | Directory path to write bundle artifacts into. |
 | `part` | `integer` | No | Optional part filter. |
 | `chapter` | `integer` | No | Optional chapter filter. |
@@ -192,6 +193,7 @@ Generate markdown review bundle artifacts from planned scene scope. Writes files
 | `include_scene_ids` | `boolean` | No | Include scene IDs in markdown headings (default true). |
 | `include_metadata_sidebar` | `boolean` | No | Include metadata sidebar in markdown output (default false). |
 | `include_paragraph_anchors` | `boolean` | No | Include paragraph anchors in markdown output (default false). |
+| `recipient_name` | `string` | No | Optional recipient display name for beta_reader_personalized profile. |
 | `bundle_name` | `string` | No | Optional output bundle base name override (slugified in filenames). |
 | `source_commit` | `string` | No | Optional explicit source commit for provenance. Defaults to current HEAD when available. |
 

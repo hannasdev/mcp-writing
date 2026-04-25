@@ -4,7 +4,7 @@ import matter from "gray-matter";
 
 const MAX_SORT_VALUE = Number.MAX_SAFE_INTEGER;
 
-export const REVIEW_BUNDLE_PROFILES = ["outline_discussion", "editor_detailed"];
+export const REVIEW_BUNDLE_PROFILES = ["outline_discussion", "editor_detailed", "beta_reader_personalized"];
 export const REVIEW_BUNDLE_STRICTNESS = ["warn", "fail"];
 
 export class ReviewBundlePlanError extends Error {
@@ -61,6 +61,62 @@ function escapeMarkdown(text) {
   return String(text ?? "")
     .replace(/\\/g, "\\\\")
     .replace(/([*_`\[\]#])/g, "\\$1");
+}
+
+function normalizeRecipientDisplayName(recipientName) {
+  const normalized = String(recipientName ?? "")
+    .replace(/[\x00-\x1f\x7f]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 100);
+
+  return normalized || "Beta Reader";
+}
+
+function renderBetaNoticeMarkdown({ projectId, recipientName }) {
+  const displayName = normalizeRecipientDisplayName(recipientName);
+  return [
+    "# Non-Distribution Notice",
+    "",
+    `This review packet is prepared for ${escapeMarkdown(displayName)} for private beta-reading purposes only.`,
+    "",
+    "Please do not distribute, repost, or share this material without explicit author permission.",
+    "",
+    "This notice is informational only and is not legal advice.",
+    "",
+    `Project: ${escapeMarkdown(projectId)}`,
+  ].join("\n") + "\n";
+}
+
+function renderBetaFeedbackFormMarkdown({ projectId, recipientName, generatedAt }) {
+  const displayName = normalizeRecipientDisplayName(recipientName);
+  const feedbackDate = String(generatedAt ?? new Date().toISOString()).slice(0, 10);
+  return [
+    "# Beta Reader Feedback Form",
+    "",
+    `- Project: ${escapeMarkdown(projectId)}`,
+    `- Reader: ${escapeMarkdown(displayName)}`,
+    `- Date: ${feedbackDate}`,
+    "",
+    "## Big-Picture Questions",
+    "",
+    "1. Which sections felt most compelling, and why?",
+    "2. Where did pacing feel slow, rushed, or unclear?",
+    "3. Were any character motivations confusing or unconvincing?",
+    "",
+    "## Scene-Level Notes",
+    "",
+    "Use scene IDs when possible.",
+    "",
+    "- Scene ID:",
+    "- Comment:",
+    "- Severity (nit / moderate / major):",
+    "",
+    "## Final Thoughts",
+    "",
+    "- What should be prioritized in the next revision?",
+    "- Any continuity concerns to flag?",
+  ].join("\n") + "\n";
 }
 
 function resolveOutputFilePath(outputDir, fileName) {
@@ -125,6 +181,7 @@ export function buildReviewBundlePlan(dbHandle, {
   include_metadata_sidebar = false,
   include_paragraph_anchors = false,
   bundle_name,
+  recipient_name,
 } = {}) {
   if (!project_id) {
     throw new ReviewBundlePlanError("INVALID_PROJECT_ID", "project_id is required.");
@@ -264,6 +321,9 @@ export function buildReviewBundlePlan(dbHandle, {
     const count = Number(row.word_count);
     return sum + (Number.isFinite(count) ? count : 0);
   }, 0);
+  const resolvedRecipientName = profile === "beta_reader_personalized"
+    ? normalizeRecipientDisplayName(recipient_name)
+    : undefined;
 
   const safeBundleName = slugifyBundleName(bundle_name || `${project_id}-${profile}`);
   const appliedFilters = {
@@ -283,6 +343,7 @@ export function buildReviewBundlePlan(dbHandle, {
         include_scene_ids: Boolean(include_scene_ids),
         include_metadata_sidebar: Boolean(include_metadata_sidebar),
         include_paragraph_anchors: Boolean(include_paragraph_anchors),
+        ...(resolvedRecipientName ? { recipient_name: resolvedRecipientName } : {}),
       },
     },
     ordering: rows.map(row => ({
@@ -308,6 +369,12 @@ export function buildReviewBundlePlan(dbHandle, {
     },
     planned_outputs: [
       `${safeBundleName}.md`,
+      ...(profile === "beta_reader_personalized"
+        ? [
+            `${safeBundleName}.notice.md`,
+            `${safeBundleName}.feedback-form.md`,
+          ]
+        : []),
       `${safeBundleName}.manifest.json`,
     ],
   };
@@ -567,19 +634,35 @@ export function renderReviewBundleMarkdown(dbHandle, plan, { generatedAt, syncDi
   const sceneIds = plan.ordering.map(row => row.scene_id);
   const rows = loadBundleSceneRows(dbHandle, plan.resolved_scope.project_id, sceneIds);
   const sections = [];
+  const recipientName = plan.resolved_scope?.options?.recipient_name;
+  const recipientDisplayName = normalizeRecipientDisplayName(recipientName);
 
   const headerLines = [
     `# Review Bundle: ${escapeMarkdown(plan.resolved_scope.project_id)}`,
     "",
     `- Profile: ${profile}`,
+    ...(profile === "beta_reader_personalized"
+      ? [`- Recipient: ${escapeMarkdown(recipientDisplayName)}`]
+      : []),
     `- Generated at: ${generatedAt ?? new Date().toISOString()}`,
     `- Scene count: ${plan.summary.scene_count}`,
   ];
   sections.push(headerLines.join("\n"));
 
+  if (profile === "beta_reader_personalized") {
+    sections.push(
+      [
+        "## Usage Notice",
+        "",
+        "This beta-reader draft is intended for private review and feedback.",
+        "Please do not redistribute without explicit author permission.",
+      ].join("\n")
+    );
+  }
+
   for (const scene of rows) {
     let prose = "";
-    if (profile === "editor_detailed") {
+    if (profile === "editor_detailed" || profile === "beta_reader_personalized") {
       const resolved = readProse(scene.file_path, { syncDir });
       if (resolved === null) {
         throw new ReviewBundlePlanError(
@@ -636,7 +719,14 @@ export function createReviewBundleArtifacts(dbHandle, {
     );
   }
 
-  const markdownFileName = plan.planned_outputs.find(name => name.endsWith(".md"));
+  const noticeFileName = plan.planned_outputs.find(name => name.endsWith(".notice.md")) ?? null;
+  const feedbackFileName = plan.planned_outputs.find(name => name.endsWith(".feedback-form.md")) ?? null;
+  const markdownFileName = plan.planned_outputs.find(
+    name =>
+      name.endsWith(".md") &&
+      !name.endsWith(".notice.md") &&
+      !name.endsWith(".feedback-form.md")
+  );
   const manifestFileName = plan.planned_outputs.find(name => name.endsWith(".manifest.json"));
   if (!markdownFileName || !manifestFileName) {
     throw new ReviewBundlePlanError(
@@ -647,9 +737,18 @@ export function createReviewBundleArtifacts(dbHandle, {
 
   const markdownPath = resolveOutputFilePath(normalizedOutputDir, markdownFileName);
   const manifestPath = resolveOutputFilePath(normalizedOutputDir, manifestFileName);
+  const noticePath = noticeFileName ? resolveOutputFilePath(normalizedOutputDir, noticeFileName) : null;
+  const feedbackPath = feedbackFileName ? resolveOutputFilePath(normalizedOutputDir, feedbackFileName) : null;
 
   const generatedAt = new Date().toISOString();
   const markdown = renderReviewBundleMarkdown(dbHandle, plan, { generatedAt, syncDir });
+  const recipientName = plan.resolved_scope?.options?.recipient_name;
+  const betaNotice = plan.profile === "beta_reader_personalized"
+    ? renderBetaNoticeMarkdown({ projectId: plan.resolved_scope.project_id, recipientName })
+    : null;
+  const betaFeedbackForm = plan.profile === "beta_reader_personalized"
+    ? renderBetaFeedbackFormMarkdown({ projectId: plan.resolved_scope.project_id, recipientName, generatedAt })
+    : null;
   const manifest = {
     bundle_id: path.basename(markdownFileName, ".md"),
     profile: plan.profile,
@@ -665,7 +764,7 @@ export function createReviewBundleArtifacts(dbHandle, {
     scene_ids: plan.ordering.map(row => row.scene_id),
   };
 
-  for (const outputPath of [markdownPath, manifestPath]) {
+  for (const outputPath of [markdownPath, manifestPath, noticePath, feedbackPath].filter(Boolean)) {
     try {
       const stat = fs.lstatSync(outputPath);
       if (stat.isSymbolicLink()) {
@@ -692,12 +791,20 @@ export function createReviewBundleArtifacts(dbHandle, {
 
   fs.writeFileSync(markdownPath, markdown, "utf8");
   fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n", "utf8");
+  if (noticePath && betaNotice != null) {
+    fs.writeFileSync(noticePath, betaNotice, "utf8");
+  }
+  if (feedbackPath && betaFeedbackForm != null) {
+    fs.writeFileSync(feedbackPath, betaFeedbackForm, "utf8");
+  }
 
   return {
     bundle_id: manifest.bundle_id,
     output_paths: {
       bundle_markdown: markdownPath,
       manifest_json: manifestPath,
+      ...(noticePath ? { notice_md: noticePath } : {}),
+      ...(feedbackPath ? { feedback_form_md: feedbackPath } : {}),
     },
     generated_at: generatedAt,
   };
