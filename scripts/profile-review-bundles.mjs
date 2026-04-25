@@ -100,7 +100,7 @@ async function profileScenario(
     console.log(`    Planning: ${planMs.toFixed(2)}ms, Creation: ${createMs.toFixed(2)}ms, Total: ${totalMs.toFixed(2)}ms`);
 
     return {
-      scenario: `${projectId} ${JSON.stringify(filters || "full")}`,
+      scenario: `${projectId} ${Object.keys(filters).length === 0 ? "full" : JSON.stringify(filters)}`,
       profile,
       sceneCount,
       wordCount,
@@ -170,8 +170,8 @@ async function main() {
     if (result) results.push(result);
   }
 
-  // Scenario 3: Subset by tag (if available)
-  console.log("\nScenario 3: Subset by tag (first 10 scenes)\n");
+  // Scenario 3: Subset by scene_ids (first 10 scenes)
+  console.log("\nScenario 3: Subset by scene_ids (first 10 scenes)\n");
   for (const profile of PROFILES) {
     const result = await profileScenario(PROJECT_SYNC_DIR, projectId, profile, {
       scene_ids: ["sc-001", "sc-002", "sc-003", "sc-004", "sc-005", "sc-006", "sc-007", "sc-008", "sc-009", "sc-010"],

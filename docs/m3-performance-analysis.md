@@ -70,4 +70,4 @@ Usage:
 node --experimental-sqlite scripts/profile-review-bundles.mjs
 ```
 
-Configurable via environment: `DB_PATH` and `PROJECT_SYNC_DIR` (hardcoded currently, can be parameterized)
+Configurable via `WRITING_SYNC_DIR` or an optional sync-dir argument (`argv[2]`); `DB_PATH` is derived from that directory.

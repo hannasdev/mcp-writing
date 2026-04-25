@@ -168,12 +168,12 @@ Dry-run planning tool for review bundles. Resolves scene scope, deterministic or
 | `tag` | `string` | No | Optional tag filter (exact match). |
 | `scene_ids` | `string[]` | No | Optional explicit scene_id allowlist. Intersects with other filters. |
 | `strictness` | `enum` | No | Strictness mode: warn (default) or fail. |
-| `include_scene_ids` | `boolean` | No | Rendering option (default true). Included in resolved_scope.options for downstream rendering; does not change planning results. |
-| `include_metadata_sidebar` | `boolean` | No | Rendering option (default false). Included in resolved_scope.options for downstream rendering; does not change planning results. |
-| `include_paragraph_anchors` | `boolean` | No | Rendering option (default false). Included in resolved_scope.options for downstream rendering; does not change planning results. |
+| `include_scene_ids` | `boolean` | No | Rendering option (default true). Echoed in resolved_scope.options for downstream rendering; does not change planning results. |
+| `include_metadata_sidebar` | `boolean` | No | Rendering option (default false). Echoed in resolved_scope.options for downstream rendering; does not change planning results. |
+| `include_paragraph_anchors` | `boolean` | No | Rendering option (default false). Echoed in resolved_scope.options for downstream rendering; does not change planning results. |
 | `recipient_name` | `string` | No | Optional recipient display name for beta_reader_personalized profile. |
 | `bundle_name` | `string` | No | Optional output bundle base name override (slugified in planned outputs). |
-| `format` | `enum("pdf","markdown","both")` | No | Output format: pdf (default), markdown, or both. |
+| `format` | `enum("pdf","markdown","both")` | No | Planned output format: pdf (default), markdown, or both. Affects planned_outputs filenames only; preview_review_bundle does not render artifacts. |
 
 ---
 

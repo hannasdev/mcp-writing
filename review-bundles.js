@@ -807,9 +807,13 @@ export function renderReviewBundlePdf(dbHandle, plan, { generatedAt, syncDir: sy
           const resolved = readProse(scene.file_path, { syncDir });
           if (resolved === null) {
             throw new ReviewBundlePlanError(
-              "SCENE_PROSE_UNAVAILABLE",
-              `Scene prose could not be resolved for profile "${profile}": ${scene.scene_id}`,
-              { sceneId: scene.scene_id, filePath: scene.file_path, profile, syncDir }
+              "SCENE_PROSE_READ_FAILED",
+              `Scene prose is unavailable for scene ${scene.scene_id}: file_path is null or could not be resolved within syncDir.`,
+              {
+                scene_id: scene.scene_id,
+                file_path: scene.file_path ?? null,
+                sync_dir: syncDir,
+              }
             );
           }
           prose = resolved;
