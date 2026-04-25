@@ -1480,7 +1480,7 @@ describe("scene character normalization", () => {
     assert.deepEqual(result.removed, ["Elena Vasquez"]);
   });
 
-  test("prunes less specific ids when a longer matching id is present", () => {
+  test("preserves co-occurring canonical ids even when one is less specific", () => {
     const context = buildCharacterNormalizationContext([
       { character_id: "char-victor-sidorin", name: "Victor Sidorin" },
       { character_id: "char-victor-alexeyevich-sidorin", name: "Victor Alexeyevich Sidorin" },
@@ -1491,9 +1491,9 @@ describe("scene character normalization", () => {
       context
     );
 
-    assert.equal(result.changed, true);
-    assert.deepEqual(result.after, ["char-victor-alexeyevich-sidorin"]);
-    assert.deepEqual(result.removed, ["char-victor-sidorin"]);
+    assert.equal(result.changed, false);
+    assert.deepEqual(result.after, ["char-victor-sidorin", "char-victor-alexeyevich-sidorin"]);
+    assert.deepEqual(result.removed, []);
   });
 
   test("keeps unresolved values unchanged when mapping is ambiguous", () => {

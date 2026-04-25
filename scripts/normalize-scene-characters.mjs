@@ -59,9 +59,6 @@ function queryRows(db, sql, ...params) {
 }
 
 function resolveCharacterRows(db, projectId) {
-  if (!projectId) {
-    return queryRows(db, "SELECT character_id, name FROM characters ORDER BY length(name) DESC");
-  }
   return queryRows(
     db,
     `SELECT character_id, name
@@ -101,8 +98,17 @@ function runNormalization({ syncDir, projectId, write, limit }) {
     // Refresh index so character/name resolution uses current canonical sheets and sidecars.
     syncAll(db, syncDir, { quiet: true, writable: false });
 
-    const context = buildCharacterNormalizationContext(resolveCharacterRows(db, projectId));
     const scenes = resolveScenes(db, projectId, limit);
+    const contextCache = new Map();
+
+    const getContextForProject = (sceneProjectId) => {
+      const key = sceneProjectId ?? "__none__";
+      if (contextCache.has(key)) return contextCache.get(key);
+
+      const context = buildCharacterNormalizationContext(resolveCharacterRows(db, sceneProjectId));
+      contextCache.set(key, context);
+      return context;
+    };
 
     const changed = [];
     let processedScenes = 0;
@@ -114,7 +120,7 @@ function runNormalization({ syncDir, projectId, write, limit }) {
         continue;
       }
 
-      const normalized = normalizeSceneCharacters(meta.characters, context);
+      const normalized = normalizeSceneCharacters(meta.characters, getContextForProject(scene.project_id));
       processedScenes++;
 
       if (!normalized.changed) continue;
@@ -145,7 +151,7 @@ function runNormalization({ syncDir, projectId, write, limit }) {
       project_id: projectId,
       processed_scenes: processedScenes,
       scenes_changed: changed.length,
-      character_reference_count: context.clean.length,
+      character_reference_count: [...contextCache.values()].reduce((sum, ctx) => sum + ctx.clean.length, 0),
       changes: changed,
     };
   } finally {
@@ -169,6 +175,10 @@ function printTextSummary(result) {
   }
   if (result.changes.length > preview.length) {
     process.stdout.write(`... ${result.changes.length - preview.length} more changed scene(s)\n`);
+  }
+
+  if (result.mode === "write") {
+    process.stdout.write("next_step: run sync() to refresh DB indexes from updated sidecars\n");
   }
 }
 

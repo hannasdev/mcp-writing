@@ -91,31 +91,6 @@ export function resolveCharacterReference(value, context) {
   return text;
 }
 
-export function pruneDominatedCharacterIds(values, context) {
-  const kept = [...values];
-
-  for (const candidateId of values) {
-    const candidate = context.byId.get(candidateId);
-    if (!candidate || candidate.informative_tokens.length < 2) continue;
-
-    for (const dominantId of values) {
-      if (dominantId === candidateId) continue;
-      const dominant = context.byId.get(dominantId);
-      if (!dominant) continue;
-      if (candidate.informative_tokens.length >= dominant.informative_tokens.length) continue;
-
-      const isSubset = candidate.informative_tokens.every(token => dominant.informative_tokens.includes(token));
-      if (isSubset) {
-        const idx = kept.indexOf(candidateId);
-        if (idx !== -1) kept.splice(idx, 1);
-        break;
-      }
-    }
-  }
-
-  return kept;
-}
-
 export function normalizeSceneCharacters(values, context) {
   const before = normalizeRawCharacterValues(values);
   const resolved = [];
@@ -128,7 +103,7 @@ export function normalizeSceneCharacters(values, context) {
     resolved.push(normalized);
   }
 
-  const after = pruneDominatedCharacterIds(resolved, context);
+  const after = resolved;
   const beforeSet = new Set(before);
   const afterSet = new Set(after);
 
