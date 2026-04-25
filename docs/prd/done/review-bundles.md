@@ -1,6 +1,6 @@
 # Review Bundles for Editorial Workflows
 
-**Status:** ✅ M1 Delivered (Phase 4A.1) — M2 Pending (`beta_reader_personalized`)
+**Status:** ✅ Complete — all milestones delivered (M1: markdown bundles, M2: beta_reader_personalized, M4: PDF export)
 
 ## Goal
 
@@ -55,7 +55,7 @@ Desired outcome:
 - distribution intent is clear
 - collected feedback is structured and easy to ingest
 
-## Bundle Profiles (Initial)
+## Bundle Profiles
 
 ### `outline_discussion`
 
@@ -81,6 +81,7 @@ Default content:
 - optional scene-level metadata sidebar
 
 Default exclusions:
+- loglines and summary metadata (those belong in `outline_discussion`)
 - private operational notes unless explicitly enabled
 
 ### `beta_reader_personalized`
@@ -94,9 +95,10 @@ Default content:
 - attached feedback form template
 
 Default exclusions:
+- loglines and summary metadata
 - internal continuity flags, debug metadata, and process notes
 
-## Functional Requirements (Phase 4A)
+## Functional Requirements
 
 1. Generate a bundle from an explicit scope:
    - `project_id` (required)
@@ -115,7 +117,7 @@ Default exclusions:
 6. Keep source files read-only during bundle generation.
 7. Write all artifacts to an output folder outside indexed prose files.
 
-## Output Format (Phase 4A)
+## Output Format
 
 Primary output:
 - PDF bundle (single-file default)
@@ -127,11 +129,7 @@ Companion outputs:
 - `feedback-form.md` (for beta profile)
 - `notice.md` (for beta profile)
 
-Potential extensions (not required in Phase 4A):
-- optional DOCX adapter built from the same intermediate representation
-- richer PDF typography/layout controls built from the same intermediate representation
-
-## Tool Surface (Proposed)
+## Tool Surface
 
 ### `preview_review_bundle`
 
@@ -153,14 +151,16 @@ Returns:
 - warning summary
 - provenance metadata
 
-Optional async counterpart for large projects may be added if generation time becomes significant.
-
 ## Privacy, Legal, and Safety Notes
 
 1. Personalized beta bundles must include clear non-distribution language.
 2. NDA text should be template-based and user-editable, with explicit disclaimer that this is not legal advice.
 3. Internal process metadata (`flags`, private notes, diagnostics) is excluded by default.
 4. Bundle generation should avoid embedding machine-local absolute paths in exported files.
+
+## Known Issues
+
+- **Logline in prose profiles (bug):** The logline renders unconditionally in all profiles, including `editor_detailed` and `beta_reader_personalized`. Per spec, loglines belong in `outline_discussion` only. The logline is a scene summary intended for structural discussion — surfacing it before prose in an editor or beta-reader PDF can prime interpretation before the reader encounters the scene. Fix: gate logline rendering on `profile === "outline_discussion"` in both the markdown and PDF renderers.
 
 ## Tradeoffs
 
@@ -181,38 +181,20 @@ Optional async counterpart for large projects may be added if generation time be
 1. Missing/ambiguous ordering metadata (`part`, `chapter`, `timeline_position`).
 2. Scene sets containing alternates, placeholders, or intentionally hidden draft material.
 3. Metadata staleness: whether to block compile in strict mode.
-4. Multi-project universe exports: keep Phase 4A project-scoped by default.
+4. Multi-project universe exports: keep project-scoped by default.
 5. Anchor stability when prose changes between review rounds.
 6. Accidental leakage of internal notes in beta-reader packets.
 7. Large bundles that exceed practical reviewer consumption size.
 
-## Implementation Path
+## Delivered Milestones
 
-1. Define intermediate bundle model (ordered sections + rendering metadata).
-2. Implement `preview_review_bundle` (dry-run only).
-3. Implement markdown renderer + manifest writer.
-4. Add profile presets and exclusion defaults.
-5. Add beta profile templates (notice + feedback form).
-6. Add integration tests for deterministic ordering, exclusion rules, and strictness behavior.
-7. Evaluate optional async execution based on observed runtime.
-
-## Rollout
-
-- Phase 4A.1: `outline_discussion` + `editor_detailed` in markdown only
-- Phase 4A.2: `beta_reader_personalized` (notice + feedback form templates)
-- Phase 4A.3: optional DOCX/PDF adapters if markdown adoption is strong
-
-## Open Questions
-
-1. Should we support multi-file chapter bundles in Phase 4A, or only single-file output?
-2. Should paragraph anchors be generated as deterministic IDs or positional counters?
-3. Should `fail` strictness block on stale metadata only, or also on missing ordering fields?
-4. How much profile customization is allowed before this becomes a template system?
-5. Should feedback form schema be fixed, or profile-configurable with limited fields?
+- **M1** ✅ — `outline_discussion` + `editor_detailed`, markdown output (v1.15–1.16)
+- **M2** ✅ — `beta_reader_personalized` with notice and feedback form templates (v1.17)
+- **M3** 📋 — optional async generation for large projects (deferred; not yet needed)
+- **M4** ✅ — PDF export via pdfkit (v2.0)
 
 ## Related
 
-- [editing.md](../done/editing.md) — Prose editing and git-backed provenance
-- [search-analysis.md](../done/search-analysis.md) — Metadata-first retrieval model
-- [reference-docs.md](reference-docs.md) — Adjacent Phase 4 querying work
+- [editing.md](editing.md) — Prose editing and git-backed provenance
+- [search-analysis.md](search-analysis.md) — Metadata-first retrieval model
 - [review-bundles-implementation.md](review-bundles-implementation.md) — Phase 4A.1 implementation checklist and tool contracts
