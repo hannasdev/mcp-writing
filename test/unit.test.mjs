@@ -33,6 +33,7 @@ import {
   mergeSidecarData,
 } from "../scrivener-direct.js";
 import { runSceneCharacterBatch } from "../scene-character-batch.js";
+import { buildCharacterNormalizationContext, normalizeSceneCharacters } from "../scene-character-normalization.js";
 import { buildReviewBundlePlan, renderReviewBundleMarkdown, ReviewBundlePlanError } from "../review-bundles.js";
 
 function insertTestScene(db, {
@@ -1461,6 +1462,50 @@ describe("runSceneCharacterBatch", () => {
     assert.deepEqual(result.results[0].removed, ["marcus"]);
 
     fs.rmSync(dir, { recursive: true, force: true });
+  });
+});
+
+describe("scene character normalization", () => {
+  test("normalizes plain-name references to canonical ids", () => {
+    const context = buildCharacterNormalizationContext([
+      { character_id: "char-elena-vasquez", name: "Elena Vasquez" },
+      { character_id: "char-marcus-hale", name: "Marcus Hale" },
+    ]);
+
+    const result = normalizeSceneCharacters(["Elena Vasquez", "char-marcus-hale"], context);
+
+    assert.equal(result.changed, true);
+    assert.deepEqual(result.after, ["char-elena-vasquez", "char-marcus-hale"]);
+    assert.deepEqual(result.added, ["char-elena-vasquez"]);
+    assert.deepEqual(result.removed, ["Elena Vasquez"]);
+  });
+
+  test("prunes less specific ids when a longer matching id is present", () => {
+    const context = buildCharacterNormalizationContext([
+      { character_id: "char-victor-sidorin", name: "Victor Sidorin" },
+      { character_id: "char-victor-alexeyevich-sidorin", name: "Victor Alexeyevich Sidorin" },
+    ]);
+
+    const result = normalizeSceneCharacters(
+      ["char-victor-sidorin", "char-victor-alexeyevich-sidorin"],
+      context
+    );
+
+    assert.equal(result.changed, true);
+    assert.deepEqual(result.after, ["char-victor-alexeyevich-sidorin"]);
+    assert.deepEqual(result.removed, ["char-victor-sidorin"]);
+  });
+
+  test("keeps unresolved values unchanged when mapping is ambiguous", () => {
+    const context = buildCharacterNormalizationContext([
+      { character_id: "char-victor-sidorin", name: "Victor Sidorin" },
+      { character_id: "char-victor-ivanov", name: "Victor Ivanov" },
+    ]);
+
+    const result = normalizeSceneCharacters(["Victor"], context);
+
+    assert.equal(result.changed, false);
+    assert.deepEqual(result.after, ["Victor"]);
   });
 });
 
