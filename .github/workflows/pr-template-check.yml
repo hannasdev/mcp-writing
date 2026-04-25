@@ -10,33 +10,61 @@ on:
 
 jobs:
   validate-pr-body:
-    name: Validate PR body sections
+    name: Validate PR description sections
     runs-on: ubuntu-latest
     permissions:
       pull-requests: read
 
     steps:
-      - name: Check required sections
+      - name: Check required sections and testing content
         uses: actions/github-script@v7
         with:
           script: |
             const body = context.payload.pull_request.body || "";
             const requiredSections = [
-              "**What changed:**",
-              "**Why:**",
-              "**Review focus:**",
-              "**Testing:**",
+              "## Summary",
+              "## Motivation",
+              "## Implementation",
+              "## Testing",
+              "## Risks and tradeoffs",
+              "## Follow-up",
             ];
 
             const missing = requiredSections.filter((section) => !body.includes(section));
 
-            if (missing.length > 0) {
+            const testingMatch = body.match(/## Testing\s*([\s\S]*?)(?=\n##\s|$)/i);
+            const testingContent = testingMatch ? testingMatch[1] : "";
+            const hasTestingEvidence =
+              /-\s*`[^`]+`/.test(testingContent) ||
+              /-\s*Not run\s*:/i.test(testingContent) ||
+              /-\s*Manual(?:ly)?\s+/i.test(testingContent);
+
+            if (missing.length > 0 || !hasTestingEvidence) {
+              const testingMessage = hasTestingEvidence
+                ? []
+                : [
+                    "Testing section must include at least one bullet with either:",
+                    "- a command in backticks (for example: - `npm test`)",
+                    "- Not run: <reason>",
+                    "- Manual/Manually ...",
+                    "",
+                  ];
+
               core.setFailed(
                 [
-                  "PR body is missing required template sections:",
-                  ...missing.map((section) => `- ${section}`),
+                  "PR description does not match required structure:",
+                  ...(missing.length > 0
+                    ? [
+                        "Missing required sections:",
+                        ...missing.map((section) => `- ${section}`),
+                        "",
+                      ]
+                    : []),
+                  ...testingMessage,
+                  "Expected sections (in this style):",
+                  ...requiredSections.map((section) => `- ${section}`),
                   "",
-                  "Use .github/PULL_REQUEST_TEMPLATE.md as the source of truth.",
+                  "Source of truth: .github/skills/pr-description/SKILL.md",
                 ].join("\n")
               );
             }
