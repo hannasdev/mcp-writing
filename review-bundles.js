@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import matter from "gray-matter";
+import PDFDocument from "pdfkit";
 
 const MAX_SORT_VALUE = Number.MAX_SAFE_INTEGER;
 
@@ -182,6 +183,7 @@ export function buildReviewBundlePlan(dbHandle, {
   include_paragraph_anchors = false,
   bundle_name,
   recipient_name,
+  format = "pdf",
 } = {}) {
   if (!project_id) {
     throw new ReviewBundlePlanError("INVALID_PROJECT_ID", "project_id is required.");
@@ -368,7 +370,8 @@ export function buildReviewBundlePlan(dbHandle, {
       blockers,
     },
     planned_outputs: [
-      `${safeBundleName}.md`,
+      ...(format === "markdown" || format === "both" ? [`${safeBundleName}.md`] : []),
+      ...(format === "pdf" || format === "both" ? [`${safeBundleName}.pdf`] : []),
       ...(profile === "beta_reader_personalized"
         ? [
             `${safeBundleName}.notice.md`,
@@ -689,11 +692,130 @@ export function renderReviewBundleMarkdown(dbHandle, plan, { generatedAt, syncDi
   return sections.join("\n\n---\n\n").trim() + "\n";
 }
 
-export function createReviewBundleArtifacts(dbHandle, {
+/**
+ * Render a review bundle plan to PDF format using pdfkit.
+ * Returns a buffer containing the PDF document.
+ */
+export function renderReviewBundlePdf(dbHandle, plan, { generatedAt, syncDir: syncDirOpt } = {}) {
+  const profile = plan.profile;
+  const includeSceneIds = Boolean(plan.resolved_scope?.options?.include_scene_ids);
+  const syncDir = syncDirOpt ?? process.env.WRITING_SYNC_DIR ?? null;
+
+  const sceneIds = plan.ordering.map(row => row.scene_id);
+  const rows = loadBundleSceneRows(dbHandle, plan.resolved_scope.project_id, sceneIds);
+  const recipientName = plan.resolved_scope?.options?.recipient_name;
+  const recipientDisplayName = normalizeRecipientDisplayName(recipientName);
+
+  // Create PDF document in memory (we'll pipe to buffer)
+  const doc = new PDFDocument({
+    size: "Letter",
+    margin: 50,
+    bufferPages: true,
+  });
+
+  // Collect all pages in a buffer
+  const chunks = [];
+  doc.on("data", chunk => chunks.push(chunk));
+
+  // Title and metadata
+  doc.fontSize(24).font("Helvetica-Bold").text(`Review Bundle: ${plan.resolved_scope.project_id}`, { align: "left" });
+  doc.moveDown(0.5);
+  doc.fontSize(11).font("Helvetica");
+  doc.text(`Profile: ${profile}`, { align: "left" });
+  if (profile === "beta_reader_personalized") {
+    doc.text(`Recipient: ${recipientDisplayName}`, { align: "left" });
+  }
+  doc.text(`Generated: ${generatedAt ?? new Date().toISOString()}`, { align: "left" });
+  doc.text(`Scenes: ${plan.summary.scene_count}`, { align: "left" });
+  doc.moveDown();
+
+  // Usage notice for beta profile
+  if (profile === "beta_reader_personalized") {
+    doc.fontSize(12).font("Helvetica-Bold").text("Usage Notice", { align: "left" });
+    doc.moveDown(0.3);
+    doc.fontSize(10).font("Helvetica");
+    doc.text("This beta-reader draft is intended for private review and feedback. Please do not redistribute without explicit author permission.", {
+      align: "left",
+      width: 495,
+    });
+    doc.moveDown();
+  }
+
+  // Render scenes
+  for (const scene of rows) {
+    // Scene heading
+    doc.fontSize(14).font("Helvetica-Bold");
+    let heading = scene.title || scene.scene_id;
+    if (includeSceneIds) {
+      heading += ` [${scene.scene_id}]`;
+    }
+    doc.text(heading, { align: "left" });
+    doc.moveDown(0.2);
+
+    // Scene metadata (one-liner)
+    doc.fontSize(9).font("Helvetica");
+    const metaParts = [];
+    if (scene.pov) metaParts.push(`POV: ${scene.pov}`);
+    if (scene.beat) metaParts.push(`Beat: ${scene.beat}`);
+    if (scene.tags && scene.tags.length > 0) metaParts.push(`Tags: ${scene.tags.join(", ")}`);
+    if (metaParts.length > 0) {
+      doc.text(metaParts.join(" • "), { align: "left", oblique: true });
+      doc.moveDown(0.2);
+    }
+
+    // Logline
+    if (scene.logline) {
+      doc.fontSize(10).font("Helvetica-Oblique");
+      doc.text(`"${scene.logline}"`, { align: "left", width: 495 });
+      doc.moveDown(0.3);
+    }
+
+    // Prose (only for detailed/beta profiles)
+    if (profile === "editor_detailed" || profile === "beta_reader_personalized") {
+      let prose = "";
+      try {
+        const resolved = readProse(scene.file_path, { syncDir });
+        if (resolved === null) {
+          prose = "[Scene prose unavailable]";
+        } else {
+          prose = resolved;
+        }
+      } catch {
+        prose = "[Error loading scene prose]";
+      }
+
+      doc.fontSize(10).font("Helvetica");
+      doc.text(prose, {
+        align: "left",
+        width: 495,
+        lineGap: 3,
+      });
+    }
+
+    doc.moveDown(0.5);
+    // Add page break if not on last scene
+    if (scene !== rows[rows.length - 1]) {
+      doc.addPage();
+    }
+  }
+
+  // Finalize and collect buffer
+  doc.end();
+
+  return new Promise((resolve, reject) => {
+    doc.on("end", () => {
+      resolve(Buffer.concat(chunks));
+    });
+    doc.on("error", reject);
+  });
+}
+
+export async function createReviewBundleArtifacts(dbHandle, {
   plan,
   output_dir,
   source_commit = null,
   syncDir,
+  format = "pdf",
 }) {
   if (!output_dir) {
     throw new ReviewBundlePlanError("INVALID_OUTPUT_DIR", "output_dir is required.");
@@ -721,27 +843,45 @@ export function createReviewBundleArtifacts(dbHandle, {
 
   const noticeFileName = plan.planned_outputs.find(name => name.endsWith(".notice.md")) ?? null;
   const feedbackFileName = plan.planned_outputs.find(name => name.endsWith(".feedback-form.md")) ?? null;
-  const markdownFileName = plan.planned_outputs.find(
-    name =>
-      name.endsWith(".md") &&
-      !name.endsWith(".notice.md") &&
-      !name.endsWith(".feedback-form.md")
-  );
+  const markdownFileName = format === "markdown" || format === "both" 
+    ? plan.planned_outputs.find(name => name.endsWith(".md") && !name.endsWith(".notice.md") && !name.endsWith(".feedback-form.md"))
+    : null;
+  const pdfFileName = format === "pdf" || format === "both"
+    ? plan.planned_outputs.find(name => name.endsWith(".pdf"))
+    : null;
   const manifestFileName = plan.planned_outputs.find(name => name.endsWith(".manifest.json"));
-  if (!markdownFileName || !manifestFileName) {
+  
+  if (!manifestFileName) {
     throw new ReviewBundlePlanError(
       "INVALID_PLAN_OUTPUTS",
-      "Plan is missing expected markdown/manifest filenames."
+      "Plan is missing expected manifest filename."
+    );
+  }
+  
+  if (!markdownFileName && !pdfFileName) {
+    throw new ReviewBundlePlanError(
+      "INVALID_PLAN_OUTPUTS",
+      `Plan format mismatch: format='${format}' but no markdown or PDF filename in planned outputs.`
     );
   }
 
-  const markdownPath = resolveOutputFilePath(normalizedOutputDir, markdownFileName);
+  const markdownPath = markdownFileName ? resolveOutputFilePath(normalizedOutputDir, markdownFileName) : null;
+  const pdfPath = pdfFileName ? resolveOutputFilePath(normalizedOutputDir, pdfFileName) : null;
   const manifestPath = resolveOutputFilePath(normalizedOutputDir, manifestFileName);
   const noticePath = noticeFileName ? resolveOutputFilePath(normalizedOutputDir, noticeFileName) : null;
   const feedbackPath = feedbackFileName ? resolveOutputFilePath(normalizedOutputDir, feedbackFileName) : null;
 
   const generatedAt = new Date().toISOString();
-  const markdown = renderReviewBundleMarkdown(dbHandle, plan, { generatedAt, syncDir });
+  
+  // Render markdown if needed
+  const markdown = markdownPath ? renderReviewBundleMarkdown(dbHandle, plan, { generatedAt, syncDir }) : null;
+  
+  // Render PDF if needed
+  let pdfBuffer = null;
+  if (pdfPath) {
+    pdfBuffer = await renderReviewBundlePdf(dbHandle, plan, { generatedAt, syncDir });
+  }
+  
   const recipientName = plan.resolved_scope?.options?.recipient_name;
   const betaNotice = plan.profile === "beta_reader_personalized"
     ? renderBetaNoticeMarkdown({ projectId: plan.resolved_scope.project_id, recipientName })
@@ -749,8 +889,11 @@ export function createReviewBundleArtifacts(dbHandle, {
   const betaFeedbackForm = plan.profile === "beta_reader_personalized"
     ? renderBetaFeedbackFormMarkdown({ projectId: plan.resolved_scope.project_id, recipientName, generatedAt })
     : null;
+  
+  // Use the bundle ID from whichever primary file exists
+  const bundleIdFileName = markdownFileName || pdfFileName;
   const manifest = {
-    bundle_id: path.basename(markdownFileName, ".md"),
+    bundle_id: path.basename(bundleIdFileName, path.extname(bundleIdFileName)),
     profile: plan.profile,
     generated_at: generatedAt,
     provenance: {
@@ -764,7 +907,7 @@ export function createReviewBundleArtifacts(dbHandle, {
     scene_ids: plan.ordering.map(row => row.scene_id),
   };
 
-  for (const outputPath of [markdownPath, manifestPath, noticePath, feedbackPath].filter(Boolean)) {
+  for (const outputPath of [markdownPath, pdfPath, manifestPath, noticePath, feedbackPath].filter(Boolean)) {
     try {
       const stat = fs.lstatSync(outputPath);
       if (stat.isSymbolicLink()) {
@@ -789,7 +932,12 @@ export function createReviewBundleArtifacts(dbHandle, {
     }
   }
 
-  fs.writeFileSync(markdownPath, markdown, "utf8");
+  if (markdownPath && markdown != null) {
+    fs.writeFileSync(markdownPath, markdown, "utf8");
+  }
+  if (pdfPath && pdfBuffer != null) {
+    fs.writeFileSync(pdfPath, pdfBuffer);
+  }
   fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n", "utf8");
   if (noticePath && betaNotice != null) {
     fs.writeFileSync(noticePath, betaNotice, "utf8");
@@ -801,7 +949,8 @@ export function createReviewBundleArtifacts(dbHandle, {
   return {
     bundle_id: manifest.bundle_id,
     output_paths: {
-      bundle_markdown: markdownPath,
+      ...(markdownPath ? { bundle_markdown: markdownPath } : {}),
+      ...(pdfPath ? { bundle_pdf: pdfPath } : {}),
       manifest_json: manifestPath,
       ...(noticePath ? { notice_md: noticePath } : {}),
       ...(feedbackPath ? { feedback_form_md: feedbackPath } : {}),

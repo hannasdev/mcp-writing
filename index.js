@@ -1363,6 +1363,7 @@ function createMcpServer() {
       include_paragraph_anchors: z.boolean().optional().describe("Advisory placeholder for later rendering behavior (default false). Included in preview output options, but does not change planning results in Phase 4A.1."),
       recipient_name: z.string().optional().describe("Optional recipient display name for beta_reader_personalized profile."),
       bundle_name: z.string().optional().describe("Optional output bundle base name override (slugified in planned outputs)."),
+      format: z.enum(["pdf", "markdown", "both"]).optional().describe("Output format: pdf (default), markdown, or both."),
     },
     async ({
       project_id,
@@ -1377,6 +1378,7 @@ function createMcpServer() {
       include_paragraph_anchors = false,
       recipient_name,
       bundle_name,
+      format = "pdf",
     }) => {
       const projectIdCheck = validateProjectId(project_id);
       if (!projectIdCheck.ok) {
@@ -1397,6 +1399,7 @@ function createMcpServer() {
           include_paragraph_anchors,
           recipient_name,
           bundle_name,
+          format,
         });
         return jsonResponse(plan);
       } catch (error) {
@@ -1414,7 +1417,7 @@ function createMcpServer() {
   // ---- create_review_bundle -----------------------------------------------
   s.tool(
     "create_review_bundle",
-    "Generate markdown review bundle artifacts from planned scene scope. Writes files only under output_dir and returns manifest/provenance details.",
+    "Generate review bundle artifacts (PDF/markdown) from planned scene scope. Writes files only under output_dir and returns manifest/provenance details.",
     {
       project_id: z.string().describe("Project ID to scope the review bundle (e.g. 'test-novel')."),
       profile: z.enum(REVIEW_BUNDLE_PROFILES).describe("Bundle profile: outline_discussion, editor_detailed, or beta_reader_personalized."),
@@ -1430,6 +1433,7 @@ function createMcpServer() {
       recipient_name: z.string().optional().describe("Optional recipient display name for beta_reader_personalized profile."),
       bundle_name: z.string().optional().describe("Optional output bundle base name override (slugified in filenames)."),
       source_commit: z.string().optional().describe("Optional explicit source commit for provenance. Defaults to current HEAD when available."),
+      format: z.enum(["pdf", "markdown", "both"]).optional().describe("Output format: pdf (default), markdown, or both."),
     },
     async ({
       project_id,
@@ -1446,6 +1450,7 @@ function createMcpServer() {
       recipient_name,
       bundle_name,
       source_commit,
+      format = "pdf",
     }) => {
       const projectIdCheck = validateProjectId(project_id);
       if (!projectIdCheck.ok) {
@@ -1479,6 +1484,7 @@ function createMcpServer() {
           include_paragraph_anchors,
           recipient_name,
           bundle_name,
+          format,
         });
 
         if (!plan.strictness_result.can_proceed) {
@@ -1490,11 +1496,12 @@ function createMcpServer() {
         }
 
         const provenanceCommit = source_commit ?? (GIT_ENABLED ? getHeadCommitHash(SYNC_DIR) : null);
-        const artifacts = createReviewBundleArtifacts(db, {
+        const artifacts = await createReviewBundleArtifacts(db, {
           plan,
           output_dir: resolvedOutputDir,
           source_commit: provenanceCommit,
           syncDir: SYNC_DIR_ABS,
+          format,
         });
 
         return jsonResponse({

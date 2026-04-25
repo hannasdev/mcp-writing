@@ -1721,7 +1721,7 @@ describe("preview_review_bundle tool", () => {
     assert.equal(parsed.summary.scene_count, 3);
     assert.equal(parsed.strictness_result.can_proceed, true);
     assert.ok(Array.isArray(parsed.planned_outputs));
-    assert.ok(parsed.planned_outputs.some(name => name.endsWith(".md")));
+    assert.ok(parsed.planned_outputs.some(name => name.endsWith(".pdf")));
     assert.ok(parsed.planned_outputs.some(name => name.endsWith(".manifest.json")));
   });
 
@@ -1763,6 +1763,7 @@ describe("preview_review_bundle tool", () => {
       project_id: "test-novel",
       profile: "beta_reader_personalized",
       recipient_name: "Jordan Example",
+      format: "both",
     });
     const parsed = JSON.parse(text);
 
@@ -1793,6 +1794,7 @@ describe("create_review_bundle tool", () => {
         output_dir: outDir,
         bundle_name: "editorial-outline",
         source_commit: "test-commit-hash",
+        format: "markdown",
       });
       const parsed = JSON.parse(text);
 
@@ -1824,6 +1826,7 @@ describe("create_review_bundle tool", () => {
         profile: "editor_detailed",
         output_dir: outDir,
         include_paragraph_anchors: true,
+        format: "markdown",
       });
       const parsed = JSON.parse(text);
       assert.equal(parsed.ok, true);
@@ -1844,6 +1847,7 @@ describe("create_review_bundle tool", () => {
         profile: "beta_reader_personalized",
         output_dir: outDir,
         recipient_name: "Jordan Example",
+        format: "markdown",
       });
       const parsed = JSON.parse(text);
 
@@ -1872,6 +1876,52 @@ describe("create_review_bundle tool", () => {
       assert.ok(feedback.includes("Beta Reader Feedback Form"));
       assert.ok(feedback.includes("Jordan Example"));
       assert.ok(feedback.includes(`- Date: ${manifest.generated_at.slice(0, 10)}`));
+    } finally {
+      fs.rmSync(outDir, { recursive: true, force: true });
+    }
+  });
+
+  test("writes outline bundle PDF by default", async () => {
+    const outDir = fs.mkdtempSync(path.join(writeSyncDir, "review-bundles-pdf-"));
+    try {
+      const text = await callWriteTool("create_review_bundle", {
+        project_id: "test-novel",
+        profile: "outline_discussion",
+        output_dir: outDir,
+      });
+      const parsed = JSON.parse(text);
+
+      assert.equal(parsed.ok, true);
+      assert.ok(parsed.output_paths?.bundle_pdf, "bundle_pdf path should be present");
+      assert.ok(!parsed.output_paths?.bundle_markdown, "bundle_markdown should not be present for format=pdf");
+      assert.ok(fs.existsSync(parsed.output_paths.bundle_pdf), "PDF file should exist on disk");
+
+      const pdfBytes = fs.readFileSync(parsed.output_paths.bundle_pdf);
+      assert.ok(pdfBytes.slice(0, 4).toString() === "%PDF", "file should start with PDF magic bytes");
+    } finally {
+      fs.rmSync(outDir, { recursive: true, force: true });
+    }
+  });
+
+  test("writes both markdown and PDF when format=both", async () => {
+    const outDir = fs.mkdtempSync(path.join(writeSyncDir, "review-bundles-both-"));
+    try {
+      const text = await callWriteTool("create_review_bundle", {
+        project_id: "test-novel",
+        profile: "outline_discussion",
+        output_dir: outDir,
+        format: "both",
+      });
+      const parsed = JSON.parse(text);
+
+      assert.equal(parsed.ok, true);
+      assert.ok(parsed.output_paths?.bundle_pdf, "bundle_pdf path should be present");
+      assert.ok(parsed.output_paths?.bundle_markdown, "bundle_markdown path should be present");
+      assert.ok(fs.existsSync(parsed.output_paths.bundle_pdf));
+      assert.ok(fs.existsSync(parsed.output_paths.bundle_markdown));
+
+      const pdfBytes = fs.readFileSync(parsed.output_paths.bundle_pdf);
+      assert.ok(pdfBytes.slice(0, 4).toString() === "%PDF");
     } finally {
       fs.rmSync(outDir, { recursive: true, force: true });
     }

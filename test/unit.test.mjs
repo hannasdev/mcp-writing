@@ -215,6 +215,7 @@ describe("buildReviewBundlePlan", () => {
         project_id: "test-novel",
         profile: "beta_reader_personalized",
         recipient_name: "Alex Reader",
+        format: "both",
       });
 
       assert.equal(plan.ok, true);
@@ -227,6 +228,7 @@ describe("buildReviewBundlePlan", () => {
             !name.endsWith(".feedback-form.md")
         )
       );
+      assert.ok(plan.planned_outputs.some(name => name.endsWith(".pdf")));
       assert.ok(plan.planned_outputs.some(name => name.endsWith(".notice.md")));
       assert.ok(plan.planned_outputs.some(name => name.endsWith(".feedback-form.md")));
       assert.ok(plan.planned_outputs.some(name => name.endsWith(".manifest.json")));
