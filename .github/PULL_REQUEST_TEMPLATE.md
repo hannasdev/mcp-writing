@@ -1,17 +1,27 @@
-## <Feature/Fix Title>
+## Summary
 
-**What changed:**
-Brief summary of the change and which files were modified.
+- Briefly describe what changed.
+- Keep this concrete and reviewer-oriented.
 
-**Why:**
-Design rationale, problem context, or architectural decision. Reference PRD.md where relevant.
+## Motivation
 
-**Review focus:**
-- Key areas/files reviewers should scrutinize
-- Non-obvious design choices or tradeoffs
-- Anything that deviates from established patterns
+Explain why the change is needed.
 
-**Testing:**
-- New tests added (unit, integration, etc.)
-- Test coverage (pass count before/after, or statement coverage)
-- Manual verification steps if applicable
+## Implementation
+
+Describe the key technical decisions.
+
+## Testing
+
+- `npm test`
+- `npm run lint`
+- Manual test of <specific workflow>
+- Not run: <reason>
+
+## Risks and tradeoffs
+
+Call out anything reviewers should pay attention to.
+
+## Follow-up
+
+List any known follow-up work, or write None.
