@@ -37,6 +37,10 @@ function normalizeRawCharacterValues(values) {
   return normalized;
 }
 
+function tokenizeValue(value) {
+  return [...new Set(String(value ?? "").toLowerCase().split(/\s+/).filter(isDistinctiveToken))];
+}
+
 export function buildCharacterNormalizationContext(rows) {
   const clean = (Array.isArray(rows) ? rows : [])
     .filter(row => row?.character_id && row?.name)
@@ -114,20 +118,37 @@ function isProperSubset(subsetTokens, supersetTokens) {
   return subsetTokens.every(token => supersetTokens.includes(token));
 }
 
-function pruneLessSpecificCanonicalIds(values, context) {
+function hasMoreSpecificNonCanonicalSource(candidate, sourceInfo) {
+  if (!sourceInfo || sourceInfo.hadCanonicalSource || sourceInfo.nonCanonicalTokens.length === 0) {
+    return false;
+  }
+
+  return sourceInfo.nonCanonicalTokens.some(tokens => isProperSubset(candidate.informative_tokens, tokens));
+}
+
+function pruneLessSpecificCanonicalIds(values, context, sourceMap) {
   return values.filter((value, idx) => {
     const row = context.byId.get(value);
     if (!row || row.informative_tokens.length === 0) {
       return true;
     }
 
+    const rowSource = sourceMap.get(value);
+    if (!rowSource?.hadCanonicalSource) {
+      return true;
+    }
+
     for (let i = 0; i < values.length; i++) {
       if (i === idx) continue;
 
-      const other = context.byId.get(values[i]);
+      const otherId = values[i];
+      const other = context.byId.get(otherId);
       if (!other || other.informative_tokens.length === 0) continue;
 
-      if (isProperSubset(row.informative_tokens, other.informative_tokens)) {
+      if (
+        isProperSubset(row.informative_tokens, other.informative_tokens)
+        && hasMoreSpecificNonCanonicalSource(row, sourceMap.get(otherId))
+      ) {
         return false;
       }
     }
@@ -140,15 +161,30 @@ export function normalizeSceneCharacters(values, context) {
   const before = normalizeRawCharacterValues(values);
   const resolved = [];
   const seen = new Set();
+  const sourceMap = new Map();
 
   for (const value of before) {
     const normalized = resolveCharacterReference(value, context);
-    if (!normalized || seen.has(normalized)) continue;
+    if (!normalized) continue;
+
+    const source = sourceMap.get(normalized) ?? {
+      hadCanonicalSource: false,
+      nonCanonicalTokens: [],
+    };
+
+    if (context.byId.has(value)) {
+      source.hadCanonicalSource = true;
+    } else {
+      source.nonCanonicalTokens.push(tokenizeValue(value));
+    }
+    sourceMap.set(normalized, source);
+
+    if (seen.has(normalized)) continue;
     seen.add(normalized);
     resolved.push(normalized);
   }
 
-  const after = pruneLessSpecificCanonicalIds(resolved, context);
+  const after = pruneLessSpecificCanonicalIds(resolved, context, sourceMap);
   const beforeSet = new Set(before);
   const afterSet = new Set(after);
 

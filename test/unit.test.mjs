@@ -1480,7 +1480,24 @@ describe("scene character normalization", () => {
     assert.deepEqual(result.removed, ["Elena Vasquez"]);
   });
 
-  test("prunes less-specific canonical ids when a more specific id is present", () => {
+  test("prunes less-specific canonical ids when stronger non-canonical evidence resolves to a more specific id", () => {
+    const context = buildCharacterNormalizationContext([
+      { character_id: "char-victor-sidorin", name: "Victor Sidorin" },
+      { character_id: "char-victor-alexeyevich-sidorin", name: "Victor Alexeyevich Sidorin" },
+    ]);
+
+    const result = normalizeSceneCharacters(
+      ["char-victor-sidorin", "Victor Alexeyevich Sidorin"],
+      context
+    );
+
+    assert.equal(result.changed, true);
+    assert.deepEqual(result.after, ["char-victor-alexeyevich-sidorin"]);
+    assert.deepEqual(result.added, ["char-victor-alexeyevich-sidorin"]);
+    assert.deepEqual(result.removed, ["char-victor-sidorin", "Victor Alexeyevich Sidorin"]);
+  });
+
+  test("preserves co-occurring canonical ids without stronger evidence", () => {
     const context = buildCharacterNormalizationContext([
       { character_id: "char-victor-sidorin", name: "Victor Sidorin" },
       { character_id: "char-victor-alexeyevich-sidorin", name: "Victor Alexeyevich Sidorin" },
@@ -1491,10 +1508,9 @@ describe("scene character normalization", () => {
       context
     );
 
-    assert.equal(result.changed, true);
-    assert.deepEqual(result.after, ["char-victor-alexeyevich-sidorin"]);
-    assert.deepEqual(result.added, []);
-    assert.deepEqual(result.removed, ["char-victor-sidorin"]);
+    assert.equal(result.changed, false);
+    assert.deepEqual(result.after, ["char-victor-sidorin", "char-victor-alexeyevich-sidorin"]);
+    assert.deepEqual(result.removed, []);
   });
 
   test("does not prune one-token overlap canonical ids", () => {
