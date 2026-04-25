@@ -34,10 +34,12 @@ All changes MUST follow this sequence:
 ### 2. Branch creation
 
 - Create a new branch from `main`
-- Naming:
+- Naming: follow `.github/instructions/contribution-workflow.instructions.md`
   - `feat/<short-description>`
   - `fix/<short-description>`
+  - `docs/<short-description>`
   - `chore/<short-description>`
+  - `refactor/<short-description>`
 
 ### 3. Implementation
 
