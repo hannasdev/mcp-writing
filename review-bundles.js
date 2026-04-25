@@ -372,31 +372,87 @@ function normalizeRelativePath(inputPath) {
 }
 
 function resolveSceneFilePath(filePath, { syncDir } = {}) {
-  if (!filePath) return null;
+  if (!filePath || !syncDir) return null;
 
-  const normalizedSyncDir = syncDir ? path.resolve(syncDir) : null;
+  const normalizedSyncDir = path.resolve(syncDir);
+  let realSyncDir;
+  try {
+    realSyncDir = fs.realpathSync.native(normalizedSyncDir);
+  } catch {
+    return null;
+  }
+
+  const rel = normalizeRelativePath(filePath);
   const candidates = [];
 
   if (path.isAbsolute(filePath)) {
-    candidates.push(filePath);
-  } else {
-    candidates.push(path.resolve(filePath));
-    if (normalizedSyncDir) {
-      const rel = normalizeRelativePath(filePath);
-      candidates.push(path.resolve(normalizedSyncDir, rel));
-      if (rel === "sync" || rel.startsWith("sync/")) {
-        candidates.push(path.resolve(normalizedSyncDir, rel.replace(/^sync\/?/, "")));
+    // Canonicalize the absolute path (resolve symlinks) so the boundary check
+    // works correctly even when syncDir itself contains a symlink component
+    // (e.g. macOS /var → /private/var or /tmp → /private/tmp).
+    const resolvedAbsolute = path.resolve(filePath);
+    let canonicalAbsolute;
+
+    if (fs.existsSync(resolvedAbsolute)) {
+      try {
+        canonicalAbsolute = fs.realpathSync.native(resolvedAbsolute);
+      } catch {
+        // Cannot canonicalize — skip this candidate.
       }
+    } else {
+      // File doesn't exist yet; walk up to the nearest existing ancestor,
+      // canonicalize that, then reconstruct the full path.
+      let ancestor = resolvedAbsolute;
+      const segments = [];
+      while (!fs.existsSync(ancestor)) {
+        const parent = path.dirname(ancestor);
+        if (parent === ancestor) { ancestor = null; break; }
+        segments.unshift(path.basename(ancestor));
+        ancestor = parent;
+      }
+      if (ancestor) {
+        try {
+          const realAncestor = fs.realpathSync.native(ancestor);
+          canonicalAbsolute = path.resolve(realAncestor, ...segments);
+        } catch {
+          // Cannot canonicalize.
+        }
+      }
+    }
+
+    if (canonicalAbsolute) {
+      const relFromSync = path.relative(realSyncDir, canonicalAbsolute);
+      if (!relFromSync.startsWith("..") && !path.isAbsolute(relFromSync)) {
+        candidates.push(canonicalAbsolute);
+      }
+    }
+  } else {
+    candidates.push(path.resolve(realSyncDir, rel));
+    if (rel === "sync" || rel.startsWith("sync/")) {
+      candidates.push(path.resolve(realSyncDir, rel.replace(/^sync\/?/, "")));
     }
   }
 
   for (const candidate of candidates) {
-    if (candidate && fs.existsSync(candidate)) {
+    if (!fs.existsSync(candidate)) {
+      // Path is inside syncDir but file is not on disk — return it so readProse
+      // can surface a meaningful SCENE_PROSE_READ_FAILED error.
       return candidate;
+    }
+
+    // File exists: validate realpath stays inside syncDir to catch symlink escapes.
+    // (For absolute paths this is already canonicalized; for relative paths, verify.)
+    try {
+      const realCandidate = fs.realpathSync.native(candidate);
+      const relReal = path.relative(realSyncDir, realCandidate);
+      if (!relReal.startsWith("..") && !path.isAbsolute(relReal)) {
+        return realCandidate;
+      }
+    } catch {
+      continue;
     }
   }
 
-  return candidates[0] ?? null;
+  return null;
 }
 
 function readProse(filePath, { syncDir } = {}) {
@@ -529,7 +585,24 @@ export function createReviewBundleArtifacts(dbHandle, {
   }
 
   const normalizedOutputDir = path.resolve(output_dir);
-  fs.mkdirSync(normalizedOutputDir, { recursive: true });
+  if (fs.existsSync(normalizedOutputDir)) {
+    if (!fs.statSync(normalizedOutputDir).isDirectory()) {
+      throw new ReviewBundlePlanError(
+        "INVALID_OUTPUT_DIR",
+        `output_dir exists but is not a directory: ${normalizedOutputDir}`
+      );
+    }
+  } else {
+    fs.mkdirSync(normalizedOutputDir, { recursive: true });
+  }
+  try {
+    fs.accessSync(normalizedOutputDir, fs.constants.W_OK);
+  } catch {
+    throw new ReviewBundlePlanError(
+      "INVALID_OUTPUT_DIR",
+      `output_dir is not writable: ${normalizedOutputDir}`
+    );
+  }
 
   const markdownFileName = plan.planned_outputs.find(name => name.endsWith(".md"));
   const manifestFileName = plan.planned_outputs.find(name => name.endsWith(".manifest.json"));
@@ -559,6 +632,20 @@ export function createReviewBundleArtifacts(dbHandle, {
     resolved_scope: plan.resolved_scope,
     scene_ids: plan.ordering.map(row => row.scene_id),
   };
+
+  for (const outputPath of [markdownPath, manifestPath]) {
+    try {
+      if (fs.lstatSync(outputPath).isSymbolicLink()) {
+        throw new ReviewBundlePlanError(
+          "INVALID_OUTPUT_PATH",
+          `Refusing to write: target path is a symlink: ${outputPath}`
+        );
+      }
+    } catch (error) {
+      if (error instanceof ReviewBundlePlanError) throw error;
+      // ENOENT — file doesn't exist yet, which is fine.
+    }
+  }
 
   fs.writeFileSync(markdownPath, markdown, "utf8");
   fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n", "utf8");

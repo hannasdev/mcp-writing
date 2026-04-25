@@ -287,14 +287,22 @@ describe("buildReviewBundlePlan", () => {
 
   test("renderReviewBundleMarkdown throws when scene prose cannot be read", () => {
     const db = setupReviewBundleTestDb();
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "bundle-prose-read-"));
+    // Use the real path to avoid macOS /tmp → /private/tmp symlink discrepancy.
+    const realTempDir = fs.realpathSync.native(tempDir);
+    const prevSyncDir = process.env.WRITING_SYNC_DIR;
+    process.env.WRITING_SYNC_DIR = realTempDir;
+    // Deliberately do NOT create the file — readProse should throw SCENE_PROSE_READ_FAILED.
+    const scenePath = path.join(realTempDir, "sc-001.md");
+
     try {
-      insertTestScene(db, {
-        sceneId: "sc-001",
-        part: 1,
-        chapter: 1,
-        timelinePosition: 1,
-        wordCount: 10,
-      });
+      const now = new Date().toISOString();
+      db.prepare(`
+        INSERT INTO scenes (
+          scene_id, project_id, title, part, chapter, timeline_position, word_count,
+          file_path, prose_checksum, metadata_stale, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run("sc-001", "test-novel", "Prose Read Test", 1, 1, 1, 10, scenePath, "deadbeef", 0, now);
 
       const plan = buildReviewBundlePlan(db, {
         project_id: "test-novel",
@@ -306,6 +314,12 @@ describe("buildReviewBundlePlan", () => {
         error => error instanceof ReviewBundlePlanError && error.code === "SCENE_PROSE_READ_FAILED"
       );
     } finally {
+      if (prevSyncDir === undefined) {
+        delete process.env.WRITING_SYNC_DIR;
+      } else {
+        process.env.WRITING_SYNC_DIR = prevSyncDir;
+      }
+      fs.rmSync(tempDir, { recursive: true, force: true });
       db.close();
     }
   });

@@ -12,8 +12,24 @@ async function callCreateBundle(client, args) {
 }
 
 async function main() {
-  const [projectId = "the-lamb", outputDir = "/Users/hanna/Code/writing/exports"] = process.argv.slice(2);
-  const writingSyncDir = process.env.WRITING_SYNC_DIR || path.dirname(path.resolve(outputDir));
+  const [projectId, outputDirArg] = process.argv.slice(2);
+  const envWritingSyncDir = process.env.WRITING_SYNC_DIR;
+
+  if (!projectId) {
+    console.error(
+      "Usage: node run_mcp_and_review.js <projectId> [outputDir]\n" +
+      "Either provide outputDir explicitly or set WRITING_SYNC_DIR to derive a default output directory."
+    );
+    process.exit(1);
+  }
+
+  if (!outputDirArg && !envWritingSyncDir) {
+    console.error("Missing output directory: provide [outputDir] or set WRITING_SYNC_DIR.");
+    process.exit(1);
+  }
+
+  const outputDir = outputDirArg || path.join(envWritingSyncDir, "exports");
+  const writingSyncDir = envWritingSyncDir || path.dirname(path.resolve(outputDir));
 
   const transport = new StdioClientTransport({
     command: process.execPath,
@@ -51,8 +67,9 @@ async function main() {
     });
   } catch (error) {
     console.error(error);
+    process.exitCode = 1;
   } finally {
-    process.exit(0);
+    process.exit(process.exitCode ?? 0);
   }
 }
 

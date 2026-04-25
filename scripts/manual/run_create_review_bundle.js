@@ -47,8 +47,9 @@ async function main() {
     console.log(JSON.stringify(result, null, 2));
   } catch (e) {
     console.error(e);
+    process.exitCode = 1;
   } finally {
-    process.exit(0);
+    process.exit(process.exitCode ?? 0);
   }
 }
 
