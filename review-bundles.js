@@ -60,7 +60,7 @@ function slugifyBundleName(value) {
 function escapeMarkdown(text) {
   return String(text ?? "")
     .replace(/\\/g, "\\\\")
-    .replace(/([*_`\[\]])/g, "\\$1");
+    .replace(/([*_`\[\]#])/g, "\\$1");
 }
 
 function resolveOutputFilePath(outputDir, fileName) {
@@ -559,7 +559,10 @@ export function renderReviewBundleMarkdown(dbHandle, plan, { generatedAt, syncDi
   const includeMetadataSidebar = Boolean(plan.resolved_scope?.options?.include_metadata_sidebar);
   const includeParagraphAnchors = Boolean(plan.resolved_scope?.options?.include_paragraph_anchors);
   // Prefer explicitly threaded syncDir; fall back to env (with "./sync" default matching index.js).
-  const syncDir = syncDirOpt ?? process.env.WRITING_SYNC_DIR ?? "./sync";
+  // Prefer explicitly threaded syncDir; fall back to env.
+  // No further fallback: if syncDir is null, resolveSceneFilePath returns null
+  // and SCENE_PROSE_READ_FAILED is thrown, making misconfiguration explicit.
+  const syncDir = syncDirOpt ?? process.env.WRITING_SYNC_DIR ?? null;
 
   const sceneIds = plan.ordering.map(row => row.scene_id);
   const rows = loadBundleSceneRows(dbHandle, plan.resolved_scope.project_id, sceneIds);
@@ -679,7 +682,11 @@ export function createReviewBundleArtifacts(dbHandle, {
       }
     } catch (error) {
       if (error instanceof ReviewBundlePlanError) throw error;
-      // ENOENT — file doesn't exist yet, which is fine.
+      if (error?.code !== "ENOENT") throw error;
+      // ENOENT — file doesn't exist yet, which is the expected case.
+      // Note: there is an inherent TOCTOU window between this lstat check and the
+      // writeFileSync below. This is acceptable for a local tool where the caller
+      // controls the output directory.
     }
   }
 
