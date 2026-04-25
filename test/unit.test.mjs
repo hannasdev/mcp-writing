@@ -290,10 +290,47 @@ describe("buildStyleguideConfigDraft", () => {
     assert.equal(draft.config.voice_notes, "Understated interiority.");
   });
 
+  test("explicit language wins over any language field present in overrides", () => {
+    const draft = buildStyleguideConfigDraft({
+      language: "english_uk",
+      overrides: {
+        language: "english_us",
+        dialogue_tags: "expressive",
+      },
+    });
+
+    assert.equal(draft.ok, true);
+    assert.equal(draft.config.language, "english_uk");
+    assert.equal(draft.config.spelling, "uk");
+    assert.equal(draft.config.dialogue_tags, "expressive");
+  });
+
   test("fails on invalid language", () => {
     const draft = buildStyleguideConfigDraft({ language: "klingon" });
     assert.equal(draft.ok, false);
     assert.equal(draft.error.code, "INVALID_STYLEGUIDE_LANGUAGE");
+  });
+});
+
+describe("styleguide config hardening", () => {
+  test("treats __proto__ as an unknown field instead of mutating object prototypes", () => {
+    const syncDir = fs.mkdtempSync(path.join(os.tmpdir(), "styleguide-proto-"));
+    try {
+      fs.writeFileSync(
+        path.join(syncDir, "prose-styleguide.config.yaml"),
+        "__proto__:\n  polluted: yes\nlanguage: english_us\n",
+        "utf8"
+      );
+
+      const result = resolveStyleguideConfig({ syncDir });
+      assert.equal(result.ok, true);
+      assert.equal(result.resolved_config.language, "english_us");
+      assert.equal(result.warnings.unknown_fields.length, 1);
+      assert.equal(result.warnings.unknown_fields[0].field, "__proto__");
+      assert.equal({}.polluted, undefined);
+    } finally {
+      fs.rmSync(syncDir, { recursive: true, force: true });
+    }
   });
 });
 

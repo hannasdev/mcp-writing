@@ -225,7 +225,7 @@ function normalizeTense(value) {
 }
 
 function normalizeConfigShape(rawConfig) {
-  const normalized = {};
+  const normalized = Object.create(null);
   for (const [key, value] of Object.entries(rawConfig ?? {})) {
     // Skip null/undefined — treat as unset, same as a missing key.
     if (value === null || value === undefined) continue;
@@ -247,7 +247,7 @@ function validateConfig(config, sourcePath) {
   const unknownFields = [];
 
   for (const [key, value] of Object.entries(normalized)) {
-    if (!(key in ENUMS) && !SPECIAL_FIELDS.has(key)) {
+    if (!Object.hasOwn(ENUMS, key) && !SPECIAL_FIELDS.has(key)) {
       unknownFields.push(key);
       continue;
     }
@@ -416,8 +416,8 @@ export function buildStyleguideConfigDraft({ language, overrides = {}, voice_not
   }
 
   const merged = {
-    language,
     ...overrideValidation.normalized,
+    language,
   };
 
   if (typeof voice_notes === "string" && voice_notes.trim()) {
