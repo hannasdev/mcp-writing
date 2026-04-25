@@ -65,7 +65,7 @@ jobs:
                   "Expected sections (in this style):",
                   ...requiredSections.map((section) => `- ${section}`),
                   "",
-                  "Source of truth: .github/skills/pr-description/SKILL.md",
+                  "Source of truth: skills/pr-description/SKILL.md",
                 ].join("\n")
               );
             }
