@@ -527,6 +527,110 @@ describe("sync tool", () => {
   });
 });
 
+describe("setup_prose_styleguide_config tool", () => {
+  test("writes a sync-root styleguide config from language defaults", async () => {
+    const text = await callWriteTool("setup_prose_styleguide_config", {
+      scope: "sync_root",
+      language: "english_us",
+      voice_notes: "Fast-paced thriller voice.",
+      overwrite: true,
+    });
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.scope, "sync_root");
+    assert.equal(parsed.config.language, "english_us");
+    assert.equal(parsed.config.spelling, "us");
+    assert.equal(parsed.config.voice_notes, "Fast-paced thriller voice.");
+
+    assert.equal(typeof parsed.file_path, "string");
+    assert.equal(parsed.file_path.length > 0, true);
+  });
+
+  test("requires project_id for project_root scope", async () => {
+    const text = await callWriteTool("setup_prose_styleguide_config", {
+      scope: "project_root",
+      language: "english_uk",
+    });
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.ok, false);
+    assert.equal(parsed.error.code, "PROJECT_ID_REQUIRED");
+  });
+
+  test("writes a project-root config for a simple project ID", async () => {
+    const projectId = "styleguide-test-proj";
+
+    const text = await callWriteTool("setup_prose_styleguide_config", {
+      scope: "project_root",
+      project_id: projectId,
+      language: "english_uk",
+      overrides: { tense: "past", pov: "first" },
+    });
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.scope, "project_root");
+    assert.equal(parsed.config.language, "english_uk");
+    assert.equal(parsed.config.tense, "past");
+    assert.equal(parsed.config.pov, "first");
+    assert.equal(parsed.config.spelling, "uk");
+  });
+});
+
+describe("get_prose_styleguide_config tool", () => {
+  test("returns setup_required when no styleguide config exists", async () => {
+    const rootConfigPath = path.join(writeSyncDir, "prose-styleguide.config.yaml");
+    fs.rmSync(rootConfigPath, { force: true });
+
+    const text = await callWriteTool("get_prose_styleguide_config");
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.styleguide.setup_required, true);
+    assert.equal(parsed.styleguide.config_found, false);
+    assert.equal(parsed.styleguide.resolved_config, null);
+  });
+
+  test("resolves root, universe, and project config precedence", async () => {
+    const projectId = "aether/book-one";
+    const universeDir = path.join(writeSyncDir, "universes", "aether");
+    const projectDir = path.join(universeDir, "book-one");
+    fs.mkdirSync(projectDir, { recursive: true });
+
+    fs.writeFileSync(
+      path.join(writeSyncDir, "prose-styleguide.config.yaml"),
+      "language: english_uk\n",
+      "utf8"
+    );
+    fs.writeFileSync(
+      path.join(universeDir, "prose-styleguide.config.yaml"),
+      "dialogue_tags: expressive\n",
+      "utf8"
+    );
+    fs.writeFileSync(
+      path.join(projectDir, "prose-styleguide.config.yaml"),
+      [
+        "dialogue_tags: minimal",
+        "sentence_fragments: intentional",
+      ].join("\n"),
+      "utf8"
+    );
+
+    const text = await callWriteTool("get_prose_styleguide_config", { project_id: projectId });
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.styleguide.setup_required, false);
+    assert.equal(parsed.styleguide.sources.length, 3);
+    assert.equal(parsed.styleguide.resolved_config.language, "english_uk");
+    assert.equal(parsed.styleguide.resolved_config.quotation_style, "single");
+    assert.equal(parsed.styleguide.resolved_config.quotation_style_nested, "double");
+    assert.equal(parsed.styleguide.resolved_config.dialogue_tags, "minimal");
+    assert.equal(parsed.styleguide.resolved_config.sentence_fragments, "intentional");
+  });
+});
+
 describe("import_scrivener_sync tool", () => {
   test("dry-run returns machine-readable counts without writing files", async () => {
     const projectId = "import-preview";
