@@ -91,6 +91,41 @@ Fast metadata-only retrieval and intelligent search. Covers FTS5, pagination, an
 
 ---
 
+### 🧾 [Review Bundles for Editorial Workflows](docs/prd/done/review-bundles.md) ✅
+
+Deterministic, collaboration-focused bundle generation for editorial workflows. Three profiles: outline discussion, detailed editing, and personalized beta reads.
+
+**Completed:**
+- `preview_review_bundle` — dry-run planner with scope, ordering, and warnings
+- `create_review_bundle` — artifact writer (PDF default, markdown optional)
+- `outline_discussion` profile: scene headings, loglines, beats — no prose
+- `editor_detailed` profile: full prose with stable scene anchors and page breaks
+- `beta_reader_personalized` profile: named recipient, usage notice, feedback form
+- PDF export via pdfkit; companion `manifest.json`, `notice.md`, `feedback-form.md`
+
+**Key Concepts:**
+- Review artifacts only — not a publishing or typesetting surface
+- Deterministic ordering from indexed scene structure
+- Provenance manifest with source commit hash and warning summary
+- `warn` vs `fail` strictness mode for stale/incomplete metadata
+
+**Known Issue:**
+- Logline renders unconditionally in all profiles; should be `outline_discussion` only. Prose profiles (`editor_detailed`, `beta_reader_personalized`) should suppress it.
+
+---
+
+### 🗂️ [Scrivener Direct Extraction](docs/prd/done/scrivener-direct-extraction-beta.md) ✅
+
+Direct ingestion from Scrivener project internals (`.scriv`/`.scrivx`) for richer metadata extraction. Graduated from beta to stable in v1.14.
+
+**Completed:**
+- Official ingestion path reading `.scrivx` binder structure
+- Richer metadata extraction compared to External Folder Sync path
+- Scoped safeguards to avoid schema-coupled regressions
+- Stable alongside sync-folder import as the default path
+
+---
+
 ## Features Under Consideration
 
 ### 📊 [Embedding-Based Search](docs/prd/todo/embeddings-search.md) 📋
@@ -113,27 +148,11 @@ Index and search world-building notes, research, and continuity scratchpads.
 
 ---
 
-### 🧾 [Review Bundles for Editorial Workflows](docs/prd/todo/review-bundles.md) 📋
-
-Generate collaboration-focused bundles for conceptual discussion, detailed editorial reading, and personalized beta-reader feedback without expanding into typesetting/final-distribution scope.
-
-**Example:** "Create an outline-only chapter packet for story discussion" or "Generate a beta-reader draft with non-distribution notice and feedback form."
-
-**Status:** Proposed for Phase 4A. Scoped as review artifacts only (not publishing output).
-
----
-
 ### 🚀 [OpenClaw Integration](docs/prd/in-progress/openclaw-integration.md) 🚧
 
 Deploy writing-mcp as a service in the OpenClaw runtime with the Writing World agent.
 
 **Status:** In progress. Runtime shape, deployment targets, and agent integration points are defined; remaining work is implementation and rollout.
-
-### 🧪 [Scrivener Direct Extraction (Beta)](docs/prd/in-progress/scrivener-direct-extraction-beta.md) 🚧
-
-Define an official beta ingestion path that reads Scrivener project internals (`.scriv`/`.scrivx`) for richer metadata extraction, while keeping sync-folder text import as the stable default.
-
-**Status:** In progress. Scope and safeguards are being defined before implementation to avoid schema-coupled regressions and preserve current import safety guarantees.
 
 ---
 
@@ -201,7 +220,7 @@ See [ideas-and-questions.md](docs/prd/inbox/ideas-and-questions.md) for:
 - **Phase 1** ✅ — Ask questions about your project (all tools implemented)
 - **Phase 2** ✅ — Answers stay accurate (metadata staleness, sidecar migration, enrichment)
 - **Phase 3** ✅ — AI helps edit prose (two-step proposals, git history, snapshots)
-- **Phase 4** 📋 — Semantic search, reference docs, and review bundles (pending evaluation/scoping)
+- **Phase 4** 🔄 — Review bundles ✅ delivered; Scrivener Direct ✅ graduated to stable; semantic search and reference docs 📋 deferred
 - **Phase 5** 🚧 — OpenClaw integration (active planning and integration work underway)
 
 ---
@@ -212,4 +231,6 @@ See [ideas-and-questions.md](docs/prd/inbox/ideas-and-questions.md) for:
 - [Import & Sync](docs/prd/done/import-sync.md) — folder structure, identity, reconciliation
 - [Prose Editing](docs/prd/done/editing.md) — two-step workflow, git history
 - [Search & Analysis](docs/prd/done/search-analysis.md) — querying, reasoning flows, pagination
+- [Review Bundles](docs/prd/done/review-bundles.md) — editorial workflows, profiles, known issues
+- [Scrivener Direct Extraction](docs/prd/done/scrivener-direct-extraction-beta.md) — direct .scriv ingestion
 - [Open Ideas](docs/prd/inbox/ideas-and-questions.md) — design questions, feature ideas
