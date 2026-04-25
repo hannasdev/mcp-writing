@@ -261,6 +261,26 @@ describe("resolveStyleguideConfig", () => {
       fs.rmSync(syncDir, { recursive: true, force: true });
     }
   });
+
+  test("reports unknown fields but does not include them in resolved_config", () => {
+    const syncDir = fs.mkdtempSync(path.join(os.tmpdir(), "styleguide-unknown-field-"));
+    try {
+      fs.writeFileSync(
+        path.join(syncDir, "prose-styleguide.config.yaml"),
+        "language: english_us\nnonexistent_setting: yes\n",
+        "utf8"
+      );
+
+      const result = resolveStyleguideConfig({ syncDir });
+      assert.equal(result.ok, true);
+      assert.equal(result.resolved_config.language, "english_us");
+      assert.equal(result.warnings.unknown_fields.length, 1);
+      assert.equal(result.warnings.unknown_fields[0].field, "nonexistent_setting");
+      assert.equal(result.resolved_config.nonexistent_setting, undefined);
+    } finally {
+      fs.rmSync(syncDir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("buildStyleguideConfigDraft", () => {

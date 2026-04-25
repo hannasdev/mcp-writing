@@ -243,6 +243,7 @@ function normalizeConfigShape(rawConfig) {
 
 function validateConfig(config, sourcePath) {
   const normalized = normalizeConfigShape(config);
+  const sanitized = Object.create(null);
   const errors = [];
   const unknownFields = [];
 
@@ -260,6 +261,9 @@ function validateConfig(config, sourcePath) {
           message: `${key} must be a string.`,
           source: sourcePath,
         });
+      }
+      if (typeof value === "string") {
+        sanitized[key] = value;
       }
       continue;
     }
@@ -283,11 +287,14 @@ function validateConfig(config, sourcePath) {
         source: sourcePath,
         received: value,
       });
+      continue;
     }
+
+    sanitized[key] = value;
   }
 
   return {
-    normalized,
+    normalized: sanitized,
     errors,
     unknownFields,
   };
@@ -439,7 +446,7 @@ export function resolveStyleguideConfig({ syncDir, projectId }) {
   const candidates = getConfigCandidates(syncDir, projectId);
   const sources = [];
   const unknownFields = [];
-  const merged = {};
+  const merged = Object.create(null);
 
   for (const candidate of candidates) {
     const loaded = readConfigFile(candidate.file_path);
