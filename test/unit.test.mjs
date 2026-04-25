@@ -200,6 +200,34 @@ describe("buildReviewBundlePlan", () => {
     }
   });
 
+  test("beta profile plans companion notice and feedback outputs", () => {
+    const db = setupReviewBundleTestDb();
+    try {
+      insertTestScene(db, {
+        sceneId: "sc-010",
+        part: 1,
+        chapter: 1,
+        timelinePosition: 1,
+        wordCount: 250,
+      });
+
+      const plan = buildReviewBundlePlan(db, {
+        project_id: "test-novel",
+        profile: "beta_reader_personalized",
+        recipient_name: "Alex Reader",
+      });
+
+      assert.equal(plan.ok, true);
+      assert.equal(plan.resolved_scope.options.recipient_name, "Alex Reader");
+      assert.ok(plan.planned_outputs.some(name => name.endsWith(".md")));
+      assert.ok(plan.planned_outputs.some(name => name.endsWith(".notice.md")));
+      assert.ok(plan.planned_outputs.some(name => name.endsWith(".feedback-form.md")));
+      assert.ok(plan.planned_outputs.some(name => name.endsWith(".manifest.json")));
+    } finally {
+      db.close();
+    }
+  });
+
   test("renderReviewBundleMarkdown escapes outline loglines with markdown metacharacters", () => {
     const db = setupReviewBundleTestDb();
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "bundle-outline-"));

@@ -1757,6 +1757,21 @@ describe("preview_review_bundle tool", () => {
     assert.equal(parsed.strictness_result.can_proceed, false);
     assert.ok(parsed.strictness_result.blockers.some(blocker => blocker.code === "STALE_METADATA"));
   });
+
+  test("beta profile preview includes planned notice + feedback outputs", async () => {
+    const text = await callTool("preview_review_bundle", {
+      project_id: "test-novel",
+      profile: "beta_reader_personalized",
+      recipient_name: "Jordan Example",
+    });
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.profile, "beta_reader_personalized");
+    assert.equal(parsed.resolved_scope.options.recipient_name, "Jordan Example");
+    assert.ok(parsed.planned_outputs.some(name => name.endsWith(".notice.md")));
+    assert.ok(parsed.planned_outputs.some(name => name.endsWith(".feedback-form.md")));
+  });
 });
 
 describe("create_review_bundle tool", () => {
@@ -1807,6 +1822,43 @@ describe("create_review_bundle tool", () => {
       const markdown = fs.readFileSync(parsed.output_paths.bundle_markdown, "utf8");
       assert.ok(markdown.includes("<!-- sc-001:p1 -->"));
       assert.ok(markdown.includes("She was at the bottom of the gangway"));
+    } finally {
+      fs.rmSync(outDir, { recursive: true, force: true });
+    }
+  });
+
+  test("writes beta bundle markdown + notice + feedback artifacts", async () => {
+    const outDir = fs.mkdtempSync(path.join(writeSyncDir, "review-bundles-beta-"));
+    try {
+      const text = await callWriteTool("create_review_bundle", {
+        project_id: "test-novel",
+        profile: "beta_reader_personalized",
+        output_dir: outDir,
+        recipient_name: "Jordan Example",
+      });
+      const parsed = JSON.parse(text);
+
+      assert.equal(parsed.ok, true);
+      assert.ok(parsed.output_paths?.bundle_markdown);
+      assert.ok(parsed.output_paths?.manifest_json);
+      assert.ok(parsed.output_paths?.notice_md);
+      assert.ok(parsed.output_paths?.feedback_form_md);
+      assert.ok(fs.existsSync(parsed.output_paths.bundle_markdown));
+      assert.ok(fs.existsSync(parsed.output_paths.notice_md));
+      assert.ok(fs.existsSync(parsed.output_paths.feedback_form_md));
+
+      const markdown = fs.readFileSync(parsed.output_paths.bundle_markdown, "utf8");
+      assert.ok(markdown.includes("- Profile: beta_reader_personalized"));
+      assert.ok(markdown.includes("- Recipient: Jordan Example"));
+      assert.ok(markdown.includes("She was at the bottom of the gangway"));
+
+      const notice = fs.readFileSync(parsed.output_paths.notice_md, "utf8");
+      assert.ok(notice.includes("Non-Distribution Notice"));
+      assert.ok(notice.includes("Jordan Example"));
+
+      const feedback = fs.readFileSync(parsed.output_paths.feedback_form_md, "utf8");
+      assert.ok(feedback.includes("Beta Reader Feedback Form"));
+      assert.ok(feedback.includes("Jordan Example"));
     } finally {
       fs.rmSync(outDir, { recursive: true, force: true });
     }

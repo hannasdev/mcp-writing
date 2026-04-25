@@ -1352,7 +1352,7 @@ function createMcpServer() {
     "Dry-run planning tool for review bundles. Resolves scene scope, deterministic ordering, warnings, and planned output filenames without writing files. Note: include_scene_ids/include_metadata_sidebar/include_paragraph_anchors are advisory placeholders in Phase 4A.1 and do not alter planning semantics yet.",
     {
       project_id: z.string().describe("Project ID to scope the review bundle (e.g. 'test-novel')."),
-      profile: z.enum(REVIEW_BUNDLE_PROFILES).describe("Bundle profile: outline_discussion or editor_detailed."),
+      profile: z.enum(REVIEW_BUNDLE_PROFILES).describe("Bundle profile: outline_discussion, editor_detailed, or beta_reader_personalized."),
       part: z.number().int().optional().describe("Optional part filter."),
       chapter: z.number().int().optional().describe("Optional chapter filter."),
       tag: z.string().optional().describe("Optional tag filter (exact match)."),
@@ -1361,6 +1361,7 @@ function createMcpServer() {
       include_scene_ids: z.boolean().optional().describe("Advisory placeholder for later rendering behavior (default true). Included in preview output options, but does not change planning results in Phase 4A.1."),
       include_metadata_sidebar: z.boolean().optional().describe("Advisory placeholder for later rendering behavior (default false). Included in preview output options, but does not change planning results in Phase 4A.1."),
       include_paragraph_anchors: z.boolean().optional().describe("Advisory placeholder for later rendering behavior (default false). Included in preview output options, but does not change planning results in Phase 4A.1."),
+      recipient_name: z.string().optional().describe("Optional recipient display name for beta_reader_personalized profile."),
       bundle_name: z.string().optional().describe("Optional output bundle base name override (slugified in planned outputs)."),
     },
     async ({
@@ -1374,6 +1375,7 @@ function createMcpServer() {
       include_scene_ids = true,
       include_metadata_sidebar = false,
       include_paragraph_anchors = false,
+      recipient_name,
       bundle_name,
     }) => {
       const projectIdCheck = validateProjectId(project_id);
@@ -1393,6 +1395,7 @@ function createMcpServer() {
           include_scene_ids,
           include_metadata_sidebar,
           include_paragraph_anchors,
+          recipient_name,
           bundle_name,
         });
         return jsonResponse(plan);
@@ -1414,7 +1417,7 @@ function createMcpServer() {
     "Generate markdown review bundle artifacts from planned scene scope. Writes files only under output_dir and returns manifest/provenance details.",
     {
       project_id: z.string().describe("Project ID to scope the review bundle (e.g. 'test-novel')."),
-      profile: z.enum(REVIEW_BUNDLE_PROFILES).describe("Bundle profile: outline_discussion or editor_detailed."),
+      profile: z.enum(REVIEW_BUNDLE_PROFILES).describe("Bundle profile: outline_discussion, editor_detailed, or beta_reader_personalized."),
       output_dir: z.string().describe("Directory path to write bundle artifacts into."),
       part: z.number().int().optional().describe("Optional part filter."),
       chapter: z.number().int().optional().describe("Optional chapter filter."),
@@ -1424,6 +1427,7 @@ function createMcpServer() {
       include_scene_ids: z.boolean().optional().describe("Include scene IDs in markdown headings (default true)."),
       include_metadata_sidebar: z.boolean().optional().describe("Include metadata sidebar in markdown output (default false)."),
       include_paragraph_anchors: z.boolean().optional().describe("Include paragraph anchors in markdown output (default false)."),
+      recipient_name: z.string().optional().describe("Optional recipient display name for beta_reader_personalized profile."),
       bundle_name: z.string().optional().describe("Optional output bundle base name override (slugified in filenames)."),
       source_commit: z.string().optional().describe("Optional explicit source commit for provenance. Defaults to current HEAD when available."),
     },
@@ -1439,6 +1443,7 @@ function createMcpServer() {
       include_scene_ids = true,
       include_metadata_sidebar = false,
       include_paragraph_anchors = false,
+      recipient_name,
       bundle_name,
       source_commit,
     }) => {
@@ -1472,6 +1477,7 @@ function createMcpServer() {
           include_scene_ids,
           include_metadata_sidebar,
           include_paragraph_anchors,
+          recipient_name,
           bundle_name,
         });
 
