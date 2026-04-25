@@ -43,7 +43,7 @@ function parseArgs(argv) {
 function usage() {
   return [
     "Usage:",
-    "  node scripts/normalize-scene-characters.mjs [--sync-dir <dir>] [--project-id <id>] [--limit <n>] [--write] [--json]",
+    "  node --experimental-sqlite scripts/normalize-scene-characters.mjs [--sync-dir <dir>] [--project-id <id>] [--limit <n>] [--write] [--json]",
     "",
     "Options:",
     "  --sync-dir, -d   WRITING_SYNC_DIR root (default: env WRITING_SYNC_DIR or ./sync)",
@@ -204,7 +204,8 @@ function main() {
     }
     printTextSummary(result);
   } catch (err) {
-    process.stderr.write(`${err.message}\n`);
+    const message = err instanceof Error ? err.message : String(err);
+    process.stderr.write(`${message}\n`);
     process.stderr.write(`${usage()}\n`);
     process.exit(1);
   }

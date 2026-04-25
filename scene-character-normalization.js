@@ -107,6 +107,35 @@ export function resolveCharacterReference(value, context) {
   return text;
 }
 
+function isProperSubset(subsetTokens, supersetTokens) {
+  if (subsetTokens.length < 2 || subsetTokens.length >= supersetTokens.length) {
+    return false;
+  }
+  return subsetTokens.every(token => supersetTokens.includes(token));
+}
+
+function pruneLessSpecificCanonicalIds(values, context) {
+  return values.filter((value, idx) => {
+    const row = context.byId.get(value);
+    if (!row || row.informative_tokens.length === 0) {
+      return true;
+    }
+
+    for (let i = 0; i < values.length; i++) {
+      if (i === idx) continue;
+
+      const other = context.byId.get(values[i]);
+      if (!other || other.informative_tokens.length === 0) continue;
+
+      if (isProperSubset(row.informative_tokens, other.informative_tokens)) {
+        return false;
+      }
+    }
+
+    return true;
+  });
+}
+
 export function normalizeSceneCharacters(values, context) {
   const before = normalizeRawCharacterValues(values);
   const resolved = [];
@@ -119,7 +148,7 @@ export function normalizeSceneCharacters(values, context) {
     resolved.push(normalized);
   }
 
-  const after = resolved;
+  const after = pruneLessSpecificCanonicalIds(resolved, context);
   const beforeSet = new Set(before);
   const afterSet = new Set(after);
 
