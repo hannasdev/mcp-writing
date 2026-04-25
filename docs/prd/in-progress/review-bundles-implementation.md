@@ -1,6 +1,6 @@
 # Review Bundles — Phase 4A.1 Implementation Checklist
 
-**Status:** 📋 Planned
+**Status:** ✅ M1 Delivered — `outline_discussion` and `editor_detailed` tools are merged and tested
 
 This checklist scopes only the first delivery slice:
 - `outline_discussion`

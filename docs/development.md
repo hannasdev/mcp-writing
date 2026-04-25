@@ -165,3 +165,49 @@ rm -rf node_modules package-lock.json
 npm install
 npm test
 ```
+
+### `preview_review_bundle` or `create_review_bundle` returns warnings about stale metadata
+
+One or more scenes have `metadata_stale: true`, meaning their prose changed after metadata was last indexed.
+
+In `strictness=warn` mode (default), the bundle is generated with a warning in the response and manifest.
+
+In `strictness=fail` mode, generation is blocked and the response includes a `blockers` list with the affected `scene_ids`.
+
+Fix: re-enrich stale scenes before generating the bundle.
+
+```json
+{ "tool": "enrich_scene_characters_batch", "project_id": "your-project" }
+```
+
+Or run a full sync to pick up any external file changes:
+
+```json
+{ "tool": "sync" }
+```
+
+Then retry bundle generation.
+
+### `create_review_bundle` returns warnings about missing ordering fields
+
+Some scenes are missing `part`, `chapter`, or `timeline_position` metadata. Deterministic ordering falls back to alphabetical `scene_id` sort for those scenes, and a `missing_ordering_fields` warning is included in the response.
+
+In `strictness=warn` mode, the bundle is generated with the fallback ordering applied.
+
+In `strictness=fail` mode, generation is currently not blocked by missing ordering fields alone — only stale metadata triggers a hard block. If you need strict ordering guarantees, update the affected scenes via `update_scene_metadata` before generating.
+
+Fix: use `find_scenes` to identify scenes with null ordering fields, then update them:
+
+```json
+{ "tool": "update_scene_metadata", "scene_id": "sc-001-example", "part": 1, "chapter": 2, "timeline_position": 3 }
+```
+
+### `create_review_bundle` writes no files / `INVALID_OUTPUT_PATH`
+
+The `output_dir` path may not exist or the `bundle_name` contains characters that resolve outside the output directory.
+
+Fix:
+
+1. Create the output directory before calling the tool.
+2. Use a simple `bundle_name` with alphanumeric characters and hyphens — special characters are slugified but extreme values are rejected.
+3. Verify that `output_dir` is an absolute path pointing to a writable location outside the manuscript sync folder.
