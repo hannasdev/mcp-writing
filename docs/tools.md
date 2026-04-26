@@ -36,7 +36,6 @@
 - [`flag_scene`](#flag_scene)
 - [`preview_review_bundle`](#preview_review_bundle)
 - [`create_review_bundle`](#create_review_bundle)
-- [`get_runtime_config`](#get_runtime_config)
 - [`setup_prose_styleguide_config`](#setup_prose_styleguide_config)
 - [`get_prose_styleguide_config`](#get_prose_styleguide_config)
 - [`summarize_prose_styleguide_config`](#summarize_prose_styleguide_config)
@@ -45,6 +44,7 @@
 - [`preview_prose_styleguide_config_update`](#preview_prose_styleguide_config_update)
 - [`check_prose_styleguide_drift`](#check_prose_styleguide_drift)
 - [`setup_prose_styleguide_skill`](#setup_prose_styleguide_skill)
+- [`get_runtime_config`](#get_runtime_config)
 - [`propose_edit`](#propose_edit)
 - [`commit_edit`](#commit_edit)
 - [`discard_edit`](#discard_edit)
@@ -454,14 +454,6 @@ Generate review bundle artifacts (PDF/markdown) from planned scene scope. Writes
 
 ---
 
-## get_runtime_config
-
-Show the active runtime paths and capabilities for this server instance (server version, sync dir, database path, writability, permission diagnostics, and git availability). Use this to verify which manuscript location is currently connected.
-
-_No parameters._
-
----
-
 ## setup_prose_styleguide_config
 
 Create prose-styleguide.config.yaml at sync root or project root using language defaults plus optional explicit overrides.
@@ -562,6 +554,14 @@ Generate skills/prose-styleguide.md from the resolved prose styleguide config an
 | --- | --- | :---: | --- |
 | `project_id` | `string` | No | Optional project ID for scoped config resolution (e.g. 'the-lamb' or 'universe-1/book-1'). |
 | `overwrite` | `boolean` | No | If true, replaces an existing skills/prose-styleguide.md file. |
+
+---
+
+## get_runtime_config
+
+Show the active runtime paths and capabilities for this server instance (server version, sync dir, database path, writability, permission diagnostics, and git availability). Use this to verify which manuscript location is currently connected.
+
+_No parameters._
 
 ---
 
