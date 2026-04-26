@@ -10,7 +10,7 @@ import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import matter from "gray-matter";
 import yaml from "js-yaml";
-import { openDb } from "./db.js";
+import { openDb, checkpointJobCreate, checkpointJobFinish, loadStalledJobs, pruneJobCheckpoints } from "./db.js";
 import { syncAll, isSyncDirWritable, getSyncOwnershipDiagnostics, sidecarPath, isStructuralProjectId } from "./sync.js";
 import { isGitAvailable, isGitRepository, initGitRepository, getSceneProseAtCommit } from "./git.js";
 import { renderCharacterArcTemplate, renderCharacterSheetTemplate, renderPlaceSheetTemplate, slugifyEntityName } from "./world-entity-templates.js";
@@ -158,6 +158,7 @@ const asyncJobs = new Map();
 
 function pruneAsyncJobs() {
   const now = Date.now();
+  let anyPruned = false;
   for (const [id, job] of asyncJobs.entries()) {
     if (!job.finishedAt) continue;
     if (now - Date.parse(job.finishedAt) > ASYNC_JOB_TTL_MS) {
@@ -172,7 +173,11 @@ function pruneAsyncJobs() {
         // best effort cleanup
       }
       asyncJobs.delete(id);
+      anyPruned = true;
     }
+  }
+  if (anyPruned) {
+    try { pruneJobCheckpoints(db, ASYNC_JOB_TTL_MS); } catch { /* best effort */ }
   }
 }
 
@@ -240,6 +245,11 @@ function startAsyncJob({ kind, requestPayload, onComplete }) {
     child,
   };
   asyncJobs.set(id, job);
+  try {
+    checkpointJobCreate(db, job);
+  } catch (err) {
+    process.stderr.write(`[mcp-writing] WARNING: failed to checkpoint job ${id}: ${err.message}\n`);
+  }
 
   let stdoutBuffer = "";
   child.stdout.on("data", (chunk) => {
@@ -276,12 +286,14 @@ function startAsyncJob({ kind, requestPayload, onComplete }) {
       job.status = "cancelled";
       job.error = error.message;
       job.finishedAt = new Date().toISOString();
+      try { checkpointJobFinish(db, job); } catch { /* best effort */ }
       pruneAsyncJobs();
       return;
     }
     job.status = "failed";
     job.error = error.message;
     job.finishedAt = new Date().toISOString();
+    try { checkpointJobFinish(db, job); } catch { /* best effort */ }
     pruneAsyncJobs();
   });
 
@@ -322,6 +334,7 @@ function startAsyncJob({ kind, requestPayload, onComplete }) {
         job.error = cancelledBySignal
           ? `Async job cancelled by signal ${signal}.`
           : payload?.error?.message ?? payload?.error ?? "Async job cancelled.";
+        try { checkpointJobFinish(db, job); } catch { /* best effort */ }
         pruneAsyncJobs();
         return;
       }
@@ -344,6 +357,7 @@ function startAsyncJob({ kind, requestPayload, onComplete }) {
         job.error = error instanceof Error ? error.message : String(error);
       }
     }
+    try { checkpointJobFinish(db, job); } catch { /* best effort */ }
     pruneAsyncJobs();
   });
 
@@ -645,6 +659,28 @@ function createCanonicalWorldEntity({ kind, name, notes, projectId, universeId, 
 // Database setup
 // ---------------------------------------------------------------------------
 const db = openDb(DB_PATH);
+
+// Recover jobs that were in-flight when the server last exited.
+const stalledJobs = loadStalledJobs(db);
+for (const job of stalledJobs) {
+  job.status = "failed";
+  job.error = "server restarted while job was running";
+  job.finishedAt = new Date().toISOString();
+  try {
+    checkpointJobFinish(db, job);
+  } catch (err) {
+    process.stderr.write(`[mcp-writing] WARNING: failed to checkpoint recovered stalled job ${job.id}: ${err.message}\n`);
+  }
+  asyncJobs.set(job.id, job);
+}
+// Prune expired rows from previous sessions unconditionally — completed/failed
+// jobs from prior runs are never loaded into asyncJobs, so anyPruned in
+// pruneAsyncJobs() would never be true for them.
+try { pruneJobCheckpoints(db, ASYNC_JOB_TTL_MS); } catch { /* best effort */ }
+
+if (stalledJobs.length > 0) {
+  process.stderr.write(`[mcp-writing] Marked ${stalledJobs.length} stalled job(s) as failed after restart.\n`);
+}
 
 process.stderr.write(`[mcp-writing] Sync dir: ${SYNC_DIR_ABS}\n`);
 process.stderr.write(`[mcp-writing] DB path: ${DB_PATH_DISPLAY}\n`);
