@@ -54,6 +54,7 @@ None.
     "sync_dir": "/path/to/sync",
     "styleguide_exists": {
       "sync_root": true,
+      "universe_root": false,
       "project_root": false
     },
     "git_available": true,
@@ -190,6 +191,7 @@ The `context` object is computed at call time and reflects current server state.
 | `scene_count` | `SELECT COUNT(*) FROM scenes` | Lets the AI set `max_scenes` correctly without guessing |
 | `sync_dir` | `SYNC_DIR_ABS` | Path confirmation |
 | `styleguide_exists.sync_root` | File existence check | Skips `setup_prose_styleguide_config` if already created |
+| `styleguide_exists.universe_root` | File existence check at universe segment of project_id (null if no `/` in project_id) | Same, at universe scope |
 | `styleguide_exists.project_root` | File existence check per derived project_id | Same, at project scope |
 | `git_available` | `GIT_AVAILABLE` runtime flag | Tells the AI whether snapshot/version tools will work |
 | `pending_proposals` | `pendingProposals.size` | Alerts the AI if uncommitted proposals exist |
@@ -213,9 +215,9 @@ The `context` object is computed at call time and reflects current server state.
 ## Implementation Notes
 
 - The tool has no schema parameters (empty `{}`).
-- `styleguide_exists` checks use `fs.existsSync` on the two standard config paths; no file parsing.
-- `project_id` derivation: `SELECT project_id, COUNT(*) as c FROM scenes GROUP BY project_id ORDER BY c DESC LIMIT 1`.
-- `pending_proposals` reads from the module-scoped `pendingProposals` Map in the edit proposal state, consistent with how `db` is accessed.
+- `styleguide_exists` checks use `fs.existsSync` on the three standard config paths (sync_root, universe_root, project_root); no file parsing. `universe_root` is derived from the universe segment of `project_id` (present when `project_id` contains `/`).
+- `project_id` derivation: `SELECT project_id, COUNT(*) as c FROM scenes GROUP BY project_id ORDER BY c DESC, project_id ASC LIMIT 1`.
+- `pending_proposals` reads from the module-scoped `pendingProposals` Map, consistent with how `db` is accessed.
 - The workflow catalogue is a static constant defined once; it does not need to be regenerated per call.
 - This tool should be listed first in the tool registration order so it appears at the top of tool lists in clients that preserve insertion order.
 

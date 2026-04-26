@@ -3246,7 +3246,8 @@ describe("describe_workflows tool", () => {
     const workflowText = await callWriteTool("describe_workflows");
     const parsed = JSON.parse(workflowText);
 
-    const scenesText = await callWriteTool("find_scenes");
+    // page_size forces total_count to always appear in the response regardless of result set size
+    const scenesText = await callWriteTool("find_scenes", { page_size: 1, page: 1 });
     const scenes = JSON.parse(scenesText);
 
     assert.equal(parsed.context.scene_count, scenes.total_count);

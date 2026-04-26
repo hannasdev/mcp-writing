@@ -969,6 +969,10 @@ function createMcpServer() {
       const projectRootConfigPath = project_id
         ? path.join(resolveProjectRoot(project_id), STYLEGUIDE_CONFIG_BASENAME)
         : null;
+      const universeSegment = project_id?.includes("/") ? project_id.split("/")[0] : null;
+      const universeRootConfigPath = universeSegment
+        ? path.join(SYNC_DIR, "universes", universeSegment, STYLEGUIDE_CONFIG_BASENAME)
+        : null;
 
       return jsonResponse({
         ok: true,
@@ -978,6 +982,7 @@ function createMcpServer() {
           sync_dir: SYNC_DIR_ABS,
           styleguide_exists: {
             sync_root: fs.existsSync(syncRootConfigPath),
+            universe_root: universeRootConfigPath !== null && fs.existsSync(universeRootConfigPath),
             project_root: projectRootConfigPath !== null && fs.existsSync(projectRootConfigPath),
           },
           git_available: GIT_AVAILABLE,
