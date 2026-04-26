@@ -27,6 +27,13 @@
 - [`list_threads`](#list_threads)
 - [`get_thread_arc`](#get_thread_arc)
 - [`get_relationship_arc`](#get_relationship_arc)
+- [`create_character_sheet`](#create_character_sheet)
+- [`create_place_sheet`](#create_place_sheet)
+- [`upsert_thread_link`](#upsert_thread_link)
+- [`update_scene_metadata`](#update_scene_metadata)
+- [`update_character_sheet`](#update_character_sheet)
+- [`update_place_sheet`](#update_place_sheet)
+- [`flag_scene`](#flag_scene)
 - [`get_runtime_config`](#get_runtime_config)
 - [`setup_prose_styleguide_config`](#setup_prose_styleguide_config)
 - [`get_prose_styleguide_config`](#get_prose_styleguide_config)
@@ -38,13 +45,6 @@
 - [`setup_prose_styleguide_skill`](#setup_prose_styleguide_skill)
 - [`preview_review_bundle`](#preview_review_bundle)
 - [`create_review_bundle`](#create_review_bundle)
-- [`create_character_sheet`](#create_character_sheet)
-- [`create_place_sheet`](#create_place_sheet)
-- [`upsert_thread_link`](#upsert_thread_link)
-- [`update_scene_metadata`](#update_scene_metadata)
-- [`update_character_sheet`](#update_character_sheet)
-- [`update_place_sheet`](#update_place_sheet)
-- [`flag_scene`](#flag_scene)
 - [`propose_edit`](#propose_edit)
 - [`commit_edit`](#commit_edit)
 - [`discard_edit`](#discard_edit)
@@ -319,6 +319,95 @@ Show how the relationship between two characters evolves across scenes, in order
 
 ---
 
+## create_character_sheet
+
+Create or reuse a canonical character sheet folder with sheet.md and sheet.meta.yaml so the character can be indexed immediately. If the folder already exists, missing canonical files are backfilled and the existing sheet is preserved.
+
+| Parameter | Type | Required | Description |
+| --- | --- | :---: | --- |
+| `name` | `string` | Yes | Display name of the character (e.g. 'Mira Nystrom'). |
+| `project_id` | `string` | No | Project scope for a book-local character (e.g. 'universe-1/book-1-the-lamb' or 'test-novel'). |
+| `universe_id` | `string` | No | Universe scope for a cross-book shared character (e.g. 'universe-1'). |
+| `notes` | `string` | No | Optional starter prose content for sheet.md. |
+| `fields` | `object` | No | Optional starter metadata fields for the character sidecar. |
+
+---
+
+## create_place_sheet
+
+Create or reuse a canonical place sheet folder with sheet.md and sheet.meta.yaml so the place can be indexed immediately. If the folder already exists, missing canonical files are backfilled and the existing sheet is preserved.
+
+| Parameter | Type | Required | Description |
+| --- | --- | :---: | --- |
+| `name` | `string` | Yes | Display name of the place (e.g. 'University Hospital'). |
+| `project_id` | `string` | No | Project scope for a book-local place (e.g. 'universe-1/book-1-the-lamb' or 'test-novel'). |
+| `universe_id` | `string` | No | Universe scope for a cross-book shared place (e.g. 'universe-1'). |
+| `notes` | `string` | No | Optional starter prose content for sheet.md. |
+| `fields` | `object` | No | Optional starter metadata fields for the place sidecar. |
+
+---
+
+## upsert_thread_link
+
+Create or update a thread and link it to a scene. Idempotent: if the link already exists, updates its beat. Only available when the sync dir is writable.
+
+| Parameter | Type | Required | Description |
+| --- | --- | :---: | --- |
+| `project_id` | `string` | Yes | Project the thread belongs to (e.g. 'the-lamb'). |
+| `thread_id` | `string` | Yes | Thread ID (e.g. 'thread-reconciliation'). |
+| `thread_name` | `string` | Yes | Thread display name. |
+| `scene_id` | `string` | Yes | Scene to link to the thread (e.g. 'sc-011-sebastian'). |
+| `beat` | `string` | No | Optional thread-specific beat label for this scene. |
+| `status` | `string` | No | Thread status (e.g. 'active', 'resolved'). Defaults to 'active'. |
+
+---
+
+## update_scene_metadata
+
+Update one or more metadata fields for a scene. Writes to the .meta.yaml sidecar — never modifies prose. Changes are immediately reflected in the index. Only available when the sync dir is writable.
+
+| Parameter | Type | Required | Description |
+| --- | --- | :---: | --- |
+| `scene_id` | `string` | Yes | The scene_id to update (e.g. 'sc-011-sebastian'). |
+| `project_id` | `string` | Yes | Project the scene belongs to (e.g. 'the-lamb'). |
+| `fields` | `object` | No | Fields to update. Only supplied keys are changed. |
+
+---
+
+## update_character_sheet
+
+Update structured metadata fields for a character (role, arc_summary, traits, etc). Writes to the .meta.yaml sidecar — never modifies the prose notes file. Changes are immediately reflected in the index. Only available when the sync dir is writable.
+
+| Parameter | Type | Required | Description |
+| --- | --- | :---: | --- |
+| `character_id` | `string` | Yes | The character_id to update (e.g. 'char-mira-nystrom'). Use list_characters to find valid IDs. |
+| `fields` | `object` | No | Fields to update. Only supplied keys are changed. |
+
+---
+
+## update_place_sheet
+
+Update structured metadata fields for a place (name, associated_characters, tags). Writes to the .meta.yaml sidecar — never modifies the prose notes file. Changes are immediately reflected in the index. Only available when the sync dir is writable.
+
+| Parameter | Type | Required | Description |
+| --- | --- | :---: | --- |
+| `place_id` | `string` | Yes | The place_id to update (e.g. 'place-harbor-district'). Use list_places to find valid IDs. |
+| `fields` | `object` | No | Fields to update. Only supplied keys are changed. |
+
+---
+
+## flag_scene
+
+Attach a continuity or review note to a scene. Flags are appended to the sidecar file and accumulate over time — they are never overwritten. Use this to record continuity problems, revision notes, or questions you want to revisit.
+
+| Parameter | Type | Required | Description |
+| --- | --- | :---: | --- |
+| `scene_id` | `string` | Yes | The scene_id to flag (e.g. 'sc-012-open-to-anyone'). |
+| `project_id` | `string` | Yes | Project the scene belongs to (e.g. 'the-lamb'). |
+| `note` | `string` | Yes | The flag note (e.g. 'Victor knows Mira’s name here, but they haven’t been introduced yet — contradicts sc-006'). |
+
+---
+
 ## get_runtime_config
 
 Show the active runtime paths and capabilities for this server instance (server version, sync dir, database path, writability, permission diagnostics, and git availability). Use this to verify which manuscript location is currently connected.
@@ -473,95 +562,6 @@ Generate review bundle artifacts (PDF/markdown) from planned scene scope. Writes
 | `bundle_name` | `string` | No | Optional output bundle base name override (slugified in filenames). |
 | `source_commit` | `string` | No | Optional explicit source commit for provenance. Defaults to current HEAD when available. |
 | `format` | `enum("pdf","markdown","both")` | No | Output format: pdf (default), markdown, or both. |
-
----
-
-## create_character_sheet
-
-Create or reuse a canonical character sheet folder with sheet.md and sheet.meta.yaml so the character can be indexed immediately. If the folder already exists, missing canonical files are backfilled and the existing sheet is preserved.
-
-| Parameter | Type | Required | Description |
-| --- | --- | :---: | --- |
-| `name` | `string` | Yes | Display name of the character (e.g. 'Mira Nystrom'). |
-| `project_id` | `string` | No | Project scope for a book-local character (e.g. 'universe-1/book-1-the-lamb' or 'test-novel'). |
-| `universe_id` | `string` | No | Universe scope for a cross-book shared character (e.g. 'universe-1'). |
-| `notes` | `string` | No | Optional starter prose content for sheet.md. |
-| `fields` | `object` | No | Optional starter metadata fields for the character sidecar. |
-
----
-
-## create_place_sheet
-
-Create or reuse a canonical place sheet folder with sheet.md and sheet.meta.yaml so the place can be indexed immediately. If the folder already exists, missing canonical files are backfilled and the existing sheet is preserved.
-
-| Parameter | Type | Required | Description |
-| --- | --- | :---: | --- |
-| `name` | `string` | Yes | Display name of the place (e.g. 'University Hospital'). |
-| `project_id` | `string` | No | Project scope for a book-local place (e.g. 'universe-1/book-1-the-lamb' or 'test-novel'). |
-| `universe_id` | `string` | No | Universe scope for a cross-book shared place (e.g. 'universe-1'). |
-| `notes` | `string` | No | Optional starter prose content for sheet.md. |
-| `fields` | `object` | No | Optional starter metadata fields for the place sidecar. |
-
----
-
-## upsert_thread_link
-
-Create or update a thread and link it to a scene. Idempotent: if the link already exists, updates its beat. Only available when the sync dir is writable.
-
-| Parameter | Type | Required | Description |
-| --- | --- | :---: | --- |
-| `project_id` | `string` | Yes | Project the thread belongs to (e.g. 'the-lamb'). |
-| `thread_id` | `string` | Yes | Thread ID (e.g. 'thread-reconciliation'). |
-| `thread_name` | `string` | Yes | Thread display name. |
-| `scene_id` | `string` | Yes | Scene to link to the thread (e.g. 'sc-011-sebastian'). |
-| `beat` | `string` | No | Optional thread-specific beat label for this scene. |
-| `status` | `string` | No | Thread status (e.g. 'active', 'resolved'). Defaults to 'active'. |
-
----
-
-## update_scene_metadata
-
-Update one or more metadata fields for a scene. Writes to the .meta.yaml sidecar — never modifies prose. Changes are immediately reflected in the index. Only available when the sync dir is writable.
-
-| Parameter | Type | Required | Description |
-| --- | --- | :---: | --- |
-| `scene_id` | `string` | Yes | The scene_id to update (e.g. 'sc-011-sebastian'). |
-| `project_id` | `string` | Yes | Project the scene belongs to (e.g. 'the-lamb'). |
-| `fields` | `object` | No | Fields to update. Only supplied keys are changed. |
-
----
-
-## update_character_sheet
-
-Update structured metadata fields for a character (role, arc_summary, traits, etc). Writes to the .meta.yaml sidecar — never modifies the prose notes file. Changes are immediately reflected in the index. Only available when the sync dir is writable.
-
-| Parameter | Type | Required | Description |
-| --- | --- | :---: | --- |
-| `character_id` | `string` | Yes | The character_id to update (e.g. 'char-mira-nystrom'). Use list_characters to find valid IDs. |
-| `fields` | `object` | No | Fields to update. Only supplied keys are changed. |
-
----
-
-## update_place_sheet
-
-Update structured metadata fields for a place (name, associated_characters, tags). Writes to the .meta.yaml sidecar — never modifies the prose notes file. Changes are immediately reflected in the index. Only available when the sync dir is writable.
-
-| Parameter | Type | Required | Description |
-| --- | --- | :---: | --- |
-| `place_id` | `string` | Yes | The place_id to update (e.g. 'place-harbor-district'). Use list_places to find valid IDs. |
-| `fields` | `object` | No | Fields to update. Only supplied keys are changed. |
-
----
-
-## flag_scene
-
-Attach a continuity or review note to a scene. Flags are appended to the sidecar file and accumulate over time — they are never overwritten. Use this to record continuity problems, revision notes, or questions you want to revisit.
-
-| Parameter | Type | Required | Description |
-| --- | --- | :---: | --- |
-| `scene_id` | `string` | Yes | The scene_id to flag (e.g. 'sc-012-open-to-anyone'). |
-| `project_id` | `string` | Yes | Project the scene belongs to (e.g. 'the-lamb'). |
-| `note` | `string` | Yes | The flag note (e.g. 'Victor knows Mira’s name here, but they haven’t been introduced yet — contradicts sc-006'). |
 
 ---
 
