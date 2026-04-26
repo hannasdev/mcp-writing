@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 /**
- * Generates docs/tools.md from tool definitions in index.js.
+ * Generates docs/tools.md from tool definitions in index.js and tools/*.js.
  *
  * Run:  node scripts/generate-tool-docs.mjs
  *   or: npm run docs
  *
  * The output is the single source of truth for the tool reference.
- * Re-run after editing tool names, descriptions, or parameters in index.js.
+ * Re-run after editing tool names, descriptions, or parameters.
  */
 
 import { readFileSync, writeFileSync, mkdirSync, readdirSync } from 'node:fs';

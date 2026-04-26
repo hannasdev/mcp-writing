@@ -29,8 +29,10 @@ export function registerSyncTools(s, {
     const result = syncAll(db, SYNC_DIR, { writable: SYNC_DIR_WRITABLE });
     const parts = [`Sync complete. ${result.indexed} scenes indexed. ${result.staleMarked} scenes marked stale.`];
     if (result.sidecarsMigrated) parts.push(`${result.sidecarsMigrated} sidecar(s) auto-generated from frontmatter.`);
-    if (result.skipped) parts.push(`${result.skipped} file(s) skipped (no scene_id).`);
-    if (result.skipped) parts.push(`Tip: for raw Scrivener Draft exports, run scripts/import.js first, then run sync again.`);
+    if (result.skipped) {
+      parts.push(`${result.skipped} file(s) skipped (no scene_id).`);
+      parts.push(`Tip: for raw Scrivener Draft exports, run scripts/import.js first, then run sync again.`);
+    }
     const summary = result.warningSummary;
     const summaryEntries = Object.entries(summary);
     if (summaryEntries.length) {
@@ -541,6 +543,7 @@ export function registerSyncTools(s, {
     }
   );
 
+  // ---- enrichment ----------------------------------------------------------
   s.tool(
     "enrich_scene",
     "Re-derive lightweight scene metadata from current prose (logline and character mentions) and clear metadata_stale for that scene. Only available when the sync dir is writable.",

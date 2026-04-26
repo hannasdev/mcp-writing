@@ -6,6 +6,11 @@ import os from "node:os";
 import { spawnServer, waitForServer, waitForExit, connectClient, createTestContext } from "../helpers/server.js";
 import { writeFileSyncWithDirs } from "../helpers/fixtures.js";
 
+// Ports 3066–3067 are shared with the ctx servers above.
+// Ports 3091–3097 are used by one-off inline servers within individual tests.
+// All ports in this file must stay unique across the integration suite because
+// --test-concurrency=1 runs files sequentially but tests within a file overlap.
+// Do not increase --test-concurrency without auditing port assignments.
 const READ_PORT = 3067;
 const WRITE_PORT = 3066;
 const ctx = createTestContext(READ_PORT, WRITE_PORT);
