@@ -17,6 +17,7 @@
 - [`setup_prose_styleguide_config`](#setup_prose_styleguide_config)
 - [`get_prose_styleguide_config`](#get_prose_styleguide_config)
 - [`summarize_prose_styleguide_config`](#summarize_prose_styleguide_config)
+- [`bootstrap_prose_styleguide_config`](#bootstrap_prose_styleguide_config)
 - [`update_prose_styleguide_config`](#update_prose_styleguide_config)
 - [`preview_prose_styleguide_config_update`](#preview_prose_styleguide_config_update)
 - [`check_prose_styleguide_drift`](#check_prose_styleguide_drift)
@@ -194,6 +195,23 @@ Summarize the currently resolved prose styleguide config in plain language for r
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |
 | `project_id` | `string` | No | Optional project ID for project-scoped resolution (e.g. 'the-lamb' or 'universe-1/book-1'). |
+
+---
+
+## bootstrap_prose_styleguide_config
+
+Detect dominant prose conventions from existing scenes and suggest initial prose-styleguide config values.
+
+| Parameter | Type | Required | Description |
+| --- | --- | :---: | --- |
+| `project_id` | `string` | Yes | Project ID to analyze (e.g. 'the-lamb' or 'universe-1/book-1'). |
+| `scene_ids` | `string[]` | No | Optional scene_id allowlist to analyze. |
+| `part` | `integer` | No | Optional part filter. |
+| `chapter` | `integer` | No | Optional chapter filter. |
+| `max_scenes` | `integer` | No | Maximum number of scenes to analyze (default: 50). |
+| `min_agreement` | `number` | No | Minimum agreement ratio for suggested fields (default: 0.6). |
+| `min_evidence` | `integer` | No | Minimum number of observed scenes per field before suggesting it (default: 3). |
+| `include_scene_signals` | `boolean` | No | If true, include per-scene detected signals in the response. |
 
 ---
 

@@ -517,6 +517,24 @@ describe("styleguide drift analysis", () => {
 
     assert.equal(Object.hasOwn(suggestions, "quotation_style"), false);
   });
+
+  test("can suggest initial config values without an existing resolved config", () => {
+    const suggestions = suggestStyleguideUpdatesFromScenes({
+      sceneAnalyses: [
+        { observed: { quotation_style: "double", spelling: "us" }, drift: [] },
+        { observed: { quotation_style: "double", spelling: "us" }, drift: [] },
+        { observed: { quotation_style: "double", spelling: "us" }, drift: [] },
+      ],
+      resolvedConfig: null,
+      minAgreement: 0.6,
+      minEvidence: 3,
+    });
+
+    assert.equal(Object.hasOwn(suggestions, "quotation_style"), true);
+    assert.equal(suggestions.quotation_style.suggested_value, "double");
+    assert.equal(Object.hasOwn(suggestions, "spelling"), true);
+    assert.equal(suggestions.spelling.suggested_value, "us");
+  });
 });
 
 describe("buildProseStyleguideSkill", () => {

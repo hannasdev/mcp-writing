@@ -27,6 +27,7 @@ import {
   updateStyleguideConfig,
 } from "./prose-styleguide.js";
 import {
+  detectStyleguideSignals,
   analyzeSceneStyleguideDrift,
   suggestStyleguideUpdatesFromScenes,
 } from "./prose-styleguide-drift.js";
@@ -1554,7 +1555,10 @@ function createMcpServer() {
         return errorResponse(
           "STYLEGUIDE_CONFIG_REQUIRED",
           "Cannot summarize prose styleguide config before prose-styleguide.config.yaml is set up.",
-          { project_id: project_id ?? null }
+          {
+            project_id: project_id ?? null,
+            next_step: "Run setup_prose_styleguide_config or bootstrap_prose_styleguide_config.",
+          }
         );
       }
 
@@ -1572,6 +1576,101 @@ function createMcpServer() {
         summary_text: summary.summary_text,
         summary_lines: summary.summary_lines,
         styleguide: resolved,
+      });
+    }
+  );
+
+  s.tool(
+    "bootstrap_prose_styleguide_config",
+    "Detect dominant prose conventions from existing scenes and suggest initial prose-styleguide config values.",
+    {
+      project_id: z.string().describe("Project ID to analyze (e.g. 'the-lamb' or 'universe-1/book-1')."),
+      scene_ids: z.array(z.string()).optional().describe("Optional scene_id allowlist to analyze."),
+      part: z.number().int().optional().describe("Optional part filter."),
+      chapter: z.number().int().optional().describe("Optional chapter filter."),
+      max_scenes: z.number().int().positive().optional().describe("Maximum number of scenes to analyze (default: 50)."),
+      min_agreement: z.number().min(0).max(1).optional().describe("Minimum agreement ratio for suggested fields (default: 0.6)."),
+      min_evidence: z.number().int().positive().optional().describe("Minimum number of observed scenes per field before suggesting it (default: 3)."),
+      include_scene_signals: z.boolean().optional().describe("If true, include per-scene detected signals in the response."),
+    },
+    async ({
+      project_id,
+      scene_ids,
+      part,
+      chapter,
+      max_scenes = 50,
+      min_agreement = 0.6,
+      min_evidence = 3,
+      include_scene_signals = false,
+    }) => {
+      const projectIdCheck = validateProjectId(project_id);
+      if (!projectIdCheck.ok) {
+        return errorResponse("INVALID_PROJECT_ID", projectIdCheck.reason, { project_id });
+      }
+
+      const targetResolution = resolveBatchTargetScenes(db, {
+        projectId: project_id,
+        sceneIds: scene_ids,
+        part,
+        chapter,
+        onlyStale: false,
+      });
+      if (!targetResolution.ok) {
+        return errorResponse(targetResolution.code, targetResolution.message, targetResolution.details);
+      }
+
+      const targetScenes = targetResolution.rows;
+      if (targetScenes.length === 0) {
+        return errorResponse(
+          "NOT_FOUND",
+          `No scenes were found for project '${project_id}' with the requested filters.`,
+          { project_id, scene_ids: scene_ids ?? null, part: part ?? null, chapter: chapter ?? null }
+        );
+      }
+
+      if (targetScenes.length > max_scenes) {
+        return errorResponse(
+          "VALIDATION_ERROR",
+          `Matched ${targetScenes.length} scenes, which exceeds max_scenes=${max_scenes}.`,
+          { matched_scenes: targetScenes.length, max_scenes, project_id }
+        );
+      }
+
+      const sceneSignals = [];
+      let unreadableScenes = 0;
+
+      for (const scene of targetScenes) {
+        try {
+          const raw = fs.readFileSync(scene.file_path, "utf8");
+          const prose = matter(raw).content;
+          sceneSignals.push({
+            scene_id: scene.scene_id,
+            observed: detectStyleguideSignals(prose),
+          });
+        } catch {
+          unreadableScenes += 1;
+          sceneSignals.push({
+            scene_id: scene.scene_id,
+            observed: {},
+          });
+        }
+      }
+
+      const suggestedConfig = suggestStyleguideUpdatesFromScenes({
+        sceneAnalyses: sceneSignals,
+        resolvedConfig: null,
+        minAgreement: min_agreement,
+        minEvidence: min_evidence,
+      });
+
+      return jsonResponse({
+        ok: true,
+        project_id,
+        checked_scenes: sceneSignals.length,
+        unreadable_scenes: unreadableScenes,
+        suggested_config: suggestedConfig,
+        next_step: "Review suggested_config, then write accepted fields via update_prose_styleguide_config.",
+        scene_signals: include_scene_signals ? sceneSignals : undefined,
       });
     }
   );
@@ -1764,7 +1863,10 @@ function createMcpServer() {
         return errorResponse(
           "STYLEGUIDE_CONFIG_REQUIRED",
           "Cannot check prose styleguide drift before prose-styleguide.config.yaml is set up.",
-          { project_id }
+          {
+            project_id,
+            next_step: "Run setup_prose_styleguide_config or bootstrap_prose_styleguide_config.",
+          }
         );
       }
 
@@ -1883,7 +1985,7 @@ function createMcpServer() {
           "Cannot generate prose-styleguide.md before prose-styleguide.config.yaml is set up.",
           {
             project_id: project_id ?? null,
-            next_step: "Run setup_prose_styleguide_config first.",
+            next_step: "Run setup_prose_styleguide_config or bootstrap_prose_styleguide_config first.",
           }
         );
       }
