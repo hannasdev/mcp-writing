@@ -6,6 +6,7 @@
   "main": "index.js",
   "files": [
     "index.js",
+    "async-jobs.js",
     "async-progress.js",
     "scene-character-batch.js",
     "scrivener-direct.js",
