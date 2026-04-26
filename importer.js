@@ -32,6 +32,16 @@ export function validateProjectId(projectId) {
   return { ok: true };
 }
 
+export function validateUniverseId(universeId) {
+  if (typeof universeId !== "string" || universeId.trim().length === 0) {
+    return { ok: false, reason: "universe_id must be a non-empty string." };
+  }
+  if (!/^[a-z0-9-]+$/.test(universeId)) {
+    return { ok: false, reason: "universe_id may contain only lowercase letters, numbers, and hyphens." };
+  }
+  return { ok: true };
+}
+
 // Parse "NNN Title [binder_id].txt" -> { seq, rawTitle, binderId, ext } or null
 function parseFilename(filename) {
   const m = filename.match(/^(\d+)\s+(.+?)\s*\[(\d+)\]\.(txt|md)$/);

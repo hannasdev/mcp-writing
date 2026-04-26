@@ -15,7 +15,7 @@ import { openDb } from "./db.js";
 import { syncAll, isSyncDirWritable, getSyncOwnershipDiagnostics, getFileWriteDiagnostics, writeMeta, readMeta, indexSceneFile, normalizeSceneMetaForPath, sidecarPath } from "./sync.js";
 import { isGitAvailable, isGitRepository, initGitRepository, createSnapshot, listSnapshots, getSceneProseAtCommit, getHeadCommitHash } from "./git.js";
 import { renderCharacterArcTemplate, renderCharacterSheetTemplate, renderPlaceSheetTemplate, slugifyEntityName } from "./world-entity-templates.js";
-import { importScrivenerSync, validateProjectId } from "./importer.js";
+import { importScrivenerSync, validateProjectId, validateUniverseId } from "./importer.js";
 import { ASYNC_PROGRESS_PREFIX } from "./async-progress.js";
 import {
   STYLEGUIDE_CONFIG_BASENAME,
@@ -845,6 +845,10 @@ async function gracefulShutdown(signal) {
   process.exit(0);
 }
 
+function maxScenesNextStep(matchedCount) {
+  return `Re-run with max_scenes set to at least ${matchedCount}.`;
+}
+
 // ---------------------------------------------------------------------------
 // MCP server factory
 // ---------------------------------------------------------------------------
@@ -1226,7 +1230,7 @@ function createMcpServer() {
             matched_scenes: targetScenes.length,
             max_scenes,
             project_id,
-            next_step: `Re-run with max_scenes set to at least ${targetScenes.length}.`,
+            next_step: maxScenesNextStep(targetScenes.length),
           }
         );
       }
@@ -1634,7 +1638,12 @@ function createMcpServer() {
         return errorResponse(
           "VALIDATION_ERROR",
           `Matched ${targetScenes.length} scenes, which exceeds max_scenes=${max_scenes}.`,
-          { matched_scenes: targetScenes.length, max_scenes, project_id, next_step: `Re-run with max_scenes set to at least ${targetScenes.length}.` }
+          {
+            matched_scenes: targetScenes.length,
+            max_scenes,
+            project_id,
+            next_step: maxScenesNextStep(targetScenes.length),
+          }
         );
       }
 
@@ -1888,7 +1897,12 @@ function createMcpServer() {
         return errorResponse(
           "VALIDATION_ERROR",
           `Matched ${targetScenes.length} scenes, which exceeds max_scenes=${max_scenes}.`,
-          { matched_scenes: targetScenes.length, max_scenes, project_id, next_step: `Re-run with max_scenes set to at least ${targetScenes.length}.` }
+          {
+            matched_scenes: targetScenes.length,
+            max_scenes,
+            project_id,
+            next_step: maxScenesNextStep(targetScenes.length),
+          }
         );
       }
 
@@ -2520,8 +2534,9 @@ function createMcpServer() {
         const check = validateProjectId(project_id);
         if (!check.ok) return errorResponse("INVALID_PROJECT_ID", check.reason, { project_id });
       }
-      if (universe_id && !/^[a-z0-9-]+$/.test(universe_id)) {
-        return errorResponse("INVALID_UNIVERSE_ID", "universe_id may contain only lowercase letters, numbers, and hyphens.", { universe_id });
+      if (universe_id) {
+        const check = validateUniverseId(universe_id);
+        if (!check.ok) return errorResponse("INVALID_UNIVERSE_ID", check.reason, { universe_id });
       }
 
       try {
@@ -2591,8 +2606,9 @@ function createMcpServer() {
         const check = validateProjectId(project_id);
         if (!check.ok) return errorResponse("INVALID_PROJECT_ID", check.reason, { project_id });
       }
-      if (universe_id && !/^[a-z0-9-]+$/.test(universe_id)) {
-        return errorResponse("INVALID_UNIVERSE_ID", "universe_id may contain only lowercase letters, numbers, and hyphens.", { universe_id });
+      if (universe_id) {
+        const check = validateUniverseId(universe_id);
+        if (!check.ok) return errorResponse("INVALID_UNIVERSE_ID", check.reason, { universe_id });
       }
 
       try {
