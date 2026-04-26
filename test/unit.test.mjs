@@ -25,7 +25,7 @@ import {
 } from "../sync.js";
 import { lintMetadataInSyncDir, validateMetadataObject } from "../metadata-lint.js";
 import { openDb } from "../db.js";
-import { importScrivenerSync } from "../importer.js";
+import { importScrivenerSync, validateProjectId, validateUniverseId } from "../importer.js";
 import {
   IMPORTER_AUTHORITATIVE_FIELDS,
   loadScrivenerProjectData,
@@ -3744,5 +3744,83 @@ describe("package.json files allowlist", () => {
         `"${file}" is imported by index.js but missing from package.json files allowlist`
       );
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// validateProjectId / validateUniverseId
+// ---------------------------------------------------------------------------
+describe("validateProjectId", () => {
+  test("accepts a simple project slug", () => {
+    assert.deepEqual(validateProjectId("the-lamb"), { ok: true });
+  });
+
+  test("accepts a universe/project slug", () => {
+    assert.deepEqual(validateProjectId("universe-1/book-1-the-lamb"), { ok: true });
+  });
+
+  test("rejects an absolute path", () => {
+    const result = validateProjectId("/etc/passwd");
+    assert.equal(result.ok, false);
+  });
+
+  test("rejects more than two segments", () => {
+    const result = validateProjectId("a/b/c");
+    assert.equal(result.ok, false);
+  });
+
+  test("rejects uppercase letters", () => {
+    const result = validateProjectId("The-Lamb");
+    assert.equal(result.ok, false);
+  });
+
+  test("rejects an empty string", () => {
+    const result = validateProjectId("");
+    assert.equal(result.ok, false);
+  });
+
+  test("rejects dot segments", () => {
+    assert.equal(validateProjectId("../etc").ok, false);
+    assert.equal(validateProjectId(".").ok, false);
+  });
+});
+
+describe("validateUniverseId", () => {
+  test("accepts a valid slug", () => {
+    assert.deepEqual(validateUniverseId("universe-1"), { ok: true });
+  });
+
+  test("accepts a single character", () => {
+    assert.deepEqual(validateUniverseId("a"), { ok: true });
+  });
+
+  test("rejects an empty string with a clear reason", () => {
+    const result = validateUniverseId("");
+    assert.equal(result.ok, false);
+    assert.ok(result.reason.length > 0);
+  });
+
+  test("rejects whitespace-only string", () => {
+    assert.equal(validateUniverseId("   ").ok, false);
+  });
+
+  test("rejects underscores", () => {
+    assert.equal(validateUniverseId("__invalid__").ok, false);
+  });
+
+  test("rejects uppercase letters", () => {
+    assert.equal(validateUniverseId("Universe-1").ok, false);
+  });
+
+  test("rejects leading hyphen", () => {
+    assert.equal(validateUniverseId("-universe").ok, false);
+  });
+
+  test("rejects trailing hyphen", () => {
+    assert.equal(validateUniverseId("universe-").ok, false);
+  });
+
+  test("rejects slashes", () => {
+    assert.equal(validateUniverseId("universe/1").ok, false);
   });
 });

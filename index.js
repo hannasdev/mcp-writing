@@ -15,7 +15,7 @@ import { openDb } from "./db.js";
 import { syncAll, isSyncDirWritable, getSyncOwnershipDiagnostics, getFileWriteDiagnostics, writeMeta, readMeta, indexSceneFile, normalizeSceneMetaForPath, sidecarPath } from "./sync.js";
 import { isGitAvailable, isGitRepository, initGitRepository, createSnapshot, listSnapshots, getSceneProseAtCommit, getHeadCommitHash } from "./git.js";
 import { renderCharacterArcTemplate, renderCharacterSheetTemplate, renderPlaceSheetTemplate, slugifyEntityName } from "./world-entity-templates.js";
-import { importScrivenerSync, validateProjectId } from "./importer.js";
+import { importScrivenerSync, validateProjectId, validateUniverseId } from "./importer.js";
 import { ASYNC_PROGRESS_PREFIX } from "./async-progress.js";
 import {
   STYLEGUIDE_CONFIG_BASENAME,
@@ -845,6 +845,10 @@ async function gracefulShutdown(signal) {
   process.exit(0);
 }
 
+function maxScenesNextStep(matchedCount) {
+  return `Re-run with max_scenes set to at least ${matchedCount}.`;
+}
+
 // ---------------------------------------------------------------------------
 // MCP server factory
 // ---------------------------------------------------------------------------
@@ -1226,6 +1230,7 @@ function createMcpServer() {
             matched_scenes: targetScenes.length,
             max_scenes,
             project_id,
+            next_step: maxScenesNextStep(targetScenes.length),
           }
         );
       }
@@ -1485,6 +1490,7 @@ function createMcpServer() {
         config: draft.config,
         inferred_defaults: draft.inferred_defaults,
         warnings: draft.warnings,
+        next_step: "Config created. Call update_prose_styleguide_config to apply field updates.",
       });
     }
   );
@@ -1520,7 +1526,7 @@ function createMcpServer() {
         ok: true,
         styleguide: resolved,
         next_step: resolved.setup_required
-          ? "No prose-styleguide.config.yaml was found. Run setup to create one at sync root or project root."
+          ? "No prose-styleguide.config.yaml was found. Call setup_prose_styleguide_config (with language e.g. 'en') to create one at sync root or project root."
           : "Config resolved successfully.",
       });
     }
@@ -1632,7 +1638,12 @@ function createMcpServer() {
         return errorResponse(
           "VALIDATION_ERROR",
           `Matched ${targetScenes.length} scenes, which exceeds max_scenes=${max_scenes}.`,
-          { matched_scenes: targetScenes.length, max_scenes, project_id }
+          {
+            matched_scenes: targetScenes.length,
+            max_scenes,
+            project_id,
+            next_step: maxScenesNextStep(targetScenes.length),
+          }
         );
       }
 
@@ -1669,7 +1680,7 @@ function createMcpServer() {
         checked_scenes: sceneSignals.length,
         unreadable_scenes: unreadableScenes,
         suggested_config: suggestedConfig,
-        next_step: "Review suggested_config, then write accepted fields via update_prose_styleguide_config.",
+        next_step: `To apply: (1) If no project-scoped config exists yet, call setup_prose_styleguide_config first with scope=project_root, project_id=${project_id}, and language (e.g. 'en'). (2) Then call update_prose_styleguide_config with the fields from suggested_config you want to apply.`,
         scene_signals: include_scene_signals ? sceneSignals : undefined,
       });
     }
@@ -1886,7 +1897,12 @@ function createMcpServer() {
         return errorResponse(
           "VALIDATION_ERROR",
           `Matched ${targetScenes.length} scenes, which exceeds max_scenes=${max_scenes}.`,
-          { matched_scenes: targetScenes.length, max_scenes, project_id }
+          {
+            matched_scenes: targetScenes.length,
+            max_scenes,
+            project_id,
+            next_step: maxScenesNextStep(targetScenes.length),
+          }
         );
       }
 
@@ -2511,8 +2527,18 @@ function createMcpServer() {
       if (!SYNC_DIR_WRITABLE) {
         return errorResponse("READ_ONLY", "Cannot create character sheet: sync dir is read-only.");
       }
-      if ((project_id && universe_id) || (!project_id && !universe_id)) {
+      const hasProjectId = project_id !== undefined;
+      const hasUniverseId = universe_id !== undefined;
+      if ((hasProjectId && hasUniverseId) || (!hasProjectId && !hasUniverseId)) {
         return errorResponse("VALIDATION_ERROR", "Provide exactly one of project_id or universe_id.");
+      }
+      if (hasProjectId) {
+        const check = validateProjectId(project_id);
+        if (!check.ok) return errorResponse("INVALID_PROJECT_ID", check.reason, { project_id });
+      }
+      if (hasUniverseId) {
+        const check = validateUniverseId(universe_id);
+        if (!check.ok) return errorResponse("INVALID_UNIVERSE_ID", check.reason, { universe_id });
       }
 
       try {
@@ -2575,8 +2601,18 @@ function createMcpServer() {
       if (!SYNC_DIR_WRITABLE) {
         return errorResponse("READ_ONLY", "Cannot create place sheet: sync dir is read-only.");
       }
-      if ((project_id && universe_id) || (!project_id && !universe_id)) {
+      const hasProjectId = project_id !== undefined;
+      const hasUniverseId = universe_id !== undefined;
+      if ((hasProjectId && hasUniverseId) || (!hasProjectId && !hasUniverseId)) {
         return errorResponse("VALIDATION_ERROR", "Provide exactly one of project_id or universe_id.");
+      }
+      if (hasProjectId) {
+        const check = validateProjectId(project_id);
+        if (!check.ok) return errorResponse("INVALID_PROJECT_ID", check.reason, { project_id });
+      }
+      if (hasUniverseId) {
+        const check = validateUniverseId(universe_id);
+        if (!check.ok) return errorResponse("INVALID_UNIVERSE_ID", check.reason, { universe_id });
       }
 
       try {
