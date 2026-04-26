@@ -12,7 +12,7 @@ import matter from "gray-matter";
 import yaml from "js-yaml";
 import { z } from "zod";
 import { openDb } from "./db.js";
-import { syncAll, isSyncDirWritable, getSyncOwnershipDiagnostics, getFileWriteDiagnostics, writeMeta, readMeta, indexSceneFile, normalizeSceneMetaForPath, sidecarPath, PROJECT_STRUCTURAL_DIRS } from "./sync.js";
+import { syncAll, isSyncDirWritable, getSyncOwnershipDiagnostics, getFileWriteDiagnostics, writeMeta, readMeta, indexSceneFile, normalizeSceneMetaForPath, sidecarPath, isStructuralProjectId } from "./sync.js";
 import { isGitAvailable, isGitRepository, initGitRepository, createSnapshot, listSnapshots, getSceneProseAtCommit, getHeadCommitHash } from "./git.js";
 import { renderCharacterArcTemplate, renderCharacterSheetTemplate, renderPlaceSheetTemplate, slugifyEntityName } from "./world-entity-templates.js";
 import { importScrivenerSync, validateProjectId, validateUniverseId } from "./importer.js";
@@ -962,9 +962,13 @@ function createMcpServer() {
       ).get();
       // Suppress structural-dir names (e.g. "scenes") that appear when SYNC_DIR points at the
       // project directory itself rather than the universe root. They are path artifacts, not
-      // real project identifiers.
+      // real project identifiers. Only suppress when no real project directory exists at that
+      // path, so a project intentionally named "scenes" (though inadvisable) is still honoured.
       const rawProjectId = projectRow?.project_id ?? null;
-      const project_id = rawProjectId && PROJECT_STRUCTURAL_DIRS.has(rawProjectId) ? null : rawProjectId;
+      const rawProjectRootPath = rawProjectId ? resolveProjectRoot(rawProjectId) : null;
+      const project_id = (
+        isStructuralProjectId(rawProjectId) && !fs.existsSync(rawProjectRootPath)
+      ) ? null : rawProjectId;
 
       const sceneCountRow = db.prepare(`SELECT COUNT(*) as count FROM scenes`).get();
       const scene_count = sceneCountRow?.count ?? 0;

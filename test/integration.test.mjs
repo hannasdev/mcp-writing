@@ -3256,6 +3256,29 @@ describe("describe_workflows tool", () => {
     assert.equal(parsed.context.scene_count, scenes.total_count);
   });
 
+  test("project_id is null when SYNC_DIR points at a project root with scenes/ layout", async () => {
+    const flatPort = 3091;
+    const flatUrl = `http://localhost:${flatPort}`;
+    const flatSyncDir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-writing-flat-"));
+    writeFileSyncWithDirs(
+      path.join(flatSyncDir, "scenes", "chapter-1", "sc-001.md"),
+      `---\nscene_id: sc-001\ntitle: Test Scene\n---\nProse here.\n`
+    );
+    const flatProc = spawnServer(flatPort, flatSyncDir);
+    let flatClient;
+    try {
+      await waitForServer(flatUrl);
+      flatClient = await connectClient(flatUrl);
+      const result = await flatClient.callTool({ name: "describe_workflows", arguments: {} });
+      const parsed = JSON.parse(result.content?.[0]?.text ?? "{}");
+      assert.equal(parsed.context.project_id, null, "structural dir name must not leak as project_id");
+    } finally {
+      try { await flatClient?.close(); } catch {}
+      if (flatProc) flatProc.kill();
+      fs.rmSync(flatSyncDir, { recursive: true, force: true });
+    }
+  });
+
   test("each workflow has id, label, use_when, and non-empty steps", async () => {
     const text = await callWriteTool("describe_workflows");
     const parsed = JSON.parse(text);
