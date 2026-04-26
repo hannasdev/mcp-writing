@@ -700,9 +700,8 @@ if (GIT_AVAILABLE && SYNC_DIR_WRITABLE) {
 
 // In-memory storage for pending edit proposals (Phase 3)
 const pendingProposals = new Map();
-let nextProposalId = 1;
 function generateProposalId() {
-  return `proposal-${nextProposalId++}`;
+  return `proposal-${randomUUID()}`;
 }
 
 function getRuntimeDiagnostics() {
