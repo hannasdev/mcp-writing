@@ -15,7 +15,7 @@ The counter-argument for leaving it is that the current layout makes grep "s.too
 
 ## 2. Large domain modules — MEDIUM
 
-review-bundles.js (~34K lines), prose-styleguide.js (~17.6K lines), and scene-character-normalization.js (~5.5K lines) are notably large. Without reading them in full, I can't attribute the size precisely, but based on the feature descriptions the likely contributors are: inline language defaults for 24 languages, PDF template strings, normalization dictionaries, and verbose error-handling branches.
+review-bundles.js, prose-styleguide.js, and scene-character-normalization.js are notably large relative to surrounding modules. Without reading them in full, I can't attribute the size precisely, but based on the feature descriptions the likely contributors are: inline language defaults for 24 languages, PDF template strings, normalization dictionaries, and verbose error-handling branches.
 
 If the size is primarily from embedded data (language defaults, normalization lookup tables), extracting those to JSON/YAML data files would reduce the code-to-data ratio and make both easier to reason about. If the size is genuinely algorithmic complexity, splitting into sub-modules (e.g., prose-styleguide-defaults.js, prose-styleguide-cascade.js) might help.
 
