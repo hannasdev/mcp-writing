@@ -2516,6 +2516,13 @@ function createMcpServer() {
       if ((project_id && universe_id) || (!project_id && !universe_id)) {
         return errorResponse("VALIDATION_ERROR", "Provide exactly one of project_id or universe_id.");
       }
+      if (project_id) {
+        const check = validateProjectId(project_id);
+        if (!check.ok) return errorResponse("INVALID_PROJECT_ID", check.reason, { project_id });
+      }
+      if (universe_id && !/^[a-z0-9-]+$/.test(universe_id)) {
+        return errorResponse("INVALID_UNIVERSE_ID", "universe_id may contain only lowercase letters, numbers, and hyphens.", { universe_id });
+      }
 
       try {
         const result = createCanonicalWorldEntity({
@@ -2579,6 +2586,13 @@ function createMcpServer() {
       }
       if ((project_id && universe_id) || (!project_id && !universe_id)) {
         return errorResponse("VALIDATION_ERROR", "Provide exactly one of project_id or universe_id.");
+      }
+      if (project_id) {
+        const check = validateProjectId(project_id);
+        if (!check.ok) return errorResponse("INVALID_PROJECT_ID", check.reason, { project_id });
+      }
+      if (universe_id && !/^[a-z0-9-]+$/.test(universe_id)) {
+        return errorResponse("INVALID_UNIVERSE_ID", "universe_id may contain only lowercase letters, numbers, and hyphens.", { universe_id });
       }
 
       try {
