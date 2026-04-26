@@ -121,11 +121,14 @@ export const SCHEMA = `
   );
 
   CREATE TABLE IF NOT EXISTS schema_version (
+    id      INTEGER PRIMARY KEY CHECK (id = 1),
     version INTEGER NOT NULL
   );
 `;
 
 // Each function is applied exactly once, in order, when version < its index+1.
+// Each migration runs inside a transaction with the version bump — crash-safe.
+// Migrations must be idempotent (guard against already-applied state).
 // Never edit existing entries — add new ones at the end.
 const MIGRATIONS = [
   // 1: add chapter_title column to scenes
@@ -141,37 +144,37 @@ const MIGRATIONS = [
       SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'scenes_fts'
     `).get()?.sql;
     if (typeof ftsSql === "string" && !ftsSql.toLowerCase().includes("keywords")) {
-      db.exec(`BEGIN IMMEDIATE;`);
-      try {
-        db.exec(`
-          CREATE VIRTUAL TABLE scenes_fts_migrating USING fts5(
-            scene_id, project_id, logline, title, keywords
-          );
-        `);
-        db.exec(`
-          INSERT INTO scenes_fts_migrating (scene_id, project_id, logline, title, keywords)
-          SELECT scene_id, project_id, logline, title, ''
-          FROM scenes_fts;
-        `);
-        db.exec(`DROP TABLE scenes_fts;`);
-        db.exec(`ALTER TABLE scenes_fts_migrating RENAME TO scenes_fts;`);
-        db.exec(`COMMIT;`);
-      } catch (err) {
-        db.exec(`ROLLBACK;`);
-        throw err;
-      }
+      db.exec(`
+        CREATE VIRTUAL TABLE scenes_fts_migrating USING fts5(
+          scene_id, project_id, logline, title, keywords
+        );
+      `);
+      db.exec(`
+        INSERT INTO scenes_fts_migrating (scene_id, project_id, logline, title, keywords)
+        SELECT scene_id, project_id, logline, title, ''
+        FROM scenes_fts;
+      `);
+      db.exec(`DROP TABLE scenes_fts;`);
+      db.exec(`ALTER TABLE scenes_fts_migrating RENAME TO scenes_fts;`);
     }
   },
 ];
 
+export const CURRENT_SCHEMA_VERSION = MIGRATIONS.length;
+
 function applyMigrations(db) {
-  if (!db.prepare(`SELECT 1 FROM schema_version LIMIT 1`).get()) {
-    db.prepare(`INSERT INTO schema_version (version) VALUES (0)`).run();
-  }
-  let version = db.prepare(`SELECT version FROM schema_version LIMIT 1`).get().version;
+  db.prepare(`INSERT OR IGNORE INTO schema_version (id, version) VALUES (1, 0)`).run();
+  const version = db.prepare(`SELECT version FROM schema_version WHERE id = 1`).get().version;
   for (let i = version; i < MIGRATIONS.length; i++) {
-    MIGRATIONS[i](db);
-    db.prepare(`UPDATE schema_version SET version = ?`).run(i + 1);
+    db.exec(`BEGIN IMMEDIATE;`);
+    try {
+      MIGRATIONS[i](db);
+      db.prepare(`UPDATE schema_version SET version = ? WHERE id = 1`).run(i + 1);
+      db.exec(`COMMIT;`);
+    } catch (err) {
+      db.exec(`ROLLBACK;`);
+      throw err;
+    }
   }
 }
 

@@ -4,7 +4,7 @@ import os from "node:os";
 import fs from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { openDb } from "../../db.js";
+import { openDb, CURRENT_SCHEMA_VERSION } from "../../db.js";
 
 function makeTempPath() {
   return path.join(os.tmpdir(), `mcp-writing-db-${Date.now()}-${Math.random().toString(36).slice(2)}.sqlite`);
@@ -16,7 +16,7 @@ describe("openDb", () => {
     try {
       const db = openDb(dbPath);
       const row = db.prepare(`SELECT version FROM schema_version LIMIT 1`).get();
-      assert.equal(row?.version, 2);
+      assert.equal(row?.version, CURRENT_SCHEMA_VERSION);
       db.close();
     } finally {
       fs.rmSync(dbPath, { force: true });
@@ -46,7 +46,7 @@ describe("openDb", () => {
 
       const db = openDb(dbPath);
       const row = db.prepare(`SELECT version FROM schema_version LIMIT 1`).get();
-      assert.equal(row?.version, 2);
+      assert.equal(row?.version, CURRENT_SCHEMA_VERSION);
       db.close();
     } finally {
       fs.rmSync(dbPath, { force: true });
@@ -97,7 +97,7 @@ describe("openDb", () => {
       openDb(dbPath).close();
       const db = openDb(dbPath);
       const row = db.prepare(`SELECT version FROM schema_version LIMIT 1`).get();
-      assert.equal(row?.version, 2);
+      assert.equal(row?.version, CURRENT_SCHEMA_VERSION);
       db.close();
     } finally {
       fs.rmSync(dbPath, { force: true });
