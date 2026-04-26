@@ -428,6 +428,22 @@ describe("updateStyleguideConfig", () => {
       fs.rmSync(syncDir, { recursive: true, force: true });
     }
   });
+
+  test("fails with PROJECT_ID_REQUIRED when scope is project_root without projectId", () => {
+    const syncDir = fs.mkdtempSync(path.join(os.tmpdir(), "styleguide-update-project-guard-"));
+    try {
+      const result = updateStyleguideConfig({
+        syncDir,
+        scope: "project_root",
+        updates: { dialogue_tags: "expressive" },
+      });
+
+      assert.equal(result.ok, false);
+      assert.equal(result.error.code, "PROJECT_ID_REQUIRED");
+    } finally {
+      fs.rmSync(syncDir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("previewStyleguideConfigUpdate", () => {

@@ -371,6 +371,17 @@ function configPathForScope(syncDir, scope, projectId) {
 }
 
 function prepareStyleguideConfigUpdate({ syncDir, scope, projectId, updates = {} }) {
+  if (scope === "project_root" && !projectId) {
+    return {
+      ok: false,
+      error: {
+        code: "PROJECT_ID_REQUIRED",
+        message: "project_id is required when scope=project_root.",
+        details: { scope, project_id: projectId ?? null },
+      },
+    };
+  }
+
   const filePath = configPathForScope(syncDir, scope, projectId);
   const current = readConfigFile(filePath);
 
