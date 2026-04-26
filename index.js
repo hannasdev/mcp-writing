@@ -1680,7 +1680,7 @@ function createMcpServer() {
         checked_scenes: sceneSignals.length,
         unreadable_scenes: unreadableScenes,
         suggested_config: suggestedConfig,
-        next_step: "To apply: (1) If no project-scoped config exists yet, call setup_prose_styleguide_config first with scope=project_root, project_id=<this project_id>, and language (e.g. 'en'). (2) Then call update_prose_styleguide_config with the fields from suggested_config you want to apply.",
+        next_step: `To apply: (1) If no project-scoped config exists yet, call setup_prose_styleguide_config first with scope=project_root, project_id=${project_id}, and language (e.g. 'en'). (2) Then call update_prose_styleguide_config with the fields from suggested_config you want to apply.`,
         scene_signals: include_scene_signals ? sceneSignals : undefined,
       });
     }
