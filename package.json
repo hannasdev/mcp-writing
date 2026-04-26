@@ -1,6 +1,6 @@
 {
   "name": "@hanna84/mcp-writing",
-  "version": "2.9.3",
+  "version": "2.9.4",
   "description": "MCP service for AI-assisted reasoning and editing on long-form fiction projects",
   "type": "module",
   "main": "index.js",
