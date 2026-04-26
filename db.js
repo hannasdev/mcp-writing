@@ -207,7 +207,7 @@ export function openDb(dbPath) {
 
 export function checkpointJobCreate(db, job) {
   db.prepare(`
-    INSERT OR REPLACE INTO async_jobs (job_id, kind, status, created_at, started_at)
+    INSERT OR IGNORE INTO async_jobs (job_id, kind, status, created_at, started_at)
     VALUES (?, ?, ?, ?, ?)
   `).run(job.id, job.kind, job.status, job.createdAt, job.startedAt ?? null);
 }

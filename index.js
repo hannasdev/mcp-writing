@@ -158,6 +158,7 @@ const asyncJobs = new Map();
 
 function pruneAsyncJobs() {
   const now = Date.now();
+  let anyPruned = false;
   for (const [id, job] of asyncJobs.entries()) {
     if (!job.finishedAt) continue;
     if (now - Date.parse(job.finishedAt) > ASYNC_JOB_TTL_MS) {
@@ -172,9 +173,12 @@ function pruneAsyncJobs() {
         // best effort cleanup
       }
       asyncJobs.delete(id);
+      anyPruned = true;
     }
   }
-  try { pruneJobCheckpoints(db, ASYNC_JOB_TTL_MS); } catch { /* best effort */ }
+  if (anyPruned) {
+    try { pruneJobCheckpoints(db, ASYNC_JOB_TTL_MS); } catch { /* best effort */ }
+  }
 }
 
 function readJsonIfExists(filePath) {
