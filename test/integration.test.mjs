@@ -1927,6 +1927,9 @@ describe("get_runtime_config tool", () => {
     const text = await callTool("get_runtime_config");
     const parsed = JSON.parse(text);
 
+    assert.equal(typeof parsed.server_version, "string");
+    assert.ok(parsed.server_version.length > 0);
+
     assert.equal(parsed.sync_dir, readSyncDir);
     assert.equal(parsed.db_path, ":memory:");
     assert.equal(parsed.http_port, TEST_PORT);

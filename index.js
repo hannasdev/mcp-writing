@@ -1521,7 +1521,7 @@ function createMcpServer() {
   // ---- get_runtime_config --------------------------------------------------
   s.tool(
     "get_runtime_config",
-    "Show the active runtime paths and capabilities for this server instance (sync dir, database path, writability, permission diagnostics, and git availability). Use this to verify which manuscript location is currently connected.",
+    "Show the active runtime paths and capabilities for this server instance (server version, sync dir, database path, writability, permission diagnostics, and git availability). Use this to verify which manuscript location is currently connected.",
     {},
     async () => {
       return jsonResponse({
