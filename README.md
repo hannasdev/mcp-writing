@@ -10,9 +10,10 @@ Designed to work with [OpenClaw](https://github.com/openclaw/openclaw) but compa
 
 Instead of feeding an entire manuscript to an AI and hoping it fits in the context window, `mcp-writing` builds a structured index from your scene files. The AI queries that index first — finding relevant characters, beats, and loglines — then loads only the specific prose it needs.
 
-**Phase 1:** Read-only analysis. Ask questions about your project.
-**Phase 2:** Metadata write-back. Answers stay accurate as the manuscript evolves.
-**Phase 3 (current):** AI-assisted prose editing with confirmation and version history.
+**Current status:**
+- **Phase 1-3 completed:** Metadata-first analysis, sidecar-backed metadata maintenance, and AI-assisted prose editing with confirmation + git history.
+- **Phase 4 delivered in part:** Review bundles and Scrivener Direct extraction are complete; embedding search and reference-doc querying are intentionally deferred.
+- **Phase 5 in progress:** OpenClaw runtime integration is active.
 
 ## Who it is for
 
