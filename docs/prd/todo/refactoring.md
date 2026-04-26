@@ -1,6 +1,6 @@
 # Targets for refactoring
 
-**Status:** 🚧 In Progress — Phases A–E done; Phase F in progress (PR 1 of 4 merged)
+**Status:** 🚧 In Progress — Phases A–E done; Phase F in progress (PR 1 of 4 in review)
 
 ---
 
