@@ -1,6 +1,6 @@
 # Workflow Discovery: `describe_workflows` Tool
 
-**Status:** 📋 Todo
+**Status:** ✅ Complete
 
 ---
 
@@ -221,9 +221,9 @@ The `context` object is computed at call time and reflects current server state.
 
 ## Completion Checklist
 
-- [ ] Implement `describe_workflows` tool in `index.js` (or extracted tool group module)
-- [ ] Implement `context` fields: `project_id`, `scene_count`, `styleguide_exists`, `git_available`, `pending_proposals`, `sync_dir`
-- [ ] Define static `WORKFLOW_CATALOGUE` constant with all 8 workflows from this PRD
-- [ ] Register tool first in tool registration order
-- [ ] Add integration test: call returns `ok: true`, `context.scene_count` matches db, all workflow ids present
-- [ ] Update `PRD.md` overview to reference this feature
+- [x] Implement `describe_workflows` tool in `index.js`
+- [x] Implement `context` fields: `project_id`, `scene_count`, `styleguide_exists`, `git_available`, `pending_proposals`, `sync_dir`
+- [x] Define static `WORKFLOW_CATALOGUE` constant with all 9 workflows
+- [x] Register tool first in tool registration order
+- [x] Add integration tests: shape, all workflow ids, `scene_count` vs db, per-workflow structural validity
+- [x] Update `PRD.md` overview to reference this feature
