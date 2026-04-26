@@ -1012,6 +1012,8 @@ function createMcpServer() {
     }
   );
 
+  // Passed to each tool registration module (tools/*.js) to thread state and
+  // shared helpers without circular imports. Grows as groups are extracted.
   const toolContext = {
     db,
     SYNC_DIR,

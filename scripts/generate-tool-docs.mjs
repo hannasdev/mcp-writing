@@ -16,21 +16,23 @@ import { fileURLToPath } from 'node:url';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OUT  = path.join(ROOT, 'docs', 'tools.md');
 
-// Read index.js first, then append tools/*.js (alphabetically).
-// Extracted tools appear after inline tools in the output — registration order
-// within createMcpServer() is not preserved across file boundaries.
-const toolModules = (() => {
-  try {
-    return readdirSync(path.join(ROOT, 'tools'))
-      .filter(f => f.endsWith('.js'))
-      .sort()
-      .map(f => readFileSync(path.join(ROOT, 'tools', f), 'utf8'));
-  } catch {
-    return [];
+// Build a map from each registration function name to its module source.
+// e.g. "registerSyncTools" -> contents of tools/sync.js
+const toolModuleMap = new Map();
+try {
+  for (const f of readdirSync(path.join(ROOT, 'tools')).filter(f => f.endsWith('.js')).sort()) {
+    const content = readFileSync(path.join(ROOT, 'tools', f), 'utf8');
+    const fnName = (content.match(/export function (\w+)\s*\(/) ?? [])[1];
+    if (fnName) toolModuleMap.set(fnName, content);
   }
-})();
+} catch { /* tools/ not yet created */ }
 
-const source = [readFileSync(path.join(ROOT, 'index.js'), 'utf8'), ...toolModules].join('\n');
+// Inline each register*Tools(s, ...) call with the module source so that
+// s.tool() blocks appear in registration order (matching createMcpServer()).
+let source = readFileSync(path.join(ROOT, 'index.js'), 'utf8');
+for (const [fnName, content] of toolModuleMap) {
+  source = source.replace(new RegExp(`[ \\t]*${fnName}\\s*\\([\\s\\S]*?\\);`), content);
+}
 
 function decodeEscape(src, i) {
   const esc = src[i];

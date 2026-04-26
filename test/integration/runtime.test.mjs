@@ -57,7 +57,7 @@ describe("get_runtime_config tool", () => {
     let invalidClient;
 
     try {
-      await waitForServer(invalidUrl);
+      await waitForServer(invalidUrl, invalidProc);
       invalidClient = await connectClient(invalidUrl);
       const result = await invalidClient.callTool({ name: "get_runtime_config", arguments: {} });
       const parsed = JSON.parse(result.content?.[0]?.text ?? "{}");
@@ -79,7 +79,7 @@ describe("get_runtime_config tool", () => {
     let normalizedClient;
 
     try {
-      await waitForServer(normalizedUrl);
+      await waitForServer(normalizedUrl, normalizedProc);
       normalizedClient = await connectClient(normalizedUrl);
       const result = await normalizedClient.callTool({ name: "get_runtime_config", arguments: {} });
       const parsed = JSON.parse(result.content?.[0]?.text ?? "{}");
@@ -103,7 +103,7 @@ describe("get_runtime_config tool", () => {
     let rootClient;
 
     try {
-      await waitForServer(rootUrl);
+      await waitForServer(rootUrl, rootProc);
       rootClient = await connectClient(rootUrl);
       const result = await rootClient.callTool({ name: "get_runtime_config", arguments: {} });
       const parsed = JSON.parse(result.content?.[0]?.text ?? "{}");
@@ -126,7 +126,7 @@ describe("get_runtime_config tool", () => {
     let overrideClient;
 
     try {
-      await waitForServer(overrideUrl);
+      await waitForServer(overrideUrl, overrideProc);
       overrideClient = await connectClient(overrideUrl);
       const result = await overrideClient.callTool({ name: "get_runtime_config", arguments: {} });
       const parsed = JSON.parse(result.content?.[0]?.text ?? "{}");
@@ -151,7 +151,7 @@ describe("get_runtime_config tool", () => {
     let invalidOverrideClient;
 
     try {
-      await waitForServer(invalidOverrideUrl);
+      await waitForServer(invalidOverrideUrl, invalidOverrideProc);
       invalidOverrideClient = await connectClient(invalidOverrideUrl);
       const result = await invalidOverrideClient.callTool({ name: "get_runtime_config", arguments: {} });
       const parsed = JSON.parse(result.content?.[0]?.text ?? "{}");
@@ -336,7 +336,7 @@ describe("describe_workflows tool", () => {
     const flatProc = spawnServer(flatPort, flatSyncDir);
     let flatClient;
     try {
-      await waitForServer(flatUrl);
+      await waitForServer(flatUrl, flatProc);
       flatClient = await connectClient(flatUrl);
       const result = await flatClient.callTool({ name: "describe_workflows", arguments: {} });
       const parsed = JSON.parse(result.content?.[0]?.text ?? "{}");

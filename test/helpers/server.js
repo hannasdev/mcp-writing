@@ -31,7 +31,11 @@ export function spawnServer(port, syncDir, extraEnv = {}) {
   return proc;
 }
 
-export async function waitForServer(url, retries = 20, delayMs = 200) {
+export async function waitForServer(url, proc = null, retries = 20, delayMs = 200) {
+  let stderr = "";
+  if (proc?.stderr) {
+    proc.stderr.on("data", (chunk) => { stderr += chunk.toString("utf8"); });
+  }
   for (let i = 0; i < retries; i++) {
     try {
       const res = await fetch(`${url}/healthz`);
@@ -39,7 +43,8 @@ export async function waitForServer(url, retries = 20, delayMs = 200) {
     } catch {}
     await new Promise((r) => setTimeout(r, delayMs));
   }
-  throw new Error(`Server at ${url} did not become ready`);
+  const hint = stderr.trim() ? `\nServer stderr:\n${stderr.trim()}` : "";
+  throw new Error(`Server at ${url} did not become ready${hint}`);
 }
 
 export async function waitForExit(proc, timeoutMs = 5000) {
@@ -86,13 +91,13 @@ export function createTestContext(readPort, writePort, extraEnv = {}) {
       readSyncDir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-writing-read-"));
       createTestSyncFixture(readSyncDir);
       serverProc = spawnServer(readPort, readSyncDir, { DEFAULT_METADATA_PAGE_SIZE: "2", ...extraEnv });
-      await waitForServer(`http://localhost:${readPort}`);
+      await waitForServer(`http://localhost:${readPort}`, serverProc);
       client = await connectClient(`http://localhost:${readPort}`);
 
       writeSyncDir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-writing-write-"));
       copyDirSync(readSyncDir, writeSyncDir);
       writeServerProc = spawnServer(writePort, writeSyncDir, { DEFAULT_METADATA_PAGE_SIZE: "2", ...extraEnv });
-      await waitForServer(`http://localhost:${writePort}`);
+      await waitForServer(`http://localhost:${writePort}`, writeServerProc);
       writeClient = await connectClient(`http://localhost:${writePort}`);
     },
 
