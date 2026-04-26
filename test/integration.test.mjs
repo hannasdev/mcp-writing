@@ -682,6 +682,37 @@ describe("update_prose_styleguide_config tool", () => {
     assert.equal(persisted.voice_notes, "Leaner and colder.");
   });
 
+  test("returns noop when requested values are unchanged", async () => {
+    fs.writeFileSync(
+      path.join(writeSyncDir, "prose-styleguide.config.yaml"),
+      "language: english_us\ndialogue_tags: minimal\n",
+      "utf8"
+    );
+
+    const text = await callWriteTool("update_prose_styleguide_config", {
+      scope: "sync_root",
+      updates: {
+        dialogue_tags: "minimal",
+      },
+    });
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.noop, true);
+    assert.equal(parsed.changed_fields.length, 0);
+  });
+
+  test("rejects unknown update fields at schema boundary", async () => {
+    const text = await callWriteTool("update_prose_styleguide_config", {
+      scope: "sync_root",
+      updates: {
+        dialogue_tags: "expressive",
+        dialog_tags_typo: "minimal",
+      },
+    });
+    assert.match(text, /Unrecognized key|unrecognized_keys|invalid/i);
+  });
+
   test("requires an existing config at the selected scope", async () => {
     fs.rmSync(path.join(writeSyncDir, "prose-styleguide.config.yaml"), { force: true });
 
@@ -720,6 +751,23 @@ describe("preview_prose_styleguide_config_update tool", () => {
     const persisted = yaml.load(fs.readFileSync(configPath, "utf8"));
     assert.equal(persisted.dialogue_tags, "minimal");
   });
+
+  test("returns noop when requested preview does not change values", async () => {
+    const configPath = path.join(writeSyncDir, "prose-styleguide.config.yaml");
+    fs.writeFileSync(configPath, "language: english_us\ndialogue_tags: minimal\n", "utf8");
+
+    const text = await callWriteTool("preview_prose_styleguide_config_update", {
+      scope: "sync_root",
+      updates: {
+        dialogue_tags: "minimal",
+      },
+    });
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.noop, true);
+    assert.equal(parsed.changed_fields.length, 0);
+  });
 });
 
 describe("check_prose_styleguide_drift tool", () => {
@@ -743,6 +791,36 @@ describe("check_prose_styleguide_drift tool", () => {
         "part: 1",
         "chapter: 1",
         "timeline_position: 1",
+        "---",
+        "\"I go now,\" she says. \"I do what I must.\"",
+      ].join("\n"),
+      "utf8"
+    );
+
+    fs.writeFileSync(
+      path.join(sceneDir, "sc-002.md"),
+      [
+        "---",
+        "scene_id: drift-sc-002",
+        "project_id: drift-demo",
+        "part: 1",
+        "chapter: 1",
+        "timeline_position: 2",
+        "---",
+        "\"I go now,\" she says. \"I do what I must.\"",
+      ].join("\n"),
+      "utf8"
+    );
+
+    fs.writeFileSync(
+      path.join(sceneDir, "sc-003.md"),
+      [
+        "---",
+        "scene_id: drift-sc-003",
+        "project_id: drift-demo",
+        "part: 1",
+        "chapter: 1",
+        "timeline_position: 3",
         "---",
         "\"I go now,\" she says. \"I do what I must.\"",
       ].join("\n"),

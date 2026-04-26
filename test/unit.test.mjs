@@ -487,6 +487,20 @@ describe("styleguide drift analysis", () => {
     assert.equal(suggestions.quotation_style.suggested_value, "double");
     assert.equal(Object.hasOwn(suggestions, "tense"), false);
   });
+
+  test("requires minimum evidence before emitting suggestion", () => {
+    const suggestions = suggestStyleguideUpdatesFromScenes({
+      sceneAnalyses: [
+        { observed: { quotation_style: "double" }, drift: [] },
+        { observed: { quotation_style: "double" }, drift: [] },
+      ],
+      resolvedConfig: { quotation_style: "single" },
+      minAgreement: 0.6,
+      minEvidence: 3,
+    });
+
+    assert.equal(Object.hasOwn(suggestions, "quotation_style"), false);
+  });
 });
 
 describe("buildProseStyleguideSkill", () => {

@@ -1599,7 +1599,7 @@ function createMcpServer() {
         dialogue_tags: z.enum(STYLEGUIDE_ENUMS.dialogue_tags).optional(),
         sentence_fragments: z.enum(STYLEGUIDE_ENUMS.sentence_fragments).optional(),
         voice_notes: z.string().optional(),
-      }).describe("Explicit config field changes to write at the selected scope."),
+      }).strict().describe("Explicit config field changes to write at the selected scope."),
     },
     async ({ scope, project_id, updates }) => {
       if (project_id !== undefined) {
@@ -1645,6 +1645,8 @@ function createMcpServer() {
         file_path: path.resolve(updated.file_path),
         config: updated.config,
         changed_fields: updated.changed_fields,
+        noop: Boolean(updated.noop),
+        message: updated.message,
         warnings: updated.warnings,
       });
     }
@@ -1673,7 +1675,7 @@ function createMcpServer() {
         dialogue_tags: z.enum(STYLEGUIDE_ENUMS.dialogue_tags).optional(),
         sentence_fragments: z.enum(STYLEGUIDE_ENUMS.sentence_fragments).optional(),
         voice_notes: z.string().optional(),
-      }).describe("Explicit config field changes to preview at the selected scope."),
+      }).strict().describe("Explicit config field changes to preview at the selected scope."),
     },
     async ({ scope, project_id, updates }) => {
       if (project_id !== undefined) {
@@ -1712,6 +1714,10 @@ function createMcpServer() {
         current_config: preview.current_config,
         next_config: preview.config,
         changed_fields: preview.changed_fields,
+        noop: preview.changed_fields.length === 0,
+        message: preview.changed_fields.length === 0
+          ? "No changes detected for requested styleguide updates."
+          : "Preview generated.",
         warnings: preview.warnings,
       });
     }

@@ -582,6 +582,20 @@ export function updateStyleguideConfig({ syncDir, scope, projectId, updates = {}
   const prepared = prepareStyleguideConfigUpdate({ syncDir, scope, projectId, updates });
   if (!prepared.ok) return prepared;
 
+  if (prepared.changed_fields.length === 0) {
+    return {
+      ok: true,
+      file_path: prepared.file_path,
+      scope: prepared.scope,
+      project_id: prepared.project_id,
+      config: prepared.config,
+      changed_fields: prepared.changed_fields,
+      warnings: prepared.warnings,
+      noop: true,
+      message: "No changes detected for requested styleguide updates.",
+    };
+  }
+
   fs.mkdirSync(path.dirname(prepared.file_path), { recursive: true });
   fs.writeFileSync(prepared.file_path, yaml.dump(prepared.config, { lineWidth: 120 }), "utf8");
 
@@ -593,6 +607,8 @@ export function updateStyleguideConfig({ syncDir, scope, projectId, updates = {}
     config: prepared.config,
     changed_fields: prepared.changed_fields,
     warnings: prepared.warnings,
+    noop: false,
+    message: "Styleguide config updated.",
   };
 }
 

@@ -95,13 +95,19 @@ export function analyzeSceneStyleguideDrift({ prose, resolvedConfig }) {
   return { observed, drift };
 }
 
-export function suggestStyleguideUpdatesFromScenes({ sceneAnalyses, resolvedConfig, minAgreement = 0.6 }) {
+export function suggestStyleguideUpdatesFromScenes({
+  sceneAnalyses,
+  resolvedConfig,
+  minAgreement = 0.6,
+  minEvidence = 3,
+}) {
   const suggestions = {};
 
   for (const field of ["quotation_style", "em_dash_spacing", "spelling", "tense"]) {
     const values = sceneAnalyses.map((scene) => scene.observed?.[field] ?? null);
     const common = mostCommonValue(values);
     if (!common) continue;
+    if (common.total < minEvidence) continue;
 
     const agreement = common.total > 0 ? common.count / common.total : 0;
     const fieldThreshold = field === "tense" ? Math.max(minAgreement, 0.75) : minAgreement;
