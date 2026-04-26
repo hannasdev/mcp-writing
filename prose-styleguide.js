@@ -391,7 +391,12 @@ function prepareStyleguideConfigUpdate({ syncDir, scope, projectId, updates = {}
       error: {
         code: "STYLEGUIDE_CONFIG_NOT_FOUND",
         message: "Cannot update styleguide config because no config exists at the requested scope.",
-        details: { file_path: filePath, scope, project_id: projectId ?? null },
+        details: {
+          file_path: filePath,
+          scope,
+          project_id: projectId ?? null,
+          next_step: `Call setup_prose_styleguide_config first (scope=${scope}${projectId ? `, project_id=${projectId}` : ""}, language=<e.g. 'en'>), then retry update_prose_styleguide_config.`,
+        },
       },
     };
   }

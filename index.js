@@ -1226,6 +1226,7 @@ function createMcpServer() {
             matched_scenes: targetScenes.length,
             max_scenes,
             project_id,
+            next_step: `Re-run with max_scenes set to at least ${targetScenes.length}.`,
           }
         );
       }
@@ -1485,6 +1486,7 @@ function createMcpServer() {
         config: draft.config,
         inferred_defaults: draft.inferred_defaults,
         warnings: draft.warnings,
+        next_step: "Config created. Call update_prose_styleguide_config to apply field updates.",
       });
     }
   );
@@ -1520,7 +1522,7 @@ function createMcpServer() {
         ok: true,
         styleguide: resolved,
         next_step: resolved.setup_required
-          ? "No prose-styleguide.config.yaml was found. Run setup to create one at sync root or project root."
+          ? "No prose-styleguide.config.yaml was found. Call setup_prose_styleguide_config (with language e.g. 'en') to create one at sync root or project root."
           : "Config resolved successfully.",
       });
     }
@@ -1632,7 +1634,7 @@ function createMcpServer() {
         return errorResponse(
           "VALIDATION_ERROR",
           `Matched ${targetScenes.length} scenes, which exceeds max_scenes=${max_scenes}.`,
-          { matched_scenes: targetScenes.length, max_scenes, project_id }
+          { matched_scenes: targetScenes.length, max_scenes, project_id, next_step: `Re-run with max_scenes set to at least ${targetScenes.length}.` }
         );
       }
 
@@ -1669,7 +1671,7 @@ function createMcpServer() {
         checked_scenes: sceneSignals.length,
         unreadable_scenes: unreadableScenes,
         suggested_config: suggestedConfig,
-        next_step: "Review suggested_config, then write accepted fields via update_prose_styleguide_config.",
+        next_step: "To apply: (1) If no project-scoped config exists yet, call setup_prose_styleguide_config first with scope=project_root, project_id=<this project_id>, and language (e.g. 'en'). (2) Then call update_prose_styleguide_config with the fields from suggested_config you want to apply.",
         scene_signals: include_scene_signals ? sceneSignals : undefined,
       });
     }
@@ -1886,7 +1888,7 @@ function createMcpServer() {
         return errorResponse(
           "VALIDATION_ERROR",
           `Matched ${targetScenes.length} scenes, which exceeds max_scenes=${max_scenes}.`,
-          { matched_scenes: targetScenes.length, max_scenes, project_id }
+          { matched_scenes: targetScenes.length, max_scenes, project_id, next_step: `Re-run with max_scenes set to at least ${targetScenes.length}.` }
         );
       }
 
