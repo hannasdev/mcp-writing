@@ -5,6 +5,7 @@
 
 ## Tools
 
+- [`describe_workflows`](#describe_workflows)
 - [`sync`](#sync)
 - [`import_scrivener_sync`](#import_scrivener_sync)
 - [`import_scrivener_sync_async`](#import_scrivener_sync_async)
@@ -49,6 +50,14 @@
 - [`discard_edit`](#discard_edit)
 - [`snapshot_scene`](#snapshot_scene)
 - [`list_snapshots`](#list_snapshots)
+
+---
+
+## describe_workflows
+
+Return a map of available task workflows and the current project context. Call this at the start of a session or whenever you are unsure what to do next. Never write scripts to invoke tools — call them directly.
+
+_No parameters._
 
 ---
 
