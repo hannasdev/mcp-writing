@@ -1784,7 +1784,7 @@ function createMcpServer() {
 
       const sceneAnalyses = [];
       for (const scene of targetScenes) {
-        let prose = "";
+        let prose;
         try {
           const raw = fs.readFileSync(scene.file_path, "utf8");
           prose = matter(raw).content;
