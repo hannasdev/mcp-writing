@@ -16,6 +16,10 @@
 - [`get_runtime_config`](#get_runtime_config)
 - [`setup_prose_styleguide_config`](#setup_prose_styleguide_config)
 - [`get_prose_styleguide_config`](#get_prose_styleguide_config)
+- [`summarize_prose_styleguide_config`](#summarize_prose_styleguide_config)
+- [`update_prose_styleguide_config`](#update_prose_styleguide_config)
+- [`preview_prose_styleguide_config_update`](#preview_prose_styleguide_config_update)
+- [`check_prose_styleguide_drift`](#check_prose_styleguide_drift)
 - [`setup_prose_styleguide_skill`](#setup_prose_styleguide_skill)
 - [`preview_review_bundle`](#preview_review_bundle)
 - [`create_review_bundle`](#create_review_bundle)
@@ -180,6 +184,56 @@ Resolve prose-styleguide.config.yaml with cascading precedence (sync root, then 
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |
 | `project_id` | `string` | No | Optional project ID for project-scoped resolution (e.g. 'the-lamb' or 'universe-1/book-1'). |
+
+---
+
+## summarize_prose_styleguide_config
+
+Summarize the currently resolved prose styleguide config in plain language for review or confirmation.
+
+| Parameter | Type | Required | Description |
+| --- | --- | :---: | --- |
+| `project_id` | `string` | No | Optional project ID for project-scoped resolution (e.g. 'the-lamb' or 'universe-1/book-1'). |
+
+---
+
+## update_prose_styleguide_config
+
+Update an existing prose-styleguide.config.yaml at sync-root or project-root scope by writing only explicit field changes.
+
+| Parameter | Type | Required | Description |
+| --- | --- | :---: | --- |
+| `scope` | `enum("sync_root","project_root")` | Yes | Config scope to update. |
+| `project_id` | `string` | No | Project ID when updating project_root config (e.g. 'the-lamb' or 'universe-1/book-1'). |
+| `updates` | `object` | No | Explicit config field changes to write at the selected scope. |
+
+---
+
+## preview_prose_styleguide_config_update
+
+Preview how explicit updates would change an existing prose-styleguide.config.yaml without writing any files.
+
+| Parameter | Type | Required | Description |
+| --- | --- | :---: | --- |
+| `scope` | `enum("sync_root","project_root")` | Yes | Config scope to preview updates for. |
+| `project_id` | `string` | No | Project ID when previewing project_root config updates (e.g. 'the-lamb' or 'universe-1/book-1'). |
+| `updates` | `object` | No | Explicit config field changes to preview at the selected scope. |
+
+---
+
+## check_prose_styleguide_drift
+
+Detect styleguide drift by comparing declared config conventions against observed signals in scene prose.
+
+| Parameter | Type | Required | Description |
+| --- | --- | :---: | --- |
+| `project_id` | `string` | Yes | Project ID to analyze (e.g. 'the-lamb' or 'universe-1/book-1'). |
+| `scene_ids` | `string[]` | No | Optional scene_id allowlist to analyze. |
+| `part` | `integer` | No | Optional part filter. |
+| `chapter` | `integer` | No | Optional chapter filter. |
+| `max_scenes` | `integer` | No | Maximum number of scenes to analyze (default: 50). |
+| `min_agreement` | `number` | No | Minimum agreement ratio for suggested updates (default: 0.6). |
+| `include_clean_scenes` | `boolean` | No | If true, include scenes with no detected drift in scene_results. |
 
 ---
 

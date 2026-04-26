@@ -631,6 +631,141 @@ describe("get_prose_styleguide_config tool", () => {
   });
 });
 
+describe("summarize_prose_styleguide_config tool", () => {
+  test("returns a plain-language summary of the resolved config", async () => {
+    fs.writeFileSync(
+      path.join(writeSyncDir, "prose-styleguide.config.yaml"),
+      [
+        "language: english_uk",
+        "dialogue_tags: minimal",
+        "voice_notes: |",
+        "  Quietly intense.",
+      ].join("\n"),
+      "utf8"
+    );
+
+    const text = await callWriteTool("summarize_prose_styleguide_config");
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.ok, true);
+    assert.match(parsed.summary_text, /Writing language: english_uk\./);
+    assert.match(parsed.summary_text, /Dialogue tag policy: minimal\./);
+    assert.match(parsed.summary_text, /Voice notes: Quietly intense\./);
+    assert.ok(Array.isArray(parsed.summary_lines));
+  });
+});
+
+describe("update_prose_styleguide_config tool", () => {
+  test("updates an existing sync-root config", async () => {
+    fs.writeFileSync(
+      path.join(writeSyncDir, "prose-styleguide.config.yaml"),
+      "language: english_us\ndialogue_tags: minimal\n",
+      "utf8"
+    );
+
+    const text = await callWriteTool("update_prose_styleguide_config", {
+      scope: "sync_root",
+      updates: {
+        dialogue_tags: "expressive",
+        voice_notes: "Leaner and colder.",
+      },
+    });
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.config.language, "english_us");
+    assert.equal(parsed.config.dialogue_tags, "expressive");
+    assert.equal(parsed.config.voice_notes, "Leaner and colder.");
+
+    const persisted = yaml.load(fs.readFileSync(path.join(writeSyncDir, "prose-styleguide.config.yaml"), "utf8"));
+    assert.equal(persisted.dialogue_tags, "expressive");
+    assert.equal(persisted.voice_notes, "Leaner and colder.");
+  });
+
+  test("requires an existing config at the selected scope", async () => {
+    fs.rmSync(path.join(writeSyncDir, "prose-styleguide.config.yaml"), { force: true });
+
+    const text = await callWriteTool("update_prose_styleguide_config", {
+      scope: "sync_root",
+      updates: {
+        dialogue_tags: "expressive",
+      },
+    });
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.ok, false);
+    assert.equal(parsed.error.code, "STYLEGUIDE_CONFIG_NOT_FOUND");
+  });
+});
+
+describe("preview_prose_styleguide_config_update tool", () => {
+  test("returns before/after config and changed fields without persisting", async () => {
+    const configPath = path.join(writeSyncDir, "prose-styleguide.config.yaml");
+    fs.writeFileSync(configPath, "language: english_us\ndialogue_tags: minimal\n", "utf8");
+
+    const text = await callWriteTool("preview_prose_styleguide_config_update", {
+      scope: "sync_root",
+      updates: {
+        dialogue_tags: "expressive",
+      },
+    });
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.current_config.dialogue_tags, "minimal");
+    assert.equal(parsed.next_config.dialogue_tags, "expressive");
+    assert.equal(parsed.changed_fields.length, 1);
+    assert.equal(parsed.changed_fields[0].field, "dialogue_tags");
+
+    const persisted = yaml.load(fs.readFileSync(configPath, "utf8"));
+    assert.equal(persisted.dialogue_tags, "minimal");
+  });
+});
+
+describe("check_prose_styleguide_drift tool", () => {
+  test("returns scene drift signals and suggested updates", async () => {
+    const projectId = "drift-demo";
+    const sceneDir = path.join(writeSyncDir, "projects", projectId, "scenes");
+    fs.mkdirSync(sceneDir, { recursive: true });
+
+    fs.writeFileSync(
+      path.join(writeSyncDir, "prose-styleguide.config.yaml"),
+      "language: english_uk\nquotation_style: single\ntense: past\n",
+      "utf8"
+    );
+
+    fs.writeFileSync(
+      path.join(sceneDir, "sc-001.md"),
+      [
+        "---",
+        "scene_id: drift-sc-001",
+        "project_id: drift-demo",
+        "part: 1",
+        "chapter: 1",
+        "timeline_position: 1",
+        "---",
+        "\"I go now,\" she says. \"I do what I must.\"",
+      ].join("\n"),
+      "utf8"
+    );
+
+    const syncText = await callWriteTool("sync");
+    assert.match(syncText, /scenes indexed/);
+
+    const text = await callWriteTool("check_prose_styleguide_drift", {
+      project_id: projectId,
+      max_scenes: 10,
+    });
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.checked_scenes >= 1, true);
+    assert.equal(parsed.scenes_with_drift >= 1, true);
+    assert.equal(Array.isArray(parsed.scene_results), true);
+    assert.equal(Object.hasOwn(parsed.suggested_updates, "quotation_style"), true);
+  });
+});
+
 describe("setup_prose_styleguide_skill tool", () => {
   test("requires a styleguide config before skill generation", async () => {
     const rootConfigPath = path.join(writeSyncDir, "prose-styleguide.config.yaml");

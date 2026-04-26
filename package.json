@@ -18,6 +18,7 @@
     "scene-character-normalization.js",
     "review-bundles.js",
     "prose-styleguide.js",
+    "prose-styleguide-drift.js",
     "prose-styleguide-skill.js",
     "scripts/",
     "README.md",

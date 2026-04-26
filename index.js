@@ -21,8 +21,15 @@ import {
   STYLEGUIDE_CONFIG_BASENAME,
   STYLEGUIDE_ENUMS,
   buildStyleguideConfigDraft,
+  previewStyleguideConfigUpdate,
   resolveStyleguideConfig,
+  summarizeStyleguideConfig,
+  updateStyleguideConfig,
 } from "./prose-styleguide.js";
+import {
+  analyzeSceneStyleguideDrift,
+  suggestStyleguideUpdatesFromScenes,
+} from "./prose-styleguide-drift.js";
 import {
   PROSE_STYLEGUIDE_SKILL_BASENAME,
   PROSE_STYLEGUIDE_SKILL_DIRNAME,
@@ -1514,6 +1521,318 @@ function createMcpServer() {
         next_step: resolved.setup_required
           ? "No prose-styleguide.config.yaml was found. Run setup to create one at sync root or project root."
           : "Config resolved successfully.",
+      });
+    }
+  );
+
+  s.tool(
+    "summarize_prose_styleguide_config",
+    "Summarize the currently resolved prose styleguide config in plain language for review or confirmation.",
+    {
+      project_id: z.string().optional().describe("Optional project ID for project-scoped resolution (e.g. 'the-lamb' or 'universe-1/book-1')."),
+    },
+    async ({ project_id }) => {
+      if (project_id !== undefined) {
+        const projectIdCheck = validateProjectId(project_id);
+        if (!projectIdCheck.ok) {
+          return errorResponse("INVALID_PROJECT_ID", projectIdCheck.reason, { project_id });
+        }
+      }
+
+      const resolved = resolveStyleguideConfig({
+        syncDir: SYNC_DIR,
+        projectId: project_id,
+      });
+      if (!resolved.ok) {
+        return errorResponse(
+          resolved.error.code,
+          resolved.error.message,
+          resolved.error.details
+        );
+      }
+      if (resolved.setup_required || !resolved.resolved_config) {
+        return errorResponse(
+          "STYLEGUIDE_CONFIG_REQUIRED",
+          "Cannot summarize prose styleguide config before prose-styleguide.config.yaml is set up.",
+          { project_id: project_id ?? null }
+        );
+      }
+
+      const summary = summarizeStyleguideConfig({
+        resolvedConfig: resolved.resolved_config,
+        inferredDefaults: resolved.inferred_defaults,
+      });
+      if (!summary.ok) {
+        return errorResponse(summary.error.code, summary.error.message);
+      }
+
+      return jsonResponse({
+        ok: true,
+        project_id: project_id ?? null,
+        summary_text: summary.summary_text,
+        summary_lines: summary.summary_lines,
+        styleguide: resolved,
+      });
+    }
+  );
+
+  s.tool(
+    "update_prose_styleguide_config",
+    "Update an existing prose-styleguide.config.yaml at sync-root or project-root scope by writing only explicit field changes.",
+    {
+      scope: z.enum(["sync_root", "project_root"]).describe("Config scope to update."),
+      project_id: z.string().optional().describe("Project ID when updating project_root config (e.g. 'the-lamb' or 'universe-1/book-1')."),
+      updates: z.object({
+        language: z.enum(STYLEGUIDE_ENUMS.language).optional(),
+        spelling: z.enum(STYLEGUIDE_ENUMS.spelling).optional(),
+        quotation_style: z.enum(STYLEGUIDE_ENUMS.quotation_style).optional(),
+        quotation_style_nested: z.enum(STYLEGUIDE_ENUMS.quotation_style_nested).optional(),
+        em_dash_spacing: z.enum(STYLEGUIDE_ENUMS.em_dash_spacing).optional(),
+        ellipsis_style: z.enum(STYLEGUIDE_ENUMS.ellipsis_style).optional(),
+        abbreviation_periods: z.enum(STYLEGUIDE_ENUMS.abbreviation_periods).optional(),
+        oxford_comma: z.enum(STYLEGUIDE_ENUMS.oxford_comma).optional(),
+        numbers: z.enum(STYLEGUIDE_ENUMS.numbers).optional(),
+        date_format: z.enum(STYLEGUIDE_ENUMS.date_format).optional(),
+        time_format: z.enum(STYLEGUIDE_ENUMS.time_format).optional(),
+        tense: z.string().optional(),
+        pov: z.enum(STYLEGUIDE_ENUMS.pov).optional(),
+        dialogue_tags: z.enum(STYLEGUIDE_ENUMS.dialogue_tags).optional(),
+        sentence_fragments: z.enum(STYLEGUIDE_ENUMS.sentence_fragments).optional(),
+        voice_notes: z.string().optional(),
+      }).describe("Explicit config field changes to write at the selected scope."),
+    },
+    async ({ scope, project_id, updates }) => {
+      if (project_id !== undefined) {
+        const projectIdCheck = validateProjectId(project_id);
+        if (!projectIdCheck.ok) {
+          return errorResponse("INVALID_PROJECT_ID", projectIdCheck.reason, { project_id });
+        }
+      }
+
+      if (scope === "project_root" && !project_id) {
+        return errorResponse(
+          "PROJECT_ID_REQUIRED",
+          "project_id is required when scope=project_root."
+        );
+      }
+
+      if (!SYNC_DIR_WRITABLE) {
+        return errorResponse(
+          "SYNC_DIR_NOT_WRITABLE",
+          "Cannot update styleguide config because WRITING_SYNC_DIR is not writable in this runtime.",
+          { sync_dir: SYNC_DIR_ABS }
+        );
+      }
+
+      const updated = updateStyleguideConfig({
+        syncDir: SYNC_DIR,
+        scope,
+        projectId: project_id,
+        updates,
+      });
+      if (!updated.ok) {
+        return errorResponse(
+          updated.error.code,
+          updated.error.message,
+          updated.error.details
+        );
+      }
+
+      return jsonResponse({
+        ok: true,
+        scope: updated.scope,
+        project_id: updated.project_id,
+        file_path: path.resolve(updated.file_path),
+        config: updated.config,
+        changed_fields: updated.changed_fields,
+        warnings: updated.warnings,
+      });
+    }
+  );
+
+  s.tool(
+    "preview_prose_styleguide_config_update",
+    "Preview how explicit updates would change an existing prose-styleguide.config.yaml without writing any files.",
+    {
+      scope: z.enum(["sync_root", "project_root"]).describe("Config scope to preview updates for."),
+      project_id: z.string().optional().describe("Project ID when previewing project_root config updates (e.g. 'the-lamb' or 'universe-1/book-1')."),
+      updates: z.object({
+        language: z.enum(STYLEGUIDE_ENUMS.language).optional(),
+        spelling: z.enum(STYLEGUIDE_ENUMS.spelling).optional(),
+        quotation_style: z.enum(STYLEGUIDE_ENUMS.quotation_style).optional(),
+        quotation_style_nested: z.enum(STYLEGUIDE_ENUMS.quotation_style_nested).optional(),
+        em_dash_spacing: z.enum(STYLEGUIDE_ENUMS.em_dash_spacing).optional(),
+        ellipsis_style: z.enum(STYLEGUIDE_ENUMS.ellipsis_style).optional(),
+        abbreviation_periods: z.enum(STYLEGUIDE_ENUMS.abbreviation_periods).optional(),
+        oxford_comma: z.enum(STYLEGUIDE_ENUMS.oxford_comma).optional(),
+        numbers: z.enum(STYLEGUIDE_ENUMS.numbers).optional(),
+        date_format: z.enum(STYLEGUIDE_ENUMS.date_format).optional(),
+        time_format: z.enum(STYLEGUIDE_ENUMS.time_format).optional(),
+        tense: z.string().optional(),
+        pov: z.enum(STYLEGUIDE_ENUMS.pov).optional(),
+        dialogue_tags: z.enum(STYLEGUIDE_ENUMS.dialogue_tags).optional(),
+        sentence_fragments: z.enum(STYLEGUIDE_ENUMS.sentence_fragments).optional(),
+        voice_notes: z.string().optional(),
+      }).describe("Explicit config field changes to preview at the selected scope."),
+    },
+    async ({ scope, project_id, updates }) => {
+      if (project_id !== undefined) {
+        const projectIdCheck = validateProjectId(project_id);
+        if (!projectIdCheck.ok) {
+          return errorResponse("INVALID_PROJECT_ID", projectIdCheck.reason, { project_id });
+        }
+      }
+
+      if (scope === "project_root" && !project_id) {
+        return errorResponse(
+          "PROJECT_ID_REQUIRED",
+          "project_id is required when scope=project_root."
+        );
+      }
+
+      const preview = previewStyleguideConfigUpdate({
+        syncDir: SYNC_DIR,
+        scope,
+        projectId: project_id,
+        updates,
+      });
+      if (!preview.ok) {
+        return errorResponse(
+          preview.error.code,
+          preview.error.message,
+          preview.error.details
+        );
+      }
+
+      return jsonResponse({
+        ok: true,
+        scope: preview.scope,
+        project_id: preview.project_id,
+        file_path: path.resolve(preview.file_path),
+        current_config: preview.current_config,
+        next_config: preview.config,
+        changed_fields: preview.changed_fields,
+        warnings: preview.warnings,
+      });
+    }
+  );
+
+  s.tool(
+    "check_prose_styleguide_drift",
+    "Detect styleguide drift by comparing declared config conventions against observed signals in scene prose.",
+    {
+      project_id: z.string().describe("Project ID to analyze (e.g. 'the-lamb' or 'universe-1/book-1')."),
+      scene_ids: z.array(z.string()).optional().describe("Optional scene_id allowlist to analyze."),
+      part: z.number().int().optional().describe("Optional part filter."),
+      chapter: z.number().int().optional().describe("Optional chapter filter."),
+      max_scenes: z.number().int().positive().optional().describe("Maximum number of scenes to analyze (default: 50)."),
+      min_agreement: z.number().min(0).max(1).optional().describe("Minimum agreement ratio for suggested updates (default: 0.6)."),
+      include_clean_scenes: z.boolean().optional().describe("If true, include scenes with no detected drift in scene_results."),
+    },
+    async ({
+      project_id,
+      scene_ids,
+      part,
+      chapter,
+      max_scenes = 50,
+      min_agreement = 0.6,
+      include_clean_scenes = false,
+    }) => {
+      const projectIdCheck = validateProjectId(project_id);
+      if (!projectIdCheck.ok) {
+        return errorResponse("INVALID_PROJECT_ID", projectIdCheck.reason, { project_id });
+      }
+
+      const resolved = resolveStyleguideConfig({
+        syncDir: SYNC_DIR,
+        projectId: project_id,
+      });
+      if (!resolved.ok) {
+        return errorResponse(
+          resolved.error.code,
+          resolved.error.message,
+          resolved.error.details
+        );
+      }
+      if (resolved.setup_required || !resolved.resolved_config) {
+        return errorResponse(
+          "STYLEGUIDE_CONFIG_REQUIRED",
+          "Cannot check prose styleguide drift before prose-styleguide.config.yaml is set up.",
+          { project_id }
+        );
+      }
+
+      const targetResolution = resolveBatchTargetScenes(db, {
+        projectId: project_id,
+        sceneIds: scene_ids,
+        part,
+        chapter,
+        onlyStale: false,
+      });
+      if (!targetResolution.ok) {
+        return errorResponse(targetResolution.code, targetResolution.message, targetResolution.details);
+      }
+
+      const targetScenes = targetResolution.rows;
+      if (targetScenes.length > max_scenes) {
+        return errorResponse(
+          "VALIDATION_ERROR",
+          `Matched ${targetScenes.length} scenes, which exceeds max_scenes=${max_scenes}.`,
+          { matched_scenes: targetScenes.length, max_scenes, project_id }
+        );
+      }
+
+      const sceneAnalyses = [];
+      for (const scene of targetScenes) {
+        let prose = "";
+        try {
+          const raw = fs.readFileSync(scene.file_path, "utf8");
+          prose = matter(raw).content;
+        } catch {
+          sceneAnalyses.push({
+            scene_id: scene.scene_id,
+            observed: {},
+            drift: [{ field: "scene_file", declared: "readable", observed: "unreadable" }],
+          });
+          continue;
+        }
+
+        const analysis = analyzeSceneStyleguideDrift({
+          prose,
+          resolvedConfig: resolved.resolved_config,
+        });
+        sceneAnalyses.push({
+          scene_id: scene.scene_id,
+          observed: analysis.observed,
+          drift: analysis.drift,
+        });
+      }
+
+      const suggestedUpdates = suggestStyleguideUpdatesFromScenes({
+        sceneAnalyses,
+        resolvedConfig: resolved.resolved_config,
+        minAgreement: min_agreement,
+      });
+
+      const filteredScenes = include_clean_scenes
+        ? sceneAnalyses
+        : sceneAnalyses.filter((scene) => scene.drift.length > 0);
+
+      const driftByField = {};
+      for (const scene of sceneAnalyses) {
+        for (const entry of scene.drift) {
+          driftByField[entry.field] = (driftByField[entry.field] ?? 0) + 1;
+        }
+      }
+
+      return jsonResponse({
+        ok: true,
+        project_id,
+        checked_scenes: sceneAnalyses.length,
+        scenes_with_drift: sceneAnalyses.filter((scene) => scene.drift.length > 0).length,
+        drift_by_field: driftByField,
+        scene_results: filteredScenes,
+        suggested_updates: suggestedUpdates,
       });
     }
   );

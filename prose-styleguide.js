@@ -67,6 +67,25 @@ export const STYLEGUIDE_ENUMS = Object.freeze(
   )
 );
 
+const STYLEGUIDE_FIELD_ORDER = [
+  "language",
+  "spelling",
+  "quotation_style",
+  "quotation_style_nested",
+  "em_dash_spacing",
+  "ellipsis_style",
+  "abbreviation_periods",
+  "oxford_comma",
+  "numbers",
+  "date_format",
+  "time_format",
+  "tense",
+  "pov",
+  "dialogue_tags",
+  "sentence_fragments",
+  "voice_notes",
+];
+
 // Fields that are valid in a config but are not enum-constrained.
 const SPECIAL_FIELDS = new Set(["voice_notes"]);
 
@@ -344,6 +363,87 @@ function readConfigFile(filePath) {
   };
 }
 
+function configPathForScope(syncDir, scope, projectId) {
+  if (scope === "sync_root") {
+    return path.join(syncDir, STYLEGUIDE_CONFIG_BASENAME);
+  }
+  return path.join(projectRootFromId(syncDir, projectId), STYLEGUIDE_CONFIG_BASENAME);
+}
+
+function prepareStyleguideConfigUpdate({ syncDir, scope, projectId, updates = {} }) {
+  const filePath = configPathForScope(syncDir, scope, projectId);
+  const current = readConfigFile(filePath);
+
+  if (current === null) {
+    return {
+      ok: false,
+      error: {
+        code: "STYLEGUIDE_CONFIG_NOT_FOUND",
+        message: "Cannot update styleguide config because no config exists at the requested scope.",
+        details: { file_path: filePath, scope, project_id: projectId ?? null },
+      },
+    };
+  }
+
+  if (!current.ok) {
+    return {
+      ok: false,
+      error: {
+        code: "INVALID_STYLEGUIDE_CONFIG",
+        message: "Styleguide config validation failed.",
+        details: { file_path: filePath, issues: current.errors },
+      },
+    };
+  }
+
+  const validatedUpdates = validateConfig(updates, "<updates>");
+  if (validatedUpdates.errors.length > 0) {
+    return {
+      ok: false,
+      error: {
+        code: "INVALID_STYLEGUIDE_UPDATE",
+        message: "Requested styleguide updates failed validation.",
+        details: validatedUpdates.errors,
+      },
+    };
+  }
+
+  const merged = Object.create(null);
+  Object.assign(merged, current.config, validatedUpdates.normalized);
+
+  const ordered = Object.create(null);
+  for (const key of STYLEGUIDE_FIELD_ORDER) {
+    if (merged[key] !== undefined) {
+      ordered[key] = merged[key];
+    }
+  }
+
+  const changedFields = [];
+  const allKeys = new Set([...Object.keys(current.config ?? {}), ...Object.keys(ordered)]);
+  for (const key of allKeys) {
+    if (current.config?.[key] !== ordered[key]) {
+      changedFields.push({
+        field: key,
+        before: current.config?.[key],
+        after: ordered[key],
+      });
+    }
+  }
+
+  return {
+    ok: true,
+    file_path: filePath,
+    scope,
+    project_id: projectId ?? null,
+    current_config: current.config,
+    config: ordered,
+    changed_fields: changedFields,
+    warnings: {
+      unknown_fields: validatedUpdates.unknownFields,
+    },
+  };
+}
+
 function getConfigCandidates(syncDir, projectId) {
   const candidates = [
     {
@@ -440,6 +540,64 @@ export function buildStyleguideConfigDraft({ language, overrides = {}, voice_not
       unknown_fields: overrideValidation.unknownFields,
     },
   };
+}
+
+export function summarizeStyleguideConfig({ resolvedConfig, inferredDefaults = {} }) {
+  if (!resolvedConfig || typeof resolvedConfig !== "object") {
+    return {
+      ok: false,
+      error: {
+        code: "INVALID_STYLEGUIDE_CONFIG",
+        message: "Cannot summarize styleguide config without a resolved config object.",
+      },
+    };
+  }
+
+  const lines = [];
+  if (resolvedConfig.language) lines.push(`Writing language: ${resolvedConfig.language}.`);
+  if (resolvedConfig.spelling) lines.push(`Spelling variant: ${resolvedConfig.spelling}.`);
+  if (resolvedConfig.quotation_style) lines.push(`Dialogue punctuation uses ${resolvedConfig.quotation_style}.`);
+  if (resolvedConfig.quotation_style_nested) lines.push(`Nested quotations use ${resolvedConfig.quotation_style_nested}.`);
+  if (resolvedConfig.tense) lines.push(`Default narrative tense: ${resolvedConfig.tense}.`);
+  if (resolvedConfig.pov) lines.push(`Default POV: ${resolvedConfig.pov}.`);
+  if (resolvedConfig.dialogue_tags) lines.push(`Dialogue tag policy: ${resolvedConfig.dialogue_tags}.`);
+  if (resolvedConfig.sentence_fragments) lines.push(`Sentence fragments: ${resolvedConfig.sentence_fragments}.`);
+  if (resolvedConfig.date_format) lines.push(`Date format: ${resolvedConfig.date_format}.`);
+  if (resolvedConfig.time_format) lines.push(`Time format: ${resolvedConfig.time_format}.`);
+  if (resolvedConfig.voice_notes) lines.push(`Voice notes: ${resolvedConfig.voice_notes}`);
+
+  const inferred = Object.keys(inferredDefaults);
+  if (inferred.length > 0) {
+    lines.push(`Inferred defaults currently fill: ${inferred.join(", ")}.`);
+  }
+
+  return {
+    ok: true,
+    summary_text: lines.join(" "),
+    summary_lines: lines,
+  };
+}
+
+export function updateStyleguideConfig({ syncDir, scope, projectId, updates = {} }) {
+  const prepared = prepareStyleguideConfigUpdate({ syncDir, scope, projectId, updates });
+  if (!prepared.ok) return prepared;
+
+  fs.mkdirSync(path.dirname(prepared.file_path), { recursive: true });
+  fs.writeFileSync(prepared.file_path, yaml.dump(prepared.config, { lineWidth: 120 }), "utf8");
+
+  return {
+    ok: true,
+    file_path: prepared.file_path,
+    scope: prepared.scope,
+    project_id: prepared.project_id,
+    config: prepared.config,
+    changed_fields: prepared.changed_fields,
+    warnings: prepared.warnings,
+  };
+}
+
+export function previewStyleguideConfigUpdate({ syncDir, scope, projectId, updates = {} }) {
+  return prepareStyleguideConfigUpdate({ syncDir, scope, projectId, updates });
 }
 
 export function resolveStyleguideConfig({ syncDir, projectId }) {

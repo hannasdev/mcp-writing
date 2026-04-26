@@ -35,8 +35,9 @@ import {
 import { runSceneCharacterBatch } from "../scene-character-batch.js";
 import { buildCharacterNormalizationContext, isDistinctiveToken, normalizeSceneCharacters } from "../scene-character-normalization.js";
 import { buildReviewBundlePlan, renderReviewBundleMarkdown, ReviewBundlePlanError } from "../review-bundles.js";
-import { buildStyleguideConfigDraft, resolveStyleguideConfig } from "../prose-styleguide.js";
+import { buildStyleguideConfigDraft, previewStyleguideConfigUpdate, resolveStyleguideConfig, summarizeStyleguideConfig, updateStyleguideConfig } from "../prose-styleguide.js";
 import { buildProseStyleguideSkill } from "../prose-styleguide-skill.js";
+import { analyzeSceneStyleguideDrift, suggestStyleguideUpdatesFromScenes } from "../prose-styleguide-drift.js";
 
 function insertTestScene(db, {
   sceneId,
@@ -352,6 +353,139 @@ describe("styleguide config hardening", () => {
     } finally {
       fs.rmSync(syncDir, { recursive: true, force: true });
     }
+  });
+});
+
+describe("summarizeStyleguideConfig", () => {
+  test("renders plain-language summary lines", () => {
+    const result = summarizeStyleguideConfig({
+      resolvedConfig: {
+        language: "english_uk",
+        spelling: "uk",
+        quotation_style: "single",
+        tense: "present",
+        dialogue_tags: "minimal",
+        voice_notes: "Restrained and precise.",
+      },
+      inferredDefaults: { spelling: "uk", quotation_style: "single" },
+    });
+
+    assert.equal(result.ok, true);
+    assert.match(result.summary_text, /Writing language: english_uk\./);
+    assert.match(result.summary_text, /Spelling variant: uk\./);
+    assert.match(result.summary_text, /Dialogue punctuation uses single\./);
+    assert.match(result.summary_text, /Voice notes: Restrained and precise\./);
+    assert.match(result.summary_text, /Inferred defaults currently fill: spelling, quotation_style\./);
+  });
+});
+
+describe("updateStyleguideConfig", () => {
+  test("updates explicit fields on an existing config layer without expanding defaults", () => {
+    const syncDir = fs.mkdtempSync(path.join(os.tmpdir(), "styleguide-update-"));
+    try {
+      fs.writeFileSync(
+        path.join(syncDir, "prose-styleguide.config.yaml"),
+        "language: english_us\ndialogue_tags: minimal\n",
+        "utf8"
+      );
+
+      const result = updateStyleguideConfig({
+        syncDir,
+        scope: "sync_root",
+        updates: {
+          dialogue_tags: "expressive",
+          voice_notes: "Sharper interiority.",
+        },
+      });
+
+      assert.equal(result.ok, true);
+      assert.equal(result.config.language, "english_us");
+      assert.equal(result.config.dialogue_tags, "expressive");
+      assert.equal(result.config.voice_notes, "Sharper interiority.");
+
+      const persisted = yaml.load(fs.readFileSync(path.join(syncDir, "prose-styleguide.config.yaml"), "utf8"));
+      assert.equal(persisted.language, "english_us");
+      assert.equal(persisted.dialogue_tags, "expressive");
+      assert.equal(persisted.voice_notes, "Sharper interiority.");
+      assert.equal(persisted.spelling, undefined);
+    } finally {
+      fs.rmSync(syncDir, { recursive: true, force: true });
+    }
+  });
+
+  test("fails when the target scope has no config file yet", () => {
+    const syncDir = fs.mkdtempSync(path.join(os.tmpdir(), "styleguide-update-missing-"));
+    try {
+      const result = updateStyleguideConfig({
+        syncDir,
+        scope: "sync_root",
+        updates: { dialogue_tags: "expressive" },
+      });
+
+      assert.equal(result.ok, false);
+      assert.equal(result.error.code, "STYLEGUIDE_CONFIG_NOT_FOUND");
+    } finally {
+      fs.rmSync(syncDir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("previewStyleguideConfigUpdate", () => {
+  test("returns before/after and changed fields without writing", () => {
+    const syncDir = fs.mkdtempSync(path.join(os.tmpdir(), "styleguide-preview-update-"));
+    try {
+      const filePath = path.join(syncDir, "prose-styleguide.config.yaml");
+      fs.writeFileSync(filePath, "language: english_us\ndialogue_tags: minimal\n", "utf8");
+
+      const preview = previewStyleguideConfigUpdate({
+        syncDir,
+        scope: "sync_root",
+        updates: { dialogue_tags: "expressive" },
+      });
+
+      assert.equal(preview.ok, true);
+      assert.equal(preview.current_config.dialogue_tags, "minimal");
+      assert.equal(preview.config.dialogue_tags, "expressive");
+      assert.equal(preview.changed_fields.length, 1);
+      assert.equal(preview.changed_fields[0].field, "dialogue_tags");
+
+      const persisted = yaml.load(fs.readFileSync(filePath, "utf8"));
+      assert.equal(persisted.dialogue_tags, "minimal");
+    } finally {
+      fs.rmSync(syncDir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("styleguide drift analysis", () => {
+  test("detects scene-level drift from declared quotation style and tense", () => {
+    const analysis = analyzeSceneStyleguideDrift({
+      prose: '"I go now," she says. "I do what I must."',
+      resolvedConfig: {
+        quotation_style: "single",
+        tense: "past",
+      },
+    });
+
+    assert.equal(analysis.observed.quotation_style, "double");
+    assert.equal(analysis.observed.tense, "present");
+    assert.equal(analysis.drift.length >= 1, true);
+  });
+
+  test("suggests updates when observed convention agreement is strong", () => {
+    const suggestions = suggestStyleguideUpdatesFromScenes({
+      sceneAnalyses: [
+        { observed: { quotation_style: "double", tense: "present" }, drift: [] },
+        { observed: { quotation_style: "double", tense: "present" }, drift: [] },
+        { observed: { quotation_style: "double", tense: "past" }, drift: [] },
+      ],
+      resolvedConfig: { quotation_style: "single", tense: "past" },
+      minAgreement: 0.6,
+    });
+
+    assert.equal(Object.hasOwn(suggestions, "quotation_style"), true);
+    assert.equal(suggestions.quotation_style.suggested_value, "double");
+    assert.equal(Object.hasOwn(suggestions, "tense"), false);
   });
 });
 
