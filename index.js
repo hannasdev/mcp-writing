@@ -297,7 +297,6 @@ const {
   isPathCandidateInsideSyncDir,
   resolveOutputDirWithinSync,
   resolveProjectRoot,
-  resolveWorldEntityDir,
   createCanonicalWorldEntity,
 } = createHelpers({
   syncDir: SYNC_DIR,
