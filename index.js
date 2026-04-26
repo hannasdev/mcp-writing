@@ -2527,14 +2527,16 @@ function createMcpServer() {
       if (!SYNC_DIR_WRITABLE) {
         return errorResponse("READ_ONLY", "Cannot create character sheet: sync dir is read-only.");
       }
-      if ((project_id && universe_id) || (!project_id && !universe_id)) {
+      const hasProjectId = project_id !== undefined;
+      const hasUniverseId = universe_id !== undefined;
+      if ((hasProjectId && hasUniverseId) || (!hasProjectId && !hasUniverseId)) {
         return errorResponse("VALIDATION_ERROR", "Provide exactly one of project_id or universe_id.");
       }
-      if (project_id) {
+      if (hasProjectId) {
         const check = validateProjectId(project_id);
         if (!check.ok) return errorResponse("INVALID_PROJECT_ID", check.reason, { project_id });
       }
-      if (universe_id) {
+      if (hasUniverseId) {
         const check = validateUniverseId(universe_id);
         if (!check.ok) return errorResponse("INVALID_UNIVERSE_ID", check.reason, { universe_id });
       }
@@ -2599,14 +2601,16 @@ function createMcpServer() {
       if (!SYNC_DIR_WRITABLE) {
         return errorResponse("READ_ONLY", "Cannot create place sheet: sync dir is read-only.");
       }
-      if ((project_id && universe_id) || (!project_id && !universe_id)) {
+      const hasProjectId = project_id !== undefined;
+      const hasUniverseId = universe_id !== undefined;
+      if ((hasProjectId && hasUniverseId) || (!hasProjectId && !hasUniverseId)) {
         return errorResponse("VALIDATION_ERROR", "Provide exactly one of project_id or universe_id.");
       }
-      if (project_id) {
+      if (hasProjectId) {
         const check = validateProjectId(project_id);
         if (!check.ok) return errorResponse("INVALID_PROJECT_ID", check.reason, { project_id });
       }
-      if (universe_id) {
+      if (hasUniverseId) {
         const check = validateUniverseId(universe_id);
         if (!check.ok) return errorResponse("INVALID_UNIVERSE_ID", check.reason, { universe_id });
       }

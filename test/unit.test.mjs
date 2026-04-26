@@ -3794,8 +3794,10 @@ describe("validateUniverseId", () => {
     assert.deepEqual(validateUniverseId("a"), { ok: true });
   });
 
-  test("rejects an empty string", () => {
-    assert.equal(validateUniverseId("").ok, false);
+  test("rejects an empty string with a clear reason", () => {
+    const result = validateUniverseId("");
+    assert.equal(result.ok, false);
+    assert.ok(result.reason.length > 0);
   });
 
   test("rejects whitespace-only string", () => {
