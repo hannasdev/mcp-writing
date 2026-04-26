@@ -1,6 +1,6 @@
 # Targets for refactoring
 
-**Status:** 🚧 In Progress — Phases A, B, C, D done; Phase E next
+**Status:** 🚧 In Progress — Phases A–E done; Phase F in progress (PR 1 of 4 in review)
 
 ---
 
@@ -51,9 +51,32 @@ After `index.js` is split. Touches `db.js` which all modules depend on.
 
 Last because it's new behavior (not pure refactor) and a prerequisite for OpenClaw, not the current system. Schema migration infrastructure from Phase D must land first.
 
-### Phase F — Large domain module investigation (#2)
+### Phase F — Module extraction (investigation complete) 🚧
 
-After structural work is stable: read `review-bundles.js`, `prose-styleguide.js`, `scene-character-normalization.js` to determine what drives the size. Data → extract to JSON/YAML. Algorithmic → sub-modules. Don't pre-decide.
+Investigation read all three large domain modules plus the remaining `index.js` surface. Findings:
+
+**`scene-character-normalization.js` (198 lines):** No action. Purely algorithmic, well-structured, size is proportionate.
+
+**`prose-styleguide.js` (684 lines):** No action. ~26% is data (`ENUMS` + `LANGUAGE_DEFAULTS`), rest is algorithmic. Extracting the data to JSON would save ~180 lines but couples tightly-related data away from the validation code that uses it. Not worth it.
+
+**`review-bundles.js` (997 lines):** Split warranted. Three distinct algorithmic concerns — plan, render, write — with clean seams. `normalizeRecipientDisplayName` is the one cross-cutting helper (used by planner and renderers); it moves with the planner and gets imported by the renderers.
+- `review-bundles-planner.js` — `buildReviewBundlePlan` + its helpers (`sceneSort`, `buildWarningSummary`, `resolveRequestedSceneIds`, `assertProfile/Strictness/Format`, `slugifyBundleName`, `normalizeRecipientDisplayName`)
+- `review-bundles-renderer.js` — `renderReviewBundleMarkdown`, `renderReviewBundlePdf`, and their helpers (`loadBundleSceneRows`, `resolveSceneFilePath`, `readProse`, `renderSceneBlock`, `renderBetaNoticeMarkdown`, `renderBetaFeedbackFormMarkdown`, `escapeMarkdown`)
+- `review-bundles-writer.js` — `createReviewBundleArtifacts` + `resolveOutputFilePath`
+- `review-bundles.js` — kept as re-export façade so the `tools/review-bundles.js` import surface is unchanged
+- **Do not fix** the known logline bug (renders in all profiles; should be `outline_discussion` only) in this phase — behavioral fix belongs in a separate PR.
+
+**`index.js` (1164 lines after Phase E):** Two extractions warranted. Everything else (startup sequencing, server factory, transport, two inline tools, graceful shutdown) is appropriately in index.js.
+- `async-jobs.js` (~207 lines): `startAsyncJob`, `pruneAsyncJobs`, `toPublicJob`, `readJsonIfExists`. Pattern: export a factory `createAsyncJobManager({ db, asyncJobs, ttlMs, runnerDir })` returning the functions, keeping coupled state encapsulated. Already threaded through `toolContext`.
+- `helpers.js` (~240 lines): `deriveLoglineFromProse`, `inferCharacterIdsFromProse`, `readSupportingNotesForEntity`, `readEntityMetadata`, `resolveProjectRoot`, `resolveWorldEntityDir`, `resolveBatchTargetScenes`, `createCanonicalWorldEntity`. Most already take explicit parameters; the ones that reference `SYNC_DIR` take it as a parameter. All already in `toolContext` — move is clean.
+- Path safety utilities (`isPathInsideSyncDir`, `isPathCandidateInsideSyncDir`, `resolveOutputDirWithinSync`, ~90 lines) — fold into `helpers.js`.
+- After both extractions `index.js` lands at ~500 lines, proportionate to its actual job.
+
+**Sequencing:** Four separate PRs, one concern each, full test suite after each:
+1. `review-bundles.js` split (planner / renderer / writer façade)
+2. `async-jobs.js` extraction from `index.js`
+3. `helpers.js` extraction from `index.js`
+4. Path safety folded into `helpers.js` (can merge with PR 3 if small enough)
 
 ---
 
@@ -122,6 +145,19 @@ Tradeoff: Splitting tests is mechanical work. The risk is accidentally splitting
 
 All git operations shell out to the git CLI via child_process. This is the right pragmatic choice over a native binding. The one thing worth verifying: createSnapshot takes an instruction argument (AI-generated text from the propose_edit / snapshot_scene tools) and uses it in a commit message. As long as this is passed as a separate array element to execSync rather than string-interpolated into a shell command, there's no injection risk. If it's interpolated, that's a security concern worth fixing even for a personal tool.
 
-## 8. node:sqlite experimental flag — LOW
+## 9. SQLite 999-parameter limit in review bundle queries — LOW
+
+Surfaced during the Phase F review-bundles split (PR #105). Two places in `review-bundles-planner.js` build unbounded `IN (...)` clauses that will exceed SQLite's 999 host-parameter limit for large `scene_ids` arrays:
+
+- `resolveRequestedSceneIds` (`review-bundles-planner.js`): builds `SELECT scene_id FROM scenes WHERE project_id = ? AND scene_id IN (...)` with one placeholder per requested ID.
+- `buildReviewBundlePlan` (~line 154): same pattern, adds `s.scene_id IN (...)` to the main query.
+
+Both were present in the original monolith. `loadBundleSceneRows` in `review-bundles-renderer.js` already handles this correctly by chunking at 900 IDs.
+
+Fix: apply the same chunk-at-900 pattern to `resolveRequestedSceneIds`, and either chunk or validate-and-reject in `buildReviewBundlePlan`. A `ReviewBundlePlanError` with code `SCENE_IDS_TOO_LARGE` is the right user-facing response for the planner case if chunking the main query adds complexity.
+
+Tradeoff: chunking `resolveRequestedSceneIds` is straightforward (returns a union of chunk results). Chunking `buildReviewBundlePlan`'s main query is trickier since the filter is part of a larger SQL statement; a pre-validation guard (`if (scene_ids.length > 900) throw`) may be the simpler and more honest approach.
+
+## 10. node:sqlite experimental flag — LOW
 
 The --experimental-sqlite flag is required in Node.js 22 but was stabilized in Node.js 23+. This is in the npm start script already. No immediate action needed, but it's worth monitoring and testing on Node 24 to confirm the flag can eventually be dropped. The alternative (switching to better-sqlite3) removes the experimental risk but adds a native build dependency — not worth it right now.
