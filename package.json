@@ -43,7 +43,7 @@
     "lint:metadata": "node scripts/lint-metadata.mjs",
     "test:unit": "node --experimental-sqlite --test test/unit.test.mjs",
     "test:integration": "node --experimental-sqlite --test test/integration.test.mjs",
-    "test": "node --experimental-sqlite --test test/unit.test.mjs test/integration.test.mjs"
+    "test": "node --experimental-sqlite --test test/unit/sync.test.mjs test/unit/styleguide.test.mjs test/unit/review-bundles.test.mjs test/unit/db.test.mjs test/unit/scene-character.test.mjs test/unit/importer.test.mjs test/unit/metadata-lint.test.mjs test/unit/validation.test.mjs && node --experimental-sqlite --test --test-concurrency=1 test/integration/sync.test.mjs test/integration/styleguide.test.mjs test/integration/search.test.mjs test/integration/metadata.test.mjs test/integration/review-bundles.test.mjs test/integration/editing.test.mjs test/integration/runtime.test.mjs"
   },
   "keywords": [
     "mcp",
