@@ -61,7 +61,7 @@ After structural work is stable: read `review-bundles.js`, `prose-styleguide.js`
 
 - Never mix a behavioral fix with a structural rename in the same commit.
 - Run the full integration test suite after every extraction.
-- PRs must be purely structural (no logic change) **or** purely behavioral (no file moves) — not both.
+- After Phase A groundwork lands, keep each PR purely structural (no logic change) **or** purely behavioral (no file moves) — not both.
 - Phase C: if a group's tests don't pass in isolation after the move, stop and diagnose before continuing.
 
 ---

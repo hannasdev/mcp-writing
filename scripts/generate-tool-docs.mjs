@@ -16,8 +16,9 @@ import { fileURLToPath } from 'node:url';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OUT  = path.join(ROOT, 'docs', 'tools.md');
 
-// Read index.js first (order matters: index.js tool order defines doc order)
-// then append any tool modules from tools/ so extracted tools are included.
+// Read index.js first, then append tools/*.js (alphabetically).
+// Extracted tools appear after inline tools in the output — registration order
+// within createMcpServer() is not preserved across file boundaries.
 const toolModules = (() => {
   try {
     return readdirSync(path.join(ROOT, 'tools'))
