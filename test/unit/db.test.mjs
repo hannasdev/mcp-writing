@@ -4,7 +4,7 @@ import os from "node:os";
 import fs from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { openDb, CURRENT_SCHEMA_VERSION, SCHEMA } from "../../db.js";
+import { openDb, CURRENT_SCHEMA_VERSION, SCHEMA, checkpointJobCreate, checkpointJobFinish, loadStalledJobs } from "../../db.js";
 
 function makeTempPath() {
   return path.join(os.tmpdir(), `mcp-writing-db-${Date.now()}-${Math.random().toString(36).slice(2)}.sqlite`);
@@ -89,6 +89,127 @@ describe("openDb", () => {
       const db = openDb(dbPath);
       const row = db.prepare(`SELECT version FROM schema_version LIMIT 1`).get();
       assert.equal(row?.version, CURRENT_SCHEMA_VERSION);
+      db.close();
+    } finally {
+      fs.rmSync(dbPath, { force: true });
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// async job checkpointing
+// ---------------------------------------------------------------------------
+
+describe("checkpointJobCreate / checkpointJobFinish / loadStalledJobs", () => {
+  function makeJob(overrides = {}) {
+    return {
+      id: `job-${Math.random().toString(36).slice(2)}`,
+      kind: "import_scrivener_sync",
+      status: "running",
+      createdAt: new Date().toISOString(),
+      startedAt: new Date().toISOString(),
+      finishedAt: null,
+      error: null,
+      result: null,
+      ...overrides,
+    };
+  }
+
+  test("checkpointJobCreate persists a running job", () => {
+    const dbPath = makeTempPath();
+    try {
+      const db = openDb(dbPath);
+      const job = makeJob();
+      checkpointJobCreate(db, job);
+      const row = db.prepare(`SELECT * FROM async_jobs WHERE job_id = ?`).get(job.id);
+      assert.equal(row.job_id, job.id);
+      assert.equal(row.kind, job.kind);
+      assert.equal(row.status, "running");
+      assert.equal(row.finished_at, null);
+      db.close();
+    } finally {
+      fs.rmSync(dbPath, { force: true });
+    }
+  });
+
+  test("checkpointJobFinish updates status, finished_at, and error", () => {
+    const dbPath = makeTempPath();
+    try {
+      const db = openDb(dbPath);
+      const job = makeJob();
+      checkpointJobCreate(db, job);
+      job.status = "failed";
+      job.error = "something went wrong";
+      job.finishedAt = new Date().toISOString();
+      checkpointJobFinish(db, job);
+      const row = db.prepare(`SELECT * FROM async_jobs WHERE job_id = ?`).get(job.id);
+      assert.equal(row.status, "failed");
+      assert.equal(row.error, "something went wrong");
+      assert.ok(row.finished_at);
+      db.close();
+    } finally {
+      fs.rmSync(dbPath, { force: true });
+    }
+  });
+
+  test("checkpointJobFinish stores result_json for completed jobs", () => {
+    const dbPath = makeTempPath();
+    try {
+      const db = openDb(dbPath);
+      const job = makeJob();
+      checkpointJobCreate(db, job);
+      job.status = "completed";
+      job.finishedAt = new Date().toISOString();
+      job.result = { ok: true, scenes_changed: 3 };
+      checkpointJobFinish(db, job);
+      const row = db.prepare(`SELECT result_json FROM async_jobs WHERE job_id = ?`).get(job.id);
+      assert.deepEqual(JSON.parse(row.result_json), job.result);
+      db.close();
+    } finally {
+      fs.rmSync(dbPath, { force: true });
+    }
+  });
+
+  test("loadStalledJobs returns running and cancelling jobs only", () => {
+    const dbPath = makeTempPath();
+    try {
+      const db = openDb(dbPath);
+      const running = makeJob({ status: "running" });
+      const cancelling = makeJob({ status: "cancelling" });
+      const completed = makeJob({ status: "completed" });
+      for (const j of [running, cancelling, completed]) {
+        checkpointJobCreate(db, j);
+      }
+      const stalled = loadStalledJobs(db);
+      const ids = stalled.map(j => j.id);
+      assert.ok(ids.includes(running.id));
+      assert.ok(ids.includes(cancelling.id));
+      assert.ok(!ids.includes(completed.id));
+      db.close();
+    } finally {
+      fs.rmSync(dbPath, { force: true });
+    }
+  });
+
+  test("loadStalledJobs returns empty array when no stalled jobs", () => {
+    const dbPath = makeTempPath();
+    try {
+      const db = openDb(dbPath);
+      assert.deepEqual(loadStalledJobs(db), []);
+      db.close();
+    } finally {
+      fs.rmSync(dbPath, { force: true });
+    }
+  });
+
+  test("async_jobs table exists on fresh database", () => {
+    const dbPath = makeTempPath();
+    try {
+      const db = openDb(dbPath);
+      const row = db.prepare(
+        `SELECT name FROM sqlite_master WHERE type='table' AND name='async_jobs'`
+      ).get();
+      assert.ok(row, "async_jobs table should exist");
       db.close();
     } finally {
       fs.rmSync(dbPath, { force: true });

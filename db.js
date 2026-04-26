@@ -124,6 +124,17 @@ export const SCHEMA = `
     id      INTEGER PRIMARY KEY CHECK (id = 1),
     version INTEGER NOT NULL
   );
+
+  CREATE TABLE IF NOT EXISTS async_jobs (
+    job_id      TEXT NOT NULL PRIMARY KEY,
+    kind        TEXT NOT NULL,
+    status      TEXT NOT NULL,
+    created_at  TEXT NOT NULL,
+    started_at  TEXT,
+    finished_at TEXT,
+    error       TEXT,
+    result_json TEXT
+  );
 `;
 
 // Each function is applied exactly once, in order, when version < its index+1.
@@ -192,4 +203,49 @@ export function openDb(dbPath) {
   db.exec(SCHEMA);
   applyMigrations(db);
   return db;
+}
+
+export function checkpointJobCreate(db, job) {
+  db.prepare(`
+    INSERT OR REPLACE INTO async_jobs (job_id, kind, status, created_at, started_at)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(job.id, job.kind, job.status, job.createdAt, job.startedAt ?? null);
+}
+
+export function checkpointJobFinish(db, job) {
+  db.prepare(`
+    UPDATE async_jobs
+    SET status = ?, finished_at = ?, error = ?, result_json = ?
+    WHERE job_id = ?
+  `).run(
+    job.status,
+    job.finishedAt ?? null,
+    job.error ?? null,
+    job.result != null ? JSON.stringify(job.result) : null,
+    job.id
+  );
+}
+
+export function loadStalledJobs(db) {
+  // 'cancelling' included defensively; in practice only 'running' rows exist
+  // since we never write a 'cancelling' checkpoint between create and finish.
+  return db.prepare(`
+    SELECT job_id, kind, status, created_at, started_at
+    FROM async_jobs WHERE status IN ('running', 'cancelling')
+  `).all().map(row => ({
+    id: row.job_id,
+    kind: row.kind,
+    status: row.status,
+    createdAt: row.created_at,
+    startedAt: row.started_at ?? null,
+    finishedAt: null,
+    error: null,
+    result: null,
+    progress: null,
+    child: null,
+    onComplete: null,
+    tmpDir: null,
+    requestPath: null,
+    resultPath: null,
+  }));
 }
