@@ -1,6 +1,71 @@
 # Targets for refactoring
 
 **Status:** 📋 Todo / Backlog
+
+---
+
+## Phasing Plan
+
+The eight items below have different risk profiles. This plan sequences them to minimize regression at each step.
+
+### Phase A — Groundwork, no behavior change
+
+Zero-risk fixes and test infrastructure hardening. Do this before any structural work so every subsequent phase has a solid foundation.
+
+1. **#5** Proposal ID → `randomUUID()`. One line, confirms the pattern works.
+2. **#7** Audit `git.js` for instruction argument interpolation. Fix if needed, document if clean. *(Known: `getSceneProseAtCommit` uses `execSync` with template interpolation — convert to `execFileSync`.)*
+3. **#6 (first half)** Extract shared test helpers (temp dirs, test databases) into `test/helpers/` without splitting test files yet. This is the prerequisite for Phase B.
+
+### Phase B — Test file split (before touching source)
+
+Split test files *before* splitting source files. Gives isolated runners to verify each module as it's extracted.
+
+- `test/sync.test.mjs`, `test/editing.test.mjs`, `test/review-bundles.test.mjs`, etc.
+- Gate: `node --test 'test/**/*.test.mjs'` must pass with equivalent coverage.
+
+### Phase C — `index.js` extraction, one group per PR
+
+Highest-risk work. One tool group per PR, full integration suite after each. Never mix a structural move with a behavioral fix.
+
+Extraction order (simplest first, highest-risk last):
+1. `registerSyncTools`
+2. `registerSearchTools` — read-only, no side effects
+3. `registerMetadataTools` — sidecar writes, low interaction surface
+4. `registerReviewBundleTools`
+5. `registerStyleguideTools`
+6. `registerEditingTools` — last; stateful, git-backed
+
+Keep a registration summary in `index.js` so grep still gives a full tool inventory.
+
+**Main failure mode:** context values (`db`, `SYNC_DIR`, etc.) not threading into extracted handlers. Define the context object shape explicitly before starting.
+
+### Phase D — Schema migration infrastructure (#4)
+
+After `index.js` is split. Touches `db.js` which all modules depend on.
+
+1. Add `schema_version` table with a single integer row.
+2. Convert existing `ALTER TABLE` checks to `migration 1` and `migration 2`.
+3. Gate: test against a clean database (version 0) and an existing production database.
+
+### Phase E — Async job state persistence (#3)
+
+Last because it's new behavior (not pure refactor) and a prerequisite for OpenClaw, not the current system. Schema migration infrastructure from Phase D must land first.
+
+### Phase F — Large domain module investigation (#2)
+
+After structural work is stable: read `review-bundles.js`, `prose-styleguide.js`, `scene-character-normalization.js` to determine what drives the size. Data → extract to JSON/YAML. Algorithmic → sub-modules. Don't pre-decide.
+
+---
+
+### Rules across all phases
+
+- Never mix a behavioral fix with a structural rename in the same commit.
+- Run the full integration test suite after every extraction.
+- PRs must be purely structural (no logic change) **or** purely behavioral (no file moves) — not both.
+- Phase C: if a group's tests don't pass in isolation after the move, stop and diagnose before continuing.
+
+---
+
 ## 1. index.js is doing too many jobs — HIGH
 
 At ~3.5k lines, index.js combines: HTTP server setup, MCP server factory, all 43 tool registrations (schema + implementation + error handling), async job lifecycle, edit proposal state, path safety utilities, runtime diagnostics, and graceful shutdown. None of this is wrong individually, but together it makes the file hard to navigate and means any change to any tool — no matter how isolated — touches this one file.
