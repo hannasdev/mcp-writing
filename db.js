@@ -119,28 +119,31 @@ export const SCHEMA = `
   CREATE VIRTUAL TABLE IF NOT EXISTS scenes_fts USING fts5(
     scene_id, project_id, logline, title, keywords
   );
+
+  CREATE TABLE IF NOT EXISTS schema_version (
+    id      INTEGER PRIMARY KEY CHECK (id = 1),
+    version INTEGER NOT NULL
+  );
 `;
 
-export function openDb(dbPath) {
-  const db = new DatabaseSync(dbPath);
-  db.exec(SCHEMA);
-
-  const sceneColumns = db.prepare(`PRAGMA table_info(scenes)`).all();
-  if (!sceneColumns.some(column => column.name === "chapter_title")) {
-    db.exec(`ALTER TABLE scenes ADD COLUMN chapter_title TEXT;`);
-  }
-
-  // Rebuild legacy FTS table if it predates keyword indexing.
-  // Preserve existing indexed rows so metadata search remains available
-  // even before the next sync pass repopulates from source files.
-  const ftsSql = db.prepare(`
-    SELECT sql
-    FROM sqlite_master
-    WHERE type = 'table' AND name = 'scenes_fts'
-  `).get()?.sql;
-  if (typeof ftsSql === "string" && !ftsSql.toLowerCase().includes("keywords")) {
-    db.exec(`BEGIN IMMEDIATE;`);
-    try {
+// Each function is applied exactly once, in order, when version < its index+1.
+// Each migration runs inside a transaction with the version bump — crash-safe.
+// Migrations must be idempotent (guard against already-applied state).
+// Never edit existing entries — add new ones at the end.
+const MIGRATIONS = [
+  // 1: add chapter_title column to scenes
+  (db) => {
+    const sceneColumns = db.prepare(`PRAGMA table_info(scenes)`).all();
+    if (!sceneColumns.some(c => c.name === "chapter_title")) {
+      db.exec(`ALTER TABLE scenes ADD COLUMN chapter_title TEXT;`);
+    }
+  },
+  // 2: rebuild FTS table to include keywords column (preserve existing rows)
+  (db) => {
+    const ftsSql = db.prepare(`
+      SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'scenes_fts'
+    `).get()?.sql;
+    if (typeof ftsSql === "string" && !ftsSql.toLowerCase().includes("keywords")) {
       db.exec(`
         CREATE VIRTUAL TABLE scenes_fts_migrating USING fts5(
           scene_id, project_id, logline, title, keywords
@@ -153,12 +156,40 @@ export function openDb(dbPath) {
       `);
       db.exec(`DROP TABLE scenes_fts;`);
       db.exec(`ALTER TABLE scenes_fts_migrating RENAME TO scenes_fts;`);
+    }
+  },
+];
+
+// The version every database should reach after openDb. Not the current DB value —
+// query schema_version directly if you need the live version of a specific database.
+export const CURRENT_SCHEMA_VERSION = MIGRATIONS.length;
+
+function applyMigrations(db) {
+  db.prepare(`INSERT OR IGNORE INTO schema_version (id, version) VALUES (1, 0)`).run();
+  for (;;) {
+    db.exec(`BEGIN IMMEDIATE;`);
+    try {
+      const { version } = db.prepare(`SELECT version FROM schema_version WHERE id = 1`).get();
+      if (version >= MIGRATIONS.length) {
+        db.exec(`COMMIT;`);
+        break;
+      }
+      MIGRATIONS[version](db);
+      // WHERE version = ? ensures the bump is monotonic: a concurrent opener
+      // that advanced the version first will cause this UPDATE to match 0 rows,
+      // which is safe — the migration is already applied.
+      db.prepare(`UPDATE schema_version SET version = ? WHERE id = 1 AND version = ?`).run(version + 1, version);
       db.exec(`COMMIT;`);
     } catch (err) {
       db.exec(`ROLLBACK;`);
       throw err;
     }
   }
+}
 
+export function openDb(dbPath) {
+  const db = new DatabaseSync(dbPath);
+  db.exec(SCHEMA);
+  applyMigrations(db);
   return db;
 }
