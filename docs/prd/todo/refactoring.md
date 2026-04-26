@@ -1,6 +1,6 @@
 # Targets for refactoring
 
-**Status:** 🚧 In Progress — Phases A, B done; Phase C started (sync group extracted)
+**Status:** 🚧 In Progress — Phases A, B done; Phase C in progress (sync + search groups extracted)
 
 ---
 
@@ -29,7 +29,7 @@ Highest-risk work. One tool group per PR, full integration suite after each. Nev
 
 Extraction order (simplest first, highest-risk last):
 1. ✅ `registerSyncTools`
-2. `registerSearchTools` — read-only, no side effects
+2. ✅ `registerSearchTools` — read-only, no side effects
 3. `registerMetadataTools` — sidecar writes, low interaction surface
 4. `registerReviewBundleTools`
 5. `registerStyleguideTools`
