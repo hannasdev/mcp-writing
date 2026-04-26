@@ -234,3 +234,4 @@ See [ideas-and-questions.md](docs/prd/inbox/ideas-and-questions.md) for:
 - [Review Bundles](docs/prd/done/review-bundles.md) — editorial workflows, profiles, known issues
 - [Scrivener Direct Extraction](docs/prd/done/scrivener-direct-extraction-beta.md) — direct .scriv ingestion
 - [Open Ideas](docs/prd/inbox/ideas-and-questions.md) — design questions, feature ideas
+- [Workflow Discovery](docs/prd/done/describe-workflows.md) — `describe_workflows` tool, entry-point for AI navigation

@@ -3197,3 +3197,75 @@ describe("commit_edit preflight diagnostics", () => {
     }
   });
 });
+
+describe("describe_workflows tool", () => {
+  test("returns ok with context, workflows, and notes", async () => {
+    const text = await callWriteTool("describe_workflows");
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.ok, true);
+    assert.ok(typeof parsed.context === "object");
+    assert.ok(typeof parsed.context.scene_count === "number");
+    assert.ok(typeof parsed.context.sync_dir === "string");
+    assert.ok(typeof parsed.context.git_available === "boolean");
+    assert.ok(typeof parsed.context.pending_proposals === "number");
+    assert.ok(typeof parsed.context.styleguide_exists === "object");
+    assert.ok(typeof parsed.context.styleguide_exists.sync_root === "boolean");
+    assert.ok(typeof parsed.context.styleguide_exists.project_root === "boolean");
+    assert.ok(Array.isArray(parsed.workflows));
+    assert.ok(parsed.workflows.length > 0);
+    assert.ok(Array.isArray(parsed.notes));
+    assert.ok(parsed.notes.length > 0);
+  });
+
+  test("includes all expected workflow ids", async () => {
+    const text = await callWriteTool("describe_workflows");
+    const parsed = JSON.parse(text);
+    const ids = parsed.workflows.map(w => w.id);
+
+    const expected = [
+      "first_time_setup",
+      "styleguide_setup_new",
+      "styleguide_drift_check",
+      "manuscript_exploration",
+      "prose_editing",
+      "character_management",
+      "place_management",
+      "review_bundle",
+      "async_job_tracking",
+    ];
+    for (const id of expected) {
+      assert.ok(ids.includes(id), `Missing workflow: ${id}`);
+    }
+  });
+
+  test("context.scene_count matches indexed scenes", async () => {
+    const syncText = await callWriteTool("sync");
+    assert.match(syncText, /scenes indexed/);
+
+    const workflowText = await callWriteTool("describe_workflows");
+    const parsed = JSON.parse(workflowText);
+
+    // page_size forces total_count to always appear in the response regardless of result set size
+    const scenesText = await callWriteTool("find_scenes", { page_size: 1, page: 1 });
+    const scenes = JSON.parse(scenesText);
+
+    assert.equal(parsed.context.scene_count, scenes.total_count);
+  });
+
+  test("each workflow has id, label, use_when, and non-empty steps", async () => {
+    const text = await callWriteTool("describe_workflows");
+    const parsed = JSON.parse(text);
+
+    for (const workflow of parsed.workflows) {
+      assert.ok(typeof workflow.id === "string" && workflow.id.length > 0, `workflow missing id`);
+      assert.ok(typeof workflow.label === "string" && workflow.label.length > 0, `${workflow.id} missing label`);
+      assert.ok(typeof workflow.use_when === "string" && workflow.use_when.length > 0, `${workflow.id} missing use_when`);
+      assert.ok(Array.isArray(workflow.steps) && workflow.steps.length > 0, `${workflow.id} missing steps`);
+      for (const step of workflow.steps) {
+        assert.ok(typeof step.tool === "string" && step.tool.length > 0, `${workflow.id} step missing tool`);
+        assert.ok(typeof step.note === "string" && step.note.length > 0, `${workflow.id} step missing note`);
+      }
+    }
+  });
+});
