@@ -97,8 +97,8 @@ export function createTestContext(readPort, writePort, extraEnv = {}) {
     },
 
     async teardown() {
-      try { await client.close(); } catch {}
-      try { await writeClient.close(); } catch {}
+      if (client) try { await client.close(); } catch {}
+      if (writeClient) try { await writeClient.close(); } catch {}
       if (serverProc) serverProc.kill();
       if (writeServerProc) writeServerProc.kill();
       if (readSyncDir) fs.rmSync(readSyncDir, { recursive: true, force: true });

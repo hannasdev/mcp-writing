@@ -3,15 +3,13 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { spawnServer, waitForServer, waitForExit, connectClient } from "../helpers/server.js";
+import { spawnServer, waitForServer, waitForExit, connectClient, createTestContext } from "../helpers/server.js";
 import { writeFileSyncWithDirs } from "../helpers/fixtures.js";
-import { createTestContext } from "../helpers/server.js";
 
 const READ_PORT = 3067;
 const WRITE_PORT = 3066;
 const ctx = createTestContext(READ_PORT, WRITE_PORT);
 let writeSyncDir, readSyncDir;
-const TEST_PORT = READ_PORT;
 
 before(async () => {
   await ctx.setup();
@@ -36,7 +34,7 @@ describe("get_runtime_config tool", () => {
 
     assert.equal(parsed.sync_dir, readSyncDir);
     assert.equal(parsed.db_path, ":memory:");
-    assert.equal(parsed.http_port, TEST_PORT);
+    assert.equal(parsed.http_port, READ_PORT);
 
     assert.equal(typeof parsed.sync_dir_writable, "boolean");
     assert.equal(typeof parsed.git_available, "boolean");
