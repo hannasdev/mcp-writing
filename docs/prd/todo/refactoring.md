@@ -1,5 +1,6 @@
 # Targets for refactoring
 
+**Status:** 📋 Todo / Backlog
 ## 1. index.js is doing too many jobs — HIGH
 
 At 3371 lines, index.js combines: HTTP server setup, MCP server factory, all 43 tool registrations (schema + implementation + error handling), async job lifecycle, edit proposal state, path safety utilities, runtime diagnostics, and graceful shutdown. None of this is wrong individually, but together it makes the file hard to navigate and means any change to any tool — no matter how isolated — touches this one file.
