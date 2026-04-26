@@ -20,8 +20,9 @@ describe("package.json files allowlist", () => {
 
   test("every local JS module imported by index.js is in the files allowlist", () => {
     const indexSrc = fs.readFileSync(path.join(root, "index.js"), "utf8");
-    const localImports = [...indexSrc.matchAll(/^import\s+.+?\s+from\s+["'](\.\/[^"']+)["']/gm)]
-      .map((m) => m[1].replace(/^\.\//, ""));
+    const localImports = [
+      ...indexSrc.matchAll(/^\s*import\b(?:[\s\S]*?\bfrom\s*)?["'](\.\/[^"']+)["']/gm),
+    ].map((m) => m[1].replace(/^\.\//, ""));
 
     for (const file of localImports) {
       const covered =
