@@ -1525,6 +1525,7 @@ function createMcpServer() {
     {},
     async () => {
       return jsonResponse({
+        server_version: MCP_SERVER_VERSION,
         sync_dir: SYNC_DIR_ABS,
         db_path: DB_PATH_DISPLAY,
         sync_dir_writable: SYNC_DIR_WRITABLE,
