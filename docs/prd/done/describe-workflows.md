@@ -215,7 +215,7 @@ The `context` object is computed at call time and reflects current server state.
 - The tool has no schema parameters (empty `{}`).
 - `styleguide_exists` checks use `fs.existsSync` on the two standard config paths; no file parsing.
 - `project_id` derivation: `SELECT project_id, COUNT(*) as c FROM scenes GROUP BY project_id ORDER BY c DESC LIMIT 1`.
-- `pending_proposals` requires access to the `pendingProposals` Map in the edit proposal state — pass it in the tool registration context alongside `db`.
+- `pending_proposals` reads from the module-scoped `pendingProposals` Map in the edit proposal state, consistent with how `db` is accessed.
 - The workflow catalogue is a static constant defined once; it does not need to be regenerated per call.
 - This tool should be listed first in the tool registration order so it appears at the top of tool lists in clients that preserve insertion order.
 
