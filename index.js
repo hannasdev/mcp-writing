@@ -673,6 +673,11 @@ for (const job of stalledJobs) {
   }
   asyncJobs.set(job.id, job);
 }
+// Prune expired rows from previous sessions unconditionally — completed/failed
+// jobs from prior runs are never loaded into asyncJobs, so anyPruned in
+// pruneAsyncJobs() would never be true for them.
+try { pruneJobCheckpoints(db, ASYNC_JOB_TTL_MS); } catch { /* best effort */ }
+
 if (stalledJobs.length > 0) {
   process.stderr.write(`[mcp-writing] Marked ${stalledJobs.length} stalled job(s) as failed after restart.\n`);
 }
