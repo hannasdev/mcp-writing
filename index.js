@@ -10,7 +10,7 @@ import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import matter from "gray-matter";
 import yaml from "js-yaml";
-import { openDb, checkpointJobCreate, checkpointJobFinish, loadStalledJobs } from "./db.js";
+import { openDb, checkpointJobCreate, checkpointJobFinish, loadStalledJobs, pruneJobCheckpoints } from "./db.js";
 import { syncAll, isSyncDirWritable, getSyncOwnershipDiagnostics, sidecarPath, isStructuralProjectId } from "./sync.js";
 import { isGitAvailable, isGitRepository, initGitRepository, getSceneProseAtCommit } from "./git.js";
 import { renderCharacterArcTemplate, renderCharacterSheetTemplate, renderPlaceSheetTemplate, slugifyEntityName } from "./world-entity-templates.js";
@@ -174,6 +174,7 @@ function pruneAsyncJobs() {
       asyncJobs.delete(id);
     }
   }
+  try { pruneJobCheckpoints(db, ASYNC_JOB_TTL_MS); } catch { /* best effort */ }
 }
 
 function readJsonIfExists(filePath) {
@@ -661,7 +662,11 @@ for (const job of stalledJobs) {
   job.status = "failed";
   job.error = "server restarted while job was running";
   job.finishedAt = new Date().toISOString();
-  checkpointJobFinish(db, job);
+  try {
+    checkpointJobFinish(db, job);
+  } catch (err) {
+    process.stderr.write(`[mcp-writing] WARNING: failed to checkpoint recovered stalled job ${job.id}: ${err.message}\n`);
+  }
   asyncJobs.set(job.id, job);
 }
 if (stalledJobs.length > 0) {

@@ -4,7 +4,7 @@ import os from "node:os";
 import fs from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { openDb, CURRENT_SCHEMA_VERSION, SCHEMA, checkpointJobCreate, checkpointJobFinish, loadStalledJobs } from "../../db.js";
+import { openDb, CURRENT_SCHEMA_VERSION, SCHEMA, checkpointJobCreate, checkpointJobFinish, loadStalledJobs, pruneJobCheckpoints } from "../../db.js";
 
 function makeTempPath() {
   return path.join(os.tmpdir(), `mcp-writing-db-${Date.now()}-${Math.random().toString(36).slice(2)}.sqlite`);
@@ -210,6 +210,68 @@ describe("checkpointJobCreate / checkpointJobFinish / loadStalledJobs", () => {
         `SELECT name FROM sqlite_master WHERE type='table' AND name='async_jobs'`
       ).get();
       assert.ok(row, "async_jobs table should exist");
+      db.close();
+    } finally {
+      fs.rmSync(dbPath, { force: true });
+    }
+  });
+
+  test("checkpointJobFinish upserts even when checkpointJobCreate was never called", () => {
+    const dbPath = makeTempPath();
+    try {
+      const db = openDb(dbPath);
+      const job = makeJob({
+        status: "failed",
+        finishedAt: new Date().toISOString(),
+        error: "create was skipped",
+      });
+      checkpointJobFinish(db, job);
+      const row = db.prepare(`SELECT * FROM async_jobs WHERE job_id = ?`).get(job.id);
+      assert.ok(row, "row should exist despite skipped create");
+      assert.equal(row.status, "failed");
+      assert.equal(row.error, "create was skipped");
+      db.close();
+    } finally {
+      fs.rmSync(dbPath, { force: true });
+    }
+  });
+
+  test("pruneJobCheckpoints deletes finished rows older than TTL", () => {
+    const dbPath = makeTempPath();
+    try {
+      const db = openDb(dbPath);
+      const old = makeJob({ status: "completed" });
+      checkpointJobCreate(db, old);
+      old.status = "completed";
+      old.finishedAt = new Date(Date.now() - 90000).toISOString(); // 90s ago
+      checkpointJobFinish(db, old);
+
+      const recent = makeJob({ status: "completed" });
+      checkpointJobCreate(db, recent);
+      recent.status = "completed";
+      recent.finishedAt = new Date().toISOString();
+      checkpointJobFinish(db, recent);
+
+      pruneJobCheckpoints(db, 60000); // TTL = 60s
+
+      const rows = db.prepare(`SELECT job_id FROM async_jobs`).all().map(r => r.job_id);
+      assert.ok(!rows.includes(old.id), "old finished job should be pruned");
+      assert.ok(rows.includes(recent.id), "recent finished job should be kept");
+      db.close();
+    } finally {
+      fs.rmSync(dbPath, { force: true });
+    }
+  });
+
+  test("pruneJobCheckpoints does not delete running jobs", () => {
+    const dbPath = makeTempPath();
+    try {
+      const db = openDb(dbPath);
+      const job = makeJob();
+      checkpointJobCreate(db, job);
+      pruneJobCheckpoints(db, 0); // TTL = 0 (prune everything finished)
+      const row = db.prepare(`SELECT job_id FROM async_jobs WHERE job_id = ?`).get(job.id);
+      assert.ok(row, "running job with null finished_at should not be pruned");
       db.close();
     } finally {
       fs.rmSync(dbPath, { force: true });

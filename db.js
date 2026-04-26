@@ -213,17 +213,34 @@ export function checkpointJobCreate(db, job) {
 }
 
 export function checkpointJobFinish(db, job) {
+  // UPSERT so a terminal state is always recorded even if checkpointJobCreate
+  // was skipped due to a best-effort failure.
   db.prepare(`
-    UPDATE async_jobs
-    SET status = ?, finished_at = ?, error = ?, result_json = ?
-    WHERE job_id = ?
+    INSERT INTO async_jobs
+      (job_id, kind, status, created_at, started_at, finished_at, error, result_json)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(job_id) DO UPDATE SET
+      status      = excluded.status,
+      finished_at = excluded.finished_at,
+      error       = excluded.error,
+      result_json = excluded.result_json
   `).run(
+    job.id,
+    job.kind,
     job.status,
+    job.createdAt,
+    job.startedAt ?? null,
     job.finishedAt ?? null,
     job.error ?? null,
-    job.result != null ? JSON.stringify(job.result) : null,
-    job.id
+    job.result != null ? JSON.stringify(job.result) : null
   );
+}
+
+export function pruneJobCheckpoints(db, ttlMs) {
+  const cutoff = new Date(Date.now() - ttlMs).toISOString();
+  db.prepare(`
+    DELETE FROM async_jobs WHERE finished_at IS NOT NULL AND finished_at < ?
+  `).run(cutoff);
 }
 
 export function loadStalledJobs(db) {
