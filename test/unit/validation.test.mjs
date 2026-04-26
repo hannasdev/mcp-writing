@@ -24,10 +24,10 @@ describe("package.json files allowlist", () => {
       .map((m) => m[1].replace(/^\.\//, ""));
 
     for (const file of localImports) {
-      assert.ok(
-        allowlist.includes(file),
-        `"${file}" is imported by index.js but missing from package.json files allowlist`
-      );
+      const covered =
+        allowlist.includes(file) ||
+        allowlist.some(entry => entry.endsWith("/") && file.startsWith(entry));
+      assert.ok(covered, `"${file}" is imported by index.js but missing from package.json files allowlist`);
     }
   });
 });

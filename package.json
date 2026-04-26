@@ -21,6 +21,7 @@
     "prose-styleguide-drift.js",
     "prose-styleguide-skill.js",
     "scripts/",
+    "tools/",
     "README.md",
     "CHANGELOG.md"
   ],
