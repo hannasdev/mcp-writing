@@ -1,6 +1,6 @@
 # Targets for refactoring
 
-**Status:** 🚧 In Progress — Phases A, B done; Phase C in progress (sync + search groups extracted)
+**Status:** 🚧 In Progress — Phases A, B, C, D done; Phase E next
 
 ---
 
@@ -23,29 +23,29 @@ Split test files *before* splitting source files. Gives isolated runners to veri
 - `test/sync.test.mjs`, `test/editing.test.mjs`, `test/review-bundles.test.mjs`, etc.
 - Gate: `node --test 'test/**/*.test.mjs'` must pass with equivalent coverage.
 
-### Phase C — `index.js` extraction, one group per PR
+### Phase C — `index.js` extraction, one group per PR ✅
 
 Highest-risk work. One tool group per PR, full integration suite after each. Never mix a structural move with a behavioral fix.
 
 Extraction order (simplest first, highest-risk last):
 1. ✅ `registerSyncTools`
 2. ✅ `registerSearchTools` — read-only, no side effects
-3. `registerMetadataTools` — sidecar writes, low interaction surface
-4. `registerReviewBundleTools`
-5. `registerStyleguideTools`
-6. `registerEditingTools` — last; stateful, git-backed
+3. ✅ `registerMetadataTools` — sidecar writes, low interaction surface
+4. ✅ `registerReviewBundleTools`
+5. ✅ `registerStyleguideTools`
+6. ✅ `registerEditingTools` — last; stateful, git-backed
 
 Keep a registration summary in `index.js` so grep still gives a full tool inventory.
 
 **Main failure mode:** context values (`db`, `SYNC_DIR`, etc.) not threading into extracted handlers. Define the context object shape explicitly before starting.
 
-### Phase D — Schema migration infrastructure (#4)
+### Phase D — Schema migration infrastructure (#4) ✅
 
 After `index.js` is split. Touches `db.js` which all modules depend on.
 
-1. Add `schema_version` table with a single integer row.
-2. Convert existing `ALTER TABLE` checks to `migration 1` and `migration 2`.
-3. Gate: test against a clean database (version 0) and an existing production database.
+1. ✅ Add `schema_version` table with a single integer row.
+2. ✅ Convert existing `ALTER TABLE` checks to `migration 1` and `migration 2`.
+3. ✅ Gate: test against a clean database (version 0) and an existing production database.
 
 ### Phase E — Async job state persistence (#3)
 

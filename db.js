@@ -119,46 +119,65 @@ export const SCHEMA = `
   CREATE VIRTUAL TABLE IF NOT EXISTS scenes_fts USING fts5(
     scene_id, project_id, logline, title, keywords
   );
+
+  CREATE TABLE IF NOT EXISTS schema_version (
+    version INTEGER NOT NULL
+  );
 `;
+
+// Each function is applied exactly once, in order, when version < its index+1.
+// Never edit existing entries — add new ones at the end.
+const MIGRATIONS = [
+  // 1: add chapter_title column to scenes
+  (db) => {
+    const sceneColumns = db.prepare(`PRAGMA table_info(scenes)`).all();
+    if (!sceneColumns.some(c => c.name === "chapter_title")) {
+      db.exec(`ALTER TABLE scenes ADD COLUMN chapter_title TEXT;`);
+    }
+  },
+  // 2: rebuild FTS table to include keywords column (preserve existing rows)
+  (db) => {
+    const ftsSql = db.prepare(`
+      SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'scenes_fts'
+    `).get()?.sql;
+    if (typeof ftsSql === "string" && !ftsSql.toLowerCase().includes("keywords")) {
+      db.exec(`BEGIN IMMEDIATE;`);
+      try {
+        db.exec(`
+          CREATE VIRTUAL TABLE scenes_fts_migrating USING fts5(
+            scene_id, project_id, logline, title, keywords
+          );
+        `);
+        db.exec(`
+          INSERT INTO scenes_fts_migrating (scene_id, project_id, logline, title, keywords)
+          SELECT scene_id, project_id, logline, title, ''
+          FROM scenes_fts;
+        `);
+        db.exec(`DROP TABLE scenes_fts;`);
+        db.exec(`ALTER TABLE scenes_fts_migrating RENAME TO scenes_fts;`);
+        db.exec(`COMMIT;`);
+      } catch (err) {
+        db.exec(`ROLLBACK;`);
+        throw err;
+      }
+    }
+  },
+];
+
+function applyMigrations(db) {
+  if (!db.prepare(`SELECT 1 FROM schema_version LIMIT 1`).get()) {
+    db.prepare(`INSERT INTO schema_version (version) VALUES (0)`).run();
+  }
+  let version = db.prepare(`SELECT version FROM schema_version LIMIT 1`).get().version;
+  for (let i = version; i < MIGRATIONS.length; i++) {
+    MIGRATIONS[i](db);
+    db.prepare(`UPDATE schema_version SET version = ?`).run(i + 1);
+  }
+}
 
 export function openDb(dbPath) {
   const db = new DatabaseSync(dbPath);
   db.exec(SCHEMA);
-
-  const sceneColumns = db.prepare(`PRAGMA table_info(scenes)`).all();
-  if (!sceneColumns.some(column => column.name === "chapter_title")) {
-    db.exec(`ALTER TABLE scenes ADD COLUMN chapter_title TEXT;`);
-  }
-
-  // Rebuild legacy FTS table if it predates keyword indexing.
-  // Preserve existing indexed rows so metadata search remains available
-  // even before the next sync pass repopulates from source files.
-  const ftsSql = db.prepare(`
-    SELECT sql
-    FROM sqlite_master
-    WHERE type = 'table' AND name = 'scenes_fts'
-  `).get()?.sql;
-  if (typeof ftsSql === "string" && !ftsSql.toLowerCase().includes("keywords")) {
-    db.exec(`BEGIN IMMEDIATE;`);
-    try {
-      db.exec(`
-        CREATE VIRTUAL TABLE scenes_fts_migrating USING fts5(
-          scene_id, project_id, logline, title, keywords
-        );
-      `);
-      db.exec(`
-        INSERT INTO scenes_fts_migrating (scene_id, project_id, logline, title, keywords)
-        SELECT scene_id, project_id, logline, title, ''
-        FROM scenes_fts;
-      `);
-      db.exec(`DROP TABLE scenes_fts;`);
-      db.exec(`ALTER TABLE scenes_fts_migrating RENAME TO scenes_fts;`);
-      db.exec(`COMMIT;`);
-    } catch (err) {
-      db.exec(`ROLLBACK;`);
-      throw err;
-    }
-  }
-
+  applyMigrations(db);
   return db;
 }
