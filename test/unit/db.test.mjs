@@ -45,7 +45,8 @@ describe("openDb", () => {
       legacy.close();
 
       const db = openDb(dbPath);
-      const row = db.prepare(`SELECT version FROM schema_version LIMIT 1`).get();
+      const row = db.prepare(`SELECT id, version FROM schema_version WHERE id = 1`).get();
+      assert.equal(row?.id, 1);
       assert.equal(row?.version, CURRENT_SCHEMA_VERSION);
       db.close();
     } finally {

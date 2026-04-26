@@ -160,6 +160,8 @@ const MIGRATIONS = [
   },
 ];
 
+// The version every database should reach after openDb. Not the current DB value —
+// query schema_version directly if you need the live version of a specific database.
 export const CURRENT_SCHEMA_VERSION = MIGRATIONS.length;
 
 function applyMigrations(db) {
