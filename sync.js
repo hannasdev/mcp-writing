@@ -99,6 +99,10 @@ export function normalizeSceneMetaForPath(syncDir, filePath, meta = {}) {
 // Structural directory names that are never project slugs under projects/<id>/.
 const PROJECT_STRUCTURAL_DIRS = new Set(["world", "scenes", "misc", "fragments", "feedback", "draft"]);
 
+export function isStructuralProjectId(name) {
+  return typeof name === "string" && PROJECT_STRUCTURAL_DIRS.has(name.toLowerCase());
+}
+
 // Cache universe project root existence checks during sync scans.
 const UNIVERSE_PROJECT_ROOT_CACHE = new Map();
 

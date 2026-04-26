@@ -12,7 +12,7 @@ import matter from "gray-matter";
 import yaml from "js-yaml";
 import { z } from "zod";
 import { openDb } from "./db.js";
-import { syncAll, isSyncDirWritable, getSyncOwnershipDiagnostics, getFileWriteDiagnostics, writeMeta, readMeta, indexSceneFile, normalizeSceneMetaForPath, sidecarPath } from "./sync.js";
+import { syncAll, isSyncDirWritable, getSyncOwnershipDiagnostics, getFileWriteDiagnostics, writeMeta, readMeta, indexSceneFile, normalizeSceneMetaForPath, sidecarPath, isStructuralProjectId } from "./sync.js";
 import { isGitAvailable, isGitRepository, initGitRepository, createSnapshot, listSnapshots, getSceneProseAtCommit, getHeadCommitHash } from "./git.js";
 import { renderCharacterArcTemplate, renderCharacterSheetTemplate, renderPlaceSheetTemplate, slugifyEntityName } from "./world-entity-templates.js";
 import { importScrivenerSync, validateProjectId, validateUniverseId } from "./importer.js";
@@ -866,7 +866,7 @@ const WORKFLOW_CATALOGUE = [
     steps: [
       { tool: "describe_workflows", note: "Check context.scene_count; use that value as max_scenes in the next call." },
       { tool: "bootstrap_prose_styleguide_config", note: "Detect dominant conventions. Confirm suggestions with the user before applying." },
-      { tool: "setup_prose_styleguide_config", note: "Create config at project_root scope if context.styleguide_exists.project_root is false. Requires language (e.g. 'english_us')." },
+      { tool: "setup_prose_styleguide_config", note: "Only if ALL context.styleguide_exists fields are false — a config at any scope is sufficient. Create at project_root scope (requires project_id and language e.g. 'english_us'), or sync_root if no project_id is known." },
       { tool: "update_prose_styleguide_config", note: "Apply the fields accepted from bootstrap suggestions." },
     ],
   },
@@ -960,7 +960,15 @@ function createMcpServer() {
       const projectRow = db.prepare(
         `SELECT project_id FROM scenes GROUP BY project_id ORDER BY COUNT(*) DESC, project_id ASC LIMIT 1`
       ).get();
-      const project_id = projectRow?.project_id ?? null;
+      // Suppress structural-dir names (e.g. "scenes") that appear when SYNC_DIR points at the
+      // project directory itself rather than the universe root. They are path artifacts, not
+      // real project identifiers. Only suppress when no real project directory exists at that
+      // path, so a project intentionally named "scenes" (though inadvisable) is still honoured.
+      const rawProjectId = projectRow?.project_id ?? null;
+      const rawProjectRootPath = rawProjectId ? resolveProjectRoot(rawProjectId) : null;
+      const project_id = (
+        isStructuralProjectId(rawProjectId) && !fs.existsSync(rawProjectRootPath)
+      ) ? null : rawProjectId;
 
       const sceneCountRow = db.prepare(`SELECT COUNT(*) as count FROM scenes`).get();
       const scene_count = sceneCountRow?.count ?? 0;
@@ -974,6 +982,10 @@ function createMcpServer() {
         ? path.join(SYNC_DIR, "universes", universeSegment, STYLEGUIDE_CONFIG_BASENAME)
         : null;
 
+      const syncRootExists = fs.existsSync(syncRootConfigPath);
+      const universeRootExists = universeRootConfigPath !== null && fs.existsSync(universeRootConfigPath);
+      const projectRootExists = projectRootConfigPath !== null && fs.existsSync(projectRootConfigPath);
+
       return jsonResponse({
         ok: true,
         context: {
@@ -981,9 +993,9 @@ function createMcpServer() {
           scene_count,
           sync_dir: SYNC_DIR_ABS,
           styleguide_exists: {
-            sync_root: fs.existsSync(syncRootConfigPath),
-            universe_root: universeRootConfigPath !== null && fs.existsSync(universeRootConfigPath),
-            project_root: projectRootConfigPath !== null && fs.existsSync(projectRootConfigPath),
+            sync_root: syncRootExists,
+            universe_root: universeRootExists,
+            project_root: projectRootExists,
           },
           git_available: GIT_AVAILABLE,
           pending_proposals: pendingProposals.size,
@@ -994,6 +1006,7 @@ function createMcpServer() {
           "If a tool returns a next_step field (in a success or error response), follow it before trying anything else.",
           "Use find_scenes without filters to discover what project_ids are indexed.",
           "When calling bootstrap_prose_styleguide_config or check_prose_styleguide_drift, set max_scenes to context.scene_count to avoid the default limit.",
+          "Styleguide tools resolve config in priority order: project_root > universe_root > sync_root. If any styleguide_exists field is true, a config exists and styleguide tools will work — do not run setup_prose_styleguide_config unless ALL styleguide_exists fields are false.",
         ],
       });
     }
