@@ -44,12 +44,12 @@
 - [`preview_prose_styleguide_config_update`](#preview_prose_styleguide_config_update)
 - [`check_prose_styleguide_drift`](#check_prose_styleguide_drift)
 - [`setup_prose_styleguide_skill`](#setup_prose_styleguide_skill)
-- [`get_runtime_config`](#get_runtime_config)
 - [`propose_edit`](#propose_edit)
 - [`commit_edit`](#commit_edit)
 - [`discard_edit`](#discard_edit)
 - [`snapshot_scene`](#snapshot_scene)
 - [`list_snapshots`](#list_snapshots)
+- [`get_runtime_config`](#get_runtime_config)
 
 ---
 
@@ -557,14 +557,6 @@ Generate skills/prose-styleguide.md from the resolved prose styleguide config an
 
 ---
 
-## get_runtime_config
-
-Show the active runtime paths and capabilities for this server instance (server version, sync dir, database path, writability, permission diagnostics, and git availability). Use this to verify which manuscript location is currently connected.
-
-_No parameters._
-
----
-
 ## propose_edit
 
 Generate a proposed revision for a scene. Returns a proposal_id and a diff preview. Nothing is written yet — you must call commit_edit to apply the change. This tool requires git to be available.
@@ -617,5 +609,13 @@ List git commit history for a scene, with timestamps and commit messages. Use th
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |
 | `scene_id` | `string` | Yes | The scene_id to list snapshots for. |
+
+---
+
+## get_runtime_config
+
+Show the active runtime paths and capabilities for this server instance (server version, sync dir, database path, writability, permission diagnostics, and git availability). Use this to verify which manuscript location is currently connected.
+
+_No parameters._
 
 ---
