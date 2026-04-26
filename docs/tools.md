@@ -34,6 +34,8 @@
 - [`update_character_sheet`](#update_character_sheet)
 - [`update_place_sheet`](#update_place_sheet)
 - [`flag_scene`](#flag_scene)
+- [`preview_review_bundle`](#preview_review_bundle)
+- [`create_review_bundle`](#create_review_bundle)
 - [`get_runtime_config`](#get_runtime_config)
 - [`setup_prose_styleguide_config`](#setup_prose_styleguide_config)
 - [`get_prose_styleguide_config`](#get_prose_styleguide_config)
@@ -43,8 +45,6 @@
 - [`preview_prose_styleguide_config_update`](#preview_prose_styleguide_config_update)
 - [`check_prose_styleguide_drift`](#check_prose_styleguide_drift)
 - [`setup_prose_styleguide_skill`](#setup_prose_styleguide_skill)
-- [`preview_review_bundle`](#preview_review_bundle)
-- [`create_review_bundle`](#create_review_bundle)
 - [`propose_edit`](#propose_edit)
 - [`commit_edit`](#commit_edit)
 - [`discard_edit`](#discard_edit)
@@ -408,6 +408,52 @@ Attach a continuity or review note to a scene. Flags are appended to the sidecar
 
 ---
 
+## preview_review_bundle
+
+Dry-run planning tool for review bundles. Resolves scene scope, deterministic ordering, warnings, and planned output filenames without writing files. Rendering options are accepted for API consistency and reflected in resolved_scope.options, but do not change planning output.
+
+| Parameter | Type | Required | Description |
+| --- | --- | :---: | --- |
+| `project_id` | `string` | Yes | Project ID to scope the review bundle (e.g. 'test-novel'). |
+| `profile` | `enum` | Yes | Bundle profile: outline_discussion, editor_detailed, or beta_reader_personalized. |
+| `part` | `integer` | No | Optional part filter. |
+| `chapter` | `integer` | No | Optional chapter filter. |
+| `tag` | `string` | No | Optional tag filter (exact match). |
+| `scene_ids` | `string[]` | No | Optional explicit scene_id allowlist. Intersects with other filters. |
+| `strictness` | `enum` | No | Strictness mode: warn (default) or fail. |
+| `include_scene_ids` | `boolean` | No | Rendering option (default true). Echoed in resolved_scope.options for downstream rendering; does not change planning results. |
+| `include_metadata_sidebar` | `boolean` | No | Rendering option (default false). Echoed in resolved_scope.options for downstream rendering; does not change planning results. |
+| `include_paragraph_anchors` | `boolean` | No | Rendering option (default false). Echoed in resolved_scope.options for downstream rendering; does not change planning results. |
+| `recipient_name` | `string` | No | Optional recipient display name for beta_reader_personalized profile. |
+| `bundle_name` | `string` | No | Optional output bundle base name override (slugified in planned outputs). |
+| `format` | `enum("pdf","markdown","both")` | No | Planned output format: pdf (default), markdown, or both. Affects planned_outputs filenames only; preview_review_bundle does not render artifacts. |
+
+---
+
+## create_review_bundle
+
+Generate review bundle artifacts (PDF/markdown) from planned scene scope. Writes files only under output_dir and returns manifest/provenance details.
+
+| Parameter | Type | Required | Description |
+| --- | --- | :---: | --- |
+| `project_id` | `string` | Yes | Project ID to scope the review bundle (e.g. 'test-novel'). |
+| `profile` | `enum` | Yes | Bundle profile: outline_discussion, editor_detailed, or beta_reader_personalized. |
+| `output_dir` | `string` | Yes | Directory path to write bundle artifacts into. |
+| `part` | `integer` | No | Optional part filter. |
+| `chapter` | `integer` | No | Optional chapter filter. |
+| `tag` | `string` | No | Optional tag filter (exact match). |
+| `scene_ids` | `string[]` | No | Optional explicit scene_id allowlist. Intersects with other filters. |
+| `strictness` | `enum` | No | Strictness mode: warn (default) or fail. |
+| `include_scene_ids` | `boolean` | No | Include scene IDs in headings (default true). Applies to both PDF and markdown. |
+| `include_metadata_sidebar` | `boolean` | No | Include metadata sidebar in markdown output (default false). Markdown only — no effect on PDF. |
+| `include_paragraph_anchors` | `boolean` | No | Include paragraph anchors in markdown output (default false). Markdown only — no effect on PDF. |
+| `recipient_name` | `string` | No | Optional recipient display name for beta_reader_personalized profile. |
+| `bundle_name` | `string` | No | Optional output bundle base name override (slugified in filenames). |
+| `source_commit` | `string` | No | Optional explicit source commit for provenance. Defaults to current HEAD when available. |
+| `format` | `enum("pdf","markdown","both")` | No | Output format: pdf (default), markdown, or both. |
+
+---
+
 ## get_runtime_config
 
 Show the active runtime paths and capabilities for this server instance (server version, sync dir, database path, writability, permission diagnostics, and git availability). Use this to verify which manuscript location is currently connected.
@@ -516,52 +562,6 @@ Generate skills/prose-styleguide.md from the resolved prose styleguide config an
 | --- | --- | :---: | --- |
 | `project_id` | `string` | No | Optional project ID for scoped config resolution (e.g. 'the-lamb' or 'universe-1/book-1'). |
 | `overwrite` | `boolean` | No | If true, replaces an existing skills/prose-styleguide.md file. |
-
----
-
-## preview_review_bundle
-
-Dry-run planning tool for review bundles. Resolves scene scope, deterministic ordering, warnings, and planned output filenames without writing files. Rendering options are accepted for API consistency and reflected in resolved_scope.options, but do not change planning output.
-
-| Parameter | Type | Required | Description |
-| --- | --- | :---: | --- |
-| `project_id` | `string` | Yes | Project ID to scope the review bundle (e.g. 'test-novel'). |
-| `profile` | `enum` | Yes | Bundle profile: outline_discussion, editor_detailed, or beta_reader_personalized. |
-| `part` | `integer` | No | Optional part filter. |
-| `chapter` | `integer` | No | Optional chapter filter. |
-| `tag` | `string` | No | Optional tag filter (exact match). |
-| `scene_ids` | `string[]` | No | Optional explicit scene_id allowlist. Intersects with other filters. |
-| `strictness` | `enum` | No | Strictness mode: warn (default) or fail. |
-| `include_scene_ids` | `boolean` | No | Rendering option (default true). Echoed in resolved_scope.options for downstream rendering; does not change planning results. |
-| `include_metadata_sidebar` | `boolean` | No | Rendering option (default false). Echoed in resolved_scope.options for downstream rendering; does not change planning results. |
-| `include_paragraph_anchors` | `boolean` | No | Rendering option (default false). Echoed in resolved_scope.options for downstream rendering; does not change planning results. |
-| `recipient_name` | `string` | No | Optional recipient display name for beta_reader_personalized profile. |
-| `bundle_name` | `string` | No | Optional output bundle base name override (slugified in planned outputs). |
-| `format` | `enum("pdf","markdown","both")` | No | Planned output format: pdf (default), markdown, or both. Affects planned_outputs filenames only; preview_review_bundle does not render artifacts. |
-
----
-
-## create_review_bundle
-
-Generate review bundle artifacts (PDF/markdown) from planned scene scope. Writes files only under output_dir and returns manifest/provenance details.
-
-| Parameter | Type | Required | Description |
-| --- | --- | :---: | --- |
-| `project_id` | `string` | Yes | Project ID to scope the review bundle (e.g. 'test-novel'). |
-| `profile` | `enum` | Yes | Bundle profile: outline_discussion, editor_detailed, or beta_reader_personalized. |
-| `output_dir` | `string` | Yes | Directory path to write bundle artifacts into. |
-| `part` | `integer` | No | Optional part filter. |
-| `chapter` | `integer` | No | Optional chapter filter. |
-| `tag` | `string` | No | Optional tag filter (exact match). |
-| `scene_ids` | `string[]` | No | Optional explicit scene_id allowlist. Intersects with other filters. |
-| `strictness` | `enum` | No | Strictness mode: warn (default) or fail. |
-| `include_scene_ids` | `boolean` | No | Include scene IDs in headings (default true). Applies to both PDF and markdown. |
-| `include_metadata_sidebar` | `boolean` | No | Include metadata sidebar in markdown output (default false). Markdown only — no effect on PDF. |
-| `include_paragraph_anchors` | `boolean` | No | Include paragraph anchors in markdown output (default false). Markdown only — no effect on PDF. |
-| `recipient_name` | `string` | No | Optional recipient display name for beta_reader_personalized profile. |
-| `bundle_name` | `string` | No | Optional output bundle base name override (slugified in filenames). |
-| `source_commit` | `string` | No | Optional explicit source commit for provenance. Defaults to current HEAD when available. |
-| `format` | `enum("pdf","markdown","both")` | No | Output format: pdf (default), markdown, or both. |
 
 ---
 
