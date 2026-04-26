@@ -8,6 +8,7 @@
     "index.js",
     "async-jobs.js",
     "async-progress.js",
+    "helpers.js",
     "scene-character-batch.js",
     "scrivener-direct.js",
     "importer.js",
