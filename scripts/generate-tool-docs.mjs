@@ -9,15 +9,27 @@
  * Re-run after editing tool names, descriptions, or parameters in index.js.
  */
 
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const SRC  = path.join(ROOT, 'index.js');
 const OUT  = path.join(ROOT, 'docs', 'tools.md');
 
-const source = readFileSync(SRC, 'utf8');
+// Read index.js first (order matters: index.js tool order defines doc order)
+// then append any tool modules from tools/ so extracted tools are included.
+const toolModules = (() => {
+  try {
+    return readdirSync(path.join(ROOT, 'tools'))
+      .filter(f => f.endsWith('.js'))
+      .sort()
+      .map(f => readFileSync(path.join(ROOT, 'tools', f), 'utf8'));
+  } catch {
+    return [];
+  }
+})();
+
+const source = [readFileSync(path.join(ROOT, 'index.js'), 'utf8'), ...toolModules].join('\n');
 
 function decodeEscape(src, i) {
   const esc = src[i];

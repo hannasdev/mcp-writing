@@ -15,7 +15,7 @@ import { openDb } from "./db.js";
 import { syncAll, isSyncDirWritable, getSyncOwnershipDiagnostics, getFileWriteDiagnostics, writeMeta, readMeta, indexSceneFile, normalizeSceneMetaForPath, sidecarPath, isStructuralProjectId } from "./sync.js";
 import { isGitAvailable, isGitRepository, initGitRepository, createSnapshot, listSnapshots, getSceneProseAtCommit, getHeadCommitHash } from "./git.js";
 import { renderCharacterArcTemplate, renderCharacterSheetTemplate, renderPlaceSheetTemplate, slugifyEntityName } from "./world-entity-templates.js";
-import { importScrivenerSync, validateProjectId, validateUniverseId } from "./importer.js";
+import { validateProjectId, validateUniverseId } from "./importer.js";
 import { ASYNC_PROGRESS_PREFIX } from "./async-progress.js";
 import {
   STYLEGUIDE_CONFIG_BASENAME,

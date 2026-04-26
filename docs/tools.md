@@ -6,14 +6,6 @@
 ## Tools
 
 - [`describe_workflows`](#describe_workflows)
-- [`sync`](#sync)
-- [`import_scrivener_sync`](#import_scrivener_sync)
-- [`import_scrivener_sync_async`](#import_scrivener_sync_async)
-- [`merge_scrivener_project_beta`](#merge_scrivener_project_beta)
-- [`enrich_scene_characters_batch`](#enrich_scene_characters_batch)
-- [`get_async_job_status`](#get_async_job_status)
-- [`list_async_jobs`](#list_async_jobs)
-- [`cancel_async_job`](#cancel_async_job)
 - [`get_runtime_config`](#get_runtime_config)
 - [`setup_prose_styleguide_config`](#setup_prose_styleguide_config)
 - [`get_prose_styleguide_config`](#get_prose_styleguide_config)
@@ -39,7 +31,6 @@
 - [`list_threads`](#list_threads)
 - [`get_thread_arc`](#get_thread_arc)
 - [`upsert_thread_link`](#upsert_thread_link)
-- [`enrich_scene`](#enrich_scene)
 - [`update_scene_metadata`](#update_scene_metadata)
 - [`update_character_sheet`](#update_character_sheet)
 - [`update_place_sheet`](#update_place_sheet)
@@ -50,6 +41,15 @@
 - [`discard_edit`](#discard_edit)
 - [`snapshot_scene`](#snapshot_scene)
 - [`list_snapshots`](#list_snapshots)
+- [`sync`](#sync)
+- [`import_scrivener_sync`](#import_scrivener_sync)
+- [`import_scrivener_sync_async`](#import_scrivener_sync_async)
+- [`merge_scrivener_project_beta`](#merge_scrivener_project_beta)
+- [`enrich_scene_characters_batch`](#enrich_scene_characters_batch)
+- [`get_async_job_status`](#get_async_job_status)
+- [`list_async_jobs`](#list_async_jobs)
+- [`cancel_async_job`](#cancel_async_job)
+- [`enrich_scene`](#enrich_scene)
 
 ---
 
@@ -58,109 +58,6 @@
 Return a map of available task workflows and the current project context. Call this at the start of a session or whenever you are unsure what to do next. Never write scripts to invoke tools — call them directly.
 
 _No parameters._
-
----
-
-## sync
-
-Re-scan the sync folder and update the scene/character/place index from disk. Call this after making edits in Scrivener or updating sidecar files outside the MCP.
-
-_No parameters._
-
----
-
-## import_scrivener_sync
-
-[STABLE] Import Scrivener External Folder Sync Draft files into this server's WRITING_SYNC_DIR by generating scene sidecars and reconciling by Scrivener binder ID. This is the recommended default path for first-time setup before sync().
-
-| Parameter | Type | Required | Description |
-| --- | --- | :---: | --- |
-| `source_dir` | `string` | Yes | Path to Scrivener external sync folder (the folder that contains Draft/, or Draft/ itself). |
-| `project_id` | `string` | No | Project ID override (e.g. 'the-lamb'). Defaults to a slug derived from WRITING_SYNC_DIR. |
-| `dry_run` | `boolean` | No | If true, reports planned writes without changing files. |
-| `auto_sync` | `boolean` | No | If true (default), runs sync() after import when not dry-run. |
-| `preflight` | `boolean` | No | If true, returns a list of files that would be processed without doing any work. Use to verify scope before a large import. |
-| `ignore_patterns` | `string[]` | No | Array of regex patterns matched against filenames. Files matching any pattern are excluded from import. Useful to skip fragments, beat-sheet notes, or feedback files. |
-
----
-
-## import_scrivener_sync_async
-
-[STABLE] Start an asynchronous Scrivener External Folder Sync import job. This is the recommended default import path when the sync tree is large. Returns immediately with a job_id to poll via get_async_job_status.
-
-| Parameter | Type | Required | Description |
-| --- | --- | :---: | --- |
-| `source_dir` | `string` | Yes | Path to Scrivener external sync folder (the folder that contains Draft/, or Draft/ itself). |
-| `project_id` | `string` | No | Project ID override (e.g. 'the-lamb' or 'universe-1/book-1-the-lamb'). |
-| `dry_run` | `boolean` | No | If true, reports planned writes without changing files. |
-| `auto_sync` | `boolean` | No | If true, runs sync() after a non-dry-run async import finishes. |
-| `preflight` | `boolean` | No | If true, returns a list of files that would be processed without doing any work. |
-| `ignore_patterns` | `string[]` | No | Array of regex patterns matched against filenames. Files matching any pattern are excluded from import. |
-
----
-
-## merge_scrivener_project_beta
-
-Merge metadata directly from a Scrivener .scriv project into existing scene sidecars by starting a background job. This path is opt-in and requires sidecars to already exist (for example, from import_scrivener_sync). Returns immediately with a job_id to poll via get_async_job_status.
-
-| Parameter | Type | Required | Description |
-| --- | --- | :---: | --- |
-| `source_project_dir` | `string` | Yes | Path to a Scrivener .scriv bundle directory. |
-| `project_id` | `string` | No | Project ID containing existing sidecars (e.g. 'the-lamb' or 'universe-1/book-1-the-lamb'). |
-| `scenes_dir` | `string` | No | Absolute path to the scenes directory containing .meta.yaml sidecars. Overrides the path derived from project_id. |
-| `dry_run` | `boolean` | No | If true (default), reports planned merges without writing files. |
-| `auto_sync` | `boolean` | No | If true, runs sync() after a non-dry-run async merge finishes. |
-| `organize_by_chapters` | `boolean` | No | If true (default false), relocate scene files into chapter-based folder hierarchies. Chapter metadata is always extracted to sidecars. |
-
----
-
-## enrich_scene_characters_batch
-
-Start an asynchronous batch job that infers scene character mentions and updates scene metadata links. Version 1 uses canonical character names only (no aliases). Defaults to dry_run=true.
-
-| Parameter | Type | Required | Description |
-| --- | --- | :---: | --- |
-| `project_id` | `string` | Yes | Project ID (e.g. 'the-lamb' or 'universe-1/book-1-the-lamb'). |
-| `scene_ids` | `string[]` | No | Optional allowlist of scene IDs to process before other filters are applied. |
-| `part` | `integer` | No | Optional part number filter. |
-| `chapter` | `integer` | No | Optional chapter number filter. |
-| `only_stale` | `boolean` | No | If true, only process scenes currently marked metadata_stale. |
-| `dry_run` | `boolean` | No | If true (default), returns preview results without writing sidecars. |
-| `replace_mode` | `enum("merge","replace")` | No | merge (default): add inferred IDs; replace: overwrite characters with inferred IDs. |
-| `max_scenes` | `integer` | No | Hard guardrail for resolved scene count (default: 200). |
-| `include_match_details` | `boolean` | No | If true, include extra match diagnostics per scene. |
-| `confirm_replace` | `boolean` | No | Must be true when replace_mode=replace. |
-
----
-
-## get_async_job_status
-
-Get status and result for an asynchronous job started by async tools such as import_scrivener_sync_async, merge_scrivener_project_beta, or enrich_scene_characters_batch. Use this to poll job progress after receiving a job_id. Common next step: if status is still running, call this tool again; if status is completed inspect result, and if status is failed or cancelled inspect job/result diagnostics.
-
-| Parameter | Type | Required | Description |
-| --- | --- | :---: | --- |
-| `job_id` | `string` | Yes | Job ID returned by an async start tool. |
-| `include_result` | `boolean` | No | If true (default), includes completed result payload when available. |
-
----
-
-## list_async_jobs
-
-List asynchronous jobs currently known to this server. Use this when you lost a job_id or need a dashboard view of running/completed jobs. Returns an object envelope containing a jobs array of job objects sorted by newest first.
-
-| Parameter | Type | Required | Description |
-| --- | --- | :---: | --- |
-| `include_results` | `boolean` | No | If true, includes completed result payloads. |
-
----
-
-## cancel_async_job
-
-Cancel a running asynchronous job. Use this when an import/merge/batch run was started with overly broad scope or is no longer needed. Returns the updated job state; cancellation is cooperative and may transition through 'cancelling' before 'cancelled'.
-
-| Parameter | Type | Required | Description |
-| --- | --- | :---: | --- |
-| `job_id` | `string` | Yes | Job ID returned by an async start tool. |
 
 ---
 
@@ -496,17 +393,6 @@ Create or update a thread and link it to a scene. Idempotent: if the link alread
 
 ---
 
-## enrich_scene
-
-Re-derive lightweight scene metadata from current prose (logline and character mentions) and clear metadata_stale for that scene. Only available when the sync dir is writable.
-
-| Parameter | Type | Required | Description |
-| --- | --- | :---: | --- |
-| `scene_id` | `string` | Yes | Scene to enrich (e.g. 'sc-011-sebastian'). |
-| `project_id` | `string` | No | Project ID. Required when scene_id is duplicated across projects. |
-
----
-
 ## update_scene_metadata
 
 Update one or more metadata fields for a scene. Writes to the .meta.yaml sidecar — never modifies prose. Changes are immediately reflected in the index. Only available when the sync dir is writable.
@@ -617,5 +503,119 @@ List git commit history for a scene, with timestamps and commit messages. Use th
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |
 | `scene_id` | `string` | Yes | The scene_id to list snapshots for. |
+
+---
+
+## sync
+
+Re-scan the sync folder and update the scene/character/place index from disk. Call this after making edits in Scrivener or updating sidecar files outside the MCP.
+
+_No parameters._
+
+---
+
+## import_scrivener_sync
+
+[STABLE] Import Scrivener External Folder Sync Draft files into this server's WRITING_SYNC_DIR by generating scene sidecars and reconciling by Scrivener binder ID. This is the recommended default path for first-time setup before sync().
+
+| Parameter | Type | Required | Description |
+| --- | --- | :---: | --- |
+| `source_dir` | `string` | Yes | Path to Scrivener external sync folder (the folder that contains Draft/, or Draft/ itself). |
+| `project_id` | `string` | No | Project ID override (e.g. 'the-lamb'). Defaults to a slug derived from WRITING_SYNC_DIR. |
+| `dry_run` | `boolean` | No | If true, reports planned writes without changing files. |
+| `auto_sync` | `boolean` | No | If true (default), runs sync() after import when not dry-run. |
+| `preflight` | `boolean` | No | If true, returns a list of files that would be processed without doing any work. Use to verify scope before a large import. |
+| `ignore_patterns` | `string[]` | No | Array of regex patterns matched against filenames. Files matching any pattern are excluded from import. Useful to skip fragments, beat-sheet notes, or feedback files. |
+
+---
+
+## import_scrivener_sync_async
+
+[STABLE] Start an asynchronous Scrivener External Folder Sync import job. This is the recommended default import path when the sync tree is large. Returns immediately with a job_id to poll via get_async_job_status.
+
+| Parameter | Type | Required | Description |
+| --- | --- | :---: | --- |
+| `source_dir` | `string` | Yes | Path to Scrivener external sync folder (the folder that contains Draft/, or Draft/ itself). |
+| `project_id` | `string` | No | Project ID override (e.g. 'the-lamb' or 'universe-1/book-1-the-lamb'). |
+| `dry_run` | `boolean` | No | If true, reports planned writes without changing files. |
+| `auto_sync` | `boolean` | No | If true, runs sync() after a non-dry-run async import finishes. |
+| `preflight` | `boolean` | No | If true, returns a list of files that would be processed without doing any work. |
+| `ignore_patterns` | `string[]` | No | Array of regex patterns matched against filenames. Files matching any pattern are excluded from import. |
+
+---
+
+## merge_scrivener_project_beta
+
+Merge metadata directly from a Scrivener .scriv project into existing scene sidecars by starting a background job. This path is opt-in and requires sidecars to already exist (for example, from import_scrivener_sync). Returns immediately with a job_id to poll via get_async_job_status.
+
+| Parameter | Type | Required | Description |
+| --- | --- | :---: | --- |
+| `source_project_dir` | `string` | Yes | Path to a Scrivener .scriv bundle directory. |
+| `project_id` | `string` | No | Project ID containing existing sidecars (e.g. 'the-lamb' or 'universe-1/book-1-the-lamb'). |
+| `scenes_dir` | `string` | No | Absolute path to the scenes directory containing .meta.yaml sidecars. Overrides the path derived from project_id. |
+| `dry_run` | `boolean` | No | If true (default), reports planned merges without writing files. |
+| `auto_sync` | `boolean` | No | If true, runs sync() after a non-dry-run async merge finishes. |
+| `organize_by_chapters` | `boolean` | No | If true (default false), relocate scene files into chapter-based folder hierarchies. Chapter metadata is always extracted to sidecars. |
+
+---
+
+## enrich_scene_characters_batch
+
+Start an asynchronous batch job that infers scene character mentions and updates scene metadata links. Version 1 uses canonical character names only (no aliases). Defaults to dry_run=true.
+
+| Parameter | Type | Required | Description |
+| --- | --- | :---: | --- |
+| `project_id` | `string` | Yes | Project ID (e.g. 'the-lamb' or 'universe-1/book-1-the-lamb'). |
+| `scene_ids` | `string[]` | No | Optional allowlist of scene IDs to process before other filters are applied. |
+| `part` | `integer` | No | Optional part number filter. |
+| `chapter` | `integer` | No | Optional chapter number filter. |
+| `only_stale` | `boolean` | No | If true, only process scenes currently marked metadata_stale. |
+| `dry_run` | `boolean` | No | If true (default), returns preview results without writing sidecars. |
+| `replace_mode` | `enum("merge","replace")` | No | merge (default): add inferred IDs; replace: overwrite characters with inferred IDs. |
+| `max_scenes` | `integer` | No | Hard guardrail for resolved scene count (default: 200). |
+| `include_match_details` | `boolean` | No | If true, include extra match diagnostics per scene. |
+| `confirm_replace` | `boolean` | No | Must be true when replace_mode=replace. |
+
+---
+
+## get_async_job_status
+
+Get status and result for an asynchronous job started by async tools such as import_scrivener_sync_async, merge_scrivener_project_beta, or enrich_scene_characters_batch. Use this to poll job progress after receiving a job_id. Common next step: if status is still running, call this tool again; if status is completed inspect result, and if status is failed or cancelled inspect job/result diagnostics.
+
+| Parameter | Type | Required | Description |
+| --- | --- | :---: | --- |
+| `job_id` | `string` | Yes | Job ID returned by an async start tool. |
+| `include_result` | `boolean` | No | If true (default), includes completed result payload when available. |
+
+---
+
+## list_async_jobs
+
+List asynchronous jobs currently known to this server. Use this when you lost a job_id or need a dashboard view of running/completed jobs. Returns an object envelope containing a jobs array of job objects sorted by newest first.
+
+| Parameter | Type | Required | Description |
+| --- | --- | :---: | --- |
+| `include_results` | `boolean` | No | If true, includes completed result payloads. |
+
+---
+
+## cancel_async_job
+
+Cancel a running asynchronous job. Use this when an import/merge/batch run was started with overly broad scope or is no longer needed. Returns the updated job state; cancellation is cooperative and may transition through 'cancelling' before 'cancelled'.
+
+| Parameter | Type | Required | Description |
+| --- | --- | :---: | --- |
+| `job_id` | `string` | Yes | Job ID returned by an async start tool. |
+
+---
+
+## enrich_scene
+
+Re-derive lightweight scene metadata from current prose (logline and character mentions) and clear metadata_stale for that scene. Only available when the sync dir is writable.
+
+| Parameter | Type | Required | Description |
+| --- | --- | :---: | --- |
+| `scene_id` | `string` | Yes | Scene to enrich (e.g. 'sc-011-sebastian'). |
+| `project_id` | `string` | No | Project ID. Required when scene_id is duplicated across projects. |
 
 ---
