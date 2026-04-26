@@ -767,7 +767,3 @@ describe("walkFiles symlink support", () => {
     fs.rmSync(dir, { recursive: true });
   });
 });
-
-// ---------------------------------------------------------------------------
-// package.json files allowlist — regression guard
-// ---------------------------------------------------------------------------
