@@ -4,7 +4,7 @@ import os from "node:os";
 import fs from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { openDb, CURRENT_SCHEMA_VERSION } from "../../db.js";
+import { openDb, CURRENT_SCHEMA_VERSION, SCHEMA } from "../../db.js";
 
 function makeTempPath() {
   return path.join(os.tmpdir(), `mcp-writing-db-${Date.now()}-${Math.random().toString(36).slice(2)}.sqlite`);
@@ -26,22 +26,12 @@ describe("openDb", () => {
   test("existing production database (all columns present) upgrades cleanly to current version", () => {
     const dbPath = makeTempPath();
     try {
-      // Simulate a production database that already has both columns but no schema_version
+      // Simulate a production database created before schema_version was introduced:
+      // full current schema is present (all tables and columns) but no schema_version table.
+      // Using SCHEMA ensures the fixture stays in sync with real production structure.
       const legacy = new DatabaseSync(dbPath);
-      legacy.exec(`
-        CREATE TABLE scenes (
-          scene_id TEXT NOT NULL, project_id TEXT NOT NULL,
-          title TEXT, chapter_title TEXT,
-          file_path TEXT NOT NULL, updated_at TEXT NOT NULL,
-          metadata_stale INTEGER NOT NULL DEFAULT 0,
-          PRIMARY KEY (scene_id, project_id)
-        );
-      `);
-      legacy.exec(`
-        CREATE VIRTUAL TABLE scenes_fts USING fts5(
-          scene_id, project_id, logline, title, keywords
-        );
-      `);
+      legacy.exec(SCHEMA);
+      legacy.exec(`DROP TABLE schema_version;`);
       legacy.close();
 
       const db = openDb(dbPath);

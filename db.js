@@ -166,12 +166,19 @@ export const CURRENT_SCHEMA_VERSION = MIGRATIONS.length;
 
 function applyMigrations(db) {
   db.prepare(`INSERT OR IGNORE INTO schema_version (id, version) VALUES (1, 0)`).run();
-  const version = db.prepare(`SELECT version FROM schema_version WHERE id = 1`).get().version;
-  for (let i = version; i < MIGRATIONS.length; i++) {
+  for (;;) {
     db.exec(`BEGIN IMMEDIATE;`);
     try {
-      MIGRATIONS[i](db);
-      db.prepare(`UPDATE schema_version SET version = ? WHERE id = 1`).run(i + 1);
+      const { version } = db.prepare(`SELECT version FROM schema_version WHERE id = 1`).get();
+      if (version >= MIGRATIONS.length) {
+        db.exec(`COMMIT;`);
+        break;
+      }
+      MIGRATIONS[version](db);
+      // WHERE version = ? ensures the bump is monotonic: a concurrent opener
+      // that advanced the version first will cause this UPDATE to match 0 rows,
+      // which is safe — the migration is already applied.
+      db.prepare(`UPDATE schema_version SET version = ? WHERE id = 1 AND version = ?`).run(version + 1, version);
       db.exec(`COMMIT;`);
     } catch (err) {
       db.exec(`ROLLBACK;`);
