@@ -47,6 +47,7 @@ None.
 
 ```json
 {
+  "ok": true,
   "context": {
     "project_id": "universe-1/book-1-the-lamb",
     "scene_count": 104,
@@ -72,8 +73,9 @@ None.
   ],
   "notes": [
     "Never write JavaScript or shell scripts to invoke tools. Call them directly.",
-    "If a tool returns an error with a next_step field, follow it before trying anything else.",
-    "Use find_scenes without filters to discover what project_ids are indexed."
+    "If a tool returns a next_step field (in a success or error response), follow it before trying anything else.",
+    "Use find_scenes without filters to discover what project_ids are indexed.",
+    "When calling bootstrap_prose_styleguide_config or check_prose_styleguide_drift, set max_scenes to context.scene_count to avoid the default limit."
   ]
 }
 ```
@@ -184,7 +186,7 @@ The `context` object is computed at call time and reflects current server state.
 
 | Field | Source | Purpose |
 |---|---|---|
-| `project_id` | Derived from `WRITING_SYNC_DIR` path or most common project in db | Tells the AI what project is connected |
+| `project_id` | Most frequent `project_id` in the scenes table (secondary sort: alphabetical for stability), or null if db is empty | Tells the AI what project is connected |
 | `scene_count` | `SELECT COUNT(*) FROM scenes` | Lets the AI set `max_scenes` correctly without guessing |
 | `sync_dir` | `SYNC_DIR_ABS` | Path confirmation |
 | `styleguide_exists.sync_root` | File existence check | Skips `setup_prose_styleguide_config` if already created |
@@ -200,7 +202,7 @@ The `context` object is computed at call time and reflects current server state.
 
 **No parameters.** The tool is a zero-friction entry point. Any parameter requirement risks the AI not calling it when it should.
 
-**`project_id` in context is best-effort.** The server has no explicit "current project" setting — the sync dir implicitly scopes it. The derived value is the most frequent `project_id` in the scenes table, or null if the db is empty. This is informational only; the AI should confirm with the user if unsure.
+**`project_id` in context is best-effort.** The server has no explicit "current project" setting. The derived value is the most frequent `project_id` in the scenes table (ties broken alphabetically for stability), or null if the db is empty. This is informational only; the AI should confirm with the user if unsure.
 
 **`notes` array, not prose.** Machine-readable rules the AI can act on directly, not narrative explanation.
 

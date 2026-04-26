@@ -866,7 +866,7 @@ const WORKFLOW_CATALOGUE = [
     steps: [
       { tool: "describe_workflows", note: "Check context.scene_count; use that value as max_scenes in the next call." },
       { tool: "bootstrap_prose_styleguide_config", note: "Detect dominant conventions. Confirm suggestions with the user before applying." },
-      { tool: "setup_prose_styleguide_config", note: "Create config at project_root scope if context.styleguide_exists.project_root is false. Requires language (e.g. 'en')." },
+      { tool: "setup_prose_styleguide_config", note: "Create config at project_root scope if context.styleguide_exists.project_root is false. Requires language (e.g. 'english_us')." },
       { tool: "update_prose_styleguide_config", note: "Apply the fields accepted from bootstrap suggestions." },
     ],
   },
@@ -876,7 +876,7 @@ const WORKFLOW_CATALOGUE = [
     use_when: "A styleguide config exists and you want to check whether recent scenes conform to it.",
     steps: [
       { tool: "get_prose_styleguide_config", note: "Confirm the currently resolved config." },
-      { tool: "check_prose_styleguide_drift", note: "Detect non-conforming scenes. Set max_scenes from context.scene_count." },
+      { tool: "check_prose_styleguide_drift", note: "Detect non-conforming scenes. Pass project_id from context.project_id and set max_scenes from context.scene_count." },
       { tool: "update_prose_styleguide_config", note: "If drift found and user approves, update config or note the outliers." },
     ],
   },
@@ -930,8 +930,8 @@ const WORKFLOW_CATALOGUE = [
     label: "Review bundle",
     use_when: "Preparing a formatted bundle for human review (outline, editorial, or beta read profile).",
     steps: [
-      { tool: "preview_review_bundle", note: "Check which scenes would be included and the estimated size." },
-      { tool: "create_review_bundle", note: "Generate the bundle." },
+      { tool: "preview_review_bundle", note: "Check which scenes would be included and the estimated size. Requires project_id and profile." },
+      { tool: "create_review_bundle", note: "Generate the bundle. Requires project_id." },
     ],
   },
   {
@@ -958,7 +958,7 @@ function createMcpServer() {
     {},
     async () => {
       const projectRow = db.prepare(
-        `SELECT project_id FROM scenes GROUP BY project_id ORDER BY COUNT(*) DESC LIMIT 1`
+        `SELECT project_id FROM scenes GROUP BY project_id ORDER BY COUNT(*) DESC, project_id ASC LIMIT 1`
       ).get();
       const project_id = projectRow?.project_id ?? null;
 
