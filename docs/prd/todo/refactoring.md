@@ -145,6 +145,19 @@ Tradeoff: Splitting tests is mechanical work. The risk is accidentally splitting
 
 All git operations shell out to the git CLI via child_process. This is the right pragmatic choice over a native binding. The one thing worth verifying: createSnapshot takes an instruction argument (AI-generated text from the propose_edit / snapshot_scene tools) and uses it in a commit message. As long as this is passed as a separate array element to execSync rather than string-interpolated into a shell command, there's no injection risk. If it's interpolated, that's a security concern worth fixing even for a personal tool.
 
-## 8. node:sqlite experimental flag — LOW
+## 9. SQLite 999-parameter limit in review bundle queries — LOW
+
+Surfaced during the Phase F review-bundles split (PR #105). Two places in `review-bundles-planner.js` build unbounded `IN (...)` clauses that will exceed SQLite's 999 host-parameter limit for large `scene_ids` arrays:
+
+- `resolveRequestedSceneIds` (`review-bundles-planner.js`): builds `SELECT scene_id FROM scenes WHERE project_id = ? AND scene_id IN (...)` with one placeholder per requested ID.
+- `buildReviewBundlePlan` (~line 154): same pattern, adds `s.scene_id IN (...)` to the main query.
+
+Both were present in the original monolith. `loadBundleSceneRows` in `review-bundles-renderer.js` already handles this correctly by chunking at 900 IDs.
+
+Fix: apply the same chunk-at-900 pattern to `resolveRequestedSceneIds`, and either chunk or validate-and-reject in `buildReviewBundlePlan`. A `ReviewBundlePlanError` with code `SCENE_IDS_TOO_LARGE` is the right user-facing response for the planner case if chunking the main query adds complexity.
+
+Tradeoff: chunking `resolveRequestedSceneIds` is straightforward (returns a union of chunk results). Chunking `buildReviewBundlePlan`'s main query is trickier since the filter is part of a larger SQL statement; a pre-validation guard (`if (scene_ids.length > 900) throw`) may be the simpler and more honest approach.
+
+## 10. node:sqlite experimental flag — LOW
 
 The --experimental-sqlite flag is required in Node.js 22 but was stabilized in Node.js 23+. This is in the npm start script already. No immediate action needed, but it's worth monitoring and testing on Node 24 to confirm the flag can eventually be dropped. The alternative (switching to better-sqlite3) removes the experimental risk but adds a native build dependency — not worth it right now.
