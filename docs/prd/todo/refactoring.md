@@ -1,6 +1,6 @@
 # Targets for refactoring
 
-**Status:** 🚧 In Progress — Phases A, B, C, D done; Phase E next
+**Status:** 🚧 In Progress — Phases A–E done; Phase F investigation complete, implementation next
 
 ---
 
@@ -51,9 +51,32 @@ After `index.js` is split. Touches `db.js` which all modules depend on.
 
 Last because it's new behavior (not pure refactor) and a prerequisite for OpenClaw, not the current system. Schema migration infrastructure from Phase D must land first.
 
-### Phase F — Large domain module investigation (#2)
+### Phase F — Module extraction (investigation complete) 🚧
 
-After structural work is stable: read `review-bundles.js`, `prose-styleguide.js`, `scene-character-normalization.js` to determine what drives the size. Data → extract to JSON/YAML. Algorithmic → sub-modules. Don't pre-decide.
+Investigation read all three large domain modules plus the remaining `index.js` surface. Findings:
+
+**`scene-character-normalization.js` (198 lines):** No action. Purely algorithmic, well-structured, size is proportionate.
+
+**`prose-styleguide.js` (684 lines):** No action. ~26% is data (`ENUMS` + `LANGUAGE_DEFAULTS`), rest is algorithmic. Extracting the data to JSON would save ~180 lines but couples tightly-related data away from the validation code that uses it. Not worth it.
+
+**`review-bundles.js` (997 lines):** Split warranted. Three distinct algorithmic concerns — plan, render, write — with clean seams. `normalizeRecipientDisplayName` is the one cross-cutting helper (used by planner and renderers); it moves with the planner and gets imported by the renderers.
+- `review-bundles-planner.js` — `buildReviewBundlePlan` + its helpers (`sceneSort`, `buildWarningSummary`, `resolveRequestedSceneIds`, `assertProfile/Strictness/Format`, `slugifyBundleName`, `normalizeRecipientDisplayName`)
+- `review-bundles-renderer.js` — `renderReviewBundleMarkdown`, `renderReviewBundlePdf`, and their helpers (`loadBundleSceneRows`, `resolveSceneFilePath`, `readProse`, `renderSceneBlock`, `renderBetaNoticeMarkdown`, `renderBetaFeedbackFormMarkdown`, `escapeMarkdown`)
+- `review-bundles-writer.js` — `createReviewBundleArtifacts` + `resolveOutputFilePath`
+- `review-bundles.js` — kept as re-export façade so the `tools/review-bundles.js` import surface is unchanged
+- **Do not fix** the known logline bug (renders in all profiles; should be `outline_discussion` only) in this phase — behavioral fix belongs in a separate PR.
+
+**`index.js` (1164 lines after Phase E):** Two extractions warranted. Everything else (startup sequencing, server factory, transport, two inline tools, graceful shutdown) is appropriately in index.js.
+- `async-jobs.js` (~207 lines): `startAsyncJob`, `pruneAsyncJobs`, `toPublicJob`, `readJsonIfExists`. Pattern: export a factory `createAsyncJobManager({ db, asyncJobs, ttlMs, runnerDir })` returning the functions, keeping coupled state encapsulated. Already threaded through `toolContext`.
+- `helpers.js` (~240 lines): `deriveLoglineFromProse`, `inferCharacterIdsFromProse`, `readSupportingNotesForEntity`, `readEntityMetadata`, `resolveProjectRoot`, `resolveWorldEntityDir`, `resolveBatchTargetScenes`, `createCanonicalWorldEntity`. Most already take explicit parameters; the ones that reference `SYNC_DIR` take it as a parameter. All already in `toolContext` — move is clean.
+- Path safety utilities (`isPathInsideSyncDir`, `isPathCandidateInsideSyncDir`, `resolveOutputDirWithinSync`, ~90 lines) — fold into `helpers.js`.
+- After both extractions `index.js` lands at ~500 lines, proportionate to its actual job.
+
+**Sequencing:** Four separate PRs, one concern each, full test suite after each:
+1. `review-bundles.js` split (planner / renderer / writer façade)
+2. `async-jobs.js` extraction from `index.js`
+3. `helpers.js` extraction from `index.js`
+4. Path safety folded into `helpers.js` (can merge with PR 3 if small enough)
 
 ---
 
