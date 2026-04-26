@@ -631,6 +631,49 @@ describe("get_prose_styleguide_config tool", () => {
   });
 });
 
+describe("setup_prose_styleguide_skill tool", () => {
+  test("requires a styleguide config before skill generation", async () => {
+    const rootConfigPath = path.join(writeSyncDir, "prose-styleguide.config.yaml");
+    fs.rmSync(rootConfigPath, { force: true });
+
+    const text = await callWriteTool("setup_prose_styleguide_skill", { overwrite: true });
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.ok, false);
+    assert.equal(parsed.error.code, "STYLEGUIDE_CONFIG_REQUIRED");
+  });
+
+  test("writes skills/prose-styleguide.md from resolved config", async () => {
+    fs.writeFileSync(
+      path.join(writeSyncDir, "prose-styleguide.config.yaml"),
+      [
+        "language: english_uk",
+        "dialogue_tags: minimal",
+        "voice_notes: |",
+        "  Keep the tone restrained.",
+      ].join("\n"),
+      "utf8"
+    );
+
+    const text = await callWriteTool("setup_prose_styleguide_skill", { overwrite: true });
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.ok, true);
+    assert.equal(typeof parsed.file_path, "string");
+    assert.equal(parsed.file_path.length > 0, true);
+    assert.ok(Array.isArray(parsed.injected_rules));
+    assert.equal(parsed.injected_rules.length > 0, true);
+
+    const skillPath = path.join(writeSyncDir, "skills", "prose-styleguide.md");
+    assert.equal(fs.existsSync(skillPath), true);
+    const skillText = fs.readFileSync(skillPath, "utf8");
+    assert.match(skillText, /# Prose Styleguide/);
+    assert.match(skillText, /Primary writing language: English \(UK\)\./);
+    assert.match(skillText, /Dialogue tag policy: minimal\./);
+    assert.match(skillText, /> Keep the tone restrained\./);
+  });
+});
+
 describe("import_scrivener_sync tool", () => {
   test("dry-run returns machine-readable counts without writing files", async () => {
     const projectId = "import-preview";

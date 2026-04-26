@@ -36,6 +36,7 @@ import { runSceneCharacterBatch } from "../scene-character-batch.js";
 import { buildCharacterNormalizationContext, isDistinctiveToken, normalizeSceneCharacters } from "../scene-character-normalization.js";
 import { buildReviewBundlePlan, renderReviewBundleMarkdown, ReviewBundlePlanError } from "../review-bundles.js";
 import { buildStyleguideConfigDraft, resolveStyleguideConfig } from "../prose-styleguide.js";
+import { buildProseStyleguideSkill } from "../prose-styleguide-skill.js";
 
 function insertTestScene(db, {
   sceneId,
@@ -351,6 +352,36 @@ describe("styleguide config hardening", () => {
     } finally {
       fs.rmSync(syncDir, { recursive: true, force: true });
     }
+  });
+});
+
+describe("buildProseStyleguideSkill", () => {
+  test("renders markdown with injected rules and voice notes", () => {
+    const result = buildProseStyleguideSkill({
+      resolvedConfig: {
+        language: "english_uk",
+        quotation_style: "single",
+        tense: "present",
+        voice_notes: "Keep subtext strong.\nAvoid over-explaining emotions.",
+      },
+      sources: [{ scope: "sync_root", file_path: "/tmp/prose-styleguide.config.yaml" }],
+      projectId: "test-novel",
+    });
+
+    assert.equal(result.ok, true);
+    assert.match(result.markdown, /# Prose Styleguide/);
+    assert.match(result.markdown, /Project scope: test-novel/);
+    assert.match(result.markdown, /Primary writing language: English \(UK\)\./);
+    assert.match(result.markdown, /Dialogue quotation style: single quotes\./);
+    assert.match(result.markdown, /Default narrative tense: present\./);
+    assert.match(result.markdown, /> Keep subtext strong\./);
+    assert.match(result.markdown, /> Avoid over-explaining emotions\./);
+  });
+
+  test("fails when resolved config is missing", () => {
+    const result = buildProseStyleguideSkill({ resolvedConfig: null });
+    assert.equal(result.ok, false);
+    assert.equal(result.error.code, "INVALID_STYLEGUIDE_CONFIG");
   });
 });
 
