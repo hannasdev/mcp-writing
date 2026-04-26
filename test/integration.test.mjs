@@ -653,6 +653,17 @@ describe("summarize_prose_styleguide_config tool", () => {
     assert.match(parsed.summary_text, /Voice notes: Quietly intense\./);
     assert.ok(Array.isArray(parsed.summary_lines));
   });
+
+  test("returns setup guidance when no config exists", async () => {
+    fs.rmSync(path.join(writeSyncDir, "prose-styleguide.config.yaml"), { force: true });
+
+    const text = await callWriteTool("summarize_prose_styleguide_config");
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.ok, false);
+    assert.equal(parsed.error.code, "STYLEGUIDE_CONFIG_REQUIRED");
+    assert.match(parsed.error.details.next_step, /bootstrap_prose_styleguide_config/);
+  });
 });
 
 describe("update_prose_styleguide_config tool", () => {
@@ -844,6 +855,76 @@ describe("check_prose_styleguide_drift tool", () => {
   });
 });
 
+describe("bootstrap_prose_styleguide_config tool", () => {
+  test("suggests initial config values from scene corpus", async () => {
+    const projectId = "bootstrap-demo";
+    const sceneDir = path.join(writeSyncDir, "projects", projectId, "scenes");
+    fs.mkdirSync(sceneDir, { recursive: true });
+
+    fs.writeFileSync(
+      path.join(sceneDir, "sc-001.md"),
+      [
+        "---",
+        "scene_id: boot-sc-001",
+        "project_id: bootstrap-demo",
+        "part: 1",
+        "chapter: 1",
+        "timeline_position: 1",
+        "---",
+        "\"I go now,\" she says. \"I do what I must.\"",
+      ].join("\n"),
+      "utf8"
+    );
+
+    fs.writeFileSync(
+      path.join(sceneDir, "sc-002.md"),
+      [
+        "---",
+        "scene_id: boot-sc-002",
+        "project_id: bootstrap-demo",
+        "part: 1",
+        "chapter: 1",
+        "timeline_position: 2",
+        "---",
+        "\"I go now,\" she says. \"I do what I must.\"",
+      ].join("\n"),
+      "utf8"
+    );
+
+    fs.writeFileSync(
+      path.join(sceneDir, "sc-003.md"),
+      [
+        "---",
+        "scene_id: boot-sc-003",
+        "project_id: bootstrap-demo",
+        "part: 1",
+        "chapter: 1",
+        "timeline_position: 3",
+        "---",
+        "\"I go now,\" she says. \"I do what I must.\"",
+      ].join("\n"),
+      "utf8"
+    );
+
+    const syncText = await callWriteTool("sync");
+    assert.match(syncText, /scenes indexed/);
+
+    const text = await callWriteTool("bootstrap_prose_styleguide_config", {
+      project_id: projectId,
+      max_scenes: 10,
+      min_evidence: 3,
+    });
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.checked_scenes, 3);
+    assert.equal(Object.hasOwn(parsed.suggested_config, "quotation_style"), true);
+    assert.equal(parsed.suggested_config.quotation_style.suggested_value, "double");
+    assert.equal(Object.hasOwn(parsed.suggested_config, "tense"), true);
+    assert.equal(parsed.suggested_config.tense.suggested_value, "present");
+  });
+});
+
 describe("setup_prose_styleguide_skill tool", () => {
   test("requires a styleguide config before skill generation", async () => {
     const rootConfigPath = path.join(writeSyncDir, "prose-styleguide.config.yaml");
@@ -854,6 +935,7 @@ describe("setup_prose_styleguide_skill tool", () => {
 
     assert.equal(parsed.ok, false);
     assert.equal(parsed.error.code, "STYLEGUIDE_CONFIG_REQUIRED");
+    assert.match(parsed.error.details.next_step, /bootstrap_prose_styleguide_config/);
   });
 
   test("writes skills/prose-styleguide.md from resolved config", async () => {
