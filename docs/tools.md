@@ -14,6 +14,7 @@
 - [`get_async_job_status`](#get_async_job_status)
 - [`list_async_jobs`](#list_async_jobs)
 - [`cancel_async_job`](#cancel_async_job)
+- [`enrich_scene`](#enrich_scene)
 - [`get_runtime_config`](#get_runtime_config)
 - [`setup_prose_styleguide_config`](#setup_prose_styleguide_config)
 - [`get_prose_styleguide_config`](#get_prose_styleguide_config)
@@ -39,7 +40,6 @@
 - [`list_threads`](#list_threads)
 - [`get_thread_arc`](#get_thread_arc)
 - [`upsert_thread_link`](#upsert_thread_link)
-- [`enrich_scene`](#enrich_scene)
 - [`update_scene_metadata`](#update_scene_metadata)
 - [`update_character_sheet`](#update_character_sheet)
 - [`update_place_sheet`](#update_place_sheet)
@@ -161,6 +161,17 @@ Cancel a running asynchronous job. Use this when an import/merge/batch run was s
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |
 | `job_id` | `string` | Yes | Job ID returned by an async start tool. |
+
+---
+
+## enrich_scene
+
+Re-derive lightweight scene metadata from current prose (logline and character mentions) and clear metadata_stale for that scene. Only available when the sync dir is writable.
+
+| Parameter | Type | Required | Description |
+| --- | --- | :---: | --- |
+| `scene_id` | `string` | Yes | Scene to enrich (e.g. 'sc-011-sebastian'). |
+| `project_id` | `string` | No | Project ID. Required when scene_id is duplicated across projects. |
 
 ---
 
@@ -493,17 +504,6 @@ Create or update a thread and link it to a scene. Idempotent: if the link alread
 | `scene_id` | `string` | Yes | Scene to link to the thread (e.g. 'sc-011-sebastian'). |
 | `beat` | `string` | No | Optional thread-specific beat label for this scene. |
 | `status` | `string` | No | Thread status (e.g. 'active', 'resolved'). Defaults to 'active'. |
-
----
-
-## enrich_scene
-
-Re-derive lightweight scene metadata from current prose (logline and character mentions) and clear metadata_stale for that scene. Only available when the sync dir is writable.
-
-| Parameter | Type | Required | Description |
-| --- | --- | :---: | --- |
-| `scene_id` | `string` | Yes | Scene to enrich (e.g. 'sc-011-sebastian'). |
-| `project_id` | `string` | No | Project ID. Required when scene_id is duplicated across projects. |
 
 ---
 

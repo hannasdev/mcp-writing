@@ -109,8 +109,9 @@ export function createSnapshot(dirPath, filePath, sceneId, instruction, options 
 export function listSnapshots(dirPath, filePath) {
   try {
     const relPath = path.relative(dirPath, filePath);
-    const output = execSync(
-      `git log --pretty=format:"%h|%ai|%s" -- "${relPath}"`,
+    const output = execFileSync(
+      "git",
+      ["log", "--pretty=format:%h|%ai|%s", "--", relPath],
       {
         cwd: dirPath,
         stdio: "pipe",
@@ -154,7 +155,7 @@ export function getSceneProseAtCommit(dirPath, filePath, commitHash) {
     }
 
     // Get version from git
-    const content = execSync(`git show ${commitHash}:"${relPath}"`, {
+    const content = execFileSync("git", ["show", `${commitHash}:${relPath}`], {
       cwd: dirPath,
       stdio: "pipe",
       encoding: "utf8",

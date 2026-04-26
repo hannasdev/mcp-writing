@@ -1,23 +1,38 @@
 #!/usr/bin/env node
 /**
- * Generates docs/tools.md from tool definitions in index.js.
+ * Generates docs/tools.md from tool definitions in index.js and tools/*.js.
  *
  * Run:  node scripts/generate-tool-docs.mjs
  *   or: npm run docs
  *
  * The output is the single source of truth for the tool reference.
- * Re-run after editing tool names, descriptions, or parameters in index.js.
+ * Re-run after editing tool names, descriptions, or parameters.
  */
 
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const SRC  = path.join(ROOT, 'index.js');
 const OUT  = path.join(ROOT, 'docs', 'tools.md');
 
-const source = readFileSync(SRC, 'utf8');
+// Build a map from each registration function name to its module source.
+// e.g. "registerSyncTools" -> contents of tools/sync.js
+const toolModuleMap = new Map();
+try {
+  for (const f of readdirSync(path.join(ROOT, 'tools')).filter(f => f.endsWith('.js')).sort()) {
+    const content = readFileSync(path.join(ROOT, 'tools', f), 'utf8');
+    const fnName = (content.match(/export function (\w+)\s*\(/) ?? [])[1];
+    if (fnName) toolModuleMap.set(fnName, content);
+  }
+} catch { /* tools/ not yet created */ }
+
+// Inline each register*Tools(s, ...) call with the module source so that
+// s.tool() blocks appear in registration order (matching createMcpServer()).
+let source = readFileSync(path.join(ROOT, 'index.js'), 'utf8');
+for (const [fnName, content] of toolModuleMap) {
+  source = source.replace(new RegExp(`[ \\t]*${fnName}\\s*\\([\\s\\S]*?\\);`), content);
+}
 
 function decodeEscape(src, i) {
   const esc = src[i];
