@@ -6,6 +6,16 @@ An MCP service for AI-assisted reasoning and editing on long-form fiction projec
 
 Designed to work with [OpenClaw](https://github.com/openclaw/openclaw) but compatible with any MCP-capable AI gateway.
 
+## Quick launch
+
+For local stdio MCP clients, run the published package directly:
+
+```sh
+WRITING_SYNC_DIR=/path/to/sync-dir DB_PATH=./writing.db npx -y @hanna84/mcp-writing
+```
+
+The CLI wrapper defaults to stdio transport and adds the Node 22 SQLite flag automatically when needed.
+
 ## What it does
 
 Instead of feeding an entire manuscript to an AI and hoping it fits in the context window, `mcp-writing` builds a structured index from your scene files. The AI queries that index first — finding relevant characters, beats, and loglines — then loads only the specific prose it needs.
