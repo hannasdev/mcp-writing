@@ -705,7 +705,7 @@ export function mergeScrivenerProjectMetadata({
       });
     }
 
-    let didRelocate = false;
+    let didRelocate;
 
     if (dryRun) {
       logger(`  DRY   ${filename}`);
