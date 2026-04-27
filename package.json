@@ -17,6 +17,7 @@
     "git.js",
     "world-entity-templates.js",
     "workflow-catalogue.js",
+    "runtime-diagnostics.js",
     "metadata-lint.js",
     "scene-character-normalization.js",
     "review-bundles.js",
