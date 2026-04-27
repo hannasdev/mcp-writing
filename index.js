@@ -26,6 +26,7 @@ import { registerReviewBundleTools } from "./tools/review-bundles.js";
 import { registerStyleguideTools } from "./tools/styleguide.js";
 import { registerEditingTools } from "./tools/editing.js";
 import { WORKFLOW_CATALOGUE } from "./workflow-catalogue.js";
+import { getRuntimeDiagnostics } from "./runtime-diagnostics.js";
 
 const SYNC_DIR = process.env.WRITING_SYNC_DIR ?? "./sync";
 const DB_PATH = process.env.DB_PATH ?? "./writing.db";
@@ -200,78 +201,16 @@ function generateProposalId() {
   return `proposal-${randomUUID()}`;
 }
 
-function getRuntimeDiagnostics() {
-  const warnings = [];
-  const recommendations = [];
-
-  if (OWNERSHIP_GUARD_MODE_RAW !== OWNERSHIP_GUARD_MODE) {
-    warnings.push(
-      `OWNERSHIP_GUARD_MODE_INVALID: Unsupported OWNERSHIP_GUARD_MODE=${OWNERSHIP_GUARD_MODE_RAW_DISPLAY}. Falling back to 'warn'.`
-    );
-    recommendations.push("Set OWNERSHIP_GUARD_MODE to either 'warn' or 'fail'.");
-  }
-
-  if (SYNC_OWNERSHIP_DIAGNOSTICS.runtime_uid_override_ignored) {
-    warnings.push("RUNTIME_UID_OVERRIDE_IGNORED: RUNTIME_UID_OVERRIDE is ignored unless NODE_ENV=test or ALLOW_RUNTIME_UID_OVERRIDE=1.");
-    recommendations.push("Avoid RUNTIME_UID_OVERRIDE in production runtime environments.");
-  }
-
-  if (SYNC_OWNERSHIP_DIAGNOSTICS.runtime_uid_override_invalid) {
-    warnings.push("RUNTIME_UID_OVERRIDE_INVALID: RUNTIME_UID_OVERRIDE must be a non-negative integer when enabled.");
-    recommendations.push("Set RUNTIME_UID_OVERRIDE to a non-negative integer, or unset it.");
-  }
-
-  if (!SYNC_DIR_WRITABLE) {
-    warnings.push("SYNC_DIR_READ_ONLY: sync dir is read-only; metadata write-back and prose editing tools are unavailable.");
-    recommendations.push("Mount WRITING_SYNC_DIR with write access (avoid read-only mounts like ':ro').");
-    recommendations.push("If running in Docker/OpenClaw, verify volume ownership and permissions for the container user.");
-  }
-
-  if (SYNC_OWNERSHIP_DIAGNOSTICS.supported && SYNC_OWNERSHIP_DIAGNOSTICS.non_runtime_owned_paths > 0) {
-    warnings.push(
-      `OWNERSHIP_MISMATCH: ${SYNC_OWNERSHIP_DIAGNOSTICS.non_runtime_owned_paths} sampled path(s) are not owned by runtime UID ${SYNC_OWNERSHIP_DIAGNOSTICS.runtime_uid}.`
-    );
-    recommendations.push(
-      `Repair ownership once on host: sudo chown -R "$(id -u):$(id -g)" "${SYNC_DIR_ABS}"`
-    );
-    recommendations.push(
-      "For Docker/OpenClaw, run container as host user (compose: user: \"${OPENCLAW_UID:-1000}:${OPENCLAW_GID:-1000}\")."
-    );
-  }
-
-  if (OWNERSHIP_GUARD_MODE === "fail" && SYNC_OWNERSHIP_DIAGNOSTICS.runtime_uid === 0) {
-    warnings.push(
-      "OWNERSHIP_GUARD_SKIPPED_FOR_ROOT: OWNERSHIP_GUARD_MODE=fail is skipped because runtime UID is 0 (root)."
-    );
-    recommendations.push("Prefer running as a non-root host-mapped UID/GID to make ownership guard checks meaningful.");
-  }
-
-  if (SYNC_OWNERSHIP_DIAGNOSTICS.supported && SYNC_OWNERSHIP_DIAGNOSTICS.root_owned_paths > 0) {
-    warnings.push(
-      `ROOT_OWNED_PATHS: ${SYNC_OWNERSHIP_DIAGNOSTICS.root_owned_paths} sampled path(s) are owned by UID 0 (root).`
-    );
-  }
-
-  if (!GIT_AVAILABLE) {
-    warnings.push("GIT_NOT_FOUND: git is not available on PATH; snapshot/edit tools are unavailable.");
-    recommendations.push("Install git in the runtime image/environment.");
-  }
-
-  if (GIT_AVAILABLE && SYNC_DIR_WRITABLE && !GIT_ENABLED) {
-    warnings.push("GIT_DISABLED: git is available but repository snapshot tools are not active.");
-    recommendations.push("Ensure WRITING_SYNC_DIR points to a writable git repository root, or allow mcp-writing to initialize one.");
-  }
-
-  if (GIT_AVAILABLE && !SYNC_DIR_WRITABLE) {
-    recommendations.push("If git reports 'dubious ownership' for mounted repos, add: git config --system --add safe.directory /sync");
-  }
-
-  recommendations.push("If indexing finds many files without scene_id, run scripts/import.js first for Scrivener Draft exports, then run sync.");
-
-  return { warnings, recommendations };
-}
-
-const RUNTIME_DIAGNOSTICS = getRuntimeDiagnostics();
+const RUNTIME_DIAGNOSTICS = getRuntimeDiagnostics({
+  ownershipGuardModeRaw: OWNERSHIP_GUARD_MODE_RAW,
+  ownershipGuardMode: OWNERSHIP_GUARD_MODE,
+  ownershipGuardModeRawDisplay: OWNERSHIP_GUARD_MODE_RAW_DISPLAY,
+  syncDirWritable: SYNC_DIR_WRITABLE,
+  syncDirAbs: SYNC_DIR_ABS,
+  syncOwnershipDiagnostics: SYNC_OWNERSHIP_DIAGNOSTICS,
+  gitAvailable: GIT_AVAILABLE,
+  gitEnabled: GIT_ENABLED,
+});
 if (RUNTIME_DIAGNOSTICS.warnings.length) {
   process.stderr.write(`[mcp-writing] Runtime diagnostics:\n`);
   for (const line of RUNTIME_DIAGNOSTICS.warnings) {
