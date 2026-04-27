@@ -1,0 +1,987 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>mcp-writing — AI-assisted fiction editing without losing context</title>
+  <meta name="description" content="A purpose-built MCP server for novelists. Query your manuscript's structure, trace character arcs, and make AI-assisted edits — without dumping your whole book into a prompt." />
+  <meta property="og:title" content="mcp-writing" />
+  <meta property="og:description" content="AI-assisted fiction editing without losing context." />
+  <meta property="og:type" content="website" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:          #08080f;
+      --surface:     #0f0f1a;
+      --card:        #131320;
+      --border:      #1e1e30;
+      --border-hi:   #2e2e48;
+      --accent:      #7c3aed;
+      --accent-2:    #a78bfa;
+      --accent-glow: rgba(124,58,237,0.25);
+      --text:        #e2e8f0;
+      --muted:       #94a3b8;
+      --dim:         #475569;
+      --green:       #22c55e;
+      --amber:       #f59e0b;
+      --red:         #f87171;
+      --code-bg:     #0a0a14;
+      --radius:      10px;
+      --radius-lg:   16px;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', system-ui, sans-serif;
+      font-size: 16px;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    a { color: var(--accent-2); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* ---- Layout ---- */
+    .container { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
+    .section { padding: 80px 0; }
+    .section-sm { padding: 56px 0; }
+
+    /* ---- NAV ---- */
+    nav {
+      position: sticky; top: 0; z-index: 100;
+      background: rgba(8,8,15,0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+    }
+    .nav-inner {
+      display: flex; align-items: center; justify-content: space-between;
+      height: 60px;
+    }
+    .nav-logo {
+      font-weight: 700; font-size: 15px; color: var(--text);
+      display: flex; align-items: center; gap: 10px;
+    }
+    .nav-logo-icon {
+      width: 28px; height: 28px; border-radius: 7px;
+      background: linear-gradient(135deg, var(--accent), #4f46e5);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px;
+    }
+    .nav-links { display: flex; align-items: center; gap: 8px; }
+    .nav-links a {
+      font-size: 13.5px; color: var(--muted); padding: 6px 12px;
+      border-radius: 6px; transition: color 0.15s, background 0.15s;
+      font-weight: 500;
+    }
+    .nav-links a:hover { color: var(--text); background: var(--card); text-decoration: none; }
+    .btn-nav {
+      background: var(--accent);
+      color: #fff !important;
+      padding: 7px 14px !important;
+      border-radius: 7px !important;
+    }
+    .btn-nav:hover { background: #6d28d9 !important; }
+
+    /* ---- HERO ---- */
+    .hero {
+      padding: 96px 0 80px;
+      position: relative; overflow: hidden;
+    }
+    .hero::before {
+      content: '';
+      position: absolute; top: -200px; left: 50%; transform: translateX(-50%);
+      width: 800px; height: 600px;
+      background: radial-gradient(ellipse at center, rgba(124,58,237,0.15) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .hero-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 60px; align-items: center;
+    }
+    .hero-badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: rgba(124,58,237,0.15); border: 1px solid rgba(124,58,237,0.35);
+      padding: 4px 12px; border-radius: 20px;
+      font-size: 12.5px; color: var(--accent-2); font-weight: 500;
+      margin-bottom: 24px;
+    }
+    .hero-badge span { font-size: 10px; }
+    .hero h1 {
+      font-size: clamp(32px, 5vw, 52px);
+      font-weight: 800; line-height: 1.15; letter-spacing: -0.03em;
+      margin-bottom: 20px;
+    }
+    .hero h1 em {
+      font-style: normal;
+      background: linear-gradient(135deg, var(--accent-2), #818cf8);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+    .hero-sub {
+      font-size: 17px; color: var(--muted); line-height: 1.65;
+      margin-bottom: 36px; max-width: 460px;
+    }
+    .hero-ctas { display: flex; gap: 12px; flex-wrap: wrap; }
+    .btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 11px 22px; border-radius: 8px; font-size: 14.5px;
+      font-weight: 600; cursor: pointer; transition: all 0.15s; border: none;
+      text-decoration: none;
+    }
+    .btn-primary {
+      background: var(--accent); color: #fff;
+    }
+    .btn-primary:hover { background: #6d28d9; text-decoration: none; color: #fff; }
+    .btn-secondary {
+      background: var(--card); color: var(--text);
+      border: 1px solid var(--border-hi);
+    }
+    .btn-secondary:hover { background: var(--border); text-decoration: none; color: var(--text); }
+
+    /* ---- CHAT MOCK ---- */
+    .chat-mock {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      font-size: 13px;
+      box-shadow: 0 24px 64px rgba(0,0,0,0.5), 0 0 0 1px var(--border);
+    }
+    .chat-mock-bar {
+      background: var(--card);
+      border-bottom: 1px solid var(--border);
+      padding: 10px 16px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .dot { width: 10px; height: 10px; border-radius: 50%; }
+    .dot-r { background: #ff5f56; }
+    .dot-y { background: #ffbd2e; }
+    .dot-g { background: #27c93f; }
+    .chat-mock-bar-label {
+      margin-left: auto; font-size: 11px; color: var(--dim);
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .chat-body { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+    .msg-user {
+      align-self: flex-end;
+      background: rgba(124,58,237,0.2);
+      border: 1px solid rgba(124,58,237,0.3);
+      padding: 8px 14px; border-radius: 10px 10px 2px 10px;
+      max-width: 85%; color: var(--text); line-height: 1.45;
+    }
+    .msg-ai {
+      align-self: flex-start; max-width: 100%; color: var(--muted); line-height: 1.5;
+    }
+    .msg-ai p { margin-bottom: 6px; }
+    .tool-call {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 7px; overflow: hidden; margin: 6px 0;
+    }
+    .tool-call-header {
+      display: flex; align-items: center; gap: 8px;
+      padding: 7px 12px;
+      background: rgba(124,58,237,0.1);
+      border-bottom: 1px solid var(--border);
+    }
+    .tool-call-name {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11.5px; color: var(--accent-2); font-weight: 500;
+    }
+    .tool-call-server {
+      font-size: 10.5px; color: var(--dim); margin-left: auto;
+    }
+    .tool-call-body {
+      padding: 8px 12px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px; color: var(--muted); line-height: 1.5;
+    }
+    .tool-result {
+      background: var(--code-bg);
+      border: 1px solid rgba(34,197,94,0.2);
+      border-radius: 7px; overflow: hidden; margin: 4px 0;
+    }
+    .tool-result-header {
+      display: flex; align-items: center; gap: 6px;
+      padding: 5px 12px;
+      background: rgba(34,197,94,0.07);
+      border-bottom: 1px solid rgba(34,197,94,0.15);
+      font-size: 10.5px; color: var(--green);
+    }
+    .tool-result-body {
+      padding: 8px 12px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px; color: var(--dim); line-height: 1.5;
+    }
+    .key { color: #818cf8; }
+    .str { color: #86efac; }
+    .num { color: #fbbf24; }
+    .msg-ai-text { color: var(--text); font-size: 13px; line-height: 1.55; }
+
+    /* ---- PROBLEM ---- */
+    .problem-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: center;
+    }
+    .problem-label {
+      font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.1em;
+      color: var(--accent-2); font-weight: 600; margin-bottom: 16px;
+    }
+    .problem h2 {
+      font-size: clamp(26px, 3.5vw, 38px);
+      font-weight: 800; letter-spacing: -0.025em; line-height: 1.2;
+      margin-bottom: 20px;
+    }
+    .problem p {
+      color: var(--muted); font-size: 16px; line-height: 1.7; margin-bottom: 16px;
+    }
+    .context-viz {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--radius-lg); padding: 24px;
+    }
+    .ctx-label { font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 12px; }
+    .ctx-bar-wrap { margin-bottom: 10px; }
+    .ctx-bar-label { font-size: 12px; color: var(--muted); margin-bottom: 4px; display: flex; justify-content: space-between; }
+    .ctx-bar { height: 10px; border-radius: 5px; background: var(--border); overflow: hidden; }
+    .ctx-fill { height: 100%; border-radius: 5px; transition: width 0.5s; }
+    .fill-red { background: var(--red); }
+    .fill-green { background: var(--green); }
+    .fill-amber { background: var(--amber); }
+    .ctx-note { margin-top: 16px; font-size: 12px; color: var(--dim); }
+    .ctx-note strong { color: var(--green); }
+
+    /* ---- HOW IT WORKS ---- */
+    .steps-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
+    .step-card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--radius-lg); padding: 28px;
+      position: relative; overflow: hidden;
+    }
+    .step-card::before {
+      content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+      background: linear-gradient(90deg, var(--accent), #4f46e5);
+    }
+    .step-num {
+      font-size: 11px; font-weight: 700; color: var(--accent-2);
+      text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 14px;
+    }
+    .step-icon {
+      font-size: 28px; margin-bottom: 14px; display: block;
+    }
+    .step-card h3 { font-size: 17px; font-weight: 700; margin-bottom: 10px; }
+    .step-card p { font-size: 14px; color: var(--muted); line-height: 1.6; }
+
+    /* ---- SCENARIOS ---- */
+    .scenario-tabs {
+      display: flex; gap: 4px; flex-wrap: wrap;
+      margin-bottom: 24px;
+    }
+    .tab-btn {
+      padding: 8px 16px; border-radius: 7px; font-size: 13.5px;
+      font-weight: 500; cursor: pointer; border: 1px solid transparent;
+      color: var(--muted); background: transparent; transition: all 0.15s;
+      font-family: inherit;
+    }
+    .tab-btn:hover { color: var(--text); background: var(--card); }
+    .tab-btn.active {
+      background: var(--card); color: var(--text);
+      border-color: var(--border-hi);
+    }
+    .scenario-panel { display: none; }
+    .scenario-panel.active { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; align-items: start; }
+    .scenario-info h3 { font-size: 22px; font-weight: 700; margin-bottom: 10px; }
+    .scenario-info .goal {
+      font-size: 12.5px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 0.08em; color: var(--accent-2); margin-bottom: 8px;
+    }
+    .scenario-info p { font-size: 15px; color: var(--muted); line-height: 1.65; margin-bottom: 16px; }
+    .scenario-steps { list-style: none; counter-reset: steps; }
+    .scenario-steps li {
+      counter-increment: steps;
+      display: flex; gap: 12px; align-items: flex-start;
+      font-size: 14px; color: var(--muted); margin-bottom: 10px; line-height: 1.5;
+    }
+    .scenario-steps li::before {
+      content: counter(steps);
+      min-width: 22px; height: 22px;
+      background: rgba(124,58,237,0.2); border: 1px solid rgba(124,58,237,0.35);
+      border-radius: 50%; font-size: 11px; font-weight: 700; color: var(--accent-2);
+      display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+      margin-top: 1px;
+    }
+    code { font-family: 'JetBrains Mono', monospace; font-size: 0.88em; color: var(--accent-2); }
+
+    /* ---- FEATURES ---- */
+    .section-header { text-align: center; margin-bottom: 48px; }
+    .section-header .label {
+      font-size: 11.5px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 0.1em; color: var(--accent-2); margin-bottom: 14px;
+    }
+    .section-header h2 {
+      font-size: clamp(26px, 3.5vw, 38px); font-weight: 800;
+      letter-spacing: -0.025em; line-height: 1.2; margin-bottom: 14px;
+    }
+    .section-header p { font-size: 16px; color: var(--muted); max-width: 520px; margin: 0 auto; }
+    .features-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+    .feature-card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--radius-lg); padding: 24px;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .feature-card:hover {
+      border-color: var(--border-hi);
+      box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+    }
+    .feature-icon { font-size: 22px; margin-bottom: 12px; display: block; }
+    .feature-card h3 { font-size: 15px; font-weight: 700; margin-bottom: 8px; }
+    .feature-card p { font-size: 13.5px; color: var(--muted); line-height: 1.55; }
+
+    /* ---- QUICKSTART ---- */
+    .quickstart-grid { display: grid; grid-template-columns: 1fr 1.2fr; gap: 48px; align-items: start; }
+    .quickstart-info h2 {
+      font-size: clamp(24px, 3vw, 34px); font-weight: 800;
+      letter-spacing: -0.025em; line-height: 1.2; margin-bottom: 16px;
+    }
+    .quickstart-info p { font-size: 15px; color: var(--muted); line-height: 1.65; margin-bottom: 24px; }
+    .code-block {
+      background: var(--code-bg); border: 1px solid var(--border);
+      border-radius: var(--radius-lg); overflow: hidden;
+    }
+    .code-block-header {
+      background: var(--card); border-bottom: 1px solid var(--border);
+      padding: 10px 16px; display: flex; align-items: center; gap: 8px;
+    }
+    .code-block-header .dots { display: flex; gap: 6px; }
+    .code-block-title { margin-left: 8px; font-size: 12px; color: var(--dim); font-family: 'JetBrains Mono', monospace; }
+    .code-block pre {
+      padding: 20px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px; line-height: 1.7; color: var(--text);
+      overflow-x: auto;
+    }
+    .code-block pre .comment { color: var(--dim); }
+    .code-block pre .cmd { color: var(--accent-2); }
+    .code-block pre .arg { color: #86efac; }
+    .code-block pre .flag { color: var(--amber); }
+
+    /* ---- FOOTER ---- */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 40px 0;
+    }
+    .footer-inner {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 24px; flex-wrap: wrap;
+    }
+    .footer-logo { font-weight: 700; font-size: 14px; color: var(--muted); }
+    .footer-links { display: flex; gap: 20px; }
+    .footer-links a { font-size: 13.5px; color: var(--dim); transition: color 0.15s; }
+    .footer-links a:hover { color: var(--text); text-decoration: none; }
+    .footer-copy { font-size: 13px; color: var(--dim); }
+
+    /* ---- DIVIDER ---- */
+    .divider { border: none; border-top: 1px solid var(--border); margin: 0; }
+
+    /* ---- Responsive ---- */
+    @media (max-width: 768px) {
+      .hero-grid, .problem-grid, .steps-grid, .features-grid,
+      .quickstart-grid { grid-template-columns: 1fr; }
+      .scenario-panel.active { grid-template-columns: 1fr; }
+      .hero { padding: 60px 0 48px; }
+      .hero h1 { font-size: 30px; }
+      .hero-sub { font-size: 15px; }
+      .nav-links .hide-mobile { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ======================== NAV ======================== -->
+<nav>
+  <div class="container">
+    <div class="nav-inner">
+      <div class="nav-logo">
+        <div class="nav-logo-icon">✦</div>
+        mcp-writing
+      </div>
+      <div class="nav-links">
+        <a href="#scenarios" class="hide-mobile">Scenarios</a>
+        <a href="#features" class="hide-mobile">Features</a>
+        <a href="https://github.com/hannasdev/mcp-writing/blob/main/docs/tools.md" target="_blank" rel="noopener" class="hide-mobile">Docs</a>
+        <a href="https://github.com/hannasdev/mcp-writing" target="_blank" rel="noopener" class="hide-mobile">GitHub</a>
+        <a href="https://www.npmjs.com/package/@hanna84/mcp-writing" target="_blank" rel="noopener" class="btn-nav">npm install</a>
+      </div>
+    </div>
+  </div>
+</nav>
+
+<!-- ======================== HERO ======================== -->
+<section class="hero">
+  <div class="container">
+    <div class="hero-grid">
+      <div class="hero-copy">
+        <div class="hero-badge"><span>✦</span> MCP Server · Node.js · Scrivener-friendly</div>
+        <h1>Your manuscript,<br /><em>structured for AI.</em></h1>
+        <p class="hero-sub">
+          mcp-writing builds a structured index from your scene files.
+          Your AI queries metadata first — finding the relevant characters,
+          beats, and loglines — then loads only the prose it needs.
+          No more pasting your whole novel into a prompt.
+        </p>
+        <div class="hero-ctas">
+          <a href="#quickstart" class="btn btn-primary">Get started</a>
+          <a href="https://github.com/hannasdev/mcp-writing" target="_blank" rel="noopener" class="btn btn-secondary">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.477 2 2 6.477 2 12c0 4.418 2.865 8.166 6.839 9.489.5.092.682-.217.682-.482 0-.237-.009-.868-.013-1.703-2.782.604-3.369-1.34-3.369-1.34-.454-1.156-1.11-1.463-1.11-1.463-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.564 9.564 0 0 1 12 6.844c.85.004 1.705.115 2.504.337 1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.203 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.936.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .267.18.578.688.48C19.138 20.163 22 16.418 22 12c0-5.523-4.477-10-10-10z"/></svg>
+            View on GitHub
+          </a>
+        </div>
+      </div>
+
+      <!-- Hero chat mock -->
+      <div class="chat-mock" role="img" aria-label="Example AI session using mcp-writing tools">
+        <div class="chat-mock-bar">
+          <div class="dot dot-r"></div>
+          <div class="dot dot-y"></div>
+          <div class="dot dot-g"></div>
+          <div class="chat-mock-bar-label">AI assistant · mcp-writing connected</div>
+        </div>
+        <div class="chat-body">
+          <div class="msg-user">
+            Walk me through Mira's arc in Part 3 — is it building toward something or drifting?
+          </div>
+          <div class="msg-ai">
+            <div class="tool-call">
+              <div class="tool-call-header">
+                <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="color:var(--accent-2)"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+                <span class="tool-call-name">get_arc</span>
+                <span class="tool-call-server">mcp-writing</span>
+              </div>
+              <div class="tool-call-body">
+                <span class="key">"character_id"</span>: <span class="str">"mira"</span>,<br/>
+                <span class="key">"project_id"</span>: <span class="str">"book-1-the-lamb"</span>,<br/>
+                <span class="key">"part"</span>: <span class="num">3</span>
+              </div>
+            </div>
+            <div class="tool-result">
+              <div class="tool-result-header">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" style="color:var(--green)"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+                14 scenes · Part 3 · ordered by timeline
+              </div>
+              <div class="tool-result-body">
+                sc-061 · "Exposure Risk" · beat: <span class="str">dark-night-of-soul</span><br/>
+                sc-064 · "On the Record" · beat: <span class="str">break-into-three</span><br/>
+                sc-067 · "The Statement" · beat: <span class="str">finale</span><br/>
+                <span style="color:var(--dim)">… 11 more</span>
+              </div>
+            </div>
+            <div class="msg-ai-text">
+              Mira's Part 3 arc is tightly escalating, not drifting. The beat
+              sequence moves from <em>dark night of soul</em> → <em>break into three</em>
+              → <em>finale</em> across her 14 scenes. The only gap is scene 063 — no beat
+              tagged and logline is stale. That one might be doing pacing work without
+              structural intent. Want me to pull the prose so we can check it?
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- /chat mock -->
+    </div>
+  </div>
+</section>
+
+<hr class="divider" />
+
+<!-- ======================== PROBLEM ======================== -->
+<section class="section problem">
+  <div class="container">
+    <div class="problem-grid">
+      <div>
+        <div class="problem-label">The problem</div>
+        <h2>Context windows don't scale to novels.</h2>
+        <p>
+          A 90,000-word manuscript is ~120,000 tokens. Paste your whole book
+          into a prompt and you've already burned most of a context window —
+          before asking a single question.
+        </p>
+        <p>
+          mcp-writing solves this with a metadata-first design.
+          The AI queries a structured SQLite index to find the relevant
+          scenes, characters, and beats. Then it loads <em>only the prose
+          it actually needs</em> — cutting context usage by 95%+ on most queries.
+        </p>
+        <p>
+          The result: the AI can reason about a 100-scene manuscript as fluently
+          as a short story.
+        </p>
+      </div>
+      <div class="context-viz" aria-hidden="true">
+        <div class="ctx-label">Typical query: context consumption</div>
+        <div class="ctx-bar-wrap">
+          <div class="ctx-bar-label">
+            <span>Naive "paste manuscript" approach</span>
+            <span style="color:var(--red)">~90%</span>
+          </div>
+          <div class="ctx-bar"><div class="ctx-fill fill-red" style="width:90%"></div></div>
+        </div>
+        <div class="ctx-bar-wrap" style="margin-top:14px">
+          <div class="ctx-bar-label">
+            <span>mcp-writing: metadata query</span>
+            <span style="color:var(--amber)">~3%</span>
+          </div>
+          <div class="ctx-bar"><div class="ctx-fill fill-amber" style="width:3%"></div></div>
+        </div>
+        <div class="ctx-bar-wrap" style="margin-top:4px">
+          <div class="ctx-bar-label">
+            <span>+ targeted prose (2–3 scenes)</span>
+            <span style="color:var(--green)">~8%</span>
+          </div>
+          <div class="ctx-bar"><div class="ctx-fill fill-green" style="width:8%"></div></div>
+        </div>
+        <div class="ctx-note">
+          <strong>~11% total</strong> vs ~90% — same answer, 8× cheaper.
+          Metadata queries never load prose at all.
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr class="divider" />
+
+<!-- ======================== HOW IT WORKS ======================== -->
+<section class="section-sm">
+  <div class="container">
+    <div class="section-header">
+      <div class="label">How it works</div>
+      <h2>Three layers, always in order.</h2>
+    </div>
+    <div class="steps-grid">
+      <div class="step-card">
+        <div class="step-num">Step 01</div>
+        <span class="step-icon">🗃️</span>
+        <h3>Index, don't paste</h3>
+        <p>
+          On first run, <code>sync</code> walks your Scrivener sync folder and
+          builds a SQLite index of every scene — title, characters, beat, POV,
+          logline, word count, and tags. Re-runs are incremental.
+        </p>
+      </div>
+      <div class="step-card">
+        <div class="step-num">Step 02</div>
+        <span class="step-icon">🔍</span>
+        <h3>Query metadata first</h3>
+        <p>
+          <code>find_scenes</code>, <code>get_arc</code>, and <code>search_metadata</code>
+          answer structural questions from the index alone — no prose loaded, no tokens
+          wasted. Full-text search runs in milliseconds against 100+ scenes.
+        </p>
+      </div>
+      <div class="step-card">
+        <div class="step-num">Step 03</div>
+        <span class="step-icon">✏️</span>
+        <h3>Load prose surgically</h3>
+        <p>
+          When the AI needs to read or edit prose, <code>get_scene_prose</code> loads
+          only the specific scenes it asks for. Every proposed edit goes through a
+          two-step confirm workflow — diff first, commit on approval.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr class="divider" />
+
+<!-- ======================== SCENARIOS ======================== -->
+<section class="section" id="scenarios">
+  <div class="container">
+    <div class="section-header">
+      <div class="label">Scenarios</div>
+      <h2>What you can actually do with it.</h2>
+      <p>Real workflows writers use with mcp-writing every day.</p>
+    </div>
+
+    <div class="scenario-tabs" role="tablist">
+      <button class="tab-btn active" role="tab" aria-selected="true"  onclick="showTab('arc')">Character arc analysis</button>
+      <button class="tab-btn"        role="tab" aria-selected="false" onclick="showTab('continuity')">Continuity check</button>
+      <button class="tab-btn"        role="tab" aria-selected="false" onclick="showTab('edit')">Safe AI line edits</button>
+      <button class="tab-btn"        role="tab" aria-selected="false" onclick="showTab('placement')">Add a character</button>
+    </div>
+
+    <!-- Tab: Arc -->
+    <div class="scenario-panel active" id="tab-arc">
+      <div class="scenario-info">
+        <div class="goal">Goal</div>
+        <h3>Trace a character's journey across the whole manuscript</h3>
+        <p>
+          You want to understand whether a character's arc is intentionally shaped
+          or accidentally drifting — without rereading 40 scenes to find out.
+        </p>
+        <ol class="scenario-steps">
+          <li>Ask the AI to run <code>get_arc</code> for the character across a specific part or the full book.</li>
+          <li>The AI receives ordered scene metadata — beats, loglines, POV, timeline — without loading prose.</li>
+          <li>It identifies structural patterns: missing beats, pacing gaps, escalation or stalling.</li>
+          <li>Load only the flagged scenes with <code>get_scene_prose</code> for closer inspection.</li>
+        </ol>
+      </div>
+      <div class="chat-mock">
+        <div class="chat-mock-bar">
+          <div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div>
+          <div class="chat-mock-bar-label">Arc analysis · book-1-the-lamb</div>
+        </div>
+        <div class="chat-body">
+          <div class="msg-user">Is Mira's arc in Part 2 doing what I think it's doing?</div>
+          <div class="msg-ai">
+            <div class="tool-call">
+              <div class="tool-call-header">
+                <span class="tool-call-name">get_arc</span>
+                <span class="tool-call-server">mcp-writing</span>
+              </div>
+              <div class="tool-call-body">
+                <span class="key">"character_id"</span>: <span class="str">"mira"</span>, <span class="key">"part"</span>: <span class="num">2</span>
+              </div>
+            </div>
+            <div class="tool-result">
+              <div class="tool-result-header">✓ 22 scenes · ordered by timeline_position</div>
+              <div class="tool-result-body">
+                sc-031 · beat: <span class="str">midpoint</span> · stale: <span style="color:var(--amber)">yes</span><br/>
+                sc-033 · beat: <span class="str">fun-and-games</span><br/>
+                sc-038 · beat: <span class="str">bad-guys-close-in</span><br/>
+                <span style="color:var(--dim)">… 19 more</span>
+              </div>
+            </div>
+            <div class="msg-ai-text">
+              Part 2 is structurally sound but has a sequencing problem: scenes 033–036
+              cluster four "fun and games" beats in a row before the midpoint shift lands.
+              That's likely why Part 2 feels slow. Also: sc-031 is flagged as stale —
+              its metadata was last updated before your last prose rewrite.
+              Worth enriching before making pacing decisions based on it.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab: Continuity -->
+    <div class="scenario-panel" id="tab-continuity">
+      <div class="scenario-info">
+        <div class="goal">Goal</div>
+        <h3>Catch timeline contradictions before beta readers see them</h3>
+        <p>
+          Before sending chapters to beta readers or an editor,
+          run a targeted continuity pass on a specific character thread,
+          subplot tag, or date range — without rereading the whole book.
+        </p>
+        <ol class="scenario-steps">
+          <li>Run <code>find_scenes</code> filtered by tag (e.g. <code>injury</code>, <code>promise</code>) or character.</li>
+          <li>Use <code>get_arc</code> to review the thread in timeline order.</li>
+          <li>Load only the suspect scenes with <code>get_scene_prose</code> for close reading.</li>
+          <li>Attach continuity notes with <code>flag_scene</code> — they stay on the scene for your next revision pass.</li>
+        </ol>
+      </div>
+      <div class="chat-mock">
+        <div class="chat-mock-bar">
+          <div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div>
+          <div class="chat-mock-bar-label">Continuity check · chapters 8–12</div>
+        </div>
+        <div class="chat-body">
+          <div class="msg-user">Check for inconsistencies in the injury subplot before I send to my editor.</div>
+          <div class="msg-ai">
+            <div class="tool-call">
+              <div class="tool-call-header">
+                <span class="tool-call-name">find_scenes</span>
+                <span class="tool-call-server">mcp-writing</span>
+              </div>
+              <div class="tool-call-body">
+                <span class="key">"tags"</span>: [<span class="str">"injury"</span>], <span class="key">"chapter_range"</span>: [<span class="num">8</span>, <span class="num">12</span>]
+              </div>
+            </div>
+            <div class="tool-result">
+              <div class="tool-result-header">✓ 6 scenes matching tag: injury</div>
+              <div class="tool-result-body">
+                sc-041 · "The Fall" · ch. 8<br/>
+                sc-049 · "Recovery" · ch. 10<br/>
+                sc-053 · "Back on Shift" · ch. 11 · stale: <span style="color:var(--amber)">yes</span><br/>
+                <span style="color:var(--dim)">… 3 more</span>
+              </div>
+            </div>
+            <div class="msg-ai-text">
+              Found a continuity gap: sc-041 establishes the injury as a broken left
+              wrist, but sc-053 ("Back on Shift") has Mira writing longhand two days
+              later with no mention of a cast or difficulty. Flagging both scenes now.
+            </div>
+            <div class="tool-call">
+              <div class="tool-call-header">
+                <span class="tool-call-name">flag_scene</span>
+                <span class="tool-call-server">mcp-writing</span>
+              </div>
+              <div class="tool-call-body">
+                <span class="key">"scene_id"</span>: <span class="str">"sc-053"</span>,<br/>
+                <span class="key">"note"</span>: <span class="str">"Continuity: wrist injury from sc-041 not reflected here"</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab: Edit -->
+    <div class="scenario-panel" id="tab-edit">
+      <div class="scenario-info">
+        <div class="goal">Goal</div>
+        <h3>Let AI propose line edits — you approve before anything is saved</h3>
+        <p>
+          No silent rewrites. Every AI edit goes through a two-step confirm workflow:
+          propose a diff, review it, then commit or discard. Full git history
+          means you can always roll back to any previous version.
+        </p>
+        <ol class="scenario-steps">
+          <li>Ask the AI to tighten, rewrite, or revise a specific scene.</li>
+          <li>It calls <code>propose_edit</code> and shows you the diff.</li>
+          <li>You review the changes — accept with <code>commit_edit</code> or discard entirely.</li>
+          <li>Every committed edit creates a git commit. Use <code>list_snapshots</code> to roll back.</li>
+        </ol>
+      </div>
+      <div class="chat-mock">
+        <div class="chat-mock-bar">
+          <div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div>
+          <div class="chat-mock-bar-label">Line edit · sc-042-on-the-record</div>
+        </div>
+        <div class="chat-body">
+          <div class="msg-user">The opening of "On the Record" feels too passive. Tighten it.</div>
+          <div class="msg-ai">
+            <div class="tool-call">
+              <div class="tool-call-header">
+                <span class="tool-call-name">propose_edit</span>
+                <span class="tool-call-server">mcp-writing</span>
+              </div>
+              <div class="tool-call-body">
+                <span class="key">"scene_id"</span>: <span class="str">"sc-042"</span>,<br/>
+                <span class="key">"instruction"</span>: <span class="str">"Tighten passive opening, stronger first line"</span>
+              </div>
+            </div>
+            <div class="tool-result">
+              <div class="tool-result-header">⬡ Diff staged — awaiting approval</div>
+              <div class="tool-result-body">
+                <span style="color:var(--red)">- The room was quiet when she walked in.</span><br/>
+                <span style="color:var(--red)">- She had not expected anyone to be there.</span><br/>
+                <span style="color:var(--green)">+ Mira stopped in the doorway.</span><br/>
+                <span style="color:var(--green)">+ The room had been searched.</span>
+              </div>
+            </div>
+            <div class="msg-ai-text">
+              Replaced the passive construction with two active sentences. The new
+              opening drops readers into action and lands the threat faster.
+              Approve with <code>commit_edit</code> or ask me to try a different direction.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab: Placement -->
+    <div class="scenario-panel" id="tab-placement">
+      <div class="scenario-info">
+        <div class="goal">Goal</div>
+        <h3>Add a new character without breaking pacing</h3>
+        <p>
+          You have a character concept — but you're not sure where they fit
+          in a 100-scene manuscript without crowding existing arcs or
+          disrupting the structural beats you've already built.
+        </p>
+        <ol class="scenario-steps">
+          <li>Ask the AI to map structural insertion windows using <code>find_scenes</code> on the full project.</li>
+          <li>Pull existing character arcs with <code>get_arc</code> to understand what the new character can't overlap.</li>
+          <li>The AI proposes a minimal beat structure (intro, fracture, exit) with exact scene placement recommendations.</li>
+          <li>Review and update the character sheet with <code>update_character_sheet</code> to anchor the plan.</li>
+        </ol>
+      </div>
+      <div class="chat-mock">
+        <div class="chat-mock-bar">
+          <div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div>
+          <div class="chat-mock-bar-label">Character placement · new: Bryce</div>
+        </div>
+        <div class="chat-body">
+          <div class="msg-user">I want to add a tech CEO character. Where does he fit without killing the pacing?</div>
+          <div class="msg-ai">
+            <div class="tool-call">
+              <div class="tool-call-header">
+                <span class="tool-call-name">find_scenes</span>
+                <span class="tool-call-server">mcp-writing</span>
+              </div>
+              <div class="tool-call-body">
+                <span class="key">"project_id"</span>: <span class="str">"book-1"</span>, <span class="key">"page_size"</span>: <span class="num">200</span>
+              </div>
+            </div>
+            <div class="tool-result">
+              <div class="tool-result-header">✓ 104 scenes · full timeline loaded</div>
+              <div class="tool-result-body">
+                Identified <span class="num">3</span> low-density windows in timeline<br/>
+                Parts 1–2 transition · after sc-028<br/>
+                Mid-Part 2 · sc-044 to sc-048<br/>
+                Pre-finale · sc-089 to sc-092
+              </div>
+            </div>
+            <div class="msg-ai-text">
+              Cap him to <strong>3 beats: humanization → fracture → exit</strong>.
+              Place one beat per major phase so he complements Victor (ideology)
+              without competing. Each beat needs a decision — not just mood —
+              or it won't earn its place in the pacing.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<hr class="divider" />
+
+<!-- ======================== FEATURES ======================== -->
+<section class="section" id="features">
+  <div class="container">
+    <div class="section-header">
+      <div class="label">Features</div>
+      <h2>Everything a novelist needs from an AI layer.</h2>
+    </div>
+    <div class="features-grid">
+      <div class="feature-card">
+        <span class="feature-icon">🗂️</span>
+        <h3>Scrivener sync</h3>
+        <p>Import from Scrivener External Folder Sync. Binder-ID identity means scenes stay stable even when you reorder them.</p>
+      </div>
+      <div class="feature-card">
+        <span class="feature-icon">⚡</span>
+        <h3>Full-text search</h3>
+        <p>FTS5-powered search across scene titles and loglines. Find every scene mentioning a theme, prop, or phrase in milliseconds.</p>
+      </div>
+      <div class="feature-card">
+        <span class="feature-icon">📊</span>
+        <h3>Beat & arc queries</h3>
+        <p>Filter by Save the Cat beat, character, chapter, part, POV, or tag. Trace any character's ordered journey across the whole manuscript.</p>
+      </div>
+      <div class="feature-card">
+        <span class="feature-icon">🔒</span>
+        <h3>Human-in-the-loop edits</h3>
+        <p>All prose changes go through propose → diff → commit. Nothing is written to disk without explicit approval. Every commit is git-backed.</p>
+      </div>
+      <div class="feature-card">
+        <span class="feature-icon">🏷️</span>
+        <h3>Sidecar metadata</h3>
+        <p>Metadata lives in <code>.meta.yaml</code> sidecar files alongside prose. Scrivener owns the <code>.md</code> files; MCP owns the metadata. No conflicts.</p>
+      </div>
+      <div class="feature-card">
+        <span class="feature-icon">🔄</span>
+        <h3>Staleness detection</h3>
+        <p>When prose is rewritten, affected scenes are flagged as stale. Re-derive metadata with <code>enrich_scene</code> so your index stays accurate.</p>
+      </div>
+      <div class="feature-card">
+        <span class="feature-icon">🌍</span>
+        <h3>World entities</h3>
+        <p>Structured character and place sheets with supporting notes. Query relationships, track mention counts, and keep world-building consistent.</p>
+      </div>
+      <div class="feature-card">
+        <span class="feature-icon">📦</span>
+        <h3>Review bundles</h3>
+        <p>Generate structured review packages for a scene or chapter range — AI-assisted analysis, flagged issues, and editorial summaries in one pass.</p>
+      </div>
+      <div class="feature-card">
+        <span class="feature-icon">🐳</span>
+        <h3>Docker-ready</h3>
+        <p>First-class Docker Compose support. Runs alongside OpenClaw or any MCP-capable AI gateway. Configurable via environment variables.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr class="divider" />
+
+<!-- ======================== QUICKSTART ======================== -->
+<section class="section" id="quickstart">
+  <div class="container">
+    <div class="quickstart-grid">
+      <div class="quickstart-info">
+        <h2>Start in under five minutes.</h2>
+        <p>
+          mcp-writing runs as a local HTTP server. Connect it to any
+          MCP-capable AI gateway — Claude Desktop, OpenClaw, or your
+          own tooling.
+        </p>
+        <div class="hero-ctas" style="margin-top:8px">
+          <a href="https://github.com/hannasdev/mcp-writing/blob/main/docs/setup.md" class="btn btn-primary" target="_blank" rel="noopener">Setup guide</a>
+          <a href="https://github.com/hannasdev/mcp-writing/blob/main/docs/tools.md" class="btn btn-secondary" target="_blank" rel="noopener">Tool reference</a>
+        </div>
+      </div>
+      <div>
+        <div class="code-block">
+          <div class="code-block-header">
+            <div class="dots">
+              <div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div>
+            </div>
+            <span class="code-block-title">terminal</span>
+          </div>
+          <pre><span class="comment"># Install</span>
+<span class="cmd">npm</span> <span class="arg">install</span> <span class="flag">-g</span> @hanna84/mcp-writing
+
+<span class="comment"># Point at your Scrivener sync folder and start</span>
+<span class="cmd">SYNC_FOLDER</span>=~/Documents/MyNovel/sync \
+<span class="cmd">mcp-writing</span>
+
+<span class="comment"># Import your manuscript (first time only)</span>
+<span class="cmd">curl</span> <span class="arg">-X POST</span> http://localhost:3000/tools/sync \
+  <span class="flag">-d</span> '{"project_id":"book-1","universe_id":"my-universe"}'
+
+<span class="comment"># Server is now available at</span>
+<span class="comment"># http://localhost:3000/sse  (MCP SSE endpoint)</span>
+<span class="comment"># http://localhost:3000/healthz</span></pre>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr class="divider" />
+
+<!-- ======================== FOOTER ======================== -->
+<footer>
+  <div class="container">
+    <div class="footer-inner">
+      <div class="footer-logo">✦ mcp-writing</div>
+      <div class="footer-links">
+        <a href="https://github.com/hannasdev/mcp-writing" target="_blank" rel="noopener">GitHub</a>
+        <a href="https://www.npmjs.com/package/@hanna84/mcp-writing" target="_blank" rel="noopener">npm</a>
+        <a href="https://github.com/hannasdev/mcp-writing/blob/main/docs/setup.md" target="_blank" rel="noopener">Setup</a>
+        <a href="https://github.com/hannasdev/mcp-writing/blob/main/docs/tools.md" target="_blank" rel="noopener">Docs</a>
+        <a href="https://github.com/hannasdev/mcp-writing/blob/main/CHANGELOG.md" target="_blank" rel="noopener">Changelog</a>
+      </div>
+      <div class="footer-copy">AGPL-3.0 · Built for novelists</div>
+    </div>
+  </div>
+</footer>
+
+<script>
+  function showTab(name) {
+    // Hide all panels, deactivate all buttons
+    document.querySelectorAll('.scenario-panel').forEach(function(p) {
+      p.classList.remove('active');
+    });
+    document.querySelectorAll('.tab-btn').forEach(function(b) {
+      b.classList.remove('active');
+      b.setAttribute('aria-selected', 'false');
+    });
+    // Show selected
+    var panel = document.getElementById('tab-' + name);
+    if (panel) panel.classList.add('active');
+    // Find the button that triggered this and activate it
+    event.currentTarget.classList.add('active');
+    event.currentTarget.setAttribute('aria-selected', 'true');
+  }
+</script>
+
+</body>
+</html>
