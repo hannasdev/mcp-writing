@@ -463,7 +463,8 @@
               <div class="tool-call-body">
                 <span class="key">"character_id"</span>: <span class="str">"elias"</span>,<br/>
                 <span class="key">"project_id"</span>: <span class="str">"book-1-the-crossing"</span>,<br/>
-                <span class="key">"part"</span>: <span class="num">1</span>
+                <span class="key">"page"</span>: <span class="num">1</span>,<br/>
+                <span class="key">"page_size"</span>: <span class="num">20</span>
               </div>
             </div>
             <div class="tool-result">
@@ -609,11 +610,11 @@
     </div>
 
     <div class="scenario-tabs" role="tablist">
-      <button class="tab-btn active" role="tab" id="tab-btn-arc"        aria-selected="true"  aria-controls="tab-arc"       onclick="showTab(event,'arc')">Character arc analysis</button>
-      <button class="tab-btn"        role="tab" id="tab-btn-continuity" aria-selected="false" aria-controls="tab-continuity" onclick="showTab(event,'continuity')">Continuity check</button>
-      <button class="tab-btn"        role="tab" id="tab-btn-edit"       aria-selected="false" aria-controls="tab-edit"       onclick="showTab(event,'edit')">Safe AI line edits</button>
-      <button class="tab-btn"        role="tab" id="tab-btn-placement"  aria-selected="false" aria-controls="tab-placement"  onclick="showTab(event,'placement')">Add a character</button>
-      <button class="tab-btn"        role="tab" id="tab-btn-bundle"     aria-selected="false" aria-controls="tab-bundle"     onclick="showTab(event,'bundle')">Review bundles</button>
+      <button class="tab-btn active" role="tab" id="tab-btn-arc"        aria-selected="true"  aria-controls="tab-arc"        tabindex="0"  onclick="showTab(event,'arc')">Character arc analysis</button>
+      <button class="tab-btn"        role="tab" id="tab-btn-continuity" aria-selected="false" aria-controls="tab-continuity" tabindex="-1" onclick="showTab(event,'continuity')">Continuity check</button>
+      <button class="tab-btn"        role="tab" id="tab-btn-edit"       aria-selected="false" aria-controls="tab-edit"       tabindex="-1" onclick="showTab(event,'edit')">Safe AI line edits</button>
+      <button class="tab-btn"        role="tab" id="tab-btn-placement"  aria-selected="false" aria-controls="tab-placement"  tabindex="-1" onclick="showTab(event,'placement')">Add a character</button>
+      <button class="tab-btn"        role="tab" id="tab-btn-bundle"     aria-selected="false" aria-controls="tab-bundle"     tabindex="-1" onclick="showTab(event,'bundle')">Review bundles</button>
     </div>
 
     <!-- Tab: Arc -->
@@ -713,7 +714,8 @@
                 <span class="tool-call-server">mcp-writing</span>
               </div>
               <div class="tool-call-body">
-                <span class="key">"tags"</span>: [<span class="str">"injury"</span>], <span class="key">"chapter_range"</span>: [<span class="num">8</span>, <span class="num">12</span>]
+                <span class="key">"project_id"</span>: <span class="str">"book-1-the-crossing"</span>,<br/>
+                <span class="key">"tag"</span>: <span class="str">"injury"</span>, <span class="key">"part"</span>: <span class="num">2</span>
               </div>
             </div>
             <div class="tool-result">
@@ -737,6 +739,7 @@
               </div>
               <div class="tool-call-body">
                 <span class="key">"scene_id"</span>: <span class="str">"sc-053"</span>,<br/>
+                <span class="key">"project_id"</span>: <span class="str">"book-1-the-crossing"</span>,<br/>
                 <span class="key">"note"</span>: <span class="str">"Continuity: wrist injury from sc-041 not reflected here"</span>
               </div>
             </div>
@@ -777,7 +780,8 @@
               </div>
               <div class="tool-call-body">
                 <span class="key">"scene_id"</span>: <span class="str">"sc-042"</span>,<br/>
-                <span class="key">"instruction"</span>: <span class="str">"Tighten passive opening, stronger first line"</span>
+                <span class="key">"instruction"</span>: <span class="str">"Tighten passive opening, stronger first line"</span>,<br/>
+                <span class="key">"revised_prose"</span>: <span class="str">"&lt;full revised scene text&gt;"</span>
               </div>
             </div>
             <div class="tool-result">
@@ -792,7 +796,8 @@
             <div class="msg-ai-text">
               Replaced the passive construction with two active sentences. The new
               opening drops readers into action and lands the threat faster.
-              Approve with <code>commit_edit</code> or ask me to try a different direction.
+              Approve with <code>commit_edit</code> using the returned proposal_id,
+              or ask me to try a different direction.
             </div>
           </div>
         </div>
@@ -887,7 +892,7 @@
                 <span class="key">"project_id"</span>: <span class="str">"book-1-the-crossing"</span>,<br/>
                 <span class="key">"profile"</span>: <span class="str">"editor_detailed"</span>,<br/>
                 <span class="key">"part"</span>: <span class="num">1</span>,<br/>
-                <span class="key">"include_metadata_sidebar"</span>: <span class="str">true</span>,<br/>
+                <span class="key">"include_metadata_sidebar"</span>: true,<br/>
                 <span class="key">"format"</span>: <span class="str">"pdf"</span>
               </div>
             </div>
@@ -1042,6 +1047,7 @@
     document.querySelectorAll('.tab-btn').forEach(function(b) {
       b.classList.remove('active');
       b.setAttribute('aria-selected', 'false');
+      b.setAttribute('tabindex', '-1');
     });
     // Hide all panels
     document.querySelectorAll('.scenario-panel').forEach(function(p) {
@@ -1050,6 +1056,7 @@
     // Activate clicked button
     e.currentTarget.classList.add('active');
     e.currentTarget.setAttribute('aria-selected', 'true');
+    e.currentTarget.setAttribute('tabindex', '0');
     // Show selected panel
     var panel = document.getElementById('tab-' + name);
     if (panel) panel.hidden = false;
@@ -1057,6 +1064,27 @@
 
   // Show first panel on load
   document.getElementById('tab-arc').hidden = false;
+
+  // Arrow-key navigation for tabs (Left/Right/Home/End)
+  var tabButtons = Array.from(document.querySelectorAll('.scenario-tabs [role="tab"]'));
+  tabButtons.forEach(function(btn) {
+    btn.addEventListener('keydown', function(ev) {
+      var idx = tabButtons.indexOf(ev.currentTarget);
+      var nextIdx = idx;
+
+      if (ev.key === 'ArrowRight') nextIdx = (idx + 1) % tabButtons.length;
+      if (ev.key === 'ArrowLeft') nextIdx = (idx - 1 + tabButtons.length) % tabButtons.length;
+      if (ev.key === 'Home') nextIdx = 0;
+      if (ev.key === 'End') nextIdx = tabButtons.length - 1;
+
+      if (nextIdx !== idx) {
+        ev.preventDefault();
+        var nextBtn = tabButtons[nextIdx];
+        nextBtn.focus();
+        showTab({ currentTarget: nextBtn }, nextBtn.getAttribute('aria-controls').replace('tab-', ''));
+      }
+    });
+  });
 </script>
 
 </body>
