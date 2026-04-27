@@ -16,7 +16,7 @@ export class ReviewBundlePlanError extends Error {
 
 export function normalizeRecipientDisplayName(recipientName) {
   const normalized = String(recipientName ?? "")
-    .replace(/[\x00-\x1f\x7f]+/g, " ")
+    .replace(/[\x00-\x1f\x7f]+/g, " ") // eslint-disable-line no-control-regex
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, 100);

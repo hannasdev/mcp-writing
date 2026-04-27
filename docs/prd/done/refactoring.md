@@ -1,6 +1,6 @@
 # Targets for refactoring
 
-**Status:** 🚧 In Progress — Phases A–E done; Phase F in progress (PR 1 of 4 in review, #9 fix applied)
+**Status:** ✅ Done — All structural refactors complete. #10 (node:sqlite flag) is a passive monitoring note, not a work item.
 
 ---
 
@@ -28,6 +28,7 @@ Split test files *before* splitting source files. Gives isolated runners to veri
 Highest-risk work. One tool group per PR, full integration suite after each. Never mix a structural move with a behavioral fix.
 
 Extraction order (simplest first, highest-risk last):
+
 1. ✅ `registerSyncTools`
 2. ✅ `registerSearchTools` — read-only, no side effects
 3. ✅ `registerMetadataTools` — sidecar writes, low interaction surface
@@ -51,7 +52,7 @@ After `index.js` is split. Touches `db.js` which all modules depend on.
 
 Last because it's new behavior (not pure refactor) and a prerequisite for OpenClaw, not the current system. Schema migration infrastructure from Phase D must land first.
 
-### Phase F — Module extraction (investigation complete) 🚧
+### Phase F — Module extraction (investigation complete) ✅
 
 Investigation read all three large domain modules plus the remaining `index.js` surface. Findings:
 
@@ -72,11 +73,12 @@ Investigation read all three large domain modules plus the remaining `index.js` 
 - Path safety utilities (`isPathInsideSyncDir`, `isPathCandidateInsideSyncDir`, `resolveOutputDirWithinSync`, ~90 lines) — fold into `helpers.js`.
 - After both extractions `index.js` lands at ~500 lines, proportionate to its actual job.
 
-**Sequencing:** Four separate PRs, one concern each, full test suite after each:
-1. `review-bundles.js` split (planner / renderer / writer façade)
-2. `async-jobs.js` extraction from `index.js`
-3. `helpers.js` extraction from `index.js`
-4. Path safety folded into `helpers.js` (can merge with PR 3 if small enough)
+**Sequencing (completed):**
+1. ✅ `review-bundles.js` split (planner / renderer / writer façade)
+2. ✅ `async-jobs.js` extraction from `index.js`
+3. ✅ `helpers.js` extraction from `index.js`
+4. ✅ Path safety folded into `helpers.js`
+5. ✅ `workflow-catalogue.js` extracted from `index.js`
 
 ---
 
@@ -89,43 +91,21 @@ Investigation read all three large domain modules plus the remaining `index.js` 
 
 ---
 
-## 1. index.js is doing too many jobs — HIGH
+## 1. index.js is doing too many jobs — HIGH ✅ Done
 
-At ~3.5k lines, index.js combines: HTTP server setup, MCP server factory, all 43 tool registrations (schema + implementation + error handling), async job lifecycle, edit proposal state, path safety utilities, runtime diagnostics, and graceful shutdown. None of this is wrong individually, but together it makes the file hard to navigate and means any change to any tool — no matter how isolated — touches this one file.
+Completed via extraction of tool registration modules plus focused utility modules (`async-jobs.js`, `helpers.js`, and `workflow-catalogue.js`). `index.js` now primarily handles startup, transport wiring, context assembly, and registration orchestration instead of carrying large inline data and helper implementations.
 
-The actual tool handlers are thin (they delegate to domain modules), so the problem isn't logic complexity. It's routing + validation + error handling for 43 tools all inline.
+## 2. Large domain modules — MEDIUM ✅ Done
 
-A practical split: A function like registerEditingTools(server, context) per tool group (sync, editing, styleguide, etc.), where context is a plain object with {db, SYNC_DIR, SYNC_DIR_WRITABLE, GIT_ENABLED, ...}. index.js becomes: assemble context → register all tool groups → start HTTP server. This mirrors what the code already does conceptually, just without the physical grouping.
+Resolved by splitting `review-bundles.js` into planner/renderer/writer modules while intentionally leaving `prose-styleguide.js` and `scene-character-normalization.js` intact based on investigation outcomes (size judged proportionate and/or data tightly coupled to logic).
 
-Tradeoff: More files means you need to know which module owns which tool. For 43 tools across maybe 6-8 groups, that's manageable with clear file names. The overhead is low because the module boundaries map to tool categories that already exist in your mental model (and in PRD.md). Searching for a specific tool gets slightly harder without an IDE, but better for reading any one group.
+## 3. In-memory async job state — MEDIUM (important for OpenClaw) ✅ Done
 
-The counter-argument for leaving it is that the current layout makes grep "s.tool" a complete tool inventory. That's a real convenience worth acknowledging — it can be preserved by keeping a registration summary in index.js even after the handlers move.
+Implemented with checkpoint persistence and restart recovery behavior. Runtime async state still uses an in-memory map for active process handles, while persisted job records prevent silent loss on restart and provide deterministic status semantics.
 
-## 2. Large domain modules — MEDIUM
+## 4. Schema migration is accumulating — MEDIUM ✅ Done
 
-review-bundles.js, prose-styleguide.js, and scene-character-normalization.js are notably large relative to surrounding modules. Without reading them in full, I can't attribute the size precisely, but based on the feature descriptions the likely contributors are: inline language defaults for 24 languages, PDF template strings, normalization dictionaries, and verbose error-handling branches.
-
-If the size is primarily from embedded data (language defaults, normalization lookup tables), extracting those to JSON/YAML data files would reduce the code-to-data ratio and make both easier to reason about. If the size is genuinely algorithmic complexity, splitting into sub-modules (e.g., prose-styleguide-defaults.js, prose-styleguide-cascade.js) might help.
-
-Tradeoff: Extracting data to JSON adds a file read at startup and removes the "everything in one place" advantage. Sub-modules add import chains without necessarily making individual files simpler. This is worth investigating before deciding — the suggestion depends heavily on what's actually driving the size, which I didn't read in full.
-
-## 3. In-memory async job state — MEDIUM (important for OpenClaw)
-
-Async jobs live in a Map in the server process. On restart (crash, deploy, SIGKILL past the timeout), all jobs and their state are gone. A caller polling get_async_job_status after a restart gets job_not_found. This is probably acceptable for the current local single-user use case — jobs complete in minutes — but it becomes a real issue in a service deployment.
-
-A minimal fix: On exit, write live job state to the SQLite database. On startup, read it back and mark any running jobs as failed with error: "server restarted while job was running". This prevents misleading state without adding per-progress-update I/O. It's roughly 30 lines in db.js (one table) plus checkpoint writes at creation and completion.
-
-Tradeoff: Full per-progress-update persistence would add SQLite I/O on every progress event, which is noisy for a batch job processing hundreds of scenes. The checkpoint-only approach (create + complete) avoids that while solving the "silent loss" problem. For OpenClaw, this is probably a prerequisite rather than a nice-to-have.
-
-## 4. Schema migration is accumulating — MEDIUM
-
-The current approach works: CREATE TABLE IF NOT EXISTS for the base schema, then explicit ALTER TABLE ADD COLUMN checks for missing columns, then an FTS rebuild check. But it's already grown to handle two specific migration cases (chapter_title column, FTS keywords column), and with Phase 4 (embeddings, reference docs) and Phase 5 (OpenClaw) both likely requiring schema changes, this pattern will keep growing in place.
-
-The risk is that as migrations accumulate, db.js becomes hard to read and the migration state becomes unclear for databases at different versions.
-
-A proportionate fix: A schema_version table with one integer row. An array of migration functions, each applied only if version < N. This is 40-50 lines of infrastructure, not a full ORM. Existing migrations become migration 1 and migration 2 in the array. New features add new entries without touching old code.
-
-Tradeoff: It's more code upfront, and the current approach isn't broken. The argument for doing it now is that the cost of retrofitting numbered migrations grows with each new ad-hoc check added.
+Implemented with a `schema_version` table and a numbered migration pipeline in `db.js`, replacing ad-hoc migration drift and making future schema evolution predictable.
 
 ## 5. Edit proposal IDs are sequential and reset on restart — LOW ✅ Done
 

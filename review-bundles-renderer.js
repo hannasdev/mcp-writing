@@ -7,7 +7,7 @@ import { ReviewBundlePlanError, normalizeRecipientDisplayName } from "./review-b
 function escapeMarkdown(text) {
   return String(text ?? "")
     .replace(/\\/g, "\\\\")
-    .replace(/([*_`\[\]#])/g, "\\$1");
+    .replace(/([*_`[\]#])/g, "\\$1");
 }
 
 function renderBetaNoticeMarkdown({ projectId, recipientName }) {

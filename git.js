@@ -35,7 +35,7 @@ export function initGitRepository(dirPath) {
     }
     return true;
   } catch (err) {
-    throw new Error(`Failed to initialize git repository: ${err.message}`);
+    throw new Error(`Failed to initialize git repository: ${err.message}`, { cause: err });
   }
 }
 
@@ -98,7 +98,7 @@ export function createSnapshot(dirPath, filePath, sceneId, instruction, options 
         reason: "no changes to commit",
       };
     }
-    throw new Error(`Failed to create snapshot: ${err.message}`);
+    throw new Error(`Failed to create snapshot: ${err.message}`, { cause: err });
   }
 }
 
@@ -137,7 +137,7 @@ export function listSnapshots(dirPath, filePath) {
     if (err.message.includes("your current branch") || err.status === 128) {
       return [];
     }
-    throw new Error(`Failed to list snapshots: ${err.message}`);
+    throw new Error(`Failed to list snapshots: ${err.message}`, { cause: err });
   }
 }
 
@@ -163,10 +163,16 @@ export function getSceneProseAtCommit(dirPath, filePath, commitHash) {
 
     return content;
   } catch (err) {
+    // ENOENT from execFileSync means the git binary was not found on PATH — not a missing file in the commit.
     if (err.code === "ENOENT") {
-      throw new Error(`File not found in commit ${commitHash}`);
+      throw new Error("git executable not found; ensure git is installed and on PATH", { cause: err });
     }
-    throw new Error(`Failed to retrieve scene prose: ${err.message}`);
+    // git exit 128 with "path ... does not exist in" or "bad object" indicates missing path/commit.
+    const stderr = err?.stderr ? String(err.stderr) : "";
+    if (err.status === 128 && (stderr.includes("does not exist in") || stderr.includes("bad object"))) {
+      throw new Error(`File not found in commit ${commitHash}`, { cause: err });
+    }
+    throw new Error(`Failed to retrieve scene prose: ${err.message}`, { cause: err });
   }
 }
 
