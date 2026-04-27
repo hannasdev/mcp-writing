@@ -17,6 +17,14 @@ WRITING_SYNC_DIR=./my-manuscript DB_PATH=./writing.db npm start
 
 The `npm start` script automatically includes the `--experimental-sqlite` flag needed for SQLite support in Node.js 22+.
 
+For stdio MCP hosts, you can also launch the published CLI directly:
+
+```sh
+WRITING_SYNC_DIR=./my-manuscript DB_PATH=./writing.db npx -y @hanna84/mcp-writing
+```
+
+The CLI wrapper defaults `MCP_TRANSPORT=stdio` and adds the Node 22 SQLite flag automatically when needed.
+
 ---
 
 ## Verify your setup

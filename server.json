@@ -1,0 +1,48 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.hannasdev/mcp-writing",
+  "title": "Writing MCP",
+  "description": "Metadata-first fiction editing and reasoning tools for long-form writing projects.",
+  "websiteUrl": "https://hannasdev.github.io/mcp-writing/",
+  "repository": {
+    "url": "https://github.com/hannasdev/mcp-writing",
+    "source": "github"
+  },
+  "version": "2.11.1",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "@hanna84/mcp-writing",
+      "version": "2.11.1",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "WRITING_SYNC_DIR",
+          "description": "Path to the manuscript sync folder that mcp-writing indexes and edits.",
+          "format": "filepath",
+          "isRequired": true,
+          "placeholder": "/path/to/your/scrivener-sync"
+        },
+        {
+          "name": "DB_PATH",
+          "description": "Optional path for the SQLite index database used by the server.",
+          "format": "filepath",
+          "isRequired": false,
+          "placeholder": "/path/to/writing.db"
+        },
+        {
+          "name": "OWNERSHIP_GUARD_MODE",
+          "description": "Startup ownership policy for sync-folder files.",
+          "choices": [
+            "warn",
+            "fail"
+          ],
+          "default": "warn",
+          "isRequired": false
+        }
+      ]
+    }
+  ]
+}
