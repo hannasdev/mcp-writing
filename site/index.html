@@ -613,6 +613,7 @@
       <button class="tab-btn"        role="tab" id="tab-btn-continuity" aria-selected="false" aria-controls="tab-continuity" onclick="showTab(event,'continuity')">Continuity check</button>
       <button class="tab-btn"        role="tab" id="tab-btn-edit"       aria-selected="false" aria-controls="tab-edit"       onclick="showTab(event,'edit')">Safe AI line edits</button>
       <button class="tab-btn"        role="tab" id="tab-btn-placement"  aria-selected="false" aria-controls="tab-placement"  onclick="showTab(event,'placement')">Add a character</button>
+      <button class="tab-btn"        role="tab" id="tab-btn-bundle"     aria-selected="false" aria-controls="tab-bundle"     onclick="showTab(event,'bundle')">Review bundles</button>
     </div>
 
     <!-- Tab: Arc -->
@@ -852,6 +853,63 @@
       </div>
     </div>
 
+    <!-- Tab: Bundle -->
+    <div class="scenario-panel" role="tabpanel" id="tab-bundle" aria-labelledby="tab-btn-bundle" hidden>
+      <div class="scenario-info">
+        <div class="goal">Goal</div>
+        <h3>Export a structured package for your editor or beta readers</h3>
+        <p>
+          Before sending work out for review, generate a polished bundle scoped
+          to a chapter, part, or tag — with three profiles tuned for different
+          audiences.
+        </p>
+        <ol class="scenario-steps">
+          <li>Choose a profile: <code>outline_discussion</code> for structural overview, <code>editor_detailed</code> for line-level notes with metadata sidebars, or <code>beta_reader_personalized</code> for a clean named copy.</li>
+          <li>Run <code>preview_review_bundle</code> first — dry-run that shows exactly which scenes will be included and flags any stale metadata before anything is written.</li>
+          <li>Run <code>create_review_bundle</code> to generate the PDF or Markdown artifact, written to your sync folder.</li>
+          <li>Share the file. The bundle includes provenance metadata — which commit hash each scene was exported from.</li>
+        </ol>
+      </div>
+      <div class="chat-mock">
+        <div class="chat-mock-bar">
+          <div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div>
+          <div class="chat-mock-bar-label">Review bundle · Part 1 · editor_detailed</div>
+        </div>
+        <div class="chat-body">
+          <div class="msg-user">Generate an editor bundle for Part 1. I want her to see the metadata alongside the prose.</div>
+          <div class="msg-ai">
+            <div class="tool-call">
+              <div class="tool-call-header">
+                <span class="tool-call-name">preview_review_bundle</span>
+                <span class="tool-call-server">mcp-writing</span>
+              </div>
+              <div class="tool-call-body">
+                <span class="key">"project_id"</span>: <span class="str">"book-1-the-crossing"</span>,<br/>
+                <span class="key">"profile"</span>: <span class="str">"editor_detailed"</span>,<br/>
+                <span class="key">"part"</span>: <span class="num">1</span>,<br/>
+                <span class="key">"include_metadata_sidebar"</span>: <span class="str">true</span>,<br/>
+                <span class="key">"format"</span>: <span class="str">"pdf"</span>
+              </div>
+            </div>
+            <div class="tool-result">
+              <div class="tool-result-header">⬡ Dry run · 24 scenes · no files written</div>
+              <div class="tool-result-body">
+                planned output: <span class="str">book-1-part-1-editor.pdf</span><br/>
+                warnings: sc-031 metadata stale · sc-044 missing logline<br/>
+                <span style="color:var(--dim)">2 warnings (strictness: warn — will proceed)</span>
+              </div>
+            </div>
+            <div class="msg-ai-text">
+              Preview looks good — 24 scenes scoped correctly to Part 1.
+              Two warnings: sc-031 has stale metadata and sc-044 is missing a logline.
+              They won't block the export, but your editor will see empty sidebar fields
+              for those two. Want me to enrich them first, or proceed with the bundle as-is?
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
   </div>
 </section>
 
@@ -903,7 +961,7 @@
       <div class="feature-card">
         <span class="feature-icon">📦</span>
         <h3>Review bundles</h3>
-        <p>Generate structured review packages for a scene or chapter range — AI-assisted analysis, flagged issues, and editorial summaries in one pass.</p>
+        <p>Export scoped PDF or Markdown packages with three profiles: <strong>outline discussion</strong> for structural review, <strong>editor detailed</strong> with metadata sidebars, or <strong>beta reader</strong> personalised clean copy. Preview before writing — stale scenes are flagged automatically.</p>
       </div>
       <div class="feature-card">
         <span class="feature-icon">🐳</span>
