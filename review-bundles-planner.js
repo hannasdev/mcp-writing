@@ -1,4 +1,5 @@
 const MAX_SORT_VALUE = Number.MAX_SAFE_INTEGER;
+const MAX_SCENE_ID_FILTER_PARAMS = 900;
 
 export const REVIEW_BUNDLE_PROFILES = ["outline_discussion", "editor_detailed", "beta_reader_personalized"];
 export const REVIEW_BUNDLE_STRICTNESS = ["warn", "fail"];
@@ -99,14 +100,22 @@ function resolveRequestedSceneIds(dbHandle, projectId, sceneIds) {
     return { requested: [], existing: new Set() };
   }
 
-  const placeholders = sceneIds.map(() => "?").join(",");
-  const rows = dbHandle.prepare(
-    `SELECT scene_id FROM scenes WHERE project_id = ? AND scene_id IN (${placeholders})`
-  ).all(projectId, ...sceneIds);
+  const existing = new Set();
+
+  for (let i = 0; i < sceneIds.length; i += MAX_SCENE_ID_FILTER_PARAMS) {
+    const chunk = sceneIds.slice(i, i + MAX_SCENE_ID_FILTER_PARAMS);
+    const placeholders = chunk.map(() => "?").join(",");
+    const rows = dbHandle.prepare(
+      `SELECT scene_id FROM scenes WHERE project_id = ? AND scene_id IN (${placeholders})`
+    ).all(projectId, ...chunk);
+    for (const row of rows) {
+      existing.add(row.scene_id);
+    }
+  }
 
   return {
     requested: sceneIds,
-    existing: new Set(rows.map(row => row.scene_id)),
+    existing,
   };
 }
 
@@ -127,6 +136,17 @@ export function buildReviewBundlePlan(dbHandle, {
 } = {}) {
   if (!project_id) {
     throw new ReviewBundlePlanError("INVALID_PROJECT_ID", "project_id is required.");
+  }
+
+  if (Array.isArray(scene_ids) && scene_ids.length > MAX_SCENE_ID_FILTER_PARAMS) {
+    throw new ReviewBundlePlanError(
+      "SCENE_IDS_TOO_LARGE",
+      `scene_ids supports at most ${MAX_SCENE_ID_FILTER_PARAMS} entries per request.`,
+      {
+        max_scene_ids: MAX_SCENE_ID_FILTER_PARAMS,
+        received_scene_ids: scene_ids.length,
+      }
+    );
   }
 
   assertProfile(profile);

@@ -82,6 +82,36 @@ describe("buildReviewBundlePlan", () => {
     }
   });
 
+  test("rejects scene_ids lists larger than the SQLite-safe planner limit", () => {
+    const db = setupReviewBundleTestDb();
+    try {
+      insertTestScene(db, {
+        sceneId: "sc-001",
+        part: 1,
+        chapter: 1,
+        timelinePosition: 1,
+        wordCount: 300,
+      });
+
+      const sceneIds = Array.from({ length: 901 }, (_, index) => `sc-${String(index + 1).padStart(4, "0")}`);
+
+      assert.throws(
+        () =>
+          buildReviewBundlePlan(db, {
+            project_id: "test-novel",
+            profile: "outline_discussion",
+            scene_ids: sceneIds,
+          }),
+        error =>
+          error instanceof ReviewBundlePlanError &&
+          error.code === "SCENE_IDS_TOO_LARGE" &&
+          error.details?.max_scene_ids === 900
+      );
+    } finally {
+      db.close();
+    }
+  });
+
   test("strictness fail blocks when stale scenes are included", () => {
     const db = setupReviewBundleTestDb();
     try {
