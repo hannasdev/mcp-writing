@@ -5,7 +5,12 @@
   "homepage": "https://hannasdev.github.io/mcp-writing/",
   "type": "module",
   "main": "index.js",
+  "bin": {
+    "mcp-writing": "./bin/mcp-writing.js"
+  },
+  "mcpName": "io.github.hannasdev/mcp-writing",
   "files": [
+    "bin/",
     "index.js",
     "async-jobs.js",
     "async-progress.js",
@@ -50,6 +55,7 @@
     "lint": "eslint *.js scripts/ tools/",
     "docs": "node scripts/generate-tool-docs.mjs",
     "lint:metadata": "node scripts/lint-metadata.mjs",
+    "sync:server-json-version": "node scripts/sync-server-json-version.mjs",
     "test:unit": "node --experimental-sqlite --test test/unit/*.test.mjs",
     "test:integration": "node --experimental-sqlite --test --test-concurrency=1 test/integration/*.test.mjs",
     "test": "npm run test:unit && npm run test:integration"
