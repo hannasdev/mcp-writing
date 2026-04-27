@@ -292,7 +292,7 @@
       border-color: var(--border-hi);
     }
     .scenario-panel { display: none; }
-    .scenario-panel.active { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; align-items: start; }
+    .scenario-panel:not([hidden]) { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; align-items: start; }
     .scenario-info h3 { font-size: 22px; font-weight: 700; margin-bottom: 10px; }
     .scenario-info .goal {
       font-size: 12.5px; font-weight: 600; text-transform: uppercase;
@@ -390,7 +390,7 @@
     @media (max-width: 768px) {
       .hero-grid, .problem-grid, .steps-grid, .features-grid,
       .quickstart-grid { grid-template-columns: 1fr; }
-      .scenario-panel.active { grid-template-columns: 1fr; }
+      .scenario-panel:not([hidden]) { grid-template-columns: 1fr; }
       .hero { padding: 60px 0 48px; }
       .hero h1 { font-size: 30px; }
       .hero-sub { font-size: 15px; }
@@ -609,14 +609,14 @@
     </div>
 
     <div class="scenario-tabs" role="tablist">
-      <button class="tab-btn active" role="tab" aria-selected="true"  onclick="showTab('arc')">Character arc analysis</button>
-      <button class="tab-btn"        role="tab" aria-selected="false" onclick="showTab('continuity')">Continuity check</button>
-      <button class="tab-btn"        role="tab" aria-selected="false" onclick="showTab('edit')">Safe AI line edits</button>
-      <button class="tab-btn"        role="tab" aria-selected="false" onclick="showTab('placement')">Add a character</button>
+      <button class="tab-btn active" role="tab" id="tab-btn-arc"        aria-selected="true"  aria-controls="tab-arc"       onclick="showTab(event,'arc')">Character arc analysis</button>
+      <button class="tab-btn"        role="tab" id="tab-btn-continuity" aria-selected="false" aria-controls="tab-continuity" onclick="showTab(event,'continuity')">Continuity check</button>
+      <button class="tab-btn"        role="tab" id="tab-btn-edit"       aria-selected="false" aria-controls="tab-edit"       onclick="showTab(event,'edit')">Safe AI line edits</button>
+      <button class="tab-btn"        role="tab" id="tab-btn-placement"  aria-selected="false" aria-controls="tab-placement"  onclick="showTab(event,'placement')">Add a character</button>
     </div>
 
     <!-- Tab: Arc -->
-    <div class="scenario-panel active" id="tab-arc">
+    <div class="scenario-panel" role="tabpanel" id="tab-arc" aria-labelledby="tab-btn-arc">
       <div class="scenario-info">
         <div class="goal">Goal</div>
         <h3>Understand whether a character's 55-scene presence earns its space</h3>
@@ -682,7 +682,7 @@
     </div>
 
     <!-- Tab: Continuity -->
-    <div class="scenario-panel" id="tab-continuity">
+    <div class="scenario-panel" role="tabpanel" id="tab-continuity" aria-labelledby="tab-btn-continuity" hidden>
       <div class="scenario-info">
         <div class="goal">Goal</div>
         <h3>Catch timeline contradictions before beta readers see them</h3>
@@ -745,7 +745,7 @@
     </div>
 
     <!-- Tab: Edit -->
-    <div class="scenario-panel" id="tab-edit">
+    <div class="scenario-panel" role="tabpanel" id="tab-edit" aria-labelledby="tab-btn-edit" hidden>
       <div class="scenario-info">
         <div class="goal">Goal</div>
         <h3>Let AI propose line edits — you approve before anything is saved</h3>
@@ -799,7 +799,7 @@
     </div>
 
     <!-- Tab: Placement -->
-    <div class="scenario-panel" id="tab-placement">
+    <div class="scenario-panel" role="tabpanel" id="tab-placement" aria-labelledby="tab-btn-placement" hidden>
       <div class="scenario-info">
         <div class="goal">Goal</div>
         <h3>Add a new character without breaking pacing</h3>
@@ -940,20 +940,19 @@
             </div>
             <span class="code-block-title">terminal</span>
           </div>
-          <pre><span class="comment"># Install</span>
-<span class="cmd">npm</span> <span class="arg">install</span> <span class="flag">-g</span> @hanna84/mcp-writing
+          <pre><span class="comment"># Clone and install</span>
+<span class="cmd">git</span> <span class="arg">clone</span> https://github.com/hannasdev/mcp-writing
+<span class="cmd">cd</span> mcp-writing &amp;&amp; <span class="cmd">npm</span> <span class="arg">install</span>
 
 <span class="comment"># Point at your Scrivener sync folder and start</span>
-<span class="cmd">SYNC_FOLDER</span>=~/Documents/MyNovel/sync \
-<span class="cmd">mcp-writing</span>
+<span class="cmd">WRITING_SYNC_DIR</span>=~/Documents/MyNovel/sync \
+<span class="cmd">npm</span> <span class="arg">start</span>
 
-<span class="comment"># Import your manuscript (first time only)</span>
-<span class="cmd">curl</span> <span class="arg">-X POST</span> http://localhost:3000/tools/sync \
-  <span class="flag">-d</span> '{"project_id":"book-1","universe_id":"my-universe"}'
+<span class="comment"># Connect your MCP client to:</span>
+<span class="comment"># http://localhost:3000/sse  (SSE transport)</span>
+<span class="comment"># http://localhost:3000/healthz  (health check)</span>
 
-<span class="comment"># Server is now available at</span>
-<span class="comment"># http://localhost:3000/sse  (MCP SSE endpoint)</span>
-<span class="comment"># http://localhost:3000/healthz</span></pre>
+<span class="comment"># Then ask your AI to run sync() to import your manuscript</span></pre>
         </div>
       </div>
     </div>
@@ -980,22 +979,26 @@
 </footer>
 
 <script>
-  function showTab(name) {
-    // Hide all panels, deactivate all buttons
-    document.querySelectorAll('.scenario-panel').forEach(function(p) {
-      p.classList.remove('active');
-    });
+  function showTab(e, name) {
+    // Deactivate all buttons
     document.querySelectorAll('.tab-btn').forEach(function(b) {
       b.classList.remove('active');
       b.setAttribute('aria-selected', 'false');
     });
-    // Show selected
+    // Hide all panels
+    document.querySelectorAll('.scenario-panel').forEach(function(p) {
+      p.hidden = true;
+    });
+    // Activate clicked button
+    e.currentTarget.classList.add('active');
+    e.currentTarget.setAttribute('aria-selected', 'true');
+    // Show selected panel
     var panel = document.getElementById('tab-' + name);
-    if (panel) panel.classList.add('active');
-    // Find the button that triggered this and activate it
-    event.currentTarget.classList.add('active');
-    event.currentTarget.setAttribute('aria-selected', 'true');
+    if (panel) panel.hidden = false;
   }
+
+  // Show first panel on load
+  document.getElementById('tab-arc').hidden = false;
 </script>
 
 </body>
