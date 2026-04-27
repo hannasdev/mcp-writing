@@ -708,7 +708,7 @@
     }
 
     @media (max-width: 620px) {
-      .wrap { width: min(100% - 28px, var(--max)); }
+      .wrap { width: min(calc(100% - 28px), var(--max)); }
       .trust-strip, .feature-grid, .scenario-grid { grid-template-columns: 1fr; }
       h1 { font-size: 54px; }
       .nav-inner {
