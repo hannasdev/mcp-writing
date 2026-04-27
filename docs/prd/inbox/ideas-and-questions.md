@@ -6,17 +6,7 @@ Unresolved design questions, feature ideas, and edge cases that haven't yet been
 
 ## Open Questions
 
-### A. Enrichment Model (RESOLVED)
-
-**Q:** Which model runs the enrichment pass?
-
-**A:** `enrich_scene` uses deterministic heuristics only (first-sentence logline, character name matching). No model call. Advisory output; user reviews before accepting.
-
-### B. Write-Back Safety for Metadata (RESOLVED)
-
-**Q:** When the AI calls `update_scene_metadata`, it modifies the sync file. Scrivener will pick up that change on next sync. Is that acceptable, or should metadata writes go to a separate sidecar?
-
-**A:** Sidecar files (`.meta.yaml`). The service writes only to sidecar files; Scrivener-managed `.md` files are never touched except during `commit_edit` prose writes.
+> Resolved questions have been moved to [done/resolved-design-questions.md](../done/resolved-design-questions.md).
 
 ### C. Proposal Persistence (OPEN)
 
@@ -25,12 +15,6 @@ Unresolved design questions, feature ideas, and edge cases that haven't yet been
 **Status:** In-memory is simpler but means a restart between propose and commit loses the proposal. Acceptable for Phase 3.
 
 **Future:** Consider persistent proposal storage if users report frequent restarts losing work.
-
-### D. Database Inclusion Policy (RESOLVED)
-
-**Q:** What should be entities vs file-first?
-
-**A:** Entities require repeated cross-book queries or stable identifiers. Scenes, characters, places, threads are entities. Editorial guidance, feedback, and process notes remain file-first.
 
 ## Edge Cases — Deferred
 
