@@ -451,7 +451,7 @@
         </div>
         <div class="chat-body">
           <div class="msg-user">
-            Walk me through Mira's arc in Part 3 — is it building toward something or drifting?
+            Walk me through Elias's arc in Part 1 — is the grief-to-connection shape landing or is it muddled?
           </div>
           <div class="msg-ai">
             <div class="tool-call">
@@ -461,29 +461,32 @@
                 <span class="tool-call-server">mcp-writing</span>
               </div>
               <div class="tool-call-body">
-                <span class="key">"character_id"</span>: <span class="str">"mira"</span>,<br/>
-                <span class="key">"project_id"</span>: <span class="str">"book-1-the-lamb"</span>,<br/>
-                <span class="key">"part"</span>: <span class="num">3</span>
+                <span class="key">"character_id"</span>: <span class="str">"elias"</span>,<br/>
+                <span class="key">"project_id"</span>: <span class="str">"book-1-the-crossing"</span>,<br/>
+                <span class="key">"part"</span>: <span class="num">1</span>
               </div>
             </div>
             <div class="tool-result">
               <div class="tool-result-header">
                 <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" style="color:var(--green)"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
-                14 scenes · Part 3 · ordered by timeline
+                9 scenes · Part 1 · ordered by timeline (page 1 of 7 · 55 total)
               </div>
               <div class="tool-result-body">
-                sc-061 · "Exposure Risk" · beat: <span class="str">dark-night-of-soul</span><br/>
-                sc-064 · "On the Record" · beat: <span class="str">break-into-three</span><br/>
-                sc-067 · "The Statement" · beat: <span class="str">finale</span><br/>
-                <span style="color:var(--dim)">… 11 more</span>
+                ch2 · "Elias" · beat: <span class="str">theme-stated</span> · pov: nora<br/>
+                ch2 · "Elsewhere, the Same Night" · beat: <span class="str">theme-stated</span><br/>
+                ch2 · "Without the Strangeness" · beat: <span class="str">fun-and-games</span><br/>
+                ch3 · "Leave the Door Open" · beat: <span class="str">b-story</span><br/>
+                ch6 · "Dr. Vance / The Stairwell" · beat: <span class="str">bad-guys-close-in</span> · stale: <span style="color:var(--amber)">yes</span><br/>
+                <span style="color:var(--dim)">… 4 more · arc paginated — 55 scenes total</span>
               </div>
             </div>
             <div class="msg-ai-text">
-              Mira's Part 3 arc is tightly escalating, not drifting. The beat
-              sequence moves from <em>dark night of soul</em> → <em>break into three</em>
-              → <em>finale</em> across her 14 scenes. The only gap is scene 063 — no beat
-              tagged and logline is stale. That one might be doing pacing work without
-              structural intent. Want me to pull the prose so we can check it?
+              The shape is landing. Part 1 moves cleanly from grief (he discovers the
+              world solved his life's work without him) to noticing Nora, to the first
+              real connection without strangeness as cover. The Conrad warning in ch7
+              is correctly placed as a <em>bad guys close in</em> beat — oblique, hard
+              for Nora to decode, which is intentional. One flag: the stairwell scene
+              in ch6 has stale metadata — worth re-enriching before you finalise pacing.
             </div>
           </div>
         </div>
@@ -616,25 +619,26 @@
     <div class="scenario-panel active" id="tab-arc">
       <div class="scenario-info">
         <div class="goal">Goal</div>
-        <h3>Trace a character's journey across the whole manuscript</h3>
+        <h3>Understand whether a character's 55-scene presence earns its space</h3>
         <p>
-          You want to understand whether a character's arc is intentionally shaped
-          or accidentally drifting — without rereading 40 scenes to find out.
+          A major character appears in 55 scenes across the full manuscript.
+          You want to know if the arc justifies that footprint — or if it's
+          bloated — without rereading every scene to find out.
         </p>
         <ol class="scenario-steps">
-          <li>Ask the AI to run <code>get_arc</code> for the character across a specific part or the full book.</li>
-          <li>The AI receives ordered scene metadata — beats, loglines, POV, timeline — without loading prose.</li>
-          <li>It identifies structural patterns: missing beats, pacing gaps, escalation or stalling.</li>
-          <li>Load only the flagged scenes with <code>get_scene_prose</code> for closer inspection.</li>
+          <li>Ask the AI to run <code>get_arc</code> for the character across the full project.</li>
+          <li>The result is paginated: metadata for all 55 scenes, ordered by timeline, grouped by part — no prose loaded.</li>
+          <li>The AI reads the beat sequence and identifies structural jobs each part is doing.</li>
+          <li>Stale scenes are surfaced automatically. Load only those with <code>get_scene_prose</code> to verify.</li>
         </ol>
       </div>
       <div class="chat-mock">
         <div class="chat-mock-bar">
           <div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div>
-          <div class="chat-mock-bar-label">Arc analysis · book-1-the-lamb</div>
+          <div class="chat-mock-bar-label">Arc analysis · book-1-the-crossing</div>
         </div>
         <div class="chat-body">
-          <div class="msg-user">Is Mira's arc in Part 2 doing what I think it's doing?</div>
+          <div class="msg-user">Show me Elias's full arc. Does his 55-scene presence justify the space he takes up?</div>
           <div class="msg-ai">
             <div class="tool-call">
               <div class="tool-call-header">
@@ -642,24 +646,35 @@
                 <span class="tool-call-server">mcp-writing</span>
               </div>
               <div class="tool-call-body">
-                <span class="key">"character_id"</span>: <span class="str">"mira"</span>, <span class="key">"part"</span>: <span class="num">2</span>
+                <span class="key">"character_id"</span>: <span class="str">"elias"</span>,
+                <span class="key">"project_id"</span>: <span class="str">"book-1-the-crossing"</span>
               </div>
             </div>
             <div class="tool-result">
-              <div class="tool-result-header">✓ 22 scenes · ordered by timeline_position</div>
+              <div class="tool-result-header">✓ 55 scenes · full manuscript · page 1 of 7</div>
               <div class="tool-result-body">
-                sc-031 · beat: <span class="str">midpoint</span> · stale: <span style="color:var(--amber)">yes</span><br/>
-                sc-033 · beat: <span class="str">fun-and-games</span><br/>
-                sc-038 · beat: <span class="str">bad-guys-close-in</span><br/>
-                <span style="color:var(--dim)">… 19 more</span>
+                <span style="color:var(--accent-2); font-size:10px">PART 1 — First contact &amp; the Conrad problem</span><br/>
+                ch2 · "Elias" · beat: <span class="str">theme-stated</span><br/>
+                ch2 · "Elsewhere, the Same Night" · <span style="color:var(--dim)">discovers world solved his life's work; grief, then Nora</span><br/>
+                ch2 · "Without the Strangeness" · beat: <span class="str">fun-and-games</span><br/>
+                ch3 · "Leave the Door Open / Stay a While" · beat: <span class="str">b-story</span><br/>
+                ch5 · "Almost at Ease / The Train North" · <span style="color:var(--dim)">encyclopedic, story of Pepper (dead parrot)</span><br/>
+                ch6 · "Dr. Vance / The Stairwell" · beat: <span class="str">bad-guys-close-in</span> · stale: <span style="color:var(--amber)">yes</span><br/>
+                ch7 · "Watching From the Hall" · <span style="color:var(--dim)">sees Conrad recruit Nora; one oblique warning she can't decode</span><br/>
+                ch7 · "The Argument / Too Bright" · beat: <span class="str">all-is-lost</span><br/>
+                <span style="color:var(--accent-2); font-size:10px; margin-top:6px; display:block">PART 2 — Separation &amp; breakthrough</span><br/>
+                ch10 · "She Notices He Doesn't Call" · <span style="color:var(--dim)">Nora's POV; his absence as signal</span><br/>
+                ch11 · "Alone in the House / The Cat Video" · <span style="color:var(--dim)">GPU racks, eureka; obsession finds somewhere useful to go</span><br/>
+                <span style="color:var(--dim)">… 44 more · request next page?</span>
               </div>
             </div>
             <div class="msg-ai-text">
-              Part 2 is structurally sound but has a sequencing problem: scenes 033–036
-              cluster four "fun and games" beats in a row before the midpoint shift lands.
-              That's likely why Part 2 feels slow. Also: sc-031 is flagged as stale —
-              its metadata was last updated before your last prose rewrite.
-              Worth enriching before making pacing decisions based on it.
+              Yes — 55 scenes is proportionate. The arc earns it because it's doing two
+              jobs: his own grief-to-breakthrough story, <em>and</em> the structural
+              framing of Nora's choices. Part 1 shows the Conrad problem through his
+              eyes before Nora understands it. Part 2's separation is load-bearing —
+              his absence is a beat, not a gap. One stale scene in ch6 is worth fixing
+              before you lock structure. Want the Part 2 and 3 continuation?
             </div>
           </div>
         </div>
