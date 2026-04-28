@@ -140,6 +140,12 @@ function extractConstantValues(src) {
     values.set(match[1], Number.parseInt(match[2], 10));
   }
 
+  for (const match of src.matchAll(/const\s+(\w+)\s*=\s*parsePositiveIntEnv\(\s*process\.env\.\w+\s*,\s*(\d+)\s*\);/g)) {
+    if (!values.has(match[1])) {
+      values.set(match[1], Number.parseInt(match[2], 10));
+    }
+  }
+
   for (const match of src.matchAll(/const\s+(\w+)\s*=\s*process\.env\.\w+\s*\?\?\s*(["'`])([\s\S]*?)\2;/g)) {
     if (!values.has(match[1])) {
       values.set(match[1], match[3]);
