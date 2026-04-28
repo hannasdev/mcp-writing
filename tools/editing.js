@@ -7,9 +7,10 @@ import { getFileWriteDiagnostics, readMeta, indexSceneFile } from "../sync.js";
 
 function renderSceneContent(metadata, revisedProse) {
   const hasFrontmatter = metadata && Object.keys(metadata).length > 0;
+  const normalizedProse = revisedProse.replace(/\r?\n$/, "");
   return hasFrontmatter
-    ? `---\n${yaml.dump(metadata)}---\n\n${revisedProse}\n`
-    : `${revisedProse}\n`;
+    ? `---\n${yaml.dump(metadata)}---\n\n${normalizedProse}\n`
+    : `${normalizedProse}\n`;
 }
 
 export function registerEditingTools(s, {
