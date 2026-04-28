@@ -14,7 +14,7 @@ import { isGitRepository, getHeadCommitHash } from "../src/core/git.js";
 import {
   buildReviewBundlePlan,
   createReviewBundleArtifacts,
-} from "../review-bundles.js";
+} from "../src/review-bundles/review-bundles.js";
 
 const PROJECT_SYNC_DIR = process.env.WRITING_SYNC_DIR ?? process.argv[2] ?? null;
 const DB_PATH = process.env.DB_PATH ?? (PROJECT_SYNC_DIR ? path.join(PROJECT_SYNC_DIR, ".mcp", "writing.db") : null);

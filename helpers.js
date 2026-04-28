@@ -9,7 +9,7 @@ import {
   renderPlaceSheetTemplate,
   renderCharacterArcTemplate,
 } from "./src/world/world-entity-templates.js";
-import { ReviewBundlePlanError } from "./review-bundles.js";
+import { ReviewBundlePlanError } from "./src/review-bundles/review-bundles.js";
 
 export function deriveLoglineFromProse(prose) {
   const compact = prose.replace(/\s+/g, " ").trim();
