@@ -6,7 +6,7 @@ import {
   ReviewBundlePlanError,
   buildReviewBundlePlan,
   createReviewBundleArtifacts,
-} from "../review-bundles.js";
+} from "../src/review-bundles/review-bundles.js";
 import { validateProjectId } from "../src/sync/importer.js";
 import { getHeadCommitHash } from "../src/core/git.js";
 

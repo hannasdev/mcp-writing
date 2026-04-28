@@ -18,14 +18,14 @@ import {
   readEntityMetadata,
   resolveBatchTargetScenes,
 } from "../helpers.js";
-import { STYLEGUIDE_CONFIG_BASENAME } from "../prose-styleguide.js";
+import { STYLEGUIDE_CONFIG_BASENAME } from "./styleguide/prose-styleguide.js";
 import { registerSyncTools } from "../tools/sync.js";
 import { registerSearchTools } from "../tools/search.js";
 import { registerMetadataTools } from "../tools/metadata.js";
 import { registerReviewBundleTools } from "../tools/review-bundles.js";
 import { registerStyleguideTools } from "../tools/styleguide.js";
 import { registerEditingTools } from "../tools/editing.js";
-import { WORKFLOW_CATALOGUE } from "../workflow-catalogue.js";
+import { WORKFLOW_CATALOGUE } from "./workflows/workflow-catalogue.js";
 import { getRuntimeDiagnostics } from "./runtime/runtime-diagnostics.js";
 
 const SYNC_DIR = process.env.WRITING_SYNC_DIR ?? "./sync";
