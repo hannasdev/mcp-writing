@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Generates docs/tools.md from tool definitions in the runtime entrypoint
- * (src/index.js when present, otherwise index.js) and tools/*.js.
+ * (src/index.js when present, otherwise index.js) and src/tools/*.js.
  *
  * Run:  node scripts/generate-tool-docs.mjs
  *   or: npm run docs
@@ -18,15 +18,19 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OUT  = path.join(ROOT, 'docs', 'tools.md');
 
 // Build a map from each registration function name to its module source.
-// e.g. "registerSyncTools" -> contents of tools/sync.js
+// e.g. "registerSyncTools" -> contents of src/tools/sync.js
 const toolModuleMap = new Map();
-try {
-  for (const f of readdirSync(path.join(ROOT, 'tools')).filter(f => f.endsWith('.js')).sort()) {
-    const content = readFileSync(path.join(ROOT, 'tools', f), 'utf8');
-    const fnName = (content.match(/export function (\w+)\s*\(/) ?? [])[1];
-    if (fnName) toolModuleMap.set(fnName, content);
+for (const dir of [path.join(ROOT, 'src', 'tools'), path.join(ROOT, 'tools')]) {
+  try {
+    for (const f of readdirSync(dir).filter(f => f.endsWith('.js')).sort()) {
+      const content = readFileSync(path.join(dir, f), 'utf8');
+      const fnName = (content.match(/export function (\w+)\s*\(/) ?? [])[1];
+      if (fnName && !toolModuleMap.has(fnName)) toolModuleMap.set(fnName, content);
+    }
+  } catch {
+    // Directory may not exist during early migration phases.
   }
-} catch { /* tools/ not yet created */ }
+}
 
 // Inline each register*Tools(s, ...) call with the module source so that
 // s.tool() blocks appear in registration order (matching createMcpServer()).

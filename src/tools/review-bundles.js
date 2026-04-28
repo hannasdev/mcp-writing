@@ -6,9 +6,9 @@ import {
   ReviewBundlePlanError,
   buildReviewBundlePlan,
   createReviewBundleArtifacts,
-} from "../src/review-bundles/review-bundles.js";
-import { validateProjectId } from "../src/sync/importer.js";
-import { getHeadCommitHash } from "../src/core/git.js";
+} from "../review-bundles/review-bundles.js";
+import { validateProjectId } from "../sync/importer.js";
+import { getHeadCommitHash } from "../core/git.js";
 
 export function registerReviewBundleTools(s, {
   db,

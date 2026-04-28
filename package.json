@@ -29,7 +29,7 @@
     "./prose-styleguide.js": "./prose-styleguide.js",
     "./prose-styleguide-drift.js": "./prose-styleguide-drift.js",
     "./prose-styleguide-skill.js": "./prose-styleguide-skill.js",
-    "./tools/*": "./tools/*",
+    "./tools/*": "./src/tools/*",
     "./scripts/*": "./scripts/*",
     "./src/*": "./src/*",
     "./package.json": "./package.json"
@@ -64,7 +64,6 @@
     "prose-styleguide-drift.js",
     "prose-styleguide-skill.js",
     "scripts/",
-    "tools/",
     "README.md",
     "CHANGELOG.md"
   ],
@@ -82,7 +81,7 @@
     "normalize:scene-characters": "node --experimental-sqlite scripts/normalize-scene-characters.mjs",
     "setup:openclaw-env": "sh scripts/setup-openclaw-env.sh",
     "release": "release-it",
-    "lint": "eslint *.js src/ scripts/ tools/",
+    "lint": "eslint *.js src/ scripts/",
     "docs": "node scripts/generate-tool-docs.mjs",
     "lint:metadata": "node scripts/lint-metadata.mjs",
     "sync:server-json-version": "node scripts/sync-server-json-version.mjs",
