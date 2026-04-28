@@ -165,7 +165,7 @@ See [ideas-and-questions.md](docs/prd/inbox/ideas-and-questions.md) for:
 - Operational improvements (first-time setup, permission warnings)
 
 Additional in-progress proposal:
-- [Root Structure Reorganization](docs/prd/inbox/root-structure-reorganization.md)
+- [Root Structure Reorganization](docs/prd/in-progress/root-structure-reorganization.md)
 
 ---
 

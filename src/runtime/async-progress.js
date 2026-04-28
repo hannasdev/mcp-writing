@@ -1,0 +1,1 @@
+export const ASYNC_PROGRESS_PREFIX = "__MCP_ASYNC_PROGRESS__ ";

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /**
- * Generates docs/tools.md from tool definitions in index.js and tools/*.js.
+ * Generates docs/tools.md from tool definitions in the runtime entrypoint
+ * (src/index.js when present, otherwise index.js) and tools/*.js.
  *
  * Run:  node scripts/generate-tool-docs.mjs
  *   or: npm run docs
@@ -29,7 +30,17 @@ try {
 
 // Inline each register*Tools(s, ...) call with the module source so that
 // s.tool() blocks appear in registration order (matching createMcpServer()).
-let source = readFileSync(path.join(ROOT, 'index.js'), 'utf8');
+const ENTRYPOINT_PATH = path.join(ROOT, 'src', 'index.js');
+const LEGACY_ENTRYPOINT_PATH = path.join(ROOT, 'index.js');
+const sourcePath = (() => {
+  try {
+    readFileSync(ENTRYPOINT_PATH, 'utf8');
+    return ENTRYPOINT_PATH;
+  } catch {
+    return LEGACY_ENTRYPOINT_PATH;
+  }
+})();
+let source = readFileSync(sourcePath, 'utf8');
 for (const [fnName, content] of toolModuleMap) {
   source = source.replace(new RegExp(`[ \\t]*${fnName}\\s*\\([\\s\\S]*?\\);`), content);
 }
@@ -127,6 +138,12 @@ function extractConstantValues(src) {
 
   for (const match of src.matchAll(/const\s+(\w+)\s*=\s*parseInt\([^\n]*\?\?\s*"([^"]+)"[^\n]*\);/g)) {
     values.set(match[1], Number.parseInt(match[2], 10));
+  }
+
+  for (const match of src.matchAll(/const\s+(\w+)\s*=\s*parsePositiveIntEnv\(\s*process\.env\.\w+\s*,\s*(\d+)\s*\);/g)) {
+    if (!values.has(match[1])) {
+      values.set(match[1], Number.parseInt(match[2], 10));
+    }
   }
 
   for (const match of src.matchAll(/const\s+(\w+)\s*=\s*process\.env\.\w+\s*\?\?\s*(["'`])([\s\S]*?)\2;/g)) {
@@ -416,10 +433,11 @@ function anchor(name) {
 }
 
 function generateMarkdown(tools) {
+  const sourceLabel = path.relative(ROOT, sourcePath).replace(/\\/g, '/');
   const lines = [
     '# Tool Reference',
     '',
-    '> Auto-generated from `index.js`.',
+    `> Auto-generated from \`${sourceLabel}\`.`,
     '> Do not edit manually — run `npm run docs` to regenerate.',
     '',
     '## Tools',

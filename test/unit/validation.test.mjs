@@ -6,7 +6,8 @@ import path from "node:path";
 describe("package.json files allowlist", () => {
   const root = path.resolve(import.meta.dirname, "../..");
   const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
-  const allowlist = pkg.files ?? [];
+  const toPosixPath = (value) => value.replace(/\\/g, "/");
+  const allowlist = (pkg.files ?? []).map(toPosixPath);
 
   test("every file listed in files exists on disk", () => {
     for (const entry of allowlist) {
@@ -18,17 +19,17 @@ describe("package.json files allowlist", () => {
     }
   });
 
-  test("every local JS module imported by index.js is in the files allowlist", () => {
-    const indexSrc = fs.readFileSync(path.join(root, "index.js"), "utf8");
+  test("every local JS module imported by src/index.js is in the files allowlist", () => {
+    const entrypointSrc = fs.readFileSync(path.join(root, "src", "index.js"), "utf8");
     const localImports = [
-      ...indexSrc.matchAll(/^\s*import\b(?:[\s\S]*?\bfrom\s*)?["'](\.\/[^"']+)["']/gm),
-    ].map((m) => m[1].replace(/^\.\//, ""));
+      ...entrypointSrc.matchAll(/^\s*import\b(?:[\s\S]*?\bfrom\s*)?["'](\.{1,2}\/[^"']+)["']/gm),
+    ].map((m) => toPosixPath(path.normalize(path.join("src", m[1]))));
 
     for (const file of localImports) {
       const covered =
         allowlist.includes(file) ||
         allowlist.some(entry => entry.endsWith("/") && file.startsWith(entry));
-      assert.ok(covered, `"${file}" is imported by index.js but missing from package.json files allowlist`);
+      assert.ok(covered, `"${file}" is imported by src/index.js but missing from package.json files allowlist`);
     }
   });
 
@@ -41,7 +42,7 @@ describe("package.json files allowlist", () => {
       const src = fs.readFileSync(path.join(toolsDir, toolFile), "utf8");
       const localImports = [
         ...src.matchAll(/^\s*import\b(?:[\s\S]*?\bfrom\s*)?["'](\.\.\/[^"']+)["']/gm),
-      ].map((m) => path.normalize(path.join("tools", m[1])));
+      ].map((m) => toPosixPath(path.normalize(path.join("tools", m[1]))));
 
       for (const file of localImports) {
         const covered =
