@@ -7,7 +7,7 @@ import {
   buildReviewBundlePlan,
   createReviewBundleArtifacts,
 } from "../review-bundles.js";
-import { validateProjectId } from "../importer.js";
+import { validateProjectId } from "../src/sync/importer.js";
 import { getHeadCommitHash } from "../git.js";
 
 export function registerReviewBundleTools(s, {

@@ -7,7 +7,7 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { openDb, checkpointJobFinish, loadStalledJobs, pruneJobCheckpoints } from "../db.js";
-import { syncAll, isSyncDirWritable, getSyncOwnershipDiagnostics, isStructuralProjectId } from "../sync.js";
+import { syncAll, isSyncDirWritable, getSyncOwnershipDiagnostics, isStructuralProjectId } from "./sync/sync.js";
 import { isGitAvailable, isGitRepository, initGitRepository, getSceneProseAtCommit } from "../git.js";
 import { createAsyncJobManager, readJsonIfExists } from "./runtime/async-jobs.js";
 import {

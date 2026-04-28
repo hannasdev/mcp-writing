@@ -1,8 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { importScrivenerSync, validateProjectId } from "../importer.js";
-import { mergeScrivenerProjectMetadata } from "../scrivener-direct.js";
+import { importScrivenerSync, validateProjectId } from "../src/sync/importer.js";
+import { mergeScrivenerProjectMetadata } from "../src/sync/scrivener-direct.js";
 
 function usage() {
   return [

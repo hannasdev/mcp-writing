@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 import path from "node:path";
 import { openDb } from "../db.js";
-import { buildCharacterNormalizationContext, normalizeSceneCharacters } from "../scene-character-normalization.js";
-import { normalizeSceneMetaForPath, readMeta, syncAll, writeMeta } from "../sync.js";
+import { buildCharacterNormalizationContext, normalizeSceneCharacters } from "../src/sync/scene-character-normalization.js";
+import { normalizeSceneMetaForPath, readMeta, syncAll, writeMeta } from "../src/sync/sync.js";
 
 function readRequiredValue(argv, index, option) {
   const value = argv[index + 1];

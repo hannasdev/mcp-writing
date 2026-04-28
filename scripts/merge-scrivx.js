@@ -27,8 +27,8 @@
  */
 
 import path from "node:path";
-import { validateProjectId } from "../importer.js";
-import { mergeScrivenerProjectMetadata } from "../scrivener-direct.js";
+import { validateProjectId } from "../src/sync/importer.js";
+import { mergeScrivenerProjectMetadata } from "../src/sync/scrivener-direct.js";
 
 // ---------------------------------------------------------------------------
 // Args
