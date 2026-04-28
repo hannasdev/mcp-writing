@@ -5,6 +5,9 @@
   "homepage": "https://hannasdev.github.io/mcp-writing/",
   "type": "module",
   "main": "index.js",
+  "exports": {
+    ".": "./index.js"
+  },
   "bin": {
     "mcp-writing": "./bin/mcp-writing.js"
   },
@@ -12,6 +15,7 @@
   "files": [
     "bin/",
     "index.js",
+    "src/",
     "async-jobs.js",
     "async-progress.js",
     "helpers.js",
@@ -52,7 +56,7 @@
     "normalize:scene-characters": "node --experimental-sqlite scripts/normalize-scene-characters.mjs",
     "setup:openclaw-env": "sh scripts/setup-openclaw-env.sh",
     "release": "release-it",
-    "lint": "eslint *.js scripts/ tools/",
+    "lint": "eslint *.js src/ scripts/ tools/",
     "docs": "node scripts/generate-tool-docs.mjs",
     "lint:metadata": "node scripts/lint-metadata.mjs",
     "sync:server-json-version": "node scripts/sync-server-json-version.mjs",
