@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 import { openDb, checkpointJobFinish, loadStalledJobs, pruneJobCheckpoints } from "../db.js";
 import { syncAll, isSyncDirWritable, getSyncOwnershipDiagnostics, isStructuralProjectId } from "../sync.js";
 import { isGitAvailable, isGitRepository, initGitRepository, getSceneProseAtCommit } from "../git.js";
-import { createAsyncJobManager, readJsonIfExists } from "../async-jobs.js";
+import { createAsyncJobManager, readJsonIfExists } from "./runtime/async-jobs.js";
 import {
   createHelpers,
   deriveLoglineFromProse,
@@ -26,7 +26,7 @@ import { registerReviewBundleTools } from "../tools/review-bundles.js";
 import { registerStyleguideTools } from "../tools/styleguide.js";
 import { registerEditingTools } from "../tools/editing.js";
 import { WORKFLOW_CATALOGUE } from "../workflow-catalogue.js";
-import { getRuntimeDiagnostics } from "../runtime-diagnostics.js";
+import { getRuntimeDiagnostics } from "./runtime/runtime-diagnostics.js";
 
 const SYNC_DIR = process.env.WRITING_SYNC_DIR ?? "./sync";
 const DB_PATH = process.env.DB_PATH ?? "./writing.db";
