@@ -100,6 +100,47 @@ describe("commit_edit behavior", () => {
     assert.equal(after, normalizedRaw);
   });
 
+  test("treats trailing CRLF in revised prose as noop", async () => {
+    const scenePath = path.join(writeSyncDir, "projects", "test-novel", "part-1", "chapter-1", "sc-002.md");
+
+    const seedProposalText = await callWriteTool("propose_edit", {
+      scene_id: "sc-002",
+      instruction: "Seed prose for CRLF noop coverage",
+      revised_prose: "CRLF newline normalization coverage.",
+    });
+    const seedProposal = JSON.parse(seedProposalText);
+    await callWriteTool("commit_edit", {
+      scene_id: "sc-002",
+      proposal_id: seedProposal.proposal_id,
+    });
+
+    const normalizedRaw = fs.readFileSync(scenePath, "utf8");
+    const normalizedProse = matter(normalizedRaw).content.trim();
+
+    const proposalText = await callWriteTool("propose_edit", {
+      scene_id: "sc-002",
+      instruction: "Retry identical edit with trailing CRLF",
+      revised_prose: `${normalizedProse}\r\n`,
+    });
+    const proposal = JSON.parse(proposalText);
+
+    assert.equal(proposal.noop, true);
+    assert.equal(proposal.diff_preview, "(no changes)");
+
+    const commitText = await callWriteTool("commit_edit", {
+      scene_id: "sc-002",
+      proposal_id: proposal.proposal_id,
+    });
+    const commitResult = JSON.parse(commitText);
+    const after = fs.readFileSync(scenePath, "utf8");
+
+    assert.equal(commitResult.ok, true);
+    assert.equal(commitResult.noop, true);
+    assert.equal(commitResult.snapshot_commit, null);
+    assert.match(commitResult.message, /Nothing was written\./);
+    assert.equal(after, normalizedRaw);
+  });
+
   test("reindexes scene metadata on noop commit when prose changed out-of-band", async () => {
     const scenePath = path.join(writeSyncDir, "projects", "test-novel", "part-1", "chapter-1", "sc-001.md");
 
