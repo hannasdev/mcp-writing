@@ -4,7 +4,7 @@ import os from "node:os";
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { ASYNC_PROGRESS_PREFIX } from "./async-progress.js";
-import { checkpointJobCreate, checkpointJobFinish, pruneJobCheckpoints } from "../../db.js";
+import { checkpointJobCreate, checkpointJobFinish, pruneJobCheckpoints } from "../core/db.js";
 
 export function readJsonIfExists(filePath) {
   if (!filePath || !fs.existsSync(filePath)) return null;

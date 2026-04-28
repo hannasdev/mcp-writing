@@ -2,7 +2,7 @@ import { z } from "zod";
 import fs from "node:fs";
 import matter from "gray-matter";
 import yaml from "js-yaml";
-import { createSnapshot, listSnapshots } from "../git.js";
+import { createSnapshot, listSnapshots } from "../src/core/git.js";
 import { getFileWriteDiagnostics, readMeta, indexSceneFile } from "../src/sync/sync.js";
 
 function renderSceneContent(metadata, revisedProse) {
