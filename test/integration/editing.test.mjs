@@ -24,7 +24,7 @@ after(async () => {
   await ctx.teardown();
 });
 
-describe("commit_edit behavior", () => {
+describe("commit_edit behavior", { concurrency: 1 }, () => {
   test("applies a revised scene file on commit", async () => {
     const scenePath = path.join(writeSyncDir, "projects", "test-novel", "part-1", "chapter-1", "sc-001.md");
     const before = fs.readFileSync(scenePath, "utf8");
