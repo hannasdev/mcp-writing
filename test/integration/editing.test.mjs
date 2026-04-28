@@ -1,26 +1,26 @@
-import { test, describe, before, after } from "node:test";
+import { test, describe, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import matter from "gray-matter";
 import { createTestContext } from "../helpers/server.js";
 
-const ctx = createTestContext(3069, 3068);
-let writeSyncDir, readSyncDir;
+let nextPort = 3068;
+let ctx;
+let writeSyncDir;
 
-before(async () => {
+beforeEach(async () => {
+  ctx = createTestContext(nextPort + 1, nextPort);
+  nextPort += 2;
   await ctx.setup();
   writeSyncDir = ctx.writeSyncDir;
-  readSyncDir = ctx.readSyncDir;
 });
 
-after(async () => {
+afterEach(async () => {
   await ctx.teardown();
 });
 
-const callTool = (n, a) => ctx.callTool(n, a);
 const callWriteTool = (n, a) => ctx.callWriteTool(n, a);
-const waitForAsyncJob = (id, t) => ctx.waitForAsyncJob(id, t);
 describe("commit_edit preflight diagnostics", () => {
   test("applies a revised scene file on commit", async () => {
     const scenePath = path.join(writeSyncDir, "projects", "test-novel", "part-1", "chapter-1", "sc-001.md");
