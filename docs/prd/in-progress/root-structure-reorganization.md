@@ -1,6 +1,6 @@
 # Root Structure Reorganization
 
-**Status:** 📥 Inbox
+**Status:** 🚧 In Progress
 
 ## Motivation
 
