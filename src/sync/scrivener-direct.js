@@ -3,7 +3,7 @@ import path from "node:path";
 import { DOMParser } from "@xmldom/xmldom";
 import yaml from "js-yaml";
 import { validateProjectId } from "./importer.js";
-import { createSnapshot, isGitRepository, isGitAvailable } from "../../git.js";
+import { createSnapshot, isGitRepository, isGitAvailable } from "../core/git.js";
 
 function attr(el, name) {
   return el?.getAttribute?.(name) ?? null;

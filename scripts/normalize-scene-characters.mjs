@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import path from "node:path";
-import { openDb } from "../db.js";
+import { openDb } from "../src/core/db.js";
 import { buildCharacterNormalizationContext, normalizeSceneCharacters } from "../src/sync/scene-character-normalization.js";
 import { normalizeSceneMetaForPath, readMeta, syncAll, writeMeta } from "../src/sync/sync.js";
 
