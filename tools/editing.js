@@ -5,6 +5,13 @@ import yaml from "js-yaml";
 import { createSnapshot, listSnapshots } from "../git.js";
 import { getFileWriteDiagnostics, readMeta, indexSceneFile } from "../sync.js";
 
+function renderSceneContent(metadata, revisedProse) {
+  const hasFrontmatter = metadata && Object.keys(metadata).length > 0;
+  return hasFrontmatter
+    ? `---\n${yaml.dump(metadata)}---\n\n${revisedProse}\n`
+    : `${revisedProse}\n`;
+}
+
 export function registerEditingTools(s, {
   db,
   SYNC_DIR,
@@ -36,6 +43,7 @@ export function registerEditingTools(s, {
       try {
         const raw = fs.readFileSync(scene.file_path, "utf8");
         const { data: metadata, content: currentProse } = matter(raw);
+        const renderedContent = renderSceneContent(metadata, revised_prose);
 
         const currentLines = currentProse.trim().split("\n");
         const revisedLines = revised_prose.trim().split("\n");
@@ -60,17 +68,28 @@ export function registerEditingTools(s, {
           scene_file_path: scene.file_path,
           instruction,
           revised_prose,
+          rendered_content: renderedContent,
           original_prose: currentProse,
           metadata,
           created_at: new Date().toISOString(),
         });
 
+        const noop = renderedContent === raw;
+        const diffPreview = noop
+          ? "(no changes)"
+          : diffLines.length > 0
+            ? diffLines.join("\n")
+            : "(changes occur after the previewed lines)";
+
         return jsonResponse({
           proposal_id: proposalId,
           scene_id,
           instruction,
-          diff_preview: diffLines.join("\n"),
-          note: "Review the diff above. Call commit_edit with this proposal_id to apply the change.",
+          diff_preview: diffPreview,
+          noop,
+          note: noop
+            ? "This proposal matches the current scene file. Calling commit_edit will be a no-op."
+            : "Review the diff above. Call commit_edit with this proposal_id to apply the change.",
         });
       } catch (err) {
         if (err.code === "ENOENT") {
@@ -152,10 +171,21 @@ export function registerEditingTools(s, {
           );
         }
 
-        const hasFrontmatter = proposal.metadata && Object.keys(proposal.metadata).length > 0;
-        const content = hasFrontmatter
-          ? `---\n${yaml.dump(proposal.metadata)}---\n\n${proposal.revised_prose}\n`
-          : `${proposal.revised_prose}\n`;
+        const content = proposal.rendered_content ?? renderSceneContent(proposal.metadata, proposal.revised_prose);
+        const currentRaw = fs.readFileSync(proposal.scene_file_path, "utf8");
+
+        if (currentRaw === content) {
+          pendingProposals.delete(proposal_id);
+
+          return jsonResponse({
+            ok: true,
+            scene_id,
+            proposal_id,
+            snapshot_commit: null,
+            noop: true,
+            message: `Proposal for scene '${scene_id}' matches the current file. Nothing was written.`,
+          });
+        }
 
         const snapshot = createSnapshot(SYNC_DIR, proposal.scene_file_path, scene_id, proposal.instruction);
 
@@ -172,7 +202,8 @@ export function registerEditingTools(s, {
           scene_id,
           proposal_id,
           snapshot_commit: snapshot.commit_hash,
-          message: `Committed edit for scene '${scene_id}'${snapshot.commit_hash ? ` (snapshot: ${snapshot.commit_hash.substring(0, 7)})` : " (no changes to snapshot)"}`,
+          noop: false,
+          message: `Applied edit to scene '${scene_id}'${snapshot.commit_hash ? ` (snapshot: ${snapshot.commit_hash.substring(0, 7)})` : " (no pre-edit snapshot needed)"}`,
         });
       } catch (err) {
         if (err.code === "ENOENT") {
