@@ -22,7 +22,7 @@ import {
   PROSE_STYLEGUIDE_SKILL_DIRNAME,
   buildProseStyleguideSkill,
 } from "../prose-styleguide-skill.js";
-import { validateProjectId } from "../importer.js";
+import { validateProjectId } from "../src/sync/importer.js";
 
 export function registerStyleguideTools(s, {
   db,

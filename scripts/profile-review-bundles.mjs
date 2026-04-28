@@ -9,7 +9,7 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { openDb } from "../db.js";
-import { syncAll } from "../sync.js";
+import { syncAll } from "../src/sync/sync.js";
 import { isGitRepository, getHeadCommitHash } from "../git.js";
 import {
   buildReviewBundlePlan,

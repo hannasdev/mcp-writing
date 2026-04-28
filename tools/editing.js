@@ -3,7 +3,7 @@ import fs from "node:fs";
 import matter from "gray-matter";
 import yaml from "js-yaml";
 import { createSnapshot, listSnapshots } from "../git.js";
-import { getFileWriteDiagnostics, readMeta, indexSceneFile } from "../sync.js";
+import { getFileWriteDiagnostics, readMeta, indexSceneFile } from "../src/sync/sync.js";
 
 function renderSceneContent(metadata, revisedProse) {
   const hasFrontmatter = metadata && Object.keys(metadata).length > 0;

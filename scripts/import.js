@@ -7,7 +7,7 @@
  */
 
 import path from "node:path";
-import { importScrivenerSync, validateProjectId } from "../importer.js";
+import { importScrivenerSync, validateProjectId } from "../src/sync/importer.js";
 
 function printUsage() {
   console.log("Usage: node scripts/import.js <scrivener-sync-dir> <mcp-sync-dir> [--project <id>] [--dry-run]");

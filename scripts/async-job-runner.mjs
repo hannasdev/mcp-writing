@@ -1,8 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
-import { importScrivenerSync } from "../importer.js";
-import { mergeScrivenerProjectMetadata } from "../scrivener-direct.js";
-import { runSceneCharacterBatch } from "../scene-character-batch.js";
+import { importScrivenerSync } from "../src/sync/importer.js";
+import { mergeScrivenerProjectMetadata } from "../src/sync/scrivener-direct.js";
+import { runSceneCharacterBatch } from "../src/sync/scene-character-batch.js";
 import { ASYNC_PROGRESS_PREFIX } from "../async-progress.js";
 
 const PROGRESS_PREFIX = ASYNC_PROGRESS_PREFIX;

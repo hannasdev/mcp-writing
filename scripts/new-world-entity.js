@@ -6,7 +6,7 @@ import {
   renderCharacterSheetTemplate,
   renderPlaceSheetTemplate,
   slugifyEntityName,
-} from "../world-entity-templates.js";
+} from "../src/world/world-entity-templates.js";
 
 function parseArgs(argv) {
   const args = argv.slice(2);

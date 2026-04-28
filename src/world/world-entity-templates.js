@@ -1,0 +1,116 @@
+export function slugifyEntityName(str) {
+  return str
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60);
+}
+
+export function renderCharacterSheetTemplate(name) {
+  return [
+    `# ${name}`,
+    "",
+    "## Core Identity",
+    "",
+    "- Age:",
+    "- Location:",
+    "- Occupation:",
+    "",
+    "## Role In Story",
+    "",
+    "What narrative function does this character serve?",
+    "",
+    "## Primary Goal",
+    "",
+    "What does this character want, at least at the start?",
+    "",
+    "## Physical Description",
+    "",
+    "What should remain visually consistent on the page?",
+    "",
+    "## Personality",
+    "",
+    "Core traits, temperament, social presence, and emotional texture.",
+    "",
+    "## Habits And Mannerisms",
+    "",
+    "Repeated behaviors, speech patterns, body language, or style cues.",
+    "",
+    "## Background",
+    "",
+    "Family, upbringing, education, and formative context.",
+    "",
+    "## Internal Conflict",
+    "",
+    "What fear, wound, contradiction, or need drives them internally?",
+    "",
+    "## External Conflict",
+    "",
+    "What pressures, antagonists, systems, or relationships oppose them?",
+    "",
+    "## Relationships",
+    "",
+    "Short notes on the most important relational dynamics.",
+    "",
+    "## Notes",
+    "",
+    `Anything important about ${name} that does not fit cleanly elsewhere.`,
+    "",
+  ].join("\n");
+}
+
+export function renderCharacterArcTemplate(name) {
+  return [
+    `# ${name} Arc`,
+    "",
+    "## Arc Premise",
+    "",
+    `How does ${name} change over the course of the story?`,
+    "",
+    "## Starting State",
+    "",
+    "Who are they at the opening, before the main pressure changes them?",
+    "",
+    "## Core Need Vs. Want",
+    "",
+    "- Want:",
+    "- Need:",
+    "",
+    "## Key Inflection Points",
+    "",
+    "1. Opening disturbance:",
+    "2. First meaningful choice:",
+    "3. Midpoint shift:",
+    "4. Crisis or moral fracture:",
+    "5. Climax choice:",
+    "6. Ending state:",
+    "",
+    "## Thematic Function",
+    "",
+    "What idea or question does this arc test?",
+    "",
+    "## Mirror Or Foil Characters",
+    "",
+    "- ",
+    "",
+    "## Notes",
+    "",
+    "Anything about the arc that is useful during revision.",
+    "",
+  ].join("\n");
+}
+
+export function renderPlaceSheetTemplate(name) {
+  return [
+    `# ${name}`,
+    "",
+    "## Overview",
+    "",
+    "One-paragraph summary of why this location matters.",
+    "",
+    "## Atmosphere",
+    "",
+    "- ",
+    "",
+  ].join("\n");
+}

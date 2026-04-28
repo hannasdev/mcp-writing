@@ -2,8 +2,8 @@ import { z } from "zod";
 import fs from "node:fs";
 import path from "node:path";
 import matter from "gray-matter";
-import { syncAll, writeMeta, readMeta, indexSceneFile, normalizeSceneMetaForPath } from "../sync.js";
-import { importScrivenerSync, validateProjectId } from "../importer.js";
+import { syncAll, writeMeta, readMeta, indexSceneFile, normalizeSceneMetaForPath } from "../src/sync/sync.js";
+import { importScrivenerSync, validateProjectId } from "../src/sync/importer.js";
 
 export function registerSyncTools(s, {
   db,

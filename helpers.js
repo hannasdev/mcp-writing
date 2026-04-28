@@ -2,13 +2,13 @@ import fs from "node:fs";
 import path from "node:path";
 import matter from "gray-matter";
 import yaml from "js-yaml";
-import { sidecarPath, syncAll } from "./sync.js";
+import { sidecarPath, syncAll } from "./src/sync/sync.js";
 import {
   slugifyEntityName,
   renderCharacterSheetTemplate,
   renderPlaceSheetTemplate,
   renderCharacterArcTemplate,
-} from "./world-entity-templates.js";
+} from "./src/world/world-entity-templates.js";
 import { ReviewBundlePlanError } from "./review-bundles.js";
 
 export function deriveLoglineFromProse(prose) {
