@@ -6,7 +6,8 @@ import path from "node:path";
 describe("package.json files allowlist", () => {
   const root = path.resolve(import.meta.dirname, "../..");
   const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
-  const allowlist = pkg.files ?? [];
+  const toPosixPath = (value) => value.replace(/\\/g, "/");
+  const allowlist = (pkg.files ?? []).map(toPosixPath);
 
   test("every file listed in files exists on disk", () => {
     for (const entry of allowlist) {
@@ -22,7 +23,7 @@ describe("package.json files allowlist", () => {
     const entrypointSrc = fs.readFileSync(path.join(root, "src", "index.js"), "utf8");
     const localImports = [
       ...entrypointSrc.matchAll(/^\s*import\b(?:[\s\S]*?\bfrom\s*)?["'](\.{1,2}\/[^"']+)["']/gm),
-    ].map((m) => path.normalize(path.join("src", m[1])));
+    ].map((m) => toPosixPath(path.normalize(path.join("src", m[1]))));
 
     for (const file of localImports) {
       const covered =
@@ -41,7 +42,7 @@ describe("package.json files allowlist", () => {
       const src = fs.readFileSync(path.join(toolsDir, toolFile), "utf8");
       const localImports = [
         ...src.matchAll(/^\s*import\b(?:[\s\S]*?\bfrom\s*)?["'](\.\.\/[^"']+)["']/gm),
-      ].map((m) => path.normalize(path.join("tools", m[1])));
+      ].map((m) => toPosixPath(path.normalize(path.join("tools", m[1]))));
 
       for (const file of localImports) {
         const covered =

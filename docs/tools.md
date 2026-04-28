@@ -1,6 +1,6 @@
 # Tool Reference
 
-> Auto-generated from `index.js`.
+> Auto-generated from `src/index.js`.
 > Do not edit manually — run `npm run docs` to regenerate.
 
 ## Tools
