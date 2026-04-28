@@ -79,7 +79,7 @@ export function registerEditingTools(s, {
           ? "(no changes)"
           : diffLines.length > 0
             ? diffLines.join("\n")
-            : "(changes occur after the previewed lines)";
+            : "(file changes are not visible in the prose preview; they may be due to frontmatter or whitespace/newline formatting)";
 
         return jsonResponse({
           proposal_id: proposalId,

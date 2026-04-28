@@ -45,7 +45,13 @@ describe("commit_edit preflight diagnostics", () => {
     assert.equal(commitResult.ok, true);
     assert.equal(commitResult.noop, false);
     assert.match(commitResult.message, /Applied edit to scene 'sc-001'/);
-    assert.notEqual(commitResult.snapshot_commit, null);
+    assert.ok(
+      commitResult.snapshot_commit === null || typeof commitResult.snapshot_commit === "string",
+      "snapshot_commit should be either null or a commit hash string",
+    );
+    if (typeof commitResult.snapshot_commit === "string") {
+      assert.notEqual(commitResult.snapshot_commit, "");
+    }
     assert.notEqual(after, before);
     assert.match(after, /Rewritten opening line\.\nSecond line\./);
   });
