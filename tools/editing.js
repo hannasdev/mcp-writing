@@ -175,6 +175,9 @@ export function registerEditingTools(s, {
         const currentRaw = fs.readFileSync(proposal.scene_file_path, "utf8");
 
         if (currentRaw === content) {
+          const { meta: canonicalMeta } = readMeta(proposal.scene_file_path, SYNC_DIR, { writable: false });
+          const { content: currentProse } = matter(currentRaw);
+          indexSceneFile(db, SYNC_DIR, proposal.scene_file_path, canonicalMeta, currentProse);
           pendingProposals.delete(proposal_id);
 
           return jsonResponse({

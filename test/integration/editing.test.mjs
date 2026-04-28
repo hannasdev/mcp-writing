@@ -97,6 +97,64 @@ describe("commit_edit preflight diagnostics", () => {
     assert.equal(after, normalizedRaw);
   });
 
+  test("reindexes scene metadata on noop commit when prose changed out-of-band", async () => {
+    const scenePath = path.join(writeSyncDir, "projects", "test-novel", "part-1", "chapter-1", "sc-001.md");
+
+    const seedProposalText = await callWriteTool("propose_edit", {
+      scene_id: "sc-001",
+      instruction: "Normalize scene formatting",
+      revised_prose: "Seed prose for noop reindex coverage.",
+    });
+    const seedProposal = JSON.parse(seedProposalText);
+    await callWriteTool("commit_edit", {
+      scene_id: "sc-001",
+      proposal_id: seedProposal.proposal_id,
+    });
+
+    const normalizedRaw = fs.readFileSync(scenePath, "utf8");
+    const frontmatterPrefix = normalizedRaw.match(/^---\n[\s\S]*?---\n\n/u)?.[0];
+    assert.ok(frontmatterPrefix, "expected canonical frontmatter prefix");
+
+    const outOfBandProse = "One two three four five six seven eight nine ten.";
+    fs.writeFileSync(scenePath, `${frontmatterPrefix}${outOfBandProse}\n`, "utf8");
+
+    const beforeText = await callWriteTool("find_scenes", {
+      project_id: "test-novel",
+      part: 1,
+      chapter: 1,
+    });
+    const beforeRows = JSON.parse(beforeText);
+    const beforeScene = beforeRows.find((row) => row.scene_id === "sc-001");
+    assert.ok(beforeScene);
+    assert.notEqual(beforeScene.word_count, 10);
+
+    const proposalText = await callWriteTool("propose_edit", {
+      scene_id: "sc-001",
+      instruction: "Retry identical edit after external change",
+      revised_prose: outOfBandProse,
+    });
+    const proposal = JSON.parse(proposalText);
+    assert.equal(proposal.noop, true);
+
+    const commitText = await callWriteTool("commit_edit", {
+      scene_id: "sc-001",
+      proposal_id: proposal.proposal_id,
+    });
+    const commitResult = JSON.parse(commitText);
+    assert.equal(commitResult.ok, true);
+    assert.equal(commitResult.noop, true);
+
+    const afterText = await callWriteTool("find_scenes", {
+      project_id: "test-novel",
+      part: 1,
+      chapter: 1,
+    });
+    const afterRows = JSON.parse(afterText);
+    const afterScene = afterRows.find((row) => row.scene_id === "sc-001");
+    assert.ok(afterScene);
+    assert.equal(afterScene.word_count, 10);
+  });
+
   test("returns STALE_PATH when indexed prose file is missing", async () => {
     const proposalText = await callWriteTool("propose_edit", {
       scene_id: "sc-001",
