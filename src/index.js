@@ -61,9 +61,9 @@ function validateRegexPatterns(patterns) {
   return { ok: true };
 }
 
-const HTTP_PORT = parseInt(process.env.HTTP_PORT ?? "3000", 10);
-const MAX_CHAPTER_SCENES = parseInt(process.env.MAX_CHAPTER_SCENES ?? "10", 10);
-const DEFAULT_METADATA_PAGE_SIZE = parseInt(process.env.DEFAULT_METADATA_PAGE_SIZE ?? "20", 10);
+const HTTP_PORT = parsePositiveIntEnv(process.env.HTTP_PORT, 3000);
+const MAX_CHAPTER_SCENES = parsePositiveIntEnv(process.env.MAX_CHAPTER_SCENES, 10);
+const DEFAULT_METADATA_PAGE_SIZE = parsePositiveIntEnv(process.env.DEFAULT_METADATA_PAGE_SIZE, 20);
 const ASYNC_JOB_TTL_MS = parsePositiveIntEnv(process.env.ASYNC_JOB_TTL_MS, 86400000);
 // Maximum time to wait for running async jobs to complete before forcing process exit on SIGTERM/SIGINT.
 const GRACEFUL_SHUTDOWN_TIMEOUT_MS = parsePositiveIntEnv(process.env.GRACEFUL_SHUTDOWN_TIMEOUT_MS, 30000);
