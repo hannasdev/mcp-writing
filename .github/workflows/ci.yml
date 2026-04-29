@@ -50,6 +50,25 @@ jobs:
       - name: Run ESLint
         run: npm run lint
 
+  legacy-root-import-guard:
+    name: Legacy Root Import Guard
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Use Node.js 22.x
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22.x
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check for legacy root-module imports
+        run: npm run guard:legacy-root-imports
+
   docs:
     name: Generated Docs
     runs-on: ubuntu-latest
