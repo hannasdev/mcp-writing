@@ -56,6 +56,7 @@ All changes MUST follow this sequence:
 
 - ALWAYS open a PR after implementation and commit preparation (no direct merges)
 - MUST use `skills/pr-description/SKILL.md`
+- For user-facing or maintainer-facing behavior changes, use `skills/release-log/SKILL.md`
 - PR must accurately reflect the actual implementation
 
 ### 6. Review handling
@@ -90,6 +91,7 @@ Use these specialized skills:
 
 - `skills/commit-writing/SKILL.md` (used during Commit step)
 - `skills/pr-description/SKILL.md` (used during Pull Request step)
+- `skills/release-log/SKILL.md` (used during Pull Request step for human-readable value notes)
 - `skills/code-review/SKILL.md` (used during Review handling step)
 
 These define execution details. This file defines workflow and constraints.
