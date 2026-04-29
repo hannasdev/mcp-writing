@@ -67,7 +67,7 @@ export function createAsyncJobManager({ db, asyncJobs, ttlMs, runnerDir }) {
 
     fs.writeFileSync(requestPath, JSON.stringify(requestPayload, null, 2), "utf8");
 
-    const runnerPath = path.join(runnerDir, "scripts", "async-job-runner.mjs");
+    const runnerPath = path.join(runnerDir, "src", "scripts", "async-job-runner.mjs");
     const child = spawn(
       process.execPath,
       ["--experimental-sqlite", runnerPath, requestPath, resultPath],
