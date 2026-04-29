@@ -19,6 +19,7 @@ Before writing the PR description:
 4. Identify test coverage and validation performed.
 5. Identify risks, tradeoffs, and follow-up work.
 6. Ensure the PR is scoped to one concern.
+7. If user-facing or maintainer-facing behavior changed, update `docs/release-log.md` using `skills/release-log/SKILL.md`.
 
 ## PR title
 
