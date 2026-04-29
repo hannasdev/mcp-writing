@@ -14,7 +14,7 @@ This complements `CHANGELOG.md`:
 - Why it matters: This completes the intended source-root structure and removes remaining top-level ambiguity from the refactor.
 - Who is affected: Maintainers and contributors running CLI scripts, tests, or release workflows.
 - Action needed: Use `src/scripts/...` paths in direct command invocations.
-- PR: TBD
+- PR: #139
 
 ### 2026-04-29 — Reduce duplicate release-time CI runs
 
