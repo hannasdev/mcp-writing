@@ -79,6 +79,9 @@ export function registerReviewBundleTools(s, {
         if (error instanceof ReviewBundlePlanError) {
           return errorResponse(error.code, error.message, error.details);
         }
+        if (error && typeof error === "object" && typeof error.code === "string") {
+          return errorResponse(error.code, error.message ?? "Request failed.", error.details);
+        }
         return errorResponse(
           "PREVIEW_FAILED",
           error instanceof Error ? error.message : "Failed to generate review bundle preview."
@@ -196,6 +199,9 @@ export function registerReviewBundleTools(s, {
       } catch (error) {
         if (error instanceof ReviewBundlePlanError) {
           return errorResponse(error.code, error.message, error.details);
+        }
+        if (error && typeof error === "object" && typeof error.code === "string") {
+          return errorResponse(error.code, error.message ?? "Request failed.", error.details);
         }
         return errorResponse(
           "CREATE_BUNDLE_FAILED",

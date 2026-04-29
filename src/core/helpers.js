@@ -9,7 +9,14 @@ import {
   renderPlaceSheetTemplate,
   renderCharacterArcTemplate,
 } from "../world/world-entity-templates.js";
-import { ReviewBundlePlanError } from "../review-bundles/review-bundles.js";
+
+function createCoreValidationError(code, message, details) {
+  const error = new Error(message);
+  error.name = "CoreValidationError";
+  error.code = code;
+  error.details = details;
+  return error;
+}
 
 export function deriveLoglineFromProse(prose) {
   const compact = prose.replace(/\s+/g, " ").trim();
@@ -197,7 +204,7 @@ export function createHelpers({ syncDir, syncDirReal, syncDirAbs, db, syncDirWri
     while (!fs.existsSync(existingAncestor)) {
       const parentDir = path.dirname(existingAncestor);
       if (parentDir === existingAncestor) {
-        throw new ReviewBundlePlanError(
+        throw createCoreValidationError(
           "INVALID_OUTPUT_DIR",
           "output_dir must be inside WRITING_SYNC_DIR.",
           { output_dir: resolvedOutputDir, sync_dir: syncDirAbs }
@@ -210,7 +217,7 @@ export function createHelpers({ syncDir, syncDirReal, syncDirAbs, db, syncDirWri
     try {
       realExistingAncestor = fs.realpathSync.native(existingAncestor);
     } catch (err) {
-      throw new ReviewBundlePlanError(
+      throw createCoreValidationError(
         "INVALID_OUTPUT_DIR",
         "output_dir ancestor could not be resolved: path may be inaccessible.",
         { output_dir: outputDir, existing_ancestor: existingAncestor, cause: err.message }
@@ -221,7 +228,7 @@ export function createHelpers({ syncDir, syncDirReal, syncDirAbs, db, syncDirWri
 
     const relativeToSyncDir = path.relative(syncDirReal, resolvedOutputDir);
     if (relativeToSyncDir.startsWith("..") || path.isAbsolute(relativeToSyncDir)) {
-      throw new ReviewBundlePlanError(
+      throw createCoreValidationError(
         "INVALID_OUTPUT_DIR",
         "output_dir must be inside WRITING_SYNC_DIR.",
         { output_dir: resolvedOutputDir, sync_dir: syncDirAbs }
