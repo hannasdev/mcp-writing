@@ -11,18 +11,18 @@ import {
   resolveStyleguideConfig,
   summarizeStyleguideConfig,
   updateStyleguideConfig,
-} from "../src/styleguide/prose-styleguide.js";
+} from "../styleguide/prose-styleguide.js";
 import {
   detectStyleguideSignals,
   analyzeSceneStyleguideDrift,
   suggestStyleguideUpdatesFromScenes,
-} from "../src/styleguide/prose-styleguide-drift.js";
+} from "../styleguide/prose-styleguide-drift.js";
 import {
   PROSE_STYLEGUIDE_SKILL_BASENAME,
   PROSE_STYLEGUIDE_SKILL_DIRNAME,
   buildProseStyleguideSkill,
-} from "../src/styleguide/prose-styleguide-skill.js";
-import { validateProjectId } from "../src/sync/importer.js";
+} from "../styleguide/prose-styleguide-skill.js";
+import { validateProjectId } from "../sync/importer.js";
 
 export function registerStyleguideTools(s, {
   db,

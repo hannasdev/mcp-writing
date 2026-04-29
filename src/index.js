@@ -19,12 +19,12 @@ import {
   resolveBatchTargetScenes,
 } from "../helpers.js";
 import { STYLEGUIDE_CONFIG_BASENAME } from "./styleguide/prose-styleguide.js";
-import { registerSyncTools } from "../tools/sync.js";
-import { registerSearchTools } from "../tools/search.js";
-import { registerMetadataTools } from "../tools/metadata.js";
-import { registerReviewBundleTools } from "../tools/review-bundles.js";
-import { registerStyleguideTools } from "../tools/styleguide.js";
-import { registerEditingTools } from "../tools/editing.js";
+import { registerSyncTools } from "./tools/sync.js";
+import { registerSearchTools } from "./tools/search.js";
+import { registerMetadataTools } from "./tools/metadata.js";
+import { registerReviewBundleTools } from "./tools/review-bundles.js";
+import { registerStyleguideTools } from "./tools/styleguide.js";
+import { registerEditingTools } from "./tools/editing.js";
 import { WORKFLOW_CATALOGUE } from "./workflows/workflow-catalogue.js";
 import { getRuntimeDiagnostics } from "./runtime/runtime-diagnostics.js";
 
@@ -365,7 +365,7 @@ function createMcpServer() {
     }
   );
 
-  // Passed to each tool registration module (tools/*.js) to thread state and
+  // Passed to each tool registration module (src/tools/*.js) to thread state and
   // shared helpers without circular imports. Grows as groups are extracted.
   const toolContext = {
     db,

@@ -1,8 +1,8 @@
 import { z } from "zod";
 import fs from "node:fs";
 import matter from "gray-matter";
-import { readMeta, writeMeta, indexSceneFile, normalizeSceneMetaForPath } from "../src/sync/sync.js";
-import { validateProjectId, validateUniverseId } from "../src/sync/importer.js";
+import { readMeta, writeMeta, indexSceneFile, normalizeSceneMetaForPath } from "../sync/sync.js";
+import { validateProjectId, validateUniverseId } from "../sync/importer.js";
 
 export function registerMetadataTools(s, {
   db,

@@ -34,8 +34,8 @@ describe("package.json files allowlist", () => {
     }
   });
 
-  test("every local JS module imported by tools/*.js is in the files allowlist", () => {
-    const toolsDir = path.join(root, "tools");
+  test("every local JS module imported by src/tools/*.js is in the files allowlist", () => {
+    const toolsDir = path.join(root, "src", "tools");
     if (!fs.existsSync(toolsDir)) return;
 
     const toolFiles = fs.readdirSync(toolsDir).filter((f) => f.endsWith(".js"));
@@ -43,13 +43,13 @@ describe("package.json files allowlist", () => {
       const src = fs.readFileSync(path.join(toolsDir, toolFile), "utf8");
       const localImports = [
         ...src.matchAll(/^\s*import\b(?:[\s\S]*?\bfrom\s*)?["'](\.\.\/[^"']+)["']/gm),
-      ].map((m) => toPosixPath(path.normalize(path.join("tools", m[1]))));
+      ].map((m) => toPosixPath(path.normalize(path.join("src", "tools", m[1]))));
 
       for (const file of localImports) {
         const covered =
           allowlist.includes(file) ||
           allowlist.some((entry) => entry.endsWith("/") && file.startsWith(entry));
-        assert.ok(covered, `"${file}" is imported by tools/${toolFile} but missing from package.json files allowlist`);
+        assert.ok(covered, `"${file}" is imported by src/tools/${toolFile} but missing from package.json files allowlist`);
       }
     }
   });
