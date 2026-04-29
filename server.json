@@ -8,12 +8,12 @@
     "url": "https://github.com/hannasdev/mcp-writing",
     "source": "github"
   },
-  "version": "2.12.9",
+  "version": "2.12.10",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "@hanna84/mcp-writing",
-      "version": "2.12.9",
+      "version": "2.12.10",
       "transport": {
         "type": "stdio"
       },
