@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 import path from "node:path";
-import { openDb } from "../src/core/db.js";
-import { buildCharacterNormalizationContext, normalizeSceneCharacters } from "../src/sync/scene-character-normalization.js";
-import { normalizeSceneMetaForPath, readMeta, syncAll, writeMeta } from "../src/sync/sync.js";
+import { openDb } from "../core/db.js";
+import { buildCharacterNormalizationContext, normalizeSceneCharacters } from "../sync/scene-character-normalization.js";
+import { normalizeSceneMetaForPath, readMeta, syncAll, writeMeta } from "../sync/sync.js";
 
 function readRequiredValue(argv, index, option) {
   const value = argv[index + 1];
@@ -54,7 +54,7 @@ function parseArgs(argv) {
 function usage() {
   return [
     "Usage:",
-    "  node --experimental-sqlite scripts/normalize-scene-characters.mjs [--sync-dir <dir>] [--project-id <id>] [--limit <n>] [--write] [--json]",
+    "  node --experimental-sqlite src/scripts/normalize-scene-characters.mjs [--sync-dir <dir>] [--project-id <id>] [--limit <n>] [--write] [--json]",
     "",
     "Options:",
     "  --sync-dir, -d   WRITING_SYNC_DIR root (default: env WRITING_SYNC_DIR or ./sync)",

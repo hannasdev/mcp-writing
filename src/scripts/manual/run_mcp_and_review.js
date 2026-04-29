@@ -17,7 +17,7 @@ async function main() {
 
   if (!projectId) {
     console.error(
-      "Usage: WRITING_SYNC_DIR=/path/to/sync node scripts/manual/run_mcp_and_review.js <projectId> [outputDir]"
+      "Usage: WRITING_SYNC_DIR=/path/to/sync node src/scripts/manual/run_mcp_and_review.js <projectId> [outputDir]"
     );
     process.exit(1);
   }
@@ -25,7 +25,7 @@ async function main() {
   if (!envWritingSyncDir) {
     console.error(
       "WRITING_SYNC_DIR is required. Set it to the root of your sync directory.\n" +
-      "Usage: WRITING_SYNC_DIR=/path/to/sync node scripts/manual/run_mcp_and_review.js <projectId> [outputDir]"
+      "Usage: WRITING_SYNC_DIR=/path/to/sync node src/scripts/manual/run_mcp_and_review.js <projectId> [outputDir]"
     );
     process.exit(1);
   }

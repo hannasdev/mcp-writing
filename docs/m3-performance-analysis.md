@@ -63,11 +63,11 @@ Instead of implementing M3 async, recommend documenting in PRD/tools.md:
 
 ## Test Script Location
 
-Profiling script saved for future benchmarking: `scripts/profile-review-bundles.mjs`
+Profiling script saved for future benchmarking: `src/scripts/profile-review-bundles.mjs`
 
 Usage:
 ```bash
-node --experimental-sqlite scripts/profile-review-bundles.mjs
+node --experimental-sqlite src/scripts/profile-review-bundles.mjs
 ```
 
 Configurable via `WRITING_SYNC_DIR` or an optional sync-dir argument (`argv[2]`); `DB_PATH` is derived from that directory.

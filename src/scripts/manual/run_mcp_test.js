@@ -4,8 +4,8 @@ import path from "path";
 import process from "process";
 
 function usage() {
-  console.log("Usage: node scripts/manual/run_mcp_test.js <source_project_dir> [project_id] [sync_dir]");
-  console.log("Example: node scripts/manual/run_mcp_test.js ~/Novel.scriv demo-project ~/sync-root");
+  console.log("Usage: node src/scripts/manual/run_mcp_test.js <source_project_dir> [project_id] [sync_dir]");
+  console.log("Example: node src/scripts/manual/run_mcp_test.js ~/Novel.scriv demo-project ~/sync-root");
 }
 
 async function runCase(env, args) {

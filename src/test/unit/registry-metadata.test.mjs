@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 
-const ROOT = path.resolve(import.meta.dirname, "../..");
+const ROOT = path.resolve(import.meta.dirname, "../../..");
 const packageJson = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8"));
 const serverJson = JSON.parse(fs.readFileSync(path.join(ROOT, "server.json"), "utf8"));
 

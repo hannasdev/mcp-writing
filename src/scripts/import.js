@@ -3,14 +3,14 @@
  * Import a Scrivener External Folder Sync output into mcp-writing sidecar format.
  *
  * Usage:
- *   node scripts/import.js <scrivener-sync-dir> <mcp-sync-dir> [--project <id>] [--dry-run]
+ *   node src/scripts/import.js <scrivener-sync-dir> <mcp-sync-dir> [--project <id>] [--dry-run]
  */
 
 import path from "node:path";
-import { importScrivenerSync, validateProjectId } from "../src/sync/importer.js";
+import { importScrivenerSync, validateProjectId } from "../sync/importer.js";
 
 function printUsage() {
-  console.log("Usage: node scripts/import.js <scrivener-sync-dir> <mcp-sync-dir> [--project <id>] [--dry-run]");
+  console.log("Usage: node src/scripts/import.js <scrivener-sync-dir> <mcp-sync-dir> [--project <id>] [--dry-run]");
 }
 
 const args = process.argv.slice(2);

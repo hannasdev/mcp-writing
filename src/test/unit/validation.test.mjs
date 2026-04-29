@@ -5,7 +5,7 @@ import path from "node:path";
 import { createRequire } from "node:module";
 
 describe("package.json files allowlist", () => {
-  const root = path.resolve(import.meta.dirname, "../..");
+  const root = path.resolve(import.meta.dirname, "../../..");
   const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
   const toPosixPath = (value) => value.replace(/\\/g, "/");
   const allowlist = (pkg.files ?? []).map(toPosixPath);
@@ -56,7 +56,7 @@ describe("package.json files allowlist", () => {
 });
 
 describe("package.json exports", () => {
-  const root = path.resolve(import.meta.dirname, "../..");
+  const root = path.resolve(import.meta.dirname, "../../..");
   const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
   const require = createRequire(import.meta.url);
   const exportsField = pkg.exports ?? {};

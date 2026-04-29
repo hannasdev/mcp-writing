@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import path from "node:path";
-import { lintMetadataInSyncDir } from "../src/sync/metadata-lint.js";
+import { lintMetadataInSyncDir } from "../sync/metadata-lint.js";
 
 function parseArgs(argv) {
   const args = { syncDir: process.env.WRITING_SYNC_DIR ?? "./sync" };

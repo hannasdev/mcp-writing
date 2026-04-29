@@ -3,7 +3,7 @@
  * Merge Scrivener project metadata into mcp-writing sidecar files.
  *
  * Usage:
- *   node scripts/merge-scrivx.js <path-to.scriv> <mcp-sync-dir> [options]
+ *   node src/scripts/merge-scrivx.js <path-to.scriv> <mcp-sync-dir> [options]
  *
  *   <path-to.scriv>   Path to the Scrivener .scriv bundle (the folder)
  *   <mcp-sync-dir>    The WRITING_SYNC_DIR root (e.g. ./sync)
@@ -27,15 +27,15 @@
  */
 
 import path from "node:path";
-import { validateProjectId } from "../src/sync/importer.js";
-import { mergeScrivenerProjectMetadata } from "../src/sync/scrivener-direct.js";
+import { validateProjectId } from "../sync/importer.js";
+import { mergeScrivenerProjectMetadata } from "../sync/scrivener-direct.js";
 
 // ---------------------------------------------------------------------------
 // Args
 // ---------------------------------------------------------------------------
 const args = process.argv.slice(2);
 if (args.length < 2 || args[0] === "--help") {
-  console.log("Usage: node scripts/merge-scrivx.js <path-to.scriv> <mcp-sync-dir> [--project <id>] [--dry-run] [--organize-by-chapters]");
+  console.log("Usage: node src/scripts/merge-scrivx.js <path-to.scriv> <mcp-sync-dir> [--project <id>] [--dry-run] [--organize-by-chapters]");
   process.exit(args[0] === "--help" ? 0 : 1);
 }
 

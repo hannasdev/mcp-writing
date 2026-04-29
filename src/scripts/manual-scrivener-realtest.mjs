@@ -1,13 +1,13 @@
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { importScrivenerSync, validateProjectId } from "../src/sync/importer.js";
-import { mergeScrivenerProjectMetadata } from "../src/sync/scrivener-direct.js";
+import { importScrivenerSync, validateProjectId } from "../sync/importer.js";
+import { mergeScrivenerProjectMetadata } from "../sync/scrivener-direct.js";
 
 function usage() {
   return [
     "Usage:",
-    "  node scripts/manual-scrivener-realtest.mjs \\",
+    "  node src/scripts/manual-scrivener-realtest.mjs \\",
     "    --source-dir <external-sync-dir> \\",
     "    --scriv-path <copied-project.scriv> \\",
     "    --project-id <project|universe/project> [options]",

@@ -4,13 +4,13 @@ import os from "node:os";
 import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
-import { lintMetadataInSyncDir, validateMetadataObject } from "../../src/sync/metadata-lint.js";
+import { lintMetadataInSyncDir, validateMetadataObject } from "../../sync/metadata-lint.js";
 
 describe("world entity scaffold script", () => {
   function runScaffold(args) {
     return spawnSync(
       process.execPath,
-      [path.join(process.cwd(), "scripts", "new-world-entity.js"), ...args],
+      [path.join(process.cwd(), "src", "scripts", "new-world-entity.js"), ...args],
       { encoding: "utf8" }
     );
   }

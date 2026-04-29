@@ -2,19 +2,19 @@
 
 /**
  * Profile review-bundle generation performance
- * Usage: node --experimental-sqlite scripts/profile-review-bundles.mjs
+ * Usage: node --experimental-sqlite src/scripts/profile-review-bundles.mjs
  */
 
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { openDb } from "../src/core/db.js";
-import { syncAll } from "../src/sync/sync.js";
-import { isGitRepository, getHeadCommitHash } from "../src/core/git.js";
+import { openDb } from "../core/db.js";
+import { syncAll } from "../sync/sync.js";
+import { isGitRepository, getHeadCommitHash } from "../core/git.js";
 import {
   buildReviewBundlePlan,
   createReviewBundleArtifacts,
-} from "../src/review-bundles/review-bundles.js";
+} from "../review-bundles/review-bundles.js";
 
 const PROJECT_SYNC_DIR = process.env.WRITING_SYNC_DIR ?? process.argv[2] ?? null;
 const DB_PATH = process.env.DB_PATH ?? (PROJECT_SYNC_DIR ? path.join(PROJECT_SYNC_DIR, ".mcp", "writing.db") : null);
@@ -119,7 +119,7 @@ async function profileScenario(
 async function main() {
   if (!PROJECT_SYNC_DIR) {
     console.error("✗ WRITING_SYNC_DIR env var or a path argument is required.");
-    console.error("  Usage: WRITING_SYNC_DIR=/path/to/project node --experimental-sqlite scripts/profile-review-bundles.mjs");
+    console.error("  Usage: WRITING_SYNC_DIR=/path/to/project node --experimental-sqlite src/scripts/profile-review-bundles.mjs");
     process.exit(1);
   }
 

@@ -1,4 +1,4 @@
-import { openDb } from "../../src/core/db.js";
+import { openDb } from "../../core/db.js";
 
 export function insertTestScene(db, {
   sceneId,

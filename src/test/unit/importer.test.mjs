@@ -5,12 +5,12 @@ import fs from "node:fs";
 import path from "node:path";
 import { execSync, spawnSync } from "node:child_process";
 import yaml from "js-yaml";
-import { importScrivenerSync, validateProjectId, validateUniverseId } from "../../src/sync/importer.js";
+import { importScrivenerSync, validateProjectId, validateUniverseId } from "../../sync/importer.js";
 import {
   IMPORTER_AUTHORITATIVE_FIELDS, loadScrivenerProjectData,
   mergeScrivenerProjectMetadata, mergeSidecarData,
-} from "../../src/sync/scrivener-direct.js";
-import { openDb } from "../../src/core/db.js";
+} from "../../sync/scrivener-direct.js";
+import { openDb } from "../../core/db.js";
 
 describe("importScrivenerSync", () => {
   function createScrivenerDraftFixture() {
@@ -141,7 +141,7 @@ describe("importScrivenerSync", () => {
 });
 
 // ---------------------------------------------------------------------------
-// scripts/import.js
+// src/scripts/import.js
 // ---------------------------------------------------------------------------
 describe("Scrivener importer", () => {
   function makeScrivenerExport() {
@@ -158,7 +158,7 @@ describe("Scrivener importer", () => {
   function runImporter(scrivenerDir, targetDir) {
     const result = spawnSync(
       process.execPath,
-      [path.join(process.cwd(), "scripts", "import.js"), scrivenerDir, targetDir, "--project", "test-import"],
+      [path.join(process.cwd(), "src", "scripts", "import.js"), scrivenerDir, targetDir, "--project", "test-import"],
       { encoding: "utf8" }
     );
 
@@ -247,7 +247,7 @@ describe("Scrivener importer", () => {
 });
 
 // ---------------------------------------------------------------------------
-// scripts/merge-scrivx.js and scrivener-direct.js
+// src/scripts/merge-scrivx.js and scrivener-direct.js
 // ---------------------------------------------------------------------------
 describe("Scrivener direct metadata merge", () => {
   function createScrivenerProjectFixture(options = {}) {
@@ -1341,14 +1341,14 @@ describe("Scrivener direct metadata merge", () => {
     }
   });
 
-  test("scripts/merge-scrivx.js remains runnable and writes merged metadata", () => {
+  test("src/scripts/merge-scrivx.js remains runnable and writes merged metadata", () => {
     const scrivDir = createScrivenerProjectFixture();
     const { syncRoot, scenesDir } = createSyncSidecarFixture("test-import", [], true);
 
     try {
       const result = spawnSync(
         process.execPath,
-        [path.join(process.cwd(), "scripts", "merge-scrivx.js"), scrivDir, syncRoot, "--project", "test-import", "--organize-by-chapters"],
+        [path.join(process.cwd(), "src", "scripts", "merge-scrivx.js"), scrivDir, syncRoot, "--project", "test-import", "--organize-by-chapters"],
         { encoding: "utf8" }
       );
 
@@ -1377,7 +1377,7 @@ describe("Scrivener direct metadata merge", () => {
 });
 
 // ---------------------------------------------------------------------------
-// scripts/new-world-entity.js
+// src/scripts/new-world-entity.js
 // ---------------------------------------------------------------------------
 describe("validateProjectId", () => {
   test("accepts a simple project slug", () => {

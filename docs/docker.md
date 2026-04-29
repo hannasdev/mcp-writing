@@ -29,8 +29,8 @@ writing-mcp:
     OWNERSHIP_GUARD_MODE: "${OWNERSHIP_GUARD_MODE:-warn}"
     GIT_SSH_COMMAND: "ssh -i /ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/ssh/known_hosts"
   volumes:
-    - ${OPENCLAW_WORKSPACE_DIR:?run scripts/setup-openclaw-env.sh first}/sync:/sync
-    - ${OPENCLAW_SSH_DIR:?run scripts/setup-openclaw-env.sh first}:/ssh:ro
+    - ${OPENCLAW_WORKSPACE_DIR:?run src/scripts/setup-openclaw-env.sh first}/sync:/sync
+    - ${OPENCLAW_SSH_DIR:?run src/scripts/setup-openclaw-env.sh first}:/ssh:ro
     - writing-mcp-data:/data
   healthcheck:
     test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
@@ -49,7 +49,7 @@ volumes:
 Start from `docker-compose.example.yml` and generate `.env` with machine-specific values:
 
 ```sh
-sh scripts/setup-openclaw-env.sh
+sh src/scripts/setup-openclaw-env.sh
 ```
 
 That script writes `OPENCLAW_UID`, `OPENCLAW_GID`, `OPENCLAW_WORKSPACE_DIR`, and `OPENCLAW_SSH_DIR` to `.env`.
@@ -93,7 +93,7 @@ Do not set these in normal production or desktop deployments.
 If `/sync` contains raw Scrivener external-sync output, run the importer once before normal `sync` usage:
 
 ```sh
-node scripts/import.js /path/to/scrivener-export /sync --project my-novel
+node src/scripts/import.js /path/to/scrivener-export /sync --project my-novel
 ```
 
 `sync` indexes files that already contain scene metadata. It does not convert Scrivener `Draft/` filenames into scene sidecars by itself.
@@ -180,7 +180,7 @@ Fix:
 1. Run importer once to create scene metadata sidecars:
 
 ```sh
-node scripts/import.js /path/to/scrivener-export /path/to/sync-dir --project my-novel
+node src/scripts/import.js /path/to/scrivener-export /path/to/sync-dir --project my-novel
 ```
 
 2. Restart the service (if needed), then call `sync` again.

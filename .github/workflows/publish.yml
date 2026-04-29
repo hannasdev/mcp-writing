@@ -55,7 +55,7 @@ jobs:
           node-version: 22.x
 
       - name: Sync server.json version to tag
-        run: node scripts/sync-server-json-version.mjs "${GITHUB_REF#refs/tags/v}"
+        run: node src/scripts/sync-server-json-version.mjs "${GITHUB_REF#refs/tags/v}"
 
       - name: Install mcp-publisher
         run: |
