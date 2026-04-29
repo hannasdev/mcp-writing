@@ -13,5 +13,5 @@ This complements `CHANGELOG.md`:
 - What changed: Added a human-readable release log format for future PR entries.
 - Why it matters: Important user value will remain visible after PR context is gone.
 - Who is affected: Users and maintainers who follow project updates.
-- Action needed: None.
-- PR: TBD
+- Action needed: None
+- PR: #129
