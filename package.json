@@ -1,6 +1,6 @@
 {
   "name": "@hanna84/mcp-writing",
-  "version": "2.12.9",
+  "version": "2.12.10",
   "description": "MCP service for AI-assisted reasoning and editing on long-form fiction projects",
   "homepage": "https://hannasdev.github.io/mcp-writing/",
   "type": "module",
