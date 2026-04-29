@@ -220,7 +220,11 @@ export function createHelpers({ syncDir, syncDirReal, syncDirAbs, db, syncDirWri
       throw createCoreValidationError(
         "INVALID_OUTPUT_DIR",
         "output_dir ancestor could not be resolved: path may be inaccessible.",
-        { output_dir: outputDir, existing_ancestor: existingAncestor, cause: err.message }
+        {
+          output_dir: outputDir,
+          existing_ancestor: existingAncestor,
+          cause: err instanceof Error ? err.message : String(err),
+        }
       );
     }
     const relativeFromAncestor = path.relative(existingAncestor, resolvedOutputDir);

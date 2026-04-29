@@ -79,7 +79,12 @@ export function registerReviewBundleTools(s, {
         if (error instanceof ReviewBundlePlanError) {
           return errorResponse(error.code, error.message, error.details);
         }
-        if (error && typeof error === "object" && typeof error.code === "string") {
+        if (
+          error &&
+          typeof error === "object" &&
+          error.name === "CoreValidationError" &&
+          typeof error.code === "string"
+        ) {
           return errorResponse(error.code, error.message ?? "Request failed.", error.details);
         }
         return errorResponse(
@@ -200,7 +205,12 @@ export function registerReviewBundleTools(s, {
         if (error instanceof ReviewBundlePlanError) {
           return errorResponse(error.code, error.message, error.details);
         }
-        if (error && typeof error === "object" && typeof error.code === "string") {
+        if (
+          error &&
+          typeof error === "object" &&
+          error.name === "CoreValidationError" &&
+          typeof error.code === "string"
+        ) {
           return errorResponse(error.code, error.message ?? "Request failed.", error.details);
         }
         return errorResponse(
