@@ -17,7 +17,7 @@ import {
   readSupportingNotesForEntity,
   readEntityMetadata,
   resolveBatchTargetScenes,
-} from "../helpers.js";
+} from "./core/helpers.js";
 import { STYLEGUIDE_CONFIG_BASENAME } from "./styleguide/prose-styleguide.js";
 import { registerSyncTools } from "./tools/sync.js";
 import { registerSearchTools } from "./tools/search.js";
