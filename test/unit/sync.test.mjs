@@ -8,8 +8,8 @@ import {
   isCanonicalWorldEntityFile, getSyncOwnershipDiagnostics, getFileWriteDiagnostics,
   isWorldFile, readMeta, isSyncDirWritable, sidecarPath, syncAll,
   walkFiles, walkSidecars, worldEntityFolderKey, worldEntityKindForPath,
-} from "../../sync.js";
-import { openDb } from "../../db.js";
+} from "../../src/sync/sync.js";
+import { openDb } from "../../src/core/db.js";
 
 describe("checksumProse", () => {
   test("returns the same hash for identical input", () => {

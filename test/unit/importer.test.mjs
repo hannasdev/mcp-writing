@@ -5,12 +5,12 @@ import fs from "node:fs";
 import path from "node:path";
 import { execSync, spawnSync } from "node:child_process";
 import yaml from "js-yaml";
-import { importScrivenerSync, validateProjectId, validateUniverseId } from "../../importer.js";
+import { importScrivenerSync, validateProjectId, validateUniverseId } from "../../src/sync/importer.js";
 import {
   IMPORTER_AUTHORITATIVE_FIELDS, loadScrivenerProjectData,
   mergeScrivenerProjectMetadata, mergeSidecarData,
-} from "../../scrivener-direct.js";
-import { openDb } from "../../db.js";
+} from "../../src/sync/scrivener-direct.js";
+import { openDb } from "../../src/core/db.js";
 
 describe("importScrivenerSync", () => {
   function createScrivenerDraftFixture() {

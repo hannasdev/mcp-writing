@@ -4,9 +4,9 @@ import os from "node:os";
 import fs from "node:fs";
 import path from "node:path";
 import yaml from "js-yaml";
-import { buildStyleguideConfigDraft, previewStyleguideConfigUpdate, resolveStyleguideConfig, summarizeStyleguideConfig, updateStyleguideConfig } from "../../prose-styleguide.js";
-import { buildProseStyleguideSkill } from "../../prose-styleguide-skill.js";
-import { analyzeSceneStyleguideDrift, suggestStyleguideUpdatesFromScenes } from "../../prose-styleguide-drift.js";
+import { buildStyleguideConfigDraft, previewStyleguideConfigUpdate, resolveStyleguideConfig, summarizeStyleguideConfig, updateStyleguideConfig } from "../../src/styleguide/prose-styleguide.js";
+import { buildProseStyleguideSkill } from "../../src/styleguide/prose-styleguide-skill.js";
+import { analyzeSceneStyleguideDrift, suggestStyleguideUpdatesFromScenes } from "../../src/styleguide/prose-styleguide-drift.js";
 
 describe("resolveStyleguideConfig", () => {
   test("returns setup_required when no config files are present", () => {

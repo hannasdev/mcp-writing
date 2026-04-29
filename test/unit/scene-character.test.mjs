@@ -5,9 +5,9 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import yaml from "js-yaml";
-import { runSceneCharacterBatch } from "../../scene-character-batch.js";
-import { buildCharacterNormalizationContext, isDistinctiveToken, normalizeSceneCharacters } from "../../scene-character-normalization.js";
-import { openDb } from "../../db.js";
+import { runSceneCharacterBatch } from "../../src/sync/scene-character-batch.js";
+import { buildCharacterNormalizationContext, isDistinctiveToken, normalizeSceneCharacters } from "../../src/sync/scene-character-normalization.js";
+import { openDb } from "../../src/core/db.js";
 import { insertTestScene } from "../helpers/db.js";
 
 describe("runSceneCharacterBatch", () => {

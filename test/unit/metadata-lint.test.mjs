@@ -4,7 +4,7 @@ import os from "node:os";
 import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
-import { lintMetadataInSyncDir, validateMetadataObject } from "../../metadata-lint.js";
+import { lintMetadataInSyncDir, validateMetadataObject } from "../../src/sync/metadata-lint.js";
 
 describe("world entity scaffold script", () => {
   function runScaffold(args) {
