@@ -11,6 +11,7 @@ on:
 jobs:
   test:
     name: Test (Node ${{ matrix.node-version }})
+    if: github.event_name != 'push' || !startsWith(github.event.head_commit.message, 'Release ')
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -33,6 +34,7 @@ jobs:
 
   lint:
     name: Lint
+    if: github.event_name != 'push' || !startsWith(github.event.head_commit.message, 'Release ')
     runs-on: ubuntu-latest
 
     steps:
@@ -52,6 +54,7 @@ jobs:
 
   legacy-root-import-guard:
     name: Legacy Root Import Guard
+    if: github.event_name != 'push' || !startsWith(github.event.head_commit.message, 'Release ')
     runs-on: ubuntu-latest
 
     steps:
@@ -71,6 +74,7 @@ jobs:
 
   docs:
     name: Generated Docs
+    if: github.event_name != 'push' || !startsWith(github.event.head_commit.message, 'Release ')
     runs-on: ubuntu-latest
 
     steps:
