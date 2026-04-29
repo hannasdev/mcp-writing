@@ -61,6 +61,7 @@
     "setup:openclaw-env": "sh scripts/setup-openclaw-env.sh",
     "release": "release-it",
     "lint": "eslint *.js src/ scripts/",
+    "guard:legacy-root-imports": "node scripts/check-legacy-root-imports.mjs",
     "docs": "node scripts/generate-tool-docs.mjs",
     "lint:metadata": "node scripts/lint-metadata.mjs",
     "sync:server-json-version": "node scripts/sync-server-json-version.mjs",
