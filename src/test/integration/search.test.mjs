@@ -510,6 +510,113 @@ describe("upsert_thread_link tool", () => {
   });
 });
 
+describe("upsert_reference_link tool", () => {
+  test("creates scene -> reference link with normalized relation", async () => {
+    const scenePath = path.join(writeSyncDir, "projects", "test-novel", "scenes", "sc-upsert-ref-001.md");
+    const targetRefPath = path.join(writeSyncDir, "projects", "test-novel", "world", "reference", "upsert-target.md");
+
+    fs.mkdirSync(path.dirname(scenePath), { recursive: true });
+    fs.mkdirSync(path.dirname(targetRefPath), { recursive: true });
+
+    fs.writeFileSync(
+      scenePath,
+      "---\nscene_id: sc-upsert-ref-001\ntitle: Upsert Reference Scene\n---\nScene prose."
+    );
+    fs.writeFileSync(
+      targetRefPath,
+      "---\ndoc_id: ref-upsert-target\ntitle: Upsert Target\n---\nReference body."
+    );
+
+    await callWriteTool("sync");
+
+    const text = await callWriteTool("upsert_reference_link", {
+      source_kind: "scene",
+      source_id: "sc-upsert-ref-001",
+      source_project_id: "test-novel",
+      target_doc_id: "ref-upsert-target",
+      relation: "Informs",
+    });
+    const parsed = JSON.parse(text);
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.action, "upserted");
+    assert.equal(parsed.link.source_kind, "scene");
+    assert.equal(parsed.link.source_project_id, "test-novel");
+    assert.equal(parsed.link.source_id, "sc-upsert-ref-001");
+    assert.equal(parsed.link.target_doc_id, "ref-upsert-target");
+    assert.equal(parsed.link.relation, "informs");
+  });
+
+  test("updates existing relation for same source and target", async () => {
+    const text = await callWriteTool("upsert_reference_link", {
+      source_kind: "scene",
+      source_id: "sc-upsert-ref-001",
+      source_project_id: "test-novel",
+      target_doc_id: "ref-upsert-target",
+      relation: "see_also",
+    });
+    const parsed = JSON.parse(text);
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.link.relation, "see_also");
+
+    const listed = await callWriteTool("list_scene_references", {
+      scene_id: "sc-upsert-ref-001",
+      project_id: "test-novel",
+    });
+    const listedParsed = JSON.parse(listed);
+    assert.equal(listedParsed.references.length, 1);
+    assert.equal(listedParsed.references[0].doc_id, "ref-upsert-target");
+    assert.equal(listedParsed.references[0].relation, "see_also");
+  });
+
+  test("returns conflict for ambiguous scene source without project scope", async () => {
+    const alphaScenePath = path.join(writeSyncDir, "projects", "alpha-upsert", "scenes", "shared.md");
+    const betaScenePath = path.join(writeSyncDir, "projects", "beta-upsert", "scenes", "shared.md");
+    const targetRefPath = path.join(writeSyncDir, "projects", "alpha-upsert", "world", "reference", "ambiguous-target.md");
+
+    fs.mkdirSync(path.dirname(alphaScenePath), { recursive: true });
+    fs.mkdirSync(path.dirname(betaScenePath), { recursive: true });
+    fs.mkdirSync(path.dirname(targetRefPath), { recursive: true });
+
+    fs.writeFileSync(alphaScenePath, "---\nscene_id: sc-upsert-shared\ntitle: Alpha Shared\n---\nAlpha prose.");
+    fs.writeFileSync(betaScenePath, "---\nscene_id: sc-upsert-shared\ntitle: Beta Shared\n---\nBeta prose.");
+    fs.writeFileSync(targetRefPath, "---\ndoc_id: ref-upsert-ambiguous\ntitle: Ambiguous Target\n---\nRef body.");
+
+    await callWriteTool("sync");
+
+    const text = await callWriteTool("upsert_reference_link", {
+      source_kind: "scene",
+      source_id: "sc-upsert-shared",
+      target_doc_id: "ref-upsert-ambiguous",
+      relation: "informs",
+    });
+    const parsed = JSON.parse(text);
+    assert.equal(parsed.ok, false);
+    assert.equal(parsed.error.code, "CONFLICT");
+    assert.ok(parsed.error.details.project_ids.includes("alpha-upsert"));
+    assert.ok(parsed.error.details.project_ids.includes("beta-upsert"));
+  });
+
+  test("rejects reference self-links", async () => {
+    const sourceRefPath = path.join(writeSyncDir, "projects", "test-novel", "world", "reference", "self-link.md");
+    fs.mkdirSync(path.dirname(sourceRefPath), { recursive: true });
+    fs.writeFileSync(
+      sourceRefPath,
+      "---\ndoc_id: ref-self-link\ntitle: Self Link\n---\nReference body."
+    );
+    await callWriteTool("sync");
+
+    const text = await callWriteTool("upsert_reference_link", {
+      source_kind: "reference",
+      source_id: "ref-self-link",
+      target_doc_id: "ref-self-link",
+      relation: "related",
+    });
+    const parsed = JSON.parse(text);
+    assert.equal(parsed.ok, false);
+    assert.equal(parsed.error.code, "VALIDATION_ERROR");
+  });
+});
+
   describe("get_relationship_arc tool", () => {
     test("returns no data message when no relationships exist", async () => {
       const text = await callTool("get_relationship_arc", {

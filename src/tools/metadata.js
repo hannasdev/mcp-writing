@@ -170,6 +170,119 @@ export function registerMetadataTools(s, {
     }
   );
 
+  // ---- upsert_reference_link -----------------------------------------------
+  s.tool(
+    "upsert_reference_link",
+    "Create or update an explicit reference link from a scene or reference doc to a target reference doc. If a link already exists between the same source and target, this updates the relation. Only available when the sync dir is writable.",
+    {
+      source_kind: z.enum(["scene", "reference"]).describe("Link source kind."),
+      source_id: z.string().describe("Source scene_id or reference doc_id."),
+      source_project_id: z.string().optional().describe("Optional project scope for scene sources. Required when scene_id is ambiguous across projects."),
+      target_doc_id: z.string().describe("Target reference doc_id."),
+      relation: z.string().describe("Relationship label (for example: 'informs', 'related', 'history_of')."),
+    },
+    async ({ source_kind, source_id, source_project_id, target_doc_id, relation }) => {
+      if (!SYNC_DIR_WRITABLE) {
+        return errorResponse("READ_ONLY", "Cannot write reference links: sync dir is read-only.");
+      }
+
+      const normalizedRelation = relation.trim().toLowerCase();
+      if (!/^[a-z][a-z0-9_-]*$/.test(normalizedRelation)) {
+        return errorResponse(
+          "VALIDATION_ERROR",
+          "Relation must use lowercase letters, numbers, underscores, or hyphens (for example: 'informs' or 'history_of').",
+          { relation }
+        );
+      }
+
+      const targetDoc = db.prepare(`
+        SELECT doc_id
+        FROM reference_docs
+        WHERE doc_id = ?
+      `).get(target_doc_id);
+      if (!targetDoc) {
+        return errorResponse("NOT_FOUND", `Target reference doc '${target_doc_id}' not found.`);
+      }
+
+      let resolvedSourceProjectId;
+      if (source_kind === "scene") {
+        if (source_project_id) {
+          const scene = db.prepare(`
+            SELECT scene_id, project_id
+            FROM scenes
+            WHERE scene_id = ? AND project_id = ?
+            LIMIT 1
+          `).get(source_id, source_project_id);
+          if (!scene) {
+            return errorResponse("NOT_FOUND", `Scene '${source_id}' not found in project '${source_project_id}'.`);
+          }
+          resolvedSourceProjectId = scene.project_id ?? "";
+        } else {
+          const matches = db.prepare(`
+            SELECT scene_id, project_id
+            FROM scenes
+            WHERE scene_id = ?
+            ORDER BY project_id
+          `).all(source_id);
+          if (matches.length === 0) {
+            return errorResponse("NOT_FOUND", `Scene '${source_id}' not found.`);
+          }
+          if (matches.length > 1) {
+            return errorResponse(
+              "CONFLICT",
+              `Scene ID '${source_id}' exists in multiple projects. Provide source_project_id to disambiguate.`,
+              { source_id, project_ids: matches.map(row => row.project_id) }
+            );
+          }
+          resolvedSourceProjectId = matches[0].project_id ?? "";
+        }
+      } else {
+        const sourceDoc = db.prepare(`
+          SELECT doc_id, project_id
+          FROM reference_docs
+          WHERE doc_id = ?
+          LIMIT 1
+        `).get(source_id);
+        if (!sourceDoc) {
+          return errorResponse("NOT_FOUND", `Source reference doc '${source_id}' not found.`);
+        }
+        if (source_id === target_doc_id) {
+          return errorResponse("VALIDATION_ERROR", "Self-links are not allowed for reference sources.");
+        }
+        resolvedSourceProjectId = sourceDoc.project_id ?? "";
+        if ((source_project_id ?? "") !== "" && source_project_id !== resolvedSourceProjectId) {
+          return errorResponse(
+            "CONFLICT",
+            `Source reference doc '${source_id}' belongs to project '${resolvedSourceProjectId}', not '${source_project_id}'.`
+          );
+        }
+      }
+
+      db.prepare(`
+        DELETE FROM reference_links
+        WHERE source_kind = ? AND source_project_id = ? AND source_id = ? AND target_doc_id = ?
+      `).run(source_kind, resolvedSourceProjectId, source_id, target_doc_id);
+
+      db.prepare(`
+        INSERT INTO reference_links (
+          source_kind, source_project_id, source_id, target_doc_id, relation
+        ) VALUES (?, ?, ?, ?, ?)
+      `).run(source_kind, resolvedSourceProjectId, source_id, target_doc_id, normalizedRelation);
+
+      const link = db.prepare(`
+        SELECT source_kind, source_project_id, source_id, target_doc_id, relation
+        FROM reference_links
+        WHERE source_kind = ? AND source_project_id = ? AND source_id = ? AND target_doc_id = ? AND relation = ?
+      `).get(source_kind, resolvedSourceProjectId, source_id, target_doc_id, normalizedRelation);
+
+      return jsonResponse({
+        ok: true,
+        action: "upserted",
+        link,
+      });
+    }
+  );
+
   // ---- update_scene_metadata -----------------------------------------------
   s.tool(
     "update_scene_metadata",

@@ -33,6 +33,7 @@
 - [`create_character_sheet`](#create_character_sheet)
 - [`create_place_sheet`](#create_place_sheet)
 - [`upsert_thread_link`](#upsert_thread_link)
+- [`upsert_reference_link`](#upsert_reference_link)
 - [`update_scene_metadata`](#update_scene_metadata)
 - [`update_character_sheet`](#update_character_sheet)
 - [`update_place_sheet`](#update_place_sheet)
@@ -396,6 +397,20 @@ Create or update a thread and link it to a scene. Idempotent: if the link alread
 | `scene_id` | `string` | Yes | Scene to link to the thread (e.g. 'sc-011-sebastian'). |
 | `beat` | `string` | No | Optional thread-specific beat label for this scene. |
 | `status` | `string` | No | Thread status (e.g. 'active', 'resolved'). Defaults to 'active'. |
+
+---
+
+## upsert_reference_link
+
+Create or update an explicit reference link from a scene or reference doc to a target reference doc. If a link already exists between the same source and target, this updates the relation. Only available when the sync dir is writable.
+
+| Parameter | Type | Required | Description |
+| --- | --- | :---: | --- |
+| `source_kind` | `enum("scene","reference")` | Yes | Link source kind. |
+| `source_id` | `string` | Yes | Source scene_id or reference doc_id. |
+| `source_project_id` | `string` | No | Optional project scope for scene sources. Required when scene_id is ambiguous across projects. |
+| `target_doc_id` | `string` | Yes | Target reference doc_id. |
+| `relation` | `string` | Yes | Relationship label (for example: 'informs', 'related', 'history_of'). |
 
 ---
 

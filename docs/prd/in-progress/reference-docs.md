@@ -204,9 +204,7 @@ In progress (Phase 4B):
 - `sync()` now indexes direct scene-to-reference (`informs`) and reference-to-reference (`related`) links from metadata
 - `list_scene_references(scene_id, project_id?)` is implemented with project-aware disambiguation
 - `get_reference_doc(doc_id, include_related?)` is implemented with one-hop related expansion
-
-Not started:
-- `upsert_reference_link(source_kind, source_id, target_doc_id, relation)`
+- `upsert_reference_link(source_kind, source_id, source_project_id?, target_doc_id, relation)` is implemented for explicit scene/reference link authoring with relation normalization and conflict-safe source resolution
 
 ## Validation and Test Strategy
 
