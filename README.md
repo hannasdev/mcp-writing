@@ -21,9 +21,9 @@ The CLI wrapper defaults to stdio transport and adds the Node 22 SQLite flag aut
 Instead of feeding an entire manuscript to an AI and hoping it fits in the context window, `mcp-writing` builds a structured index from your scene files. The AI queries that index first — finding relevant characters, beats, and loglines — then loads only the specific prose it needs.
 
 **Current status:**
-- **Phase 1-3 completed:** Metadata-first analysis, sidecar-backed metadata maintenance, and AI-assisted prose editing with confirmation + git history.
-- **Phase 4 delivered in part:** Review bundles and Scrivener Direct extraction are complete; embedding search and reference-doc querying are intentionally deferred.
-- **Phase 5 in progress:** OpenClaw runtime integration is active.
+- **Core platform complete:** Metadata-first analysis, sidecar-backed metadata maintenance, AI-assisted prose editing with confirmation + git history, review bundles, and Scrivener Direct extraction are all implemented.
+- **Active development:** OpenClaw runtime integration and guideline generation are the current focus areas.
+- **Deferred backlog:** Embedding search and the reference document system are intentionally deferred for later exploration.
 
 ## Who it is for
 
