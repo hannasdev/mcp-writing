@@ -22,8 +22,8 @@ Instead of feeding an entire manuscript to an AI and hoping it fits in the conte
 
 **Current status:**
 - **Core platform complete:** Metadata-first analysis, sidecar-backed metadata maintenance, AI-assisted prose editing with confirmation + git history, review bundles, and Scrivener Direct extraction are all implemented.
-- **Active development:** OpenClaw runtime integration and guideline generation are the current focus areas.
-- **Deferred backlog:** Embedding search and the reference document system are intentionally deferred for later exploration.
+- **Active development:** OpenClaw integration and guideline generation are the current focus areas.
+- **Deferred backlog:** embeddings search and the reference document system are intentionally deferred for later exploration.
 
 ## Who it is for
 
