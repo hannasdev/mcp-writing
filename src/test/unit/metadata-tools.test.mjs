@@ -211,6 +211,30 @@ describe("metadata upsert_reference_link tool", () => {
     }
   });
 
+  test("reports unscoped reference ownership clearly in conflict details", async () => {
+    const db = openDb(":memory:");
+    try {
+      seedReferenceDoc(db, { docId: "ref-global-source", projectId: null, title: "Global Source" });
+      seedReferenceDoc(db, { docId: "ref-global-target", projectId: null, title: "Global Target" });
+
+      const tools = makeToolHarness(db);
+      const mismatched = await tools.call("upsert_reference_link", {
+        source_kind: "reference",
+        source_id: "ref-global-source",
+        source_project_id: "test-novel",
+        target_doc_id: "ref-global-target",
+        relation: "related",
+      });
+      assert.equal(mismatched.ok, false);
+      assert.equal(mismatched.error.code, "CONFLICT");
+      assert.equal(mismatched.error.details.resolved_source_project_id, "");
+      assert.equal(mismatched.error.details.source_project_id, "test-novel");
+      assert.ok(mismatched.error.message.includes("unscoped/no project"));
+    } finally {
+      db.close();
+    }
+  });
+
   test("rejects reference self-links", async () => {
     const db = openDb(":memory:");
     try {

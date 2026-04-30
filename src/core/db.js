@@ -218,7 +218,6 @@ const MIGRATIONS = [
         source_id     TEXT NOT NULL,
         target_doc_id TEXT NOT NULL,
         relation      TEXT NOT NULL,
-        origin        TEXT NOT NULL DEFAULT 'inferred',
         PRIMARY KEY (source_kind, source_project_id, source_id, target_doc_id, relation)
       );
     `);
@@ -244,7 +243,6 @@ const MIGRATIONS = [
           source_id     TEXT NOT NULL,
           target_doc_id TEXT NOT NULL,
           relation      TEXT NOT NULL,
-          origin        TEXT NOT NULL DEFAULT 'inferred',
           PRIMARY KEY (source_kind, source_project_id, source_id, target_doc_id, relation)
         );
       `);
@@ -258,14 +256,13 @@ const MIGRATIONS = [
             source_id     TEXT NOT NULL,
             target_doc_id TEXT NOT NULL,
             relation      TEXT NOT NULL,
-            origin        TEXT NOT NULL DEFAULT 'inferred',
             PRIMARY KEY (source_kind, source_project_id, source_id, target_doc_id, relation)
           );
         `);
         db.exec(`
           INSERT OR IGNORE INTO reference_links_migrating
-            (source_kind, source_project_id, source_id, target_doc_id, relation, origin)
-          SELECT source_kind, '', source_id, target_doc_id, relation, 'inferred'
+            (source_kind, source_project_id, source_id, target_doc_id, relation)
+          SELECT source_kind, '', source_id, target_doc_id, relation
           FROM reference_links;
         `);
         db.exec(`DROP TABLE reference_links;`);

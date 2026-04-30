@@ -224,7 +224,7 @@ Integration tests:
 - `search_reference()` returns lightweight results without loading full content
 - `list_scene_references(scene_id, project_id?)` returns only direct scene links
 - `get_reference_doc(doc_id, include_related=true)` returns one-hop related references without looping
-- explicit links authored via tools remain present after `sync()` and after rebuilding the DB from files
+- explicit links authored via tools remain present after `sync()`
 
 Behavioral guardrails:
 - no automatic deep expansion in scene query tools

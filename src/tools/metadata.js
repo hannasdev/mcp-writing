@@ -251,9 +251,20 @@ export function registerMetadataTools(s, {
         }
         resolvedSourceProjectId = sourceDoc.project_id ?? "";
         if ((source_project_id ?? "") !== "" && source_project_id !== resolvedSourceProjectId) {
+          const resolvedSourceProjectLabel = resolvedSourceProjectId === ""
+            ? "unscoped/no project"
+            : `project '${resolvedSourceProjectId}'`;
+          const requestedSourceProjectLabel = source_project_id === ""
+            ? "unscoped/no project"
+            : `project '${source_project_id}'`;
           return errorResponse(
             "CONFLICT",
-            `Source reference doc '${source_id}' belongs to project '${resolvedSourceProjectId}', not '${source_project_id}'.`
+            `Source reference doc '${source_id}' belongs to ${resolvedSourceProjectLabel}, not ${requestedSourceProjectLabel}.`,
+            {
+              source_id,
+              source_project_id,
+              resolved_source_project_id: resolvedSourceProjectId,
+            }
           );
         }
       }
