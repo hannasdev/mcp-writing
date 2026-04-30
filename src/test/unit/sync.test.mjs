@@ -381,6 +381,10 @@ describe("reference docs", () => {
     assert.equal(isReferenceFile(syncDir, "/sync/projects/novel/world/reference/vampirism.md"), true);
   });
 
+  test("detects reference files in project-root world/reference paths", () => {
+    assert.equal(isReferenceFile("/sync/projects/novel", "/sync/projects/novel/world/reference/vampirism.md"), true);
+  });
+
   test("detects reference files in Notes paths", () => {
     assert.equal(isReferenceFile(syncDir, "/sync/projects/novel/Notes/continuity/blood.md"), true);
   });
@@ -389,6 +393,11 @@ describe("reference docs", () => {
     assert.equal(inferReferenceDocType(syncDir, "/sync/projects/novel/world/reference/vampirism.md"), "world");
     assert.equal(inferReferenceDocType(syncDir, "/sync/projects/novel/Notes/continuity/blood.md"), "continuity");
     assert.equal(inferReferenceDocType(syncDir, "/sync/projects/novel/Notes/research/boats.md"), "research");
+  });
+
+  test("infers reference doc types for project-root sync layouts", () => {
+    assert.equal(inferReferenceDocType("/sync/projects/novel", "/sync/projects/novel/world/reference/vampirism.md"), "world");
+    assert.equal(inferReferenceDocType("/sync/projects/novel", "/sync/projects/novel/Notes/continuity/blood.md"), "continuity");
   });
 
   test("derives stable doc ids from relative path when doc_id is missing", () => {
@@ -595,6 +604,45 @@ describe("syncAll", () => {
 
     db.close();
     fs.rmSync(dir, { recursive: true });
+  });
+
+  test("indexes reference docs with correct project metadata from a project-root sync dir", () => {
+    const syncRoot = fs.mkdtempSync(path.join(os.tmpdir(), "sync-project-root-"));
+    const projectRoot = path.join(syncRoot, "projects", "project-root-novel");
+    const db = openDb(":memory:");
+    fs.mkdirSync(path.join(projectRoot, "world", "reference"), { recursive: true });
+    fs.mkdirSync(path.join(projectRoot, "Notes", "continuity"), { recursive: true });
+    fs.writeFileSync(
+      path.join(projectRoot, "world", "reference", "vampirism.md"),
+      "---\ntitle: Vampirism in this universe\n---\nReference body."
+    );
+    fs.writeFileSync(
+      path.join(projectRoot, "Notes", "continuity", "blood-replacement.md"),
+      "---\ntitle: Sebastian's struggle for blood replacement\n---\nReference body."
+    );
+
+    syncAll(db, projectRoot, { quiet: true });
+
+    const docs = db.prepare(`
+      SELECT doc_id, project_id, type
+      FROM reference_docs
+      ORDER BY doc_id
+    `).all().map(row => ({ ...row }));
+    assert.deepEqual(docs, [
+      {
+        doc_id: "ref-notes-continuity-blood-replacement",
+        project_id: "project-root-novel",
+        type: "continuity",
+      },
+      {
+        doc_id: "ref-world-reference-vampirism",
+        project_id: "project-root-novel",
+        type: "world",
+      },
+    ]);
+
+    db.close();
+    fs.rmSync(syncRoot, { recursive: true });
   });
 
   test("does not prune reference docs when sync root is narrowed to scenes", () => {

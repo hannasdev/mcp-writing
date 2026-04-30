@@ -172,16 +172,48 @@ export function isWorldFile(syncDir, filePath) {
 
 export function isReferenceFile(syncDir, filePath) {
   const rel = path.relative(syncDir, filePath).split(path.sep).join("/").toLowerCase();
-  return rel.includes("/world/reference/") || rel.startsWith("notes/") || rel.includes("/notes/");
+  return rel.startsWith("world/reference/") || rel.includes("/world/reference/") || rel.startsWith("notes/") || rel.includes("/notes/");
 }
 
 export function inferReferenceDocType(syncDir, filePath) {
   const rel = path.relative(syncDir, filePath).split(path.sep).join("/").toLowerCase();
-  if (rel.includes("/world/reference/")) return "world";
-  if (rel.includes("/notes/continuity/")) return "continuity";
-  if (rel.includes("/notes/research/")) return "research";
-  if (rel.includes("/notes/style/")) return "style";
+  if (rel.startsWith("world/reference/") || rel.includes("/world/reference/")) return "world";
+  if (rel.startsWith("notes/continuity/") || rel.includes("/notes/continuity/")) return "continuity";
+  if (rel.startsWith("notes/research/") || rel.includes("/notes/research/")) return "research";
+  if (rel.startsWith("notes/style/") || rel.includes("/notes/style/")) return "style";
   return "reference";
+}
+
+function inferReferenceScopeFromSyncDir(syncDir) {
+  const parts = path.resolve(syncDir).split(path.sep).filter(Boolean);
+  const projectSlug = parts.at(-1);
+  const parent = parts.at(-2);
+  const universeId = parts.at(-2);
+  const universeProjectSlug = parts.at(-1);
+  const universeMarker = parts.at(-3);
+
+  if (parent === "projects" && projectSlug) {
+    return { universe_id: null, project_id: projectSlug };
+  }
+
+  if (universeMarker === "universes" && universeId && universeProjectSlug) {
+    return { universe_id: universeId, project_id: `${universeId}/${universeProjectSlug}` };
+  }
+
+  return null;
+}
+
+function inferReferenceProjectAndUniverse(syncDir, filePath) {
+  const rel = path.relative(syncDir, filePath).split(path.sep).join("/").toLowerCase();
+  const scoped = inferReferenceScopeFromSyncDir(syncDir);
+  if (
+    scoped
+    && (rel.startsWith("world/reference/") || rel.startsWith("notes/"))
+  ) {
+    return scoped;
+  }
+
+  return inferProjectAndUniverse(syncDir, filePath);
 }
 
 function slugifyReferencePart(value) {
@@ -540,7 +572,7 @@ export function indexWorldFile(db, syncDir, file, meta) {
 }
 
 export function indexReferenceFile(db, syncDir, file, meta = {}, content = "") {
-  const { universe_id, project_id } = inferProjectAndUniverse(syncDir, file);
+  const { universe_id, project_id } = inferReferenceProjectAndUniverse(syncDir, file);
   const docId = deriveReferenceDocId(syncDir, file, meta);
   const type = inferReferenceDocType(syncDir, file);
   const title = deriveReferenceTitle(file, meta, content);
