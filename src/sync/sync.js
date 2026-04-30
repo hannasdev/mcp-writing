@@ -196,6 +196,10 @@ function inferReferenceScopeFromSyncDir(syncDir) {
     return { universe_id: null, project_id: projectSlug };
   }
 
+  if (parent === "universes" && projectSlug) {
+    return { universe_id: projectSlug, project_id: null };
+  }
+
   if (universeMarker === "universes" && universeId && universeProjectSlug) {
     return { universe_id: universeId, project_id: `${universeId}/${universeProjectSlug}` };
   }

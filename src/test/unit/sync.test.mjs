@@ -645,6 +645,36 @@ describe("syncAll", () => {
     fs.rmSync(syncRoot, { recursive: true });
   });
 
+  test("indexes universe-root reference docs with correct universe metadata", () => {
+    const syncRoot = fs.mkdtempSync(path.join(os.tmpdir(), "sync-universe-root-"));
+    const universeRoot = path.join(syncRoot, "universes", "aether");
+    const db = openDb(":memory:");
+    fs.mkdirSync(path.join(universeRoot, "world", "reference"), { recursive: true });
+    fs.writeFileSync(
+      path.join(universeRoot, "world", "reference", "vampirism.md"),
+      "---\ntitle: Vampirism in this universe\n---\nReference body."
+    );
+
+    syncAll(db, universeRoot, { quiet: true });
+
+    const docs = db.prepare(`
+      SELECT doc_id, project_id, universe_id, type
+      FROM reference_docs
+      ORDER BY doc_id
+    `).all().map(row => ({ ...row }));
+    assert.deepEqual(docs, [
+      {
+        doc_id: "ref-world-reference-vampirism",
+        project_id: null,
+        universe_id: "aether",
+        type: "world",
+      },
+    ]);
+
+    db.close();
+    fs.rmSync(syncRoot, { recursive: true });
+  });
+
   test("does not prune reference docs when sync root is narrowed to scenes", () => {
     const dir = makeTempSync();
     const db = openDb(":memory:");
