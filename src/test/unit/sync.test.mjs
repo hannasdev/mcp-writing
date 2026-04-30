@@ -606,6 +606,28 @@ describe("syncAll", () => {
     fs.rmSync(dir, { recursive: true });
   });
 
+  test("keeps one FTS row per reference doc across repeated sync runs", () => {
+    const dir = makeTempSync();
+    const db = openDb(":memory:");
+    const refPath = path.join(dir, "projects", "test-novel", "world", "reference", "vampirism.md");
+    fs.mkdirSync(path.dirname(refPath), { recursive: true });
+    fs.writeFileSync(
+      refPath,
+      "---\ntitle: Vampirism in this universe\ntags:\n  - vampirism\n---\nReference body."
+    );
+
+    syncAll(db, dir, { quiet: true });
+    syncAll(db, dir, { quiet: true });
+
+    assert.equal(
+      db.prepare(`SELECT COUNT(*) AS count FROM reference_docs_fts WHERE doc_id = ?`).get("ref-projects-test-novel-world-reference-vampirism").count,
+      1
+    );
+
+    db.close();
+    fs.rmSync(dir, { recursive: true });
+  });
+
   test("indexes reference docs with correct project metadata from a project-root sync dir", () => {
     const syncRoot = fs.mkdtempSync(path.join(os.tmpdir(), "sync-project-root-"));
     const projectRoot = path.join(syncRoot, "projects", "project-root-novel");
@@ -691,6 +713,35 @@ describe("syncAll", () => {
 
     const scenesRoot = path.join(dir, "projects", "test-novel", "scenes");
     syncAll(db, scenesRoot, { quiet: true });
+
+    assert.equal(db.prepare(`SELECT COUNT(*) AS count FROM reference_docs`).get().count, 1);
+    assert.equal(
+      db.prepare(`SELECT COUNT(*) AS count FROM reference_docs_fts WHERE reference_docs_fts MATCH 'vampirism'`).get().count,
+      1
+    );
+
+    db.close();
+    fs.rmSync(dir, { recursive: true });
+  });
+
+  test("does not prune reference docs when sync root is a deeper scenes subtree", () => {
+    const dir = makeTempSync();
+    const db = openDb(":memory:");
+    const refPath = path.join(dir, "projects", "test-novel", "world", "reference", "vampirism.md");
+    fs.mkdirSync(path.dirname(refPath), { recursive: true });
+    fs.writeFileSync(
+      refPath,
+      "---\ntitle: Vampirism in this universe\ntags:\n  - vampirism\n---\nReference body."
+    );
+    const chapterDir = path.join(dir, "projects", "test-novel", "scenes", "chapter-1");
+    fs.mkdirSync(chapterDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(chapterDir, "sc-001.md"),
+      "---\nscene_id: sc-001\ntitle: Scene sc-001\npart: 1\nchapter: 1\npov: elena\n---\nProse content for scene sc-001."
+    );
+
+    syncAll(db, dir, { quiet: true });
+    syncAll(db, chapterDir, { quiet: true });
 
     assert.equal(db.prepare(`SELECT COUNT(*) AS count FROM reference_docs`).get().count, 1);
     assert.equal(

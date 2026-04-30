@@ -608,8 +608,9 @@ export function indexReferenceFile(db, syncDir, file, meta = {}, content = "") {
     db.prepare(`INSERT OR IGNORE INTO reference_doc_tags (doc_id, tag) VALUES (?, ?)`).run(docId, tag);
   }
 
+  db.prepare(`DELETE FROM reference_docs_fts WHERE doc_id = ?`).run(docId);
   db.prepare(`
-    INSERT OR REPLACE INTO reference_docs_fts (doc_id, project_id, title, summary, tags)
+    INSERT INTO reference_docs_fts (doc_id, project_id, title, summary, tags)
     VALUES (?, ?, ?, ?, ?)
   `).run(
     docId,
@@ -633,9 +634,21 @@ function pruneMissingReferenceDocs(db, seenDocIds) {
 }
 
 function canPruneReferenceDocs(syncDir) {
-  // A sync root that points directly at a scenes/ subtree cannot observe the
-  // project's reference docs, so pruning there would wipe valid indexed rows.
-  return path.basename(path.resolve(syncDir)).toLowerCase() !== "scenes";
+  const resolvedSyncDir = path.resolve(syncDir);
+  const scopedRoot = inferReferenceScopeFromSyncDir(resolvedSyncDir);
+  if (scopedRoot) return true;
+
+  // Flat project roots and broad workspace roots can safely prune because
+  // they can observe the full set of reference docs in their scope.
+  const hasBroadRootChild = ["projects", "universes", "scenes"].some((name) => {
+    try {
+      return fs.statSync(path.join(resolvedSyncDir, name)).isDirectory();
+    } catch {
+      return false;
+    }
+  });
+
+  return hasBroadRootChild;
 }
 
 export function indexSceneFile(db, syncDir, file, meta, prose) {
