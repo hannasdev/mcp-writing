@@ -130,7 +130,7 @@ Direct ingestion from Scrivener project internals (`.scriv`/`.scrivx`) for riche
 
 ### 🚀 [OpenClaw Integration](docs/prd/in-progress/openclaw-integration.md) 🚧
 
-Deploy writing-mcp as a service in the OpenClaw runtime with the Writing World agent.
+Deploy Writing MCP as a service in the OpenClaw runtime with the Writing World agent.
 
 **Status:** In progress. Runtime shape, deployment targets, and agent integration points are defined; remaining work is implementation and rollout.
 
