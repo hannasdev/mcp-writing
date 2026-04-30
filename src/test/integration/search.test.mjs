@@ -8,20 +8,22 @@ import { createTestContext } from "../helpers/server.js";
 const ctx = createTestContext(3075, 3074);
 let writeSyncDir, readSyncDir;
 
-before(async () => {
-  await ctx.setup();
-  writeSyncDir = ctx.writeSyncDir;
-  readSyncDir = ctx.readSyncDir;
-});
+describe("search tools integration suite", { concurrency: 1 }, () => {
+  before(async () => {
+    await ctx.setup();
+    writeSyncDir = ctx.writeSyncDir;
+    readSyncDir = ctx.readSyncDir;
+  });
 
-after(async () => {
-  await ctx.teardown();
-});
+  after(async () => {
+    await ctx.teardown();
+  });
 
-const callTool = (n, a) => ctx.callTool(n, a);
-const callWriteTool = (n, a) => ctx.callWriteTool(n, a);
-const waitForAsyncJob = (id, t) => ctx.waitForAsyncJob(id, t);
-describe("find_scenes tool", () => {
+  const callTool = (n, a) => ctx.callTool(n, a);
+  const callWriteTool = (n, a) => ctx.callWriteTool(n, a);
+  const waitForAsyncJob = (id, t) => ctx.waitForAsyncJob(id, t);
+
+  describe("find_scenes tool", () => {
   test("returns all 3 scenes with no filters", async () => {
     const text = await callTool("find_scenes");
     const parsed = JSON.parse(text);
@@ -318,6 +320,109 @@ describe("search_reference tool", () => {
   });
 });
 
+describe("reference link tools", () => {
+  test("list_scene_references returns direct scene -> reference links", async () => {
+    const scenePath = path.join(writeSyncDir, "projects", "test-novel", "scenes", "sc-ref-001.md");
+    const worldRefPath = path.join(writeSyncDir, "projects", "test-novel", "world", "reference", "blood-rules.md");
+    const continuityRefPath = path.join(writeSyncDir, "projects", "test-novel", "Notes", "continuity", "sebastian-blood-notes.md");
+
+    fs.mkdirSync(path.dirname(scenePath), { recursive: true });
+    fs.mkdirSync(path.dirname(worldRefPath), { recursive: true });
+    fs.mkdirSync(path.dirname(continuityRefPath), { recursive: true });
+
+    fs.writeFileSync(
+      worldRefPath,
+      "---\ndoc_id: ref-blood-rules\ntitle: Blood Rules\ntags:\n  - vampirism\n---\nReference body."
+    );
+    fs.writeFileSync(
+      continuityRefPath,
+      "---\ndoc_id: ref-sebastian-blood\ntitle: Sebastian Blood Notes\ntags:\n  - continuity\n---\nReference body."
+    );
+    fs.writeFileSync(
+      scenePath,
+      "---\nscene_id: sc-ref-001\ntitle: Reference Scene\nreference_ids:\n  - ref-blood-rules\n  - ref-sebastian-blood\n---\nScene prose."
+    );
+
+    await callWriteTool("sync");
+
+    const text = await callWriteTool("list_scene_references", {
+      scene_id: "sc-ref-001",
+      project_id: "test-novel",
+    });
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.scene_id, "sc-ref-001");
+    assert.equal(parsed.project_id, "test-novel");
+    assert.equal(parsed.references.length, 2);
+    assert.ok(parsed.references.some(row => row.doc_id === "ref-blood-rules"));
+    assert.ok(parsed.references.some(row => row.doc_id === "ref-sebastian-blood"));
+  });
+
+  test("list_scene_references returns CONFLICT for ambiguous scene_id without project_id", async () => {
+    const alphaScenePath = path.join(writeSyncDir, "projects", "alpha-novel", "scenes", "shared.md");
+    const betaScenePath = path.join(writeSyncDir, "projects", "beta-novel", "scenes", "shared.md");
+    const alphaRefPath = path.join(writeSyncDir, "projects", "alpha-novel", "world", "reference", "alpha.md");
+    const betaRefPath = path.join(writeSyncDir, "projects", "beta-novel", "world", "reference", "beta.md");
+
+    fs.mkdirSync(path.dirname(alphaScenePath), { recursive: true });
+    fs.mkdirSync(path.dirname(betaScenePath), { recursive: true });
+    fs.mkdirSync(path.dirname(alphaRefPath), { recursive: true });
+    fs.mkdirSync(path.dirname(betaRefPath), { recursive: true });
+
+    fs.writeFileSync(alphaRefPath, "---\ndoc_id: ref-alpha\ntitle: Alpha Ref\n---\nAlpha");
+    fs.writeFileSync(betaRefPath, "---\ndoc_id: ref-beta\ntitle: Beta Ref\n---\nBeta");
+    fs.writeFileSync(
+      alphaScenePath,
+      "---\nscene_id: sc-shared-001\ntitle: Alpha Shared\nreference_ids:\n  - ref-alpha\n---\nAlpha scene prose."
+    );
+    fs.writeFileSync(
+      betaScenePath,
+      "---\nscene_id: sc-shared-001\ntitle: Beta Shared\nreference_ids:\n  - ref-beta\n---\nBeta scene prose."
+    );
+
+    await callWriteTool("sync");
+
+    const text = await callWriteTool("list_scene_references", { scene_id: "sc-shared-001" });
+    const parsed = JSON.parse(text);
+    assert.equal(parsed.ok, false);
+    assert.equal(parsed.error.code, "CONFLICT");
+    assert.ok(Array.isArray(parsed.error.details.project_ids));
+    assert.ok(parsed.error.details.project_ids.includes("alpha-novel"));
+    assert.ok(parsed.error.details.project_ids.includes("beta-novel"));
+  });
+
+  test("get_reference_doc returns metadata plus one-hop related docs", async () => {
+    const sourcePath = path.join(writeSyncDir, "projects", "test-novel", "world", "reference", "vamp-lore.md");
+    const targetPath = path.join(writeSyncDir, "projects", "test-novel", "Notes", "continuity", "vamp-history.md");
+
+    fs.mkdirSync(path.dirname(sourcePath), { recursive: true });
+    fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+
+    fs.writeFileSync(
+      sourcePath,
+      "---\ndoc_id: ref-vamp-lore\ntitle: Vamp Lore\nrelated_reference_ids:\n  - ref-vamp-history\ntags:\n  - lore\n---\nLore body."
+    );
+    fs.writeFileSync(
+      targetPath,
+      "---\ndoc_id: ref-vamp-history\ntitle: Vamp History\ntags:\n  - history\n---\nHistory body."
+    );
+
+    await callWriteTool("sync");
+
+    const text = await callWriteTool("get_reference_doc", {
+      doc_id: "ref-vamp-lore",
+      include_related: true,
+    });
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.doc_id, "ref-vamp-lore");
+    assert.ok(parsed.tags.includes("lore"));
+    assert.equal(parsed.related.length, 1);
+    assert.equal(parsed.related[0].doc_id, "ref-vamp-history");
+    assert.ok(parsed.related[0].tags.includes("history"));
+  });
+});
+
 describe("list_threads tool", () => {
   test("returns structured empty result when none created", async () => {
     const text = await callTool("list_threads", { project_id: "test-novel" });
@@ -405,12 +510,13 @@ describe("upsert_thread_link tool", () => {
   });
 });
 
-describe("get_relationship_arc tool", () => {
-  test("returns no data message when no relationships exist", async () => {
-    const text = await callTool("get_relationship_arc", {
-      from_character: "elena",
-      to_character: "marcus",
+  describe("get_relationship_arc tool", () => {
+    test("returns no data message when no relationships exist", async () => {
+      const text = await callTool("get_relationship_arc", {
+        from_character: "elena",
+        to_character: "marcus",
+      });
+      assert.ok(text.toLowerCase().includes("no relationship data"));
     });
-    assert.ok(text.toLowerCase().includes("no relationship data"));
   });
 });
