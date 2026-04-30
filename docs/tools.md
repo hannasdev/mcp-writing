@@ -25,6 +25,8 @@
 - [`get_place_sheet`](#get_place_sheet)
 - [`search_metadata`](#search_metadata)
 - [`search_reference`](#search_reference)
+- [`list_scene_references`](#list_scene_references)
+- [`get_reference_doc`](#get_reference_doc)
 - [`list_threads`](#list_threads)
 - [`get_thread_arc`](#get_thread_arc)
 - [`get_relationship_arc`](#get_relationship_arc)
@@ -293,6 +295,28 @@ Full-text search across indexed reference document titles, summaries, and tags. 
 | `query` | `string` | Yes | Search terms (e.g. 'vampirism' or 'blood replacement'). FTS5 syntax supported. |
 | `type` | `string` | No | Optional reference type filter (for example: 'world', 'continuity', 'research', 'style'). |
 | `tag` | `string` | No | Optional exact tag filter. |
+
+---
+
+## list_scene_references
+
+List direct reference documents linked from a scene via metadata (for example, reference_ids). Returns only one-hop scene -> reference links and does not recursively traverse related references.
+
+| Parameter | Type | Required | Description |
+| --- | --- | :---: | --- |
+| `scene_id` | `string` | Yes | Scene ID to inspect. |
+| `project_id` | `string` | No | Optional project ID to disambiguate duplicate scene IDs across projects. |
+
+---
+
+## get_reference_doc
+
+Get metadata for a reference document by doc_id. Optionally includes exactly one hop of related reference docs.
+
+| Parameter | Type | Required | Description |
+| --- | --- | :---: | --- |
+| `doc_id` | `string` | Yes | Reference document ID. |
+| `include_related` | `boolean` | No | If true, include one-hop related reference docs. |
 
 ---
 

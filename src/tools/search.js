@@ -485,6 +485,160 @@ export function registerSearchTools(s, {
     }
   );
 
+  // ---- list_scene_references -----------------------------------------------
+  s.tool(
+    "list_scene_references",
+    "List direct reference documents linked from a scene via metadata (for example, reference_ids). Returns only one-hop scene -> reference links and does not recursively traverse related references.",
+    {
+      scene_id: z.string().describe("Scene ID to inspect."),
+      project_id: z.string().optional().describe("Optional project ID to disambiguate duplicate scene IDs across projects."),
+    },
+    async ({ scene_id, project_id }) => {
+      let scene;
+      if (project_id) {
+        scene = db.prepare(`
+          SELECT scene_id, project_id
+          FROM scenes
+          WHERE scene_id = ? AND project_id = ?
+          LIMIT 1
+        `).get(scene_id, project_id);
+        if (!scene) {
+          return errorResponse("NOT_FOUND", `Scene '${scene_id}' not found in project '${project_id}'.`);
+        }
+      } else {
+        const matches = db.prepare(`
+          SELECT scene_id, project_id
+          FROM scenes
+          WHERE scene_id = ?
+          ORDER BY project_id
+        `).all(scene_id);
+        if (matches.length === 0) {
+          return errorResponse("NOT_FOUND", `Scene '${scene_id}' not found.`);
+        }
+        if (matches.length > 1) {
+          return errorResponse(
+            "CONFLICT",
+            `Scene ID '${scene_id}' exists in multiple projects. Provide project_id to disambiguate.`,
+            { scene_id, project_ids: matches.map(row => row.project_id) }
+          );
+        }
+        scene = matches[0];
+      }
+
+      const links = db.prepare(`
+        SELECT
+          rl.target_doc_id,
+          rl.relation,
+          rd.project_id AS target_project_id,
+          rd.universe_id AS target_universe_id,
+          rd.type,
+          rd.title,
+          rd.summary,
+          rd.file_path
+        FROM reference_links rl
+        LEFT JOIN reference_docs rd ON rd.doc_id = rl.target_doc_id
+        WHERE rl.source_kind = 'scene' AND rl.source_project_id = ? AND rl.source_id = ?
+        ORDER BY rl.target_doc_id
+      `).all(scene.project_id ?? "", scene.scene_id);
+
+      if (links.length === 0) {
+        return errorResponse("NO_RESULTS", `No reference links found for scene '${scene.scene_id}' in project '${scene.project_id}'.`);
+      }
+
+      const tagsStmt = db.prepare(`
+        SELECT tag
+        FROM reference_doc_tags
+        WHERE doc_id = ?
+        ORDER BY tag
+      `);
+      const references = links.map((row) => ({
+        doc_id: row.target_doc_id,
+        relation: row.relation,
+        project_id: row.target_project_id,
+        universe_id: row.target_universe_id,
+        type: row.type,
+        title: row.title,
+        summary: row.summary,
+        file_path: row.file_path,
+        tags: tagsStmt.all(row.target_doc_id).map(tagRow => tagRow.tag),
+      }));
+
+      return {
+        content: [{
+          type: "text",
+          text: JSON.stringify({
+            scene_id: scene.scene_id,
+            project_id: scene.project_id,
+            references,
+          }, null, 2),
+        }],
+      };
+    }
+  );
+
+  // ---- get_reference_doc ----------------------------------------------------
+  s.tool(
+    "get_reference_doc",
+    "Get metadata for a reference document by doc_id. Optionally includes exactly one hop of related reference docs.",
+    {
+      doc_id: z.string().describe("Reference document ID."),
+      include_related: z.boolean().optional().describe("If true, include one-hop related reference docs."),
+    },
+    async ({ doc_id, include_related = false }) => {
+      const doc = db.prepare(`
+        SELECT doc_id, project_id, universe_id, type, title, summary, file_path
+        FROM reference_docs
+        WHERE doc_id = ?
+      `).get(doc_id);
+      if (!doc) {
+        return errorResponse("NOT_FOUND", `Reference document '${doc_id}' not found.`);
+      }
+
+      const tagsStmt = db.prepare(`
+        SELECT tag
+        FROM reference_doc_tags
+        WHERE doc_id = ?
+        ORDER BY tag
+      `);
+      const payload = {
+        ...doc,
+        tags: tagsStmt.all(doc.doc_id).map(row => row.tag),
+      };
+
+      if (include_related) {
+        const relatedRows = db.prepare(`
+          SELECT
+            rl.target_doc_id,
+            rl.relation,
+            rd.project_id,
+            rd.universe_id,
+            rd.type,
+            rd.title,
+            rd.summary,
+            rd.file_path
+          FROM reference_links rl
+          LEFT JOIN reference_docs rd ON rd.doc_id = rl.target_doc_id
+          WHERE rl.source_kind = 'reference' AND rl.source_project_id = ? AND rl.source_id = ?
+          ORDER BY rl.target_doc_id
+        `).all(doc.project_id ?? "", doc.doc_id);
+
+        payload.related = relatedRows.map((row) => ({
+          doc_id: row.target_doc_id,
+          relation: row.relation,
+          project_id: row.project_id,
+          universe_id: row.universe_id,
+          type: row.type,
+          title: row.title,
+          summary: row.summary,
+          file_path: row.file_path,
+          tags: tagsStmt.all(row.target_doc_id).map(tagRow => tagRow.tag),
+        }));
+      }
+
+      return { content: [{ type: "text", text: JSON.stringify(payload, null, 2) }] };
+    }
+  );
+
   // ---- list_threads --------------------------------------------------------
   s.tool(
     "list_threads",

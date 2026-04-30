@@ -8,6 +8,14 @@ This complements `CHANGELOG.md`:
 
 ## Unreleased
 
+### 2026-04-30 — Add reference link query tools for scenes and docs
+
+- What changed: Added `list_scene_references` (direct scene → reference links) and `get_reference_doc` (reference metadata with optional one-hop related docs).
+- Why it matters: Agents can now move from scene context into relevant lore/continuity notes without broad keyword-only search or unbounded graph traversal.
+- Who is affected: Anyone using Writing MCP for continuity and world-reference reasoning.
+- Action needed: Optional but recommended: keep `reference_ids` on scenes and `related_reference_ids` on reference docs up to date for best results.
+- PR: #TBD
+
 ### 2026-04-30 — Add persisted scene and reference document links
 
 - What changed: `sync()` now stores explicit links from scenes to reference docs (`reference_ids`) and between reference docs (`related_reference_ids`), and keeps those links pruned as files are removed.
