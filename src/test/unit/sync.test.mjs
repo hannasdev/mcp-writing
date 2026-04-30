@@ -735,6 +735,50 @@ describe("syncAll", () => {
     fs.rmSync(dir, { recursive: true });
   });
 
+  test("preserves explicit reference links across sync and skips inferred overwrite for same target", () => {
+    const dir = makeTempSync();
+    const db = openDb(":memory:");
+
+    fs.mkdirSync(path.join(dir, "projects", "test-novel", "scenes"), { recursive: true });
+    fs.mkdirSync(path.join(dir, "projects", "test-novel", "world", "reference"), { recursive: true });
+
+    fs.writeFileSync(
+      path.join(dir, "projects", "test-novel", "scenes", "sc-001.md"),
+      "---\nscene_id: sc-001\ntitle: Scene\ntags: [test]\nreference_ids:\n  - ref-vamp\n---\nScene prose."
+    );
+    fs.writeFileSync(
+      path.join(dir, "projects", "test-novel", "world", "reference", "vamp.md"),
+      "---\ndoc_id: ref-vamp\ntitle: Vamp\n---\nReference body."
+    );
+
+    syncAll(db, dir, { quiet: true });
+
+    db.prepare(`
+      DELETE FROM reference_links
+      WHERE source_kind = 'scene' AND source_project_id = 'test-novel' AND source_id = 'sc-001' AND target_doc_id = 'ref-vamp'
+    `).run();
+    db.prepare(`
+      INSERT INTO reference_links (
+        source_kind, source_project_id, source_id, target_doc_id, relation, origin
+      ) VALUES (?, ?, ?, ?, ?, ?)
+    `).run("scene", "test-novel", "sc-001", "ref-vamp", "see_also", "explicit");
+
+    syncAll(db, dir, { quiet: true });
+
+    const links = db.prepare(`
+      SELECT relation, origin
+      FROM reference_links
+      WHERE source_kind = 'scene' AND source_project_id = 'test-novel' AND source_id = 'sc-001' AND target_doc_id = 'ref-vamp'
+      ORDER BY relation
+    `).all().map(row => ({ ...row }));
+    assert.deepEqual(links, [
+      { relation: "see_also", origin: "explicit" },
+    ]);
+
+    db.close();
+    fs.rmSync(dir, { recursive: true });
+  });
+
   test("keeps one FTS row per reference doc across repeated sync runs", () => {
     const dir = makeTempSync();
     const db = openDb(":memory:");

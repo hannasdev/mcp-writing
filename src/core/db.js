@@ -124,6 +124,7 @@ export const SCHEMA = `
     source_id     TEXT NOT NULL,
     target_doc_id TEXT NOT NULL,
     relation      TEXT NOT NULL,
+    origin        TEXT NOT NULL DEFAULT 'inferred',
     PRIMARY KEY (source_kind, source_project_id, source_id, target_doc_id, relation)
   );
 
@@ -273,6 +274,13 @@ const MIGRATIONS = [
       CREATE INDEX IF NOT EXISTS idx_reference_links_target_doc_id
         ON reference_links(target_doc_id);
     `);
+  },
+  // 6: add origin marker to reference_links so sync can preserve explicit tool-authored links
+  (db) => {
+    const columns = db.prepare(`PRAGMA table_info(reference_links)`).all();
+    if (!columns.some(c => c.name === "origin")) {
+      db.exec(`ALTER TABLE reference_links ADD COLUMN origin TEXT NOT NULL DEFAULT 'inferred';`);
+    }
   },
 ];
 

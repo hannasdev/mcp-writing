@@ -159,6 +159,7 @@ describe("openDb", () => {
 
       const columns = db.prepare(`PRAGMA table_info(reference_links)`).all();
       assert.ok(columns.some(column => column.name === "source_project_id"));
+      assert.ok(columns.some(column => column.name === "origin"));
 
       const index = db.prepare(`
         SELECT name
