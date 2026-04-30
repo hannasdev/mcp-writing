@@ -14,7 +14,7 @@ This complements `CHANGELOG.md`:
 - Why it matters: Reference graph maintenance is now writable through tools, not only inferred during sync, which improves iterative continuity workflows.
 - Who is affected: Anyone managing reference relationships from MCP tool calls.
 - Action needed: Optional but recommended: pass `source_project_id` for scene links when scene IDs may overlap across projects.
-- PR: #150
+- PR: [#150](https://github.com/hannasdev/mcp-writing/pull/150)
 
 ### 2026-04-30 — Add reference link query tools for scenes and docs
 
