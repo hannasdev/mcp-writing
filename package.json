@@ -41,7 +41,16 @@
   "files": [
     "bin/",
     "index.js",
-    "src/",
+    "src/index.js",
+    "src/core/",
+    "src/review-bundles/",
+    "src/runtime/",
+    "src/scripts/",
+    "src/styleguide/",
+    "src/sync/",
+    "src/tools/",
+    "src/workflows/",
+    "src/world/",
     "README.md",
     "CHANGELOG.md"
   ],
