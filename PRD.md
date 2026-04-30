@@ -223,7 +223,7 @@ Additional completed structural proposal:
 - **Phase 1** ✅ — Ask questions about your project (all tools implemented)
 - **Phase 2** ✅ — Answers stay accurate (metadata staleness, sidecar migration, enrichment)
 - **Phase 3** ✅ — AI helps edit prose (two-step proposals, git history, snapshots)
-- **Phase 4** ⏸️ — Review bundles ✅ delivered; Scrivener Direct ✅ graduated to stable; semantic search and reference docs remain deferred backlog items
+- **Phase 4** ⏸️ — Review bundles ✅ delivered; Scrivener Direct ✅ graduated to stable; semantic search remains a deferred backlog item, and reference docs remain deferred within Phase 4 scope
 - **Phase 5** 🚧 — OpenClaw integration (active planning and integration work underway)
 
 ---
