@@ -7,14 +7,14 @@ import fs from "node:fs";
 async function main() {
   const [projectId, profile, outputDir, ...flags] = process.argv.slice(2);
   if (!projectId || !profile || !outputDir) {
-    console.error("Usage: WRITING_SYNC_DIR=/path/to/sync node scripts/manual/run_create_review_bundle.js <project_id> <profile> <output_dir> [--anchors] [--recipient <name>] [--bundle-name <name>] [--skip-preview] [--show-files]");
+    console.error("Usage: WRITING_SYNC_DIR=/path/to/sync node src/scripts/manual/run_create_review_bundle.js <project_id> <profile> <output_dir> [--anchors] [--recipient <name>] [--bundle-name <name>] [--skip-preview] [--show-files]");
     process.exit(1);
   }
 
   if (!process.env.WRITING_SYNC_DIR) {
     console.error(
       "WRITING_SYNC_DIR is required. Set it to the root of your sync directory.\n" +
-      "Usage: WRITING_SYNC_DIR=/path/to/sync node scripts/manual/run_create_review_bundle.js <project_id> <profile> <output_dir>"
+      "Usage: WRITING_SYNC_DIR=/path/to/sync node src/scripts/manual/run_create_review_bundle.js <project_id> <profile> <output_dir>"
     );
     process.exit(1);
   }

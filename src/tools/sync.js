@@ -31,7 +31,7 @@ export function registerSyncTools(s, {
     if (result.sidecarsMigrated) parts.push(`${result.sidecarsMigrated} sidecar(s) auto-generated from frontmatter.`);
     if (result.skipped) {
       parts.push(`${result.skipped} file(s) skipped (no scene_id).`);
-      parts.push(`Tip: for raw Scrivener Draft exports, run scripts/import.js first, then run sync again.`);
+      parts.push(`Tip: for raw Scrivener Draft exports, run src/scripts/import.js first, then run sync again.`);
     }
     const summary = result.warningSummary;
     const summaryEntries = Object.entries(summary);

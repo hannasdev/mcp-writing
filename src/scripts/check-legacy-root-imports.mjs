@@ -4,9 +4,9 @@ import { fileURLToPath } from "node:url";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const ROOT = path.resolve(__dirname, "..");
+const ROOT = path.resolve(__dirname, "../..");
 
-const SCAN_PATHS = ["src", "scripts", "test", "index.js"];
+const SCAN_PATHS = ["src", "index.js"];
 const SOURCE_EXTENSIONS = new Set([".js", ".mjs"]);
 const LEGACY_ROOT_MODULES = new Set([
   "async-jobs.js",

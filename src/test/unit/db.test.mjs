@@ -4,7 +4,7 @@ import os from "node:os";
 import fs from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { openDb, CURRENT_SCHEMA_VERSION, SCHEMA, checkpointJobCreate, checkpointJobFinish, loadStalledJobs, pruneJobCheckpoints } from "../../src/core/db.js";
+import { openDb, CURRENT_SCHEMA_VERSION, SCHEMA, checkpointJobCreate, checkpointJobFinish, loadStalledJobs, pruneJobCheckpoints } from "../../core/db.js";
 
 function makeTempPath() {
   return path.join(os.tmpdir(), `mcp-writing-db-${Date.now()}-${Math.random().toString(36).slice(2)}.sqlite`);

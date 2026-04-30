@@ -92,7 +92,7 @@ async function main() {
   const resultPath = process.argv[3];
 
   if (!requestPath || !resultPath) {
-    throw new Error("Usage: node scripts/async-job-runner.mjs <request.json> <result.json>");
+    throw new Error("Usage: node src/scripts/async-job-runner.mjs <request.json> <result.json>");
   }
 
   const request = JSON.parse(fs.readFileSync(requestPath, "utf8"));

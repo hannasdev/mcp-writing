@@ -5,9 +5,9 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import yaml from "js-yaml";
-import { runSceneCharacterBatch } from "../../src/sync/scene-character-batch.js";
-import { buildCharacterNormalizationContext, isDistinctiveToken, normalizeSceneCharacters } from "../../src/sync/scene-character-normalization.js";
-import { openDb } from "../../src/core/db.js";
+import { runSceneCharacterBatch } from "../../sync/scene-character-batch.js";
+import { buildCharacterNormalizationContext, isDistinctiveToken, normalizeSceneCharacters } from "../../sync/scene-character-normalization.js";
+import { openDb } from "../../core/db.js";
 import { insertTestScene } from "../helpers/db.js";
 
 describe("runSceneCharacterBatch", () => {
@@ -375,7 +375,7 @@ describe("scene character normalization", () => {
   test("normalize-scene-characters CLI reports missing option values clearly", () => {
     const result = spawnSync(
       process.execPath,
-      ["--experimental-sqlite", "scripts/normalize-scene-characters.mjs", "--limit"],
+      ["--experimental-sqlite", "src/scripts/normalize-scene-characters.mjs", "--limit"],
       {
         cwd: path.resolve("."),
         encoding: "utf8",

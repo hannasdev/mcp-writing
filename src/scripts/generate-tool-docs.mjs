@@ -3,7 +3,7 @@
  * Generates docs/tools.md from tool definitions in the runtime entrypoint
  * (src/index.js when present, otherwise index.js) and src/tools/*.js.
  *
- * Run:  node scripts/generate-tool-docs.mjs
+ * Run:  node src/scripts/generate-tool-docs.mjs
  *   or: npm run docs
  *
  * The output is the single source of truth for the tool reference.
@@ -14,7 +14,7 @@ import { readFileSync, writeFileSync, mkdirSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const OUT  = path.join(ROOT, 'docs', 'tools.md');
 
 // Build a map from each registration function name to its module source.

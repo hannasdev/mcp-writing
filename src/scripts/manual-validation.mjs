@@ -137,7 +137,7 @@ async function runPhaseB() {
   // Import
   try {
     const importOutput = execSync(
-      `node scripts/import.js ./txt ${IMPORT_DIR} --project scrivener-export`,
+      `node src/scripts/import.js ./txt ${IMPORT_DIR} --project scrivener-export`,
       { cwd: ROOT, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] }
     );
     console.log("✓ Import completed");
@@ -151,7 +151,7 @@ async function runPhaseB() {
   // Lint
   try {
     const lintOutput = execSync(
-      `node scripts/lint-metadata.mjs --sync-dir ${IMPORT_DIR}`,
+      `node src/scripts/lint-metadata.mjs --sync-dir ${IMPORT_DIR}`,
       { cwd: ROOT, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] }
     );
     results.lintOutput = lintOutput;

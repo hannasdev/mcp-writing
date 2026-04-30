@@ -91,7 +91,7 @@ export function getRuntimeDiagnostics({
     recommendations.push("If git reports 'dubious ownership' for mounted repos, add: git config --system --add safe.directory /sync");
   }
 
-  recommendations.push("If indexing finds many files without scene_id, run scripts/import.js first for Scrivener Draft exports, then run sync.");
+  recommendations.push("If indexing finds many files without scene_id, run src/scripts/import.js first for Scrivener Draft exports, then run sync.");
 
   return { warnings, recommendations };
 }

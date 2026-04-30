@@ -141,7 +141,7 @@ Fix:
 1. In Scrivener, re-export with **File → Sync → With External Folder**
 2. Ensure the format is set to **Plain text** (not RTF or .docx)
 3. Verify the export folder has a `Draft/` subdirectory with `.txt` files
-4. Try the import again: `node scripts/import.js ~/my-novel-txt /path/to/sync-dir --project my-novel`
+4. Try the import again: `node src/scripts/import.js ~/my-novel-txt /path/to/sync-dir --project my-novel`
 
 ### "SCRIVENER_DIRECT_BETA_FAILED"
 

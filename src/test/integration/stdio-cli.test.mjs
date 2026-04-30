@@ -7,7 +7,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { createTestSyncFixture } from "../helpers/fixtures.js";
 
-const ROOT = path.resolve(import.meta.dirname, "../..");
+const ROOT = path.resolve(import.meta.dirname, "../../..");
 
 test("CLI wrapper serves MCP over stdio by default", async () => {
   const syncDir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-writing-stdio-"));

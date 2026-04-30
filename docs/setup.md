@@ -152,7 +152,7 @@ Non-draft content is not inferred from `Notes/`. Put it directly into the target
 If you prefer to run the import from the command line, use:
 
 ```sh
-node scripts/import.js ~/my-novel-txt /path/to/sync-dir --project my-novel
+node src/scripts/import.js ~/my-novel-txt /path/to/sync-dir --project my-novel
 ```
 
 Then call `sync` once.
@@ -160,7 +160,7 @@ Then call `sync` once.
 ### 6. Lint your metadata (optional)
 
 ```sh
-node scripts/lint-metadata.mjs --sync-dir /path/to/sync-dir
+node src/scripts/lint-metadata.mjs --sync-dir /path/to/sync-dir
 ```
 
 This exits with a non-zero code if it finds errors. Warnings (for example `UNKNOWN_KEY`) are informational.

@@ -6,7 +6,7 @@ import {
   renderCharacterSheetTemplate,
   renderPlaceSheetTemplate,
   slugifyEntityName,
-} from "../src/world/world-entity-templates.js";
+} from "../world/world-entity-templates.js";
 
 function parseArgs(argv) {
   const args = argv.slice(2);
@@ -39,11 +39,11 @@ function parseArgs(argv) {
 function usage() {
   return [
     "Usage:",
-    "  node scripts/new-world-entity.js --sync-dir <dir> --kind <character|place> --scope <project|universe> --name <display name> [--project <project-id>] [--universe <universe-id>] [--dry-run]",
+    "  node src/scripts/new-world-entity.js --sync-dir <dir> --kind <character|place> --scope <project|universe> --name <display name> [--project <project-id>] [--universe <universe-id>] [--dry-run]",
     "",
     "Examples:",
-    "  node scripts/new-world-entity.js --sync-dir ./writing --kind character --scope universe --universe universe-1 --name 'Mira Nystrom'",
-    "  node scripts/new-world-entity.js --sync-dir ./writing --kind place --scope project --project universe-1/book-1-the-lamb --name 'University Hospital'",
+    "  node src/scripts/new-world-entity.js --sync-dir ./writing --kind character --scope universe --universe universe-1 --name 'Mira Nystrom'",
+    "  node src/scripts/new-world-entity.js --sync-dir ./writing --kind place --scope project --project universe-1/book-1-the-lamb --name 'University Hospital'",
   ].join("\n");
 }
 
