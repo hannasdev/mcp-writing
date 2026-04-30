@@ -8,6 +8,14 @@ This complements `CHANGELOG.md`:
 
 ## Unreleased
 
+### 2026-04-30 — Keep published package focused after test move
+
+- What changed: Tightened `package.json` publish allowlist so the npm package includes production `src/*` modules without unintentionally shipping `src/test`.
+- Why it matters: Keeps install size and published surface clean after moving tests under `src/`, and avoids exposing internal test assets to consumers.
+- Who is affected: Maintainers publishing packages and downstream consumers installing them.
+- Action needed: None
+- PR: (pending)
+
 ### 2026-04-29 — Finish source-root reorg for scripts and tests
 
 - What changed: Moved remaining root `scripts/` and `test/` content under `src/scripts` and `src/test`, and updated commands/workflows/docs to use the new paths.
