@@ -14,7 +14,7 @@ This complements `CHANGELOG.md`:
 - Why it matters: Keeps install size and published surface clean after moving tests under `src/`, and avoids exposing internal test assets to consumers.
 - Who is affected: Maintainers publishing packages and downstream consumers installing them.
 - Action needed: None
-- PR: (pending)
+- PR: #140
 
 ### 2026-04-29 — Finish source-root reorg for scripts and tests
 
