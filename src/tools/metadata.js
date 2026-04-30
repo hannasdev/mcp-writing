@@ -177,7 +177,7 @@ export function registerMetadataTools(s, {
     {
       source_kind: z.enum(["scene", "reference"]).describe("Link source kind."),
       source_id: z.string().describe("Source scene_id or reference doc_id."),
-      source_project_id: z.string().optional().describe("Optional project scope for scene sources. Required when scene_id is ambiguous across projects."),
+      source_project_id: z.string().optional().describe("Optional project scope for the source. For scene sources, use this to disambiguate an ambiguous scene_id across projects. For reference sources, when provided, it is treated as an ownership check and must match the source reference doc's project."),
       target_doc_id: z.string().describe("Target reference doc_id."),
       relation: z.string().describe("Relationship label (for example: 'informs', 'related', 'history_of')."),
     },

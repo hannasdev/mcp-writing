@@ -408,7 +408,7 @@ Create or update an explicit reference link from a scene or reference doc to a t
 | --- | --- | :---: | --- |
 | `source_kind` | `enum("scene","reference")` | Yes | Link source kind. |
 | `source_id` | `string` | Yes | Source scene_id or reference doc_id. |
-| `source_project_id` | `string` | No | Optional project scope for scene sources. Required when scene_id is ambiguous across projects. |
+| `source_project_id` | `string` | No | Optional project scope for the source. For scene sources, use this to disambiguate an ambiguous scene_id across projects. For reference sources, when provided, it is treated as an ownership check and must match the source reference doc's project. |
 | `target_doc_id` | `string` | Yes | Target reference doc_id. |
 | `relation` | `string` | Yes | Relationship label (for example: 'informs', 'related', 'history_of'). |
 

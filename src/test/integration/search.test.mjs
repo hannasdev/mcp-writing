@@ -596,6 +596,63 @@ describe("upsert_reference_link tool", () => {
     assert.ok(parsed.error.details.project_ids.includes("beta-upsert"));
   });
 
+  test("creates and updates reference -> reference links", async () => {
+    const sourceRefPath = path.join(writeSyncDir, "projects", "test-novel", "world", "reference", "ref-upsert-source.md");
+    const targetRefPath = path.join(writeSyncDir, "projects", "test-novel", "world", "reference", "ref-upsert-target-2.md");
+    fs.mkdirSync(path.dirname(sourceRefPath), { recursive: true });
+    fs.mkdirSync(path.dirname(targetRefPath), { recursive: true });
+
+    fs.writeFileSync(sourceRefPath, "---\ndoc_id: ref-upsert-source\ntitle: Upsert Source\n---\nSource body.");
+    fs.writeFileSync(targetRefPath, "---\ndoc_id: ref-upsert-target-2\ntitle: Upsert Target 2\n---\nTarget body.");
+    await callWriteTool("sync");
+
+    const createdText = await callWriteTool("upsert_reference_link", {
+      source_kind: "reference",
+      source_id: "ref-upsert-source",
+      source_project_id: "test-novel",
+      target_doc_id: "ref-upsert-target-2",
+      relation: "Related",
+    });
+    const created = JSON.parse(createdText);
+    assert.equal(created.ok, true);
+    assert.equal(created.link.source_kind, "reference");
+    assert.equal(created.link.source_project_id, "test-novel");
+    assert.equal(created.link.relation, "related");
+
+    const updatedText = await callWriteTool("upsert_reference_link", {
+      source_kind: "reference",
+      source_id: "ref-upsert-source",
+      source_project_id: "test-novel",
+      target_doc_id: "ref-upsert-target-2",
+      relation: "history_of",
+    });
+    const updated = JSON.parse(updatedText);
+    assert.equal(updated.ok, true);
+    assert.equal(updated.link.relation, "history_of");
+
+    const referenceDocText = await callWriteTool("get_reference_doc", {
+      doc_id: "ref-upsert-source",
+      include_related: true,
+    });
+    const referenceDoc = JSON.parse(referenceDocText);
+    assert.equal(referenceDoc.related.length, 1);
+    assert.equal(referenceDoc.related[0].doc_id, "ref-upsert-target-2");
+    assert.equal(referenceDoc.related[0].relation, "history_of");
+  });
+
+  test("returns conflict for reference source with mismatched source_project_id", async () => {
+    const text = await callWriteTool("upsert_reference_link", {
+      source_kind: "reference",
+      source_id: "ref-upsert-source",
+      source_project_id: "wrong-project",
+      target_doc_id: "ref-upsert-target-2",
+      relation: "related",
+    });
+    const parsed = JSON.parse(text);
+    assert.equal(parsed.ok, false);
+    assert.equal(parsed.error.code, "CONFLICT");
+  });
+
   test("rejects reference self-links", async () => {
     const sourceRefPath = path.join(writeSyncDir, "projects", "test-novel", "world", "reference", "self-link.md");
     fs.mkdirSync(path.dirname(sourceRefPath), { recursive: true });
