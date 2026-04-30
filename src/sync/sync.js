@@ -267,6 +267,20 @@ export function normalizeReferenceTags(tags) {
   )];
 }
 
+export function normalizeReferenceIdList(values) {
+  const rawValues = Array.isArray(values)
+    ? values
+    : typeof values === "string"
+      ? values.split(",")
+      : [];
+
+  return [...new Set(
+    rawValues
+      .map(value => String(value).trim())
+      .filter(Boolean)
+  )];
+}
+
 export function deriveReferenceSummary(meta = {}, content = "") {
   if (typeof meta.summary === "string" && meta.summary.trim()) return meta.summary.trim();
 
@@ -280,6 +294,18 @@ export function deriveReferenceSummary(meta = {}, content = "") {
 
   if (!body) return null;
   return body.length <= 240 ? body : `${body.slice(0, 237).trimEnd()}...`;
+}
+
+function indexReferenceLinksForSource(db, { sourceKind, sourceId, targetDocIds, relation }) {
+  db.prepare(`DELETE FROM reference_links WHERE source_kind = ? AND source_id = ?`).run(sourceKind, sourceId);
+
+  for (const targetDocId of targetDocIds) {
+    if (sourceKind === "reference" && sourceId === targetDocId) continue;
+    db.prepare(`
+      INSERT OR IGNORE INTO reference_links (source_kind, source_id, target_doc_id, relation)
+      VALUES (?, ?, ?, ?)
+    `).run(sourceKind, sourceId, targetDocId, relation);
+  }
 }
 
 export function worldEntityKindForPath(syncDir, filePath) {
@@ -582,6 +608,9 @@ export function indexReferenceFile(db, syncDir, file, meta = {}, content = "") {
   const title = deriveReferenceTitle(file, meta, content);
   const summary = deriveReferenceSummary(meta, content);
   const tags = normalizeReferenceTags(meta.tags);
+  const relatedReferenceIds = normalizeReferenceIdList(
+    meta.related_reference_ids ?? meta.related_references ?? meta.related_docs ?? meta.related
+  );
 
   db.prepare(`
     INSERT INTO reference_docs (doc_id, project_id, universe_id, type, title, summary, file_path)
@@ -620,6 +649,13 @@ export function indexReferenceFile(db, syncDir, file, meta = {}, content = "") {
     tags.join(" ")
   );
 
+  indexReferenceLinksForSource(db, {
+    sourceKind: "reference",
+    sourceId: docId,
+    targetDocIds: relatedReferenceIds,
+    relation: "related",
+  });
+
   return docId;
 }
 
@@ -627,6 +663,8 @@ function pruneMissingReferenceDocs(db, seenDocIds) {
   const rows = db.prepare(`SELECT doc_id FROM reference_docs`).all();
   for (const row of rows) {
     if (seenDocIds.has(row.doc_id)) continue;
+    db.prepare(`DELETE FROM reference_links WHERE source_kind = 'reference' AND source_id = ?`).run(row.doc_id);
+    db.prepare(`DELETE FROM reference_links WHERE target_doc_id = ?`).run(row.doc_id);
     db.prepare(`DELETE FROM reference_doc_tags WHERE doc_id = ?`).run(row.doc_id);
     db.prepare(`DELETE FROM reference_docs_fts WHERE doc_id = ?`).run(row.doc_id);
     db.prepare(`DELETE FROM reference_docs WHERE doc_id = ?`).run(row.doc_id);
@@ -653,6 +691,7 @@ function canPruneReferenceDocs(syncDir) {
 
 export function indexSceneFile(db, syncDir, file, meta, prose) {
   const { universe_id, project_id } = inferProjectAndUniverse(syncDir, file);
+  const referenceIds = normalizeReferenceIdList(meta.reference_ids ?? meta.references);
 
   if (universe_id) {
     db.prepare(`INSERT OR IGNORE INTO universes (universe_id, name) VALUES (?, ?)`).run(
@@ -776,6 +815,13 @@ export function indexSceneFile(db, syncDir, file, meta, prose) {
     meta.title ?? "",
     keywordTokens,
   );
+
+  indexReferenceLinksForSource(db, {
+    sourceKind: "scene",
+    sourceId: meta.scene_id,
+    targetDocIds: referenceIds,
+    relation: "informs",
+  });
 
   return { isStale };
 }

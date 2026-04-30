@@ -134,6 +134,34 @@ describe("openDb", () => {
       fs.rmSync(dbPath, { force: true });
     }
   });
+
+  test("creates reference_links table for legacy databases", () => {
+    const dbPath = makeTempPath();
+    try {
+      const legacyDb = new DatabaseSync(dbPath);
+      legacyDb.exec(`
+        CREATE TABLE schema_version (
+          id INTEGER PRIMARY KEY CHECK (id = 1),
+          version INTEGER NOT NULL
+        );
+      `);
+      // Simulate database at previous migration level.
+      legacyDb.exec(`INSERT INTO schema_version (id, version) VALUES (1, 3);`);
+      legacyDb.close();
+
+      const db = openDb(dbPath);
+      const table = db.prepare(`
+        SELECT name
+        FROM sqlite_master
+        WHERE type = 'table' AND name = 'reference_links'
+      `).get();
+      assert.equal(table?.name, "reference_links");
+
+      db.close();
+    } finally {
+      fs.rmSync(dbPath, { force: true });
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------

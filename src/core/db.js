@@ -118,6 +118,14 @@ export const SCHEMA = `
     PRIMARY KEY (doc_id, tag)
   );
 
+  CREATE TABLE IF NOT EXISTS reference_links (
+    source_kind   TEXT NOT NULL,
+    source_id     TEXT NOT NULL,
+    target_doc_id TEXT NOT NULL,
+    relation      TEXT NOT NULL,
+    PRIMARY KEY (source_kind, source_id, target_doc_id, relation)
+  );
+
   CREATE VIRTUAL TABLE IF NOT EXISTS scenes_fts USING fts5(
     scene_id, project_id, logline, title, keywords
   );
@@ -195,6 +203,18 @@ const MIGRATIONS = [
         );
       `);
     }
+  },
+  // 4: add explicit reference links table
+  (db) => {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS reference_links (
+        source_kind   TEXT NOT NULL,
+        source_id     TEXT NOT NULL,
+        target_doc_id TEXT NOT NULL,
+        relation      TEXT NOT NULL,
+        PRIMARY KEY (source_kind, source_id, target_doc_id, relation)
+      );
+    `);
   },
 ];
 

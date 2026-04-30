@@ -7,6 +7,7 @@ import {
   checksumProse, inferProjectAndUniverse, inferScenePositionFromPath,
   inferReferenceDocType, isReferenceFile, deriveReferenceDocId,
   deriveReferenceSummary, deriveReferenceTitle, normalizeReferenceTags,
+  normalizeReferenceIdList,
   isCanonicalWorldEntityFile, getSyncOwnershipDiagnostics, getFileWriteDiagnostics,
   isWorldFile, readMeta, isSyncDirWritable, sidecarPath, syncAll,
   walkFiles, walkSidecars, worldEntityFolderKey, worldEntityKindForPath,
@@ -424,6 +425,13 @@ describe("reference docs", () => {
       ["blood", "lore"]
     );
   });
+
+  test("normalizes reference ids from strings and removes duplicates", () => {
+    assert.deepEqual(
+      normalizeReferenceIdList("ref-vampirism, ref-blood, ref-vampirism"),
+      ["ref-vampirism", "ref-blood"]
+    );
+  });
 });
 
 describe("world entity canonical detection", () => {
@@ -582,6 +590,53 @@ describe("syncAll", () => {
     fs.rmSync(dir, { recursive: true });
   });
 
+  test("indexes scene->reference and reference->reference links from metadata", () => {
+    const dir = makeTempSync();
+    const db = openDb(":memory:");
+
+    fs.mkdirSync(path.join(dir, "projects", "test-novel", "world", "reference"), { recursive: true });
+    fs.mkdirSync(path.join(dir, "projects", "test-novel", "Notes", "continuity"), { recursive: true });
+
+    fs.writeFileSync(
+      path.join(dir, "projects", "test-novel", "world", "reference", "vampirism.md"),
+      "---\ndoc_id: ref-vampirism\ntitle: Vampirism in this universe\nrelated_reference_ids:\n  - ref-blood-replacement\n  - ref-vampirism\n---\nReference body."
+    );
+    fs.writeFileSync(
+      path.join(dir, "projects", "test-novel", "Notes", "continuity", "blood-replacement.md"),
+      "---\ndoc_id: ref-blood-replacement\ntitle: Sebastian's struggle for blood replacement\n---\nReference body."
+    );
+
+    writeScene(dir, "sc-001", {
+      reference_ids: ["ref-vampirism", "ref-blood-replacement"],
+    });
+
+    syncAll(db, dir, { quiet: true });
+
+    const sceneLinks = db.prepare(`
+      SELECT source_kind, source_id, target_doc_id, relation
+      FROM reference_links
+      WHERE source_kind = 'scene' AND source_id = 'sc-001'
+      ORDER BY target_doc_id
+    `).all().map(row => ({ ...row }));
+    assert.deepEqual(sceneLinks, [
+      { source_kind: "scene", source_id: "sc-001", target_doc_id: "ref-blood-replacement", relation: "informs" },
+      { source_kind: "scene", source_id: "sc-001", target_doc_id: "ref-vampirism", relation: "informs" },
+    ]);
+
+    const referenceLinks = db.prepare(`
+      SELECT source_kind, source_id, target_doc_id, relation
+      FROM reference_links
+      WHERE source_kind = 'reference' AND source_id = 'ref-vampirism'
+      ORDER BY target_doc_id
+    `).all().map(row => ({ ...row }));
+    assert.deepEqual(referenceLinks, [
+      { source_kind: "reference", source_id: "ref-vampirism", target_doc_id: "ref-blood-replacement", relation: "related" },
+    ]);
+
+    db.close();
+    fs.rmSync(dir, { recursive: true });
+  });
+
   test("prunes deleted reference docs from search tables on re-sync", () => {
     const dir = makeTempSync();
     const db = openDb(":memory:");
@@ -601,6 +656,36 @@ describe("syncAll", () => {
     assert.equal(db.prepare(`SELECT COUNT(*) AS count FROM reference_docs`).get().count, 0);
     assert.equal(db.prepare(`SELECT COUNT(*) AS count FROM reference_doc_tags`).get().count, 0);
     assert.equal(db.prepare(`SELECT COUNT(*) AS count FROM reference_docs_fts`).get().count, 0);
+
+    db.close();
+    fs.rmSync(dir, { recursive: true });
+  });
+
+  test("prunes reference_links that target deleted reference docs on re-sync", () => {
+    const dir = makeTempSync();
+    const db = openDb(":memory:");
+    const targetPath = path.join(dir, "projects", "test-novel", "world", "reference", "vampirism.md");
+    const sourcePath = path.join(dir, "projects", "test-novel", "Notes", "continuity", "blood-replacement.md");
+    fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+    fs.mkdirSync(path.dirname(sourcePath), { recursive: true });
+
+    fs.writeFileSync(
+      targetPath,
+      "---\ndoc_id: ref-vampirism\ntitle: Vampirism in this universe\n---\nReference body."
+    );
+    fs.writeFileSync(
+      sourcePath,
+      "---\ndoc_id: ref-blood\ntitle: Blood replacement notes\nrelated_reference_ids:\n  - ref-vampirism\n---\nReference body."
+    );
+
+    syncAll(db, dir, { quiet: true });
+    assert.equal(db.prepare(`SELECT COUNT(*) AS count FROM reference_links`).get().count, 1);
+
+    fs.rmSync(targetPath);
+    syncAll(db, dir, { quiet: true });
+
+    assert.equal(db.prepare(`SELECT COUNT(*) AS count FROM reference_docs WHERE doc_id = 'ref-vampirism'`).get().count, 0);
+    assert.equal(db.prepare(`SELECT COUNT(*) AS count FROM reference_links`).get().count, 0);
 
     db.close();
     fs.rmSync(dir, { recursive: true });
