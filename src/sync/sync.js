@@ -305,18 +305,38 @@ function indexReferenceLinksForSource(db, {
 }) {
   db.prepare(`
     DELETE FROM reference_links
-    WHERE source_kind = ? AND source_project_id = ? AND source_id = ?
+    WHERE source_kind = ? AND source_project_id = ? AND source_id = ? AND origin = 'inferred'
   `).run(sourceKind, sourceProjectId, sourceId);
 
   const insertReferenceLink = db.prepare(`
-    INSERT OR IGNORE INTO reference_links
-      (source_kind, source_project_id, source_id, target_doc_id, relation)
-    VALUES (?, ?, ?, ?, ?)
+    INSERT OR IGNORE INTO reference_links (
+      source_kind, source_project_id, source_id, target_doc_id, relation, origin
+    )
+    SELECT ?, ?, ?, ?, ?, 'inferred'
+    WHERE NOT EXISTS (
+      SELECT 1
+      FROM reference_links existing
+      WHERE existing.source_kind = ?
+        AND existing.source_project_id = ?
+        AND existing.source_id = ?
+        AND existing.target_doc_id = ?
+        AND existing.origin = 'explicit'
+    )
   `);
 
   for (const targetDocId of targetDocIds) {
     if (sourceKind === "reference" && sourceId === targetDocId) continue;
-    insertReferenceLink.run(sourceKind, sourceProjectId, sourceId, targetDocId, relation);
+    insertReferenceLink.run(
+      sourceKind,
+      sourceProjectId,
+      sourceId,
+      targetDocId,
+      relation,
+      sourceKind,
+      sourceProjectId,
+      sourceId,
+      targetDocId
+    );
   }
 }
 

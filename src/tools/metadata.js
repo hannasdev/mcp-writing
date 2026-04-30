@@ -267,8 +267,8 @@ export function registerMetadataTools(s, {
 
         db.prepare(`
           INSERT INTO reference_links (
-            source_kind, source_project_id, source_id, target_doc_id, relation
-          ) VALUES (?, ?, ?, ?, ?)
+            source_kind, source_project_id, source_id, target_doc_id, relation, origin
+          ) VALUES (?, ?, ?, ?, ?, 'explicit')
         `).run(source_kind, resolvedSourceProjectId, source_id, target_doc_id, normalizedRelation);
         db.exec("COMMIT");
       } catch (err) {
@@ -281,7 +281,7 @@ export function registerMetadataTools(s, {
       }
 
       const link = db.prepare(`
-        SELECT source_kind, source_project_id, source_id, target_doc_id, relation
+        SELECT source_kind, source_project_id, source_id, target_doc_id, relation, origin
         FROM reference_links
         WHERE source_kind = ? AND source_project_id = ? AND source_id = ? AND target_doc_id = ? AND relation = ?
       `).get(source_kind, resolvedSourceProjectId, source_id, target_doc_id, normalizedRelation);

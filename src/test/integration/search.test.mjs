@@ -566,6 +566,17 @@ describe("upsert_reference_link tool", () => {
     assert.equal(listedParsed.references.length, 1);
     assert.equal(listedParsed.references[0].doc_id, "ref-upsert-target");
     assert.equal(listedParsed.references[0].relation, "see_also");
+
+    await callWriteTool("sync");
+
+    const listedAfterSync = await callWriteTool("list_scene_references", {
+      scene_id: "sc-upsert-ref-001",
+      project_id: "test-novel",
+    });
+    const listedAfterSyncParsed = JSON.parse(listedAfterSync);
+    assert.equal(listedAfterSyncParsed.references.length, 1);
+    assert.equal(listedAfterSyncParsed.references[0].doc_id, "ref-upsert-target");
+    assert.equal(listedAfterSyncParsed.references[0].relation, "see_also");
   });
 
   test("returns conflict for ambiguous scene source without project scope", async () => {
