@@ -283,6 +283,37 @@ tags:
   - recurring
 `
   );
+
+  writeFileSyncWithDirs(
+    path.join(syncDir, "projects", "test-novel", "world", "reference", "vampirism.md"),
+    `---
+title: Vampirism in this universe
+summary: Defines how vampirism works in the setting, including blood need, feeding limits, and inherited traits.
+tags:
+  - vampirism
+  - blood
+  - lore
+---
+
+# Vampirism in this universe
+
+Vampirism in this setting is an inherited condition with strict feeding constraints, ritual taboos, and physiological limits.
+`
+  );
+
+  writeFileSyncWithDirs(
+    path.join(syncDir, "projects", "test-novel", "Notes", "continuity", "blood-replacement.md"),
+    `---
+title: Sebastian's struggle for blood replacement
+tags:
+  - continuity
+  - blood
+  - sebastian
+---
+
+Sebastian has spent years cataloguing failed inventions meant to reduce or replace his dependence on fresh blood.
+`
+  );
 }
 
 export function createScrivenerDraftFixture(baseDir) {

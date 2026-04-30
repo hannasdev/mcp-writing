@@ -24,6 +24,7 @@
 - [`list_places`](#list_places)
 - [`get_place_sheet`](#get_place_sheet)
 - [`search_metadata`](#search_metadata)
+- [`search_reference`](#search_reference)
 - [`list_threads`](#list_threads)
 - [`get_thread_arc`](#get_thread_arc)
 - [`get_relationship_arc`](#get_relationship_arc)
@@ -280,6 +281,18 @@ Full-text search across scene titles, loglines (synopsis/logline text fields), a
 | `query` | `string` | Yes | Search terms (e.g. 'hospital' or 'Sebastian feeding'). FTS5 syntax supported. |
 | `page` | `integer` | No | Optional page number for paginated responses (1-based). |
 | `page_size` | `integer` | No | Optional page size for paginated responses (default: 20, max: 200). |
+
+---
+
+## search_reference
+
+Full-text search across indexed reference document titles, summaries, and tags. Use this to discover world-building notes, continuity references, research docs, and other reference material without loading full file contents.
+
+| Parameter | Type | Required | Description |
+| --- | --- | :---: | --- |
+| `query` | `string` | Yes | Search terms (e.g. 'vampirism' or 'blood replacement'). FTS5 syntax supported. |
+| `type` | `string` | No | Optional reference type filter (for example: 'world', 'continuity', 'research', 'style'). |
+| `tag` | `string` | No | Optional exact tag filter. |
 
 ---
 

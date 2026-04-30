@@ -42,7 +42,7 @@ The importer never reads or writes anything under `world/`. These files are full
 | `world/characters/<slug>/sheet.meta.yaml` | **AI agent** | Character metadata (`name`, `role`, `arc_summary`, `first_appearance`, `traits`). Written by `create_character_sheet`, `update_character_sheet`. |
 | `world/places/<slug>/sheet.md` | **Human** (after creation) | Canonical place sheet prose. `create_place_sheet` writes this file once on first setup; after that it is human-owned and no tool modifies it. |
 | `world/places/<slug>/sheet.meta.yaml` | **AI agent** | Place metadata (`name`, `associated_characters`, `tags`). Written by `create_place_sheet`, `update_place_sheet`. |
-| `world/reference/**/*.md` | **Human** | Free-form reference notes (world rules, timelines, etc.). Never indexed as entities. |
+| `world/reference/**/*.md` | **Human** | Free-form reference notes (world rules, timelines, etc.). Content remains human-owned; metadata may be indexed as lightweight reference-doc entities for discovery/search. |
 
 **Rule:** all character and place changes that should survive forever — backstory, relationships, traits, arc notes — belong in `world/`. This content is never at risk from a Scrivener re-import.
 

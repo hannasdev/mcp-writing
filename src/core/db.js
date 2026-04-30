@@ -106,7 +106,9 @@ export const SCHEMA = `
     doc_id      TEXT NOT NULL PRIMARY KEY,
     project_id  TEXT,
     universe_id TEXT,
+    type        TEXT,
     title       TEXT NOT NULL,
+    summary     TEXT,
     file_path   TEXT NOT NULL
   );
 
@@ -118,6 +120,10 @@ export const SCHEMA = `
 
   CREATE VIRTUAL TABLE IF NOT EXISTS scenes_fts USING fts5(
     scene_id, project_id, logline, title, keywords
+  );
+
+  CREATE VIRTUAL TABLE IF NOT EXISTS reference_docs_fts USING fts5(
+    doc_id, project_id, title, summary, tags
   );
 
   CREATE TABLE IF NOT EXISTS schema_version (
@@ -167,6 +173,27 @@ const MIGRATIONS = [
       `);
       db.exec(`DROP TABLE scenes_fts;`);
       db.exec(`ALTER TABLE scenes_fts_migrating RENAME TO scenes_fts;`);
+    }
+  },
+  // 3: add lightweight reference-doc metadata columns and FTS table
+  (db) => {
+    const referenceDocColumns = db.prepare(`PRAGMA table_info(reference_docs)`).all();
+    if (!referenceDocColumns.some(c => c.name === "type")) {
+      db.exec(`ALTER TABLE reference_docs ADD COLUMN type TEXT;`);
+    }
+    if (!referenceDocColumns.some(c => c.name === "summary")) {
+      db.exec(`ALTER TABLE reference_docs ADD COLUMN summary TEXT;`);
+    }
+
+    const ftsSql = db.prepare(`
+      SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'reference_docs_fts'
+    `).get()?.sql;
+    if (typeof ftsSql !== "string") {
+      db.exec(`
+        CREATE VIRTUAL TABLE reference_docs_fts USING fts5(
+          doc_id, project_id, title, summary, tags
+        );
+      `);
     }
   },
 ];

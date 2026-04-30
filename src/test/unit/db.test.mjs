@@ -94,6 +94,46 @@ describe("openDb", () => {
       fs.rmSync(dbPath, { force: true });
     }
   });
+
+  test("migrates legacy reference_docs schema and creates reference_docs_fts", () => {
+    const dbPath = makeTempPath();
+    try {
+      const legacyDb = new DatabaseSync(dbPath);
+      legacyDb.exec(`
+        CREATE TABLE reference_docs (
+          doc_id TEXT NOT NULL PRIMARY KEY,
+          project_id TEXT,
+          universe_id TEXT,
+          title TEXT NOT NULL,
+          file_path TEXT NOT NULL
+        );
+      `);
+      legacyDb.exec(`
+        CREATE TABLE reference_doc_tags (
+          doc_id TEXT NOT NULL,
+          tag TEXT NOT NULL,
+          PRIMARY KEY (doc_id, tag)
+        );
+      `);
+      legacyDb.close();
+
+      const db = openDb(dbPath);
+      const columns = db.prepare(`PRAGMA table_info(reference_docs)`).all();
+      assert.ok(columns.some(column => column.name === "type"));
+      assert.ok(columns.some(column => column.name === "summary"));
+
+      const ftsSql = db.prepare(`
+        SELECT sql
+        FROM sqlite_master
+        WHERE type = 'table' AND name = 'reference_docs_fts'
+      `).get()?.sql;
+      assert.ok(typeof ftsSql === "string" && ftsSql.toLowerCase().includes("summary"));
+
+      db.close();
+    } finally {
+      fs.rmSync(dbPath, { force: true });
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------
