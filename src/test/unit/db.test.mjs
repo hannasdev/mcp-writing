@@ -157,6 +157,16 @@ describe("openDb", () => {
       `).get();
       assert.equal(table?.name, "reference_links");
 
+      const columns = db.prepare(`PRAGMA table_info(reference_links)`).all();
+      assert.ok(columns.some(column => column.name === "source_project_id"));
+
+      const index = db.prepare(`
+        SELECT name
+        FROM sqlite_master
+        WHERE type = 'index' AND name = 'idx_reference_links_target_doc_id'
+      `).get();
+      assert.equal(index?.name, "idx_reference_links_target_doc_id");
+
       db.close();
     } finally {
       fs.rmSync(dbPath, { force: true });

@@ -613,24 +613,24 @@ describe("syncAll", () => {
     syncAll(db, dir, { quiet: true });
 
     const sceneLinks = db.prepare(`
-      SELECT source_kind, source_id, target_doc_id, relation
+      SELECT source_kind, source_project_id, source_id, target_doc_id, relation
       FROM reference_links
-      WHERE source_kind = 'scene' AND source_id = 'sc-001'
+      WHERE source_kind = 'scene' AND source_project_id = 'test-novel' AND source_id = 'sc-001'
       ORDER BY target_doc_id
     `).all().map(row => ({ ...row }));
     assert.deepEqual(sceneLinks, [
-      { source_kind: "scene", source_id: "sc-001", target_doc_id: "ref-blood-replacement", relation: "informs" },
-      { source_kind: "scene", source_id: "sc-001", target_doc_id: "ref-vampirism", relation: "informs" },
+      { source_kind: "scene", source_project_id: "test-novel", source_id: "sc-001", target_doc_id: "ref-blood-replacement", relation: "informs" },
+      { source_kind: "scene", source_project_id: "test-novel", source_id: "sc-001", target_doc_id: "ref-vampirism", relation: "informs" },
     ]);
 
     const referenceLinks = db.prepare(`
-      SELECT source_kind, source_id, target_doc_id, relation
+      SELECT source_kind, source_project_id, source_id, target_doc_id, relation
       FROM reference_links
-      WHERE source_kind = 'reference' AND source_id = 'ref-vampirism'
+      WHERE source_kind = 'reference' AND source_project_id = 'test-novel' AND source_id = 'ref-vampirism'
       ORDER BY target_doc_id
     `).all().map(row => ({ ...row }));
     assert.deepEqual(referenceLinks, [
-      { source_kind: "reference", source_id: "ref-vampirism", target_doc_id: "ref-blood-replacement", relation: "related" },
+      { source_kind: "reference", source_project_id: "test-novel", source_id: "ref-vampirism", target_doc_id: "ref-blood-replacement", relation: "related" },
     ]);
 
     db.close();
@@ -686,6 +686,50 @@ describe("syncAll", () => {
 
     assert.equal(db.prepare(`SELECT COUNT(*) AS count FROM reference_docs WHERE doc_id = 'ref-vampirism'`).get().count, 0);
     assert.equal(db.prepare(`SELECT COUNT(*) AS count FROM reference_links`).get().count, 0);
+
+    db.close();
+    fs.rmSync(dir, { recursive: true });
+  });
+
+  test("keeps scene->reference links isolated when the same scene_id exists in multiple projects", () => {
+    const dir = makeTempSync();
+    const db = openDb(":memory:");
+
+    fs.mkdirSync(path.join(dir, "projects", "alpha-novel", "scenes"), { recursive: true });
+    fs.mkdirSync(path.join(dir, "projects", "alpha-novel", "world", "reference"), { recursive: true });
+    fs.mkdirSync(path.join(dir, "projects", "beta-novel", "scenes"), { recursive: true });
+    fs.mkdirSync(path.join(dir, "projects", "beta-novel", "world", "reference"), { recursive: true });
+
+    fs.writeFileSync(
+      path.join(dir, "projects", "alpha-novel", "scenes", "sc-001.md"),
+      "---\nscene_id: sc-001\ntitle: Alpha Scene\nreference_ids:\n  - ref-alpha\n---\nAlpha prose."
+    );
+    fs.writeFileSync(
+      path.join(dir, "projects", "beta-novel", "scenes", "sc-001.md"),
+      "---\nscene_id: sc-001\ntitle: Beta Scene\nreference_ids:\n  - ref-beta\n---\nBeta prose."
+    );
+    fs.writeFileSync(
+      path.join(dir, "projects", "alpha-novel", "world", "reference", "alpha.md"),
+      "---\ndoc_id: ref-alpha\ntitle: Alpha reference\n---\nAlpha reference body."
+    );
+    fs.writeFileSync(
+      path.join(dir, "projects", "beta-novel", "world", "reference", "beta.md"),
+      "---\ndoc_id: ref-beta\ntitle: Beta reference\n---\nBeta reference body."
+    );
+
+    syncAll(db, dir, { quiet: true });
+
+    const sceneLinks = db.prepare(`
+      SELECT source_kind, source_project_id, source_id, target_doc_id, relation
+      FROM reference_links
+      WHERE source_kind = 'scene' AND source_id = 'sc-001'
+      ORDER BY source_project_id, target_doc_id
+    `).all().map(row => ({ ...row }));
+
+    assert.deepEqual(sceneLinks, [
+      { source_kind: "scene", source_project_id: "alpha-novel", source_id: "sc-001", target_doc_id: "ref-alpha", relation: "informs" },
+      { source_kind: "scene", source_project_id: "beta-novel", source_id: "sc-001", target_doc_id: "ref-beta", relation: "informs" },
+    ]);
 
     db.close();
     fs.rmSync(dir, { recursive: true });

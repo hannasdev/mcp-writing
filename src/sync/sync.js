@@ -296,15 +296,27 @@ export function deriveReferenceSummary(meta = {}, content = "") {
   return body.length <= 240 ? body : `${body.slice(0, 237).trimEnd()}...`;
 }
 
-function indexReferenceLinksForSource(db, { sourceKind, sourceId, targetDocIds, relation }) {
-  db.prepare(`DELETE FROM reference_links WHERE source_kind = ? AND source_id = ?`).run(sourceKind, sourceId);
+function indexReferenceLinksForSource(db, {
+  sourceKind,
+  sourceProjectId = "",
+  sourceId,
+  targetDocIds,
+  relation,
+}) {
+  db.prepare(`
+    DELETE FROM reference_links
+    WHERE source_kind = ? AND source_project_id = ? AND source_id = ?
+  `).run(sourceKind, sourceProjectId, sourceId);
+
+  const insertReferenceLink = db.prepare(`
+    INSERT OR IGNORE INTO reference_links
+      (source_kind, source_project_id, source_id, target_doc_id, relation)
+    VALUES (?, ?, ?, ?, ?)
+  `);
 
   for (const targetDocId of targetDocIds) {
     if (sourceKind === "reference" && sourceId === targetDocId) continue;
-    db.prepare(`
-      INSERT OR IGNORE INTO reference_links (source_kind, source_id, target_doc_id, relation)
-      VALUES (?, ?, ?, ?)
-    `).run(sourceKind, sourceId, targetDocId, relation);
+    insertReferenceLink.run(sourceKind, sourceProjectId, sourceId, targetDocId, relation);
   }
 }
 
@@ -651,6 +663,7 @@ export function indexReferenceFile(db, syncDir, file, meta = {}, content = "") {
 
   indexReferenceLinksForSource(db, {
     sourceKind: "reference",
+    sourceProjectId: project_id ?? "",
     sourceId: docId,
     targetDocIds: relatedReferenceIds,
     relation: "related",
@@ -660,10 +673,13 @@ export function indexReferenceFile(db, syncDir, file, meta = {}, content = "") {
 }
 
 function pruneMissingReferenceDocs(db, seenDocIds) {
-  const rows = db.prepare(`SELECT doc_id FROM reference_docs`).all();
+  const rows = db.prepare(`SELECT doc_id, project_id FROM reference_docs`).all();
   for (const row of rows) {
     if (seenDocIds.has(row.doc_id)) continue;
-    db.prepare(`DELETE FROM reference_links WHERE source_kind = 'reference' AND source_id = ?`).run(row.doc_id);
+    db.prepare(`
+      DELETE FROM reference_links
+      WHERE source_kind = 'reference' AND source_project_id = ? AND source_id = ?
+    `).run(row.project_id ?? "", row.doc_id);
     db.prepare(`DELETE FROM reference_links WHERE target_doc_id = ?`).run(row.doc_id);
     db.prepare(`DELETE FROM reference_doc_tags WHERE doc_id = ?`).run(row.doc_id);
     db.prepare(`DELETE FROM reference_docs_fts WHERE doc_id = ?`).run(row.doc_id);
@@ -818,6 +834,7 @@ export function indexSceneFile(db, syncDir, file, meta, prose) {
 
   indexReferenceLinksForSource(db, {
     sourceKind: "scene",
+    sourceProjectId: project_id ?? "",
     sourceId: meta.scene_id,
     targetDocIds: referenceIds,
     relation: "informs",
