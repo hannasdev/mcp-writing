@@ -597,6 +597,33 @@ describe("syncAll", () => {
     fs.rmSync(dir, { recursive: true });
   });
 
+  test("does not prune reference docs when sync root is narrowed to scenes", () => {
+    const dir = makeTempSync();
+    const db = openDb(":memory:");
+    const refPath = path.join(dir, "projects", "test-novel", "world", "reference", "vampirism.md");
+    fs.mkdirSync(path.dirname(refPath), { recursive: true });
+    fs.writeFileSync(
+      refPath,
+      "---\ntitle: Vampirism in this universe\ntags:\n  - vampirism\n---\nReference body."
+    );
+    writeScene(dir, "sc-001");
+
+    syncAll(db, dir, { quiet: true });
+    assert.equal(db.prepare(`SELECT COUNT(*) AS count FROM reference_docs`).get().count, 1);
+
+    const scenesRoot = path.join(dir, "projects", "test-novel", "scenes");
+    syncAll(db, scenesRoot, { quiet: true });
+
+    assert.equal(db.prepare(`SELECT COUNT(*) AS count FROM reference_docs`).get().count, 1);
+    assert.equal(
+      db.prepare(`SELECT COUNT(*) AS count FROM reference_docs_fts WHERE reference_docs_fts MATCH 'vampirism'`).get().count,
+      1
+    );
+
+    db.close();
+    fs.rmSync(dir, { recursive: true });
+  });
+
   test("indexes only canonical files in nested character folders", () => {
     const dir = makeTempSync();
     const db = openDb(":memory:");

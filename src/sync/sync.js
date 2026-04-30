@@ -596,6 +596,12 @@ function pruneMissingReferenceDocs(db, seenDocIds) {
   }
 }
 
+function canPruneReferenceDocs(syncDir) {
+  // A sync root that points directly at a scenes/ subtree cannot observe the
+  // project's reference docs, so pruning there would wipe valid indexed rows.
+  return path.basename(path.resolve(syncDir)).toLowerCase() !== "scenes";
+}
+
 export function indexSceneFile(db, syncDir, file, meta, prose) {
   const { universe_id, project_id } = inferProjectAndUniverse(syncDir, file);
 
@@ -812,7 +818,9 @@ export function syncAll(db, syncDir, { quiet = false, writable = false } = {}) {
     }
   }
 
-  pruneMissingReferenceDocs(db, indexedReferenceDocIds);
+  if (canPruneReferenceDocs(syncDir)) {
+    pruneMissingReferenceDocs(db, indexedReferenceDocIds);
+  }
 
   // --- Pass 2: scene files ---
   for (const file of scanFiles) {
