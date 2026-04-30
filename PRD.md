@@ -126,7 +126,7 @@ Direct ingestion from Scrivener project internals (`.scriv`/`.scrivx`) for riche
 
 ---
 
-## Features Under Consideration
+## Deferred Backlog (Not Active)
 
 ### 📊 [Embedding-Based Search](docs/prd/todo/embeddings-search.md) 📋
 
@@ -134,7 +134,7 @@ Semantic search for queries that require understanding meaning, not just keyword
 
 **Example:** "Find scenes with confrontation near water" (currently impossible with FTS5 alone)
 
-**Status:** Deferred to Phase 4. Pending evaluation of embedding backend (OpenAI vs Ollama vs Hugging Face), cost, and performance.
+**Status:** Deferred backlog (not active). Pending evaluation of embedding backend (OpenAI vs Ollama vs Hugging Face), cost, and performance.
 
 ---
 
@@ -223,7 +223,7 @@ Additional completed structural proposal:
 - **Phase 1** ✅ — Ask questions about your project (all tools implemented)
 - **Phase 2** ✅ — Answers stay accurate (metadata staleness, sidecar migration, enrichment)
 - **Phase 3** ✅ — AI helps edit prose (two-step proposals, git history, snapshots)
-- **Phase 4** 🔄 — Review bundles ✅ delivered; Scrivener Direct ✅ graduated to stable; semantic search and reference docs 📋 deferred
+- **Phase 4** ⏸️ — Review bundles ✅ delivered; Scrivener Direct ✅ graduated to stable; semantic search and reference docs remain deferred backlog items
 - **Phase 5** 🚧 — OpenClaw integration (active planning and integration work underway)
 
 ---

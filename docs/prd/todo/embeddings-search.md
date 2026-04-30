@@ -1,6 +1,6 @@
 # Embedding-Based Search
 
-**Status:** 📋 Deferred (Phase 4)
+**Status:** 📋 Deferred backlog (not active)
 
 ## Motivation
 
