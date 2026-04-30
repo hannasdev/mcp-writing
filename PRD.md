@@ -126,7 +126,25 @@ Direct ingestion from Scrivener project internals (`.scriv`/`.scrivx`) for riche
 
 ---
 
-## Roadmap & Backlog
+## Active Development
+
+### 🚀 [OpenClaw Integration](docs/prd/in-progress/openclaw-integration.md) 🚧
+
+Deploy Writing MCP as a service in the OpenClaw runtime with the Writing World agent.
+
+**Status:** In progress. Runtime shape, deployment targets, and agent integration points are defined; remaining work is implementation and rollout.
+
+---
+
+### 🪄 [Guideline Generation](docs/prd/in-progress/guideline-generation.md) 🚧
+
+Build a reusable prose styleguide system with config, skill generation, and setup/bootstrap flows that help authors preserve voice and structural consistency.
+
+**Status:** In progress. Core styleguide capabilities are live; remaining work is refining onboarding, generation flow, and long-term authoring UX.
+
+---
+
+## Deferred Backlog (Not Active)
 
 ### 📊 [Embedding-Based Search](docs/prd/todo/embeddings-search.md) 📋
 
@@ -144,15 +162,7 @@ Index and search world-building notes, research, and continuity scratchpads.
 
 **Example:** "Find all continuity notes mentioning Elena" or "What are the rules of magic in this world?"
 
-**Status:** Deferred to Phase 4. Pending decision on lightweight vs full indexing.
-
----
-
-### 🚀 [OpenClaw Integration](docs/prd/in-progress/openclaw-integration.md) 🚧
-
-Deploy writing-mcp as a service in the OpenClaw runtime with the Writing World agent.
-
-**Status:** In progress. Runtime shape, deployment targets, and agent integration points are defined; remaining work is implementation and rollout.
+**Status:** Deferred backlog (not active). Pending decision on lightweight vs full indexing.
 
 ---
 
@@ -218,13 +228,14 @@ Additional completed structural proposal:
 
 ---
 
-## Status
+## Current State
 
-- **Phase 1** ✅ — Ask questions about your project (all tools implemented)
-- **Phase 2** ✅ — Answers stay accurate (metadata staleness, sidecar migration, enrichment)
-- **Phase 3** ✅ — AI helps edit prose (two-step proposals, git history, snapshots)
-- **Phase 4** ⏸️ — Review bundles ✅ delivered; Scrivener Direct ✅ graduated to stable; semantic search remains a deferred backlog item, and reference docs remain deferred within Phase 4 scope
-- **Phase 5** 🚧 — OpenClaw integration (active planning and integration work underway)
+Writing MCP is now in continuous development rather than sequential phase delivery.
+
+- **Core platform complete:** metadata architecture, import/sync, prose editing, search/analysis, review bundles, and Scrivener Direct extraction are all implemented.
+- **Active development:** OpenClaw integration and guideline generation.
+- **Deferred backlog:** embeddings search and the reference document system.
+- **Ideas and open questions:** tracked separately so future exploration does not distort the active roadmap.
 
 ---
 
@@ -236,5 +247,7 @@ Additional completed structural proposal:
 - [Search & Analysis](docs/prd/done/search-analysis.md) — querying, reasoning flows, pagination
 - [Review Bundles](docs/prd/done/review-bundles.md) — editorial workflows, profiles, known issues
 - [Scrivener Direct Extraction](docs/prd/done/scrivener-direct-extraction-beta.md) — direct .scriv ingestion
+- [OpenClaw Integration](docs/prd/in-progress/openclaw-integration.md) — deployment and runtime integration
+- [Guideline Generation](docs/prd/in-progress/guideline-generation.md) — styleguide generation, onboarding, and authoring UX
 - [Open Ideas](docs/prd/inbox/ideas-and-questions.md) — design questions, feature ideas
 - [Workflow Discovery](docs/prd/done/describe-workflows.md) — `describe_workflows` tool, entry-point for AI navigation
