@@ -179,7 +179,7 @@ export function registerMetadataTools(s, {
       source_id: z.string().describe("Source scene_id or reference doc_id."),
       source_project_id: z.string().optional().describe("Optional project scope for the source. For scene sources, use this to disambiguate an ambiguous scene_id across projects. For reference sources, when provided, it is treated as an ownership check and must match the source reference doc's project."),
       target_doc_id: z.string().describe("Target reference doc_id."),
-      relation: z.string().describe("Relationship label (for example: 'informs', 'related', 'history_of')."),
+      relation: z.string().describe("Relationship label (for example: 'informs', 'related', 'history_of'). The value is trimmed and lowercased before validation."),
     },
     async ({ source_kind, source_id, source_project_id, target_doc_id, relation }) => {
       if (!SYNC_DIR_WRITABLE) {
@@ -190,7 +190,7 @@ export function registerMetadataTools(s, {
       if (!/^[a-z][a-z0-9_-]*$/.test(normalizedRelation)) {
         return errorResponse(
           "VALIDATION_ERROR",
-          "Relation must use lowercase letters, numbers, underscores, or hyphens (for example: 'informs' or 'history_of').",
+          "Relation is normalized to lowercase and must match [a-z][a-z0-9_-]* after normalization (for example: 'informs' or 'history_of').",
           { relation }
         );
       }
@@ -258,16 +258,27 @@ export function registerMetadataTools(s, {
         }
       }
 
-      db.prepare(`
-        DELETE FROM reference_links
-        WHERE source_kind = ? AND source_project_id = ? AND source_id = ? AND target_doc_id = ?
-      `).run(source_kind, resolvedSourceProjectId, source_id, target_doc_id);
+      try {
+        db.exec("BEGIN");
+        db.prepare(`
+          DELETE FROM reference_links
+          WHERE source_kind = ? AND source_project_id = ? AND source_id = ? AND target_doc_id = ?
+        `).run(source_kind, resolvedSourceProjectId, source_id, target_doc_id);
 
-      db.prepare(`
-        INSERT INTO reference_links (
-          source_kind, source_project_id, source_id, target_doc_id, relation
-        ) VALUES (?, ?, ?, ?, ?)
-      `).run(source_kind, resolvedSourceProjectId, source_id, target_doc_id, normalizedRelation);
+        db.prepare(`
+          INSERT INTO reference_links (
+            source_kind, source_project_id, source_id, target_doc_id, relation
+          ) VALUES (?, ?, ?, ?, ?)
+        `).run(source_kind, resolvedSourceProjectId, source_id, target_doc_id, normalizedRelation);
+        db.exec("COMMIT");
+      } catch (err) {
+        try {
+          db.exec("ROLLBACK");
+        } catch (rollbackErr) {
+          void rollbackErr;
+        }
+        throw err;
+      }
 
       const link = db.prepare(`
         SELECT source_kind, source_project_id, source_id, target_doc_id, relation
