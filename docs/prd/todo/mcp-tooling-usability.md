@@ -1,7 +1,7 @@
 # MCP Tooling Convention Proposal (mcp-writing)
 
 Date: 2026-04-30
-Applies to: mcp-writing 2.15.0 (48 tools)
+Applies to: mcp-writing 2.15.0 (49 tools)
 
 ## Goals
 
@@ -61,6 +61,7 @@ These should appear first in docs and discovery results:
 - get_reference_doc
 - list_scene_references
 - search_reference
+- upsert_reference_link
 - create_character_sheet
 - update_character_sheet
 - get_character_sheet
@@ -87,6 +88,7 @@ Pattern:
 - Collection read: `domain.list`
 - Single read: `domain.get`
 - Create/update: `domain.create`, `domain.update`
+- Relationship edge upsert: `domain.links.upsert`
 - Analysis/check: `domain.check`, `domain.analyze`
 - Long-running operation: `domain.run` + job tools
 - Dry-run: `domain.preview`
@@ -126,11 +128,12 @@ Pattern:
 
 - list_threads -> threads.list
 - get_thread_arc -> threads.get_arc
-- upsert_thread_link -> threads.link_upsert
+- upsert_thread_link -> threads.links.upsert
 
 - get_reference_doc -> references.get
 - list_scene_references -> references.list_scene_links
 - search_reference -> references.search
+- upsert_reference_link -> references.links.upsert
 
 - bootstrap_prose_styleguide_config -> styleguide.bootstrap
 - setup_prose_styleguide_config -> styleguide.setup
@@ -179,7 +182,8 @@ Apply these uniformly across tools:
 - Use `scene_id`, `character_id`, `place_id`, `thread_id` consistently.
 - Use pagination as `page`, `page_size` everywhere list-like data may be large.
 - Use filtering as a top-level `filters` object when there are 3+ optional filters.
-- Use `dry_run` on heavy writes/imports.
+- Use dedicated `domain.preview` tools when preview output needs its own shape or reviewer workflow.
+- Use `dry_run` only on heavy writes/imports where preview and execute can share the same validation path and response shape.
 - Return `next_step` on actionable errors.
 
 ## Response Envelope Convention
@@ -239,27 +243,33 @@ Acceptance criteria for `3.0.0` cut:
 - Cons: Requires temporary dual maintenance in 2.x and stronger release discipline.
 
 Decision:
+
 - Chosen option: **Option C** (staged `2.x` transition, then `3.0.0` cleanup).
 - Rationale: balances usability improvements and migration safety while still reaching a clean canonical API in the next major.
 
 ## Resolved Decisions
 
 1. `recommend_next_tool` decision model
+
 - Use deterministic routing as far as possible via maintained mapping/rules.
 - Allow fallback behavior only when no deterministic match exists.
 
-2. Alias precedence and canonical naming
+1. Alias precedence and canonical naming
+
 - Adopt aliases as canonical names as early as possible.
 - During transition, docs and examples should prefer alias/canonical names.
 
-3. Response envelope rollout scope for `3.0.0`
+1. Response envelope rollout scope for `3.0.0`
+
 - Standardize all tools on the response envelope in `3.0.0` (no partial domain rollout).
 
-4. Deprecation observability in `2.x`
+1. Deprecation observability in `2.x`
+
 - No dedicated observability/telemetry requirement for migration readiness in this phase.
 - Migration readiness is assessed by maintainers via docs/tests/review rather than usage analytics.
 
-5. Compatibility window and release policy
+1. Compatibility window and release policy
+
 - Keep transition window short.
 - Use minimal RC/release gating appropriate for a likely small user base.
 
