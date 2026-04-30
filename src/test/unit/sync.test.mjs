@@ -921,6 +921,69 @@ describe("syncAll", () => {
     fs.rmSync(dir, { recursive: true });
   });
 
+  test("prunes deleted scenes and related scene links on re-sync", () => {
+    const dir = makeTempSync();
+    const db = openDb(":memory:");
+
+    fs.mkdirSync(path.join(dir, "projects", "test-novel", "world", "reference"), { recursive: true });
+    fs.writeFileSync(
+      path.join(dir, "projects", "test-novel", "world", "reference", "vampirism.md"),
+      "---\ndoc_id: ref-vampirism\ntitle: Vampirism in this universe\n---\nReference body."
+    );
+
+    writeScene(dir, "sc-001", { reference_ids: ["ref-vampirism"] });
+    syncAll(db, dir, { quiet: true });
+    assert.equal(db.prepare(`SELECT COUNT(*) AS count FROM scenes WHERE scene_id = 'sc-001'`).get().count, 1);
+    assert.equal(
+      db.prepare(`SELECT COUNT(*) AS count FROM reference_links WHERE source_kind = 'scene' AND source_id = 'sc-001'`).get().count,
+      1
+    );
+
+    fs.rmSync(path.join(dir, "projects", "test-novel", "scenes", "sc-001.md"));
+    syncAll(db, dir, { quiet: true });
+
+    assert.equal(db.prepare(`SELECT COUNT(*) AS count FROM scenes WHERE scene_id = 'sc-001'`).get().count, 0);
+    assert.equal(
+      db.prepare(`SELECT COUNT(*) AS count FROM reference_links WHERE source_kind = 'scene' AND source_id = 'sc-001'`).get().count,
+      0
+    );
+
+    db.close();
+    fs.rmSync(dir, { recursive: true });
+  });
+
+  test("does not prune scenes when sync root is a deeper scenes subtree", () => {
+    const dir = makeTempSync();
+    const db = openDb(":memory:");
+
+    fs.mkdirSync(path.join(dir, "projects", "test-novel", "scenes", "chapter-1"), { recursive: true });
+    fs.writeFileSync(
+      path.join(dir, "projects", "test-novel", "scenes", "chapter-1", "sc-001.md"),
+      "---\nscene_id: sc-001\ntitle: Scene one\n---\nScene prose."
+    );
+    fs.writeFileSync(
+      path.join(dir, "projects", "test-novel", "scenes", "sc-002.md"),
+      "---\nscene_id: sc-002\ntitle: Scene two\n---\nScene prose."
+    );
+
+    syncAll(db, dir, { quiet: true });
+    assert.equal(
+      db.prepare(`SELECT COUNT(*) AS count FROM scenes WHERE project_id = 'test-novel'`).get().count,
+      2
+    );
+
+    const chapterRoot = path.join(dir, "projects", "test-novel", "scenes", "chapter-1");
+    syncAll(db, chapterRoot, { quiet: true });
+
+    assert.equal(
+      db.prepare(`SELECT COUNT(*) AS count FROM scenes WHERE project_id = 'test-novel'`).get().count,
+      2
+    );
+
+    db.close();
+    fs.rmSync(dir, { recursive: true });
+  });
+
   test("skips files without scene_id", () => {
     const dir = makeTempSync();
     const db = openDb(":memory:");

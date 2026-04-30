@@ -705,6 +705,72 @@ function canPruneReferenceDocs(syncDir) {
   return hasBroadRootChild;
 }
 
+function inferSceneProjectScopeFromSyncDir(syncDir) {
+  const parts = path.resolve(syncDir).split(path.sep).filter(Boolean);
+  if (parts.length < 2) return null;
+
+  const tail = parts.at(-1);
+  const parent = parts.at(-2);
+
+  if (parent === "projects" && tail) {
+    return tail;
+  }
+
+  if (tail === "scenes" && parts.length >= 3 && parts.at(-3) === "projects") {
+    return parts.at(-2);
+  }
+
+  if (parts.length >= 3 && parts.at(-3) === "universes") {
+    return `${parts.at(-2)}/${parts.at(-1)}`;
+  }
+
+  if (tail === "scenes" && parts.length >= 4 && parts.at(-4) === "universes") {
+    return `${parts.at(-3)}/${parts.at(-2)}`;
+  }
+
+  return null;
+}
+
+function canPruneScenes(syncDir) {
+  const resolvedSyncDir = path.resolve(syncDir);
+
+  if (inferSceneProjectScopeFromSyncDir(resolvedSyncDir)) {
+    return true;
+  }
+
+  const hasBroadRootChild = ["projects", "universes", "scenes"].some((name) => {
+    try {
+      return fs.statSync(path.join(resolvedSyncDir, name)).isDirectory();
+    } catch {
+      return false;
+    }
+  });
+
+  return hasBroadRootChild;
+}
+
+function pruneMissingScenes(db, seenSceneKeys, syncDir) {
+  const projectScope = inferSceneProjectScopeFromSyncDir(syncDir);
+  const rows = projectScope
+    ? db.prepare(`SELECT scene_id, project_id FROM scenes WHERE project_id = ?`).all(projectScope)
+    : db.prepare(`SELECT scene_id, project_id FROM scenes`).all();
+
+  for (const row of rows) {
+    const key = `${row.scene_id}::${row.project_id}`;
+    if (seenSceneKeys.has(key)) continue;
+
+    db.prepare(`DELETE FROM scene_characters WHERE scene_id = ?`).run(row.scene_id);
+    db.prepare(`DELETE FROM scene_places WHERE scene_id = ?`).run(row.scene_id);
+    db.prepare(`DELETE FROM scene_tags WHERE scene_id = ?`).run(row.scene_id);
+    db.prepare(`DELETE FROM scenes_fts WHERE scene_id = ? AND project_id = ?`).run(row.scene_id, row.project_id);
+    db.prepare(`
+      DELETE FROM reference_links
+      WHERE source_kind = 'scene' AND source_project_id = ? AND source_id = ?
+    `).run(row.project_id ?? "", row.scene_id);
+    db.prepare(`DELETE FROM scenes WHERE scene_id = ? AND project_id = ?`).run(row.scene_id, row.project_id);
+  }
+}
+
 export function indexSceneFile(db, syncDir, file, meta, prose) {
   const { universe_id, project_id } = inferProjectAndUniverse(syncDir, file);
   const referenceIds = normalizeReferenceIdList(meta.reference_ids ?? meta.references);
@@ -889,6 +955,7 @@ export function syncAll(db, syncDir, { quiet = false, writable = false } = {}) {
   let skipped = 0;
   let sidecarsMigrated = 0;
   const seenSceneIds = new Map(); // scene_id+project_id → file path, for duplicate detection
+  const seenSceneKeys = new Set();
   const indexedSceneIds = new Set(); // scene_id only — for orphaned sidecar move detection
   const indexedReferenceDocIds = new Set();
   const warnings = [];
@@ -959,6 +1026,7 @@ export function syncAll(db, syncDir, { quiet = false, writable = false } = {}) {
       } else {
         seenSceneIds.set(key, file);
       }
+      seenSceneKeys.add(key);
 
       if (mismatches.part || mismatches.chapter) {
         const details = [];
@@ -977,6 +1045,10 @@ export function syncAll(db, syncDir, { quiet = false, writable = false } = {}) {
     } catch (err) {
       process.stderr.write(`[mcp-writing] Failed to index ${file}: ${err.message}\n`);
     }
+  }
+
+  if (canPruneScenes(syncDir)) {
+    pruneMissingScenes(db, seenSceneKeys, syncDir);
   }
 
   // --- Orphaned sidecar detection ---
