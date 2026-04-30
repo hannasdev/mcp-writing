@@ -126,7 +126,7 @@ Direct ingestion from Scrivener project internals (`.scriv`/`.scrivx`) for riche
 
 ---
 
-## Deferred Backlog (Not Active)
+## Roadmap & Backlog
 
 ### 📊 [Embedding-Based Search](docs/prd/todo/embeddings-search.md) 📋
 
