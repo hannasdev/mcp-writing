@@ -1,6 +1,8 @@
 # Root Structure Reorganization
 
-**Status:** 🚧 In Progress
+**Status:** ✅ Done
+
+Completed and retained as a structural change record for the source-root migration.
 
 ## Motivation
 
@@ -307,6 +309,6 @@ Because phases are incremental and behavior-neutral, rollback should be low-cost
 
 ## Related
 
-- [../done/refactoring.md](../done/refactoring.md)
+- [./refactoring.md](./refactoring.md)
 - [../../development.md](../../development.md)
 - [../../../AGENTS.md](../../../AGENTS.md)
