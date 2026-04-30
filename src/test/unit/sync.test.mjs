@@ -952,6 +952,66 @@ describe("syncAll", () => {
     fs.rmSync(dir, { recursive: true });
   });
 
+  test("pruning one project does not clear scene metadata for same scene_id in another project", () => {
+    const dir = makeTempSync();
+    const db = openDb(":memory:");
+
+    fs.mkdirSync(path.join(dir, "projects", "alpha-novel", "scenes"), { recursive: true });
+    fs.mkdirSync(path.join(dir, "projects", "beta-novel", "scenes"), { recursive: true });
+
+    fs.writeFileSync(
+      path.join(dir, "projects", "alpha-novel", "scenes", "sc-shared.md"),
+      "---\nscene_id: sc-shared\ntitle: Alpha Scene\ncharacters:\n  - alpha-hero\n---\nAlpha prose."
+    );
+    fs.writeFileSync(
+      path.join(dir, "projects", "beta-novel", "scenes", "sc-shared.md"),
+      "---\nscene_id: sc-shared\ntitle: Beta Scene\ncharacters:\n  - beta-hero\n---\nBeta prose."
+    );
+
+    syncAll(db, dir, { quiet: true });
+
+    fs.rmSync(path.join(dir, "projects", "alpha-novel", "scenes", "sc-shared.md"));
+    syncAll(db, dir, { quiet: true });
+
+    assert.equal(
+      db.prepare(`SELECT COUNT(*) AS count FROM scenes WHERE scene_id = 'sc-shared' AND project_id = 'alpha-novel'`).get().count,
+      0
+    );
+    assert.equal(
+      db.prepare(`SELECT COUNT(*) AS count FROM scenes WHERE scene_id = 'sc-shared' AND project_id = 'beta-novel'`).get().count,
+      1
+    );
+    assert.deepEqual(
+      db.prepare(`SELECT character_id FROM scene_characters WHERE scene_id = 'sc-shared' ORDER BY character_id`)
+        .all()
+        .map(row => row.character_id),
+      ["beta-hero"]
+    );
+
+    db.close();
+    fs.rmSync(dir, { recursive: true });
+  });
+
+  test("does not prune existing scenes when scene indexing fails", () => {
+    const dir = makeTempSync();
+    const db = openDb(":memory:");
+
+    writeScene(dir, "sc-001");
+    syncAll(db, dir, { quiet: true });
+    assert.equal(db.prepare(`SELECT COUNT(*) AS count FROM scenes WHERE scene_id = 'sc-001'`).get().count, 1);
+
+    fs.writeFileSync(
+      path.join(dir, "projects", "test-novel", "scenes", "sc-001.meta.yaml"),
+      "scene_id: [invalid"
+    );
+    syncAll(db, dir, { quiet: true });
+
+    assert.equal(db.prepare(`SELECT COUNT(*) AS count FROM scenes WHERE scene_id = 'sc-001'`).get().count, 1);
+
+    db.close();
+    fs.rmSync(dir, { recursive: true });
+  });
+
   test("does not prune scenes when sync root is a deeper scenes subtree", () => {
     const dir = makeTempSync();
     const db = openDb(":memory:");

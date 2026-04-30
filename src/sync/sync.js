@@ -759,15 +759,19 @@ function pruneMissingScenes(db, seenSceneKeys, syncDir) {
     const key = `${row.scene_id}::${row.project_id}`;
     if (seenSceneKeys.has(key)) continue;
 
-    db.prepare(`DELETE FROM scene_characters WHERE scene_id = ?`).run(row.scene_id);
-    db.prepare(`DELETE FROM scene_places WHERE scene_id = ?`).run(row.scene_id);
-    db.prepare(`DELETE FROM scene_tags WHERE scene_id = ?`).run(row.scene_id);
     db.prepare(`DELETE FROM scenes_fts WHERE scene_id = ? AND project_id = ?`).run(row.scene_id, row.project_id);
     db.prepare(`
       DELETE FROM reference_links
       WHERE source_kind = 'scene' AND source_project_id = ? AND source_id = ?
     `).run(row.project_id ?? "", row.scene_id);
     db.prepare(`DELETE FROM scenes WHERE scene_id = ? AND project_id = ?`).run(row.scene_id, row.project_id);
+
+    const remainingScene = db.prepare(`SELECT 1 FROM scenes WHERE scene_id = ? LIMIT 1`).get(row.scene_id);
+    if (!remainingScene) {
+      db.prepare(`DELETE FROM scene_characters WHERE scene_id = ?`).run(row.scene_id);
+      db.prepare(`DELETE FROM scene_places WHERE scene_id = ?`).run(row.scene_id);
+      db.prepare(`DELETE FROM scene_tags WHERE scene_id = ?`).run(row.scene_id);
+    }
   }
 }
 
@@ -958,6 +962,7 @@ export function syncAll(db, syncDir, { quiet = false, writable = false } = {}) {
   const seenSceneKeys = new Set();
   const indexedSceneIds = new Set(); // scene_id only — for orphaned sidecar move detection
   const indexedReferenceDocIds = new Set();
+  let sceneIndexFailures = 0;
   const warnings = [];
 
   const scanFiles = [];
@@ -1043,11 +1048,12 @@ export function syncAll(db, syncDir, { quiet = false, writable = false } = {}) {
       if (isStale) staleMarked++;
       indexed++;
     } catch (err) {
+      sceneIndexFailures++;
       process.stderr.write(`[mcp-writing] Failed to index ${file}: ${err.message}\n`);
     }
   }
 
-  if (canPruneScenes(syncDir)) {
+  if (canPruneScenes(syncDir) && sceneIndexFailures === 0) {
     pruneMissingScenes(db, seenSceneKeys, syncDir);
   }
 
