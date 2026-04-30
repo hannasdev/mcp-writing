@@ -178,6 +178,7 @@ Default behavior:
 7. Implement `get_reference_doc(doc_id, include_related?)`
 8. Add `sync()` support for detecting and indexing reference docs and their links
 9. Optionally add authoring helpers for writing/updating links later
+10. Persist explicit tool-authored links back to source metadata files (scene sidecars/frontmatter and reference frontmatter) so links survive DB reset/rebuild
 
 Link extraction can start simple:
 - frontmatter fields in reference docs for `tags`, `summary`, and related reference IDs
@@ -206,6 +207,10 @@ In progress (Phase 4B):
 - `get_reference_doc(doc_id, include_related?)` is implemented with one-hop related expansion
 - `upsert_reference_link(source_kind, source_id, source_project_id?, target_doc_id, relation)` is implemented for explicit scene/reference link authoring with relation normalization and conflict-safe source resolution
 
+Not started (durability follow-up):
+- `upsert_reference_link` should write through to source metadata files so explicit links are not lost on DB reset/rebuild
+- define merge rules between inferred links from files and explicit tool-authored links when both exist for the same source/target
+
 ## Validation and Test Strategy
 
 Unit tests:
@@ -219,6 +224,7 @@ Integration tests:
 - `search_reference()` returns lightweight results without loading full content
 - `list_scene_references(scene_id, project_id?)` returns only direct scene links
 - `get_reference_doc(doc_id, include_related=true)` returns one-hop related references without looping
+- explicit links authored via tools remain present after `sync()` and after rebuilding the DB from files
 
 Behavioral guardrails:
 - no automatic deep expansion in scene query tools
@@ -228,6 +234,7 @@ Behavioral guardrails:
 ## Known Gaps
 
 - No finalized authoring UX for creating links inside markdown/sidecars yet
+- Explicit tool-authored links are not yet guaranteed to round-trip into source metadata files for DB rebuild durability
 - No auto-suggestion flow for likely scene references yet
 - No decision yet on whether summaries are handwritten only or can be inferred from content
 - Cross-project/shared-universe reference ownership rules may need refinement once used on larger series projects
