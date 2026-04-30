@@ -170,6 +170,118 @@ export function isWorldFile(syncDir, filePath) {
   return rel.includes(`${path.sep}world${path.sep}`) || rel.includes("/world/");
 }
 
+export function isReferenceFile(syncDir, filePath) {
+  const rel = path.relative(syncDir, filePath).split(path.sep).join("/").toLowerCase();
+  return rel.startsWith("world/reference/") || rel.includes("/world/reference/") || rel.startsWith("notes/") || rel.includes("/notes/");
+}
+
+export function inferReferenceDocType(syncDir, filePath) {
+  const rel = path.relative(syncDir, filePath).split(path.sep).join("/").toLowerCase();
+  if (rel.startsWith("world/reference/") || rel.includes("/world/reference/")) return "world";
+  if (rel.startsWith("notes/continuity/") || rel.includes("/notes/continuity/")) return "continuity";
+  if (rel.startsWith("notes/research/") || rel.includes("/notes/research/")) return "research";
+  if (rel.startsWith("notes/style/") || rel.includes("/notes/style/")) return "style";
+  return "reference";
+}
+
+function inferReferenceScopeFromSyncDir(syncDir) {
+  const parts = path.resolve(syncDir).split(path.sep).filter(Boolean);
+  const projectSlug = parts.at(-1);
+  const parent = parts.at(-2);
+  const universeId = parts.at(-2);
+  const universeProjectSlug = parts.at(-1);
+  const universeMarker = parts.at(-3);
+
+  if (parent === "projects" && projectSlug) {
+    return { universe_id: null, project_id: projectSlug };
+  }
+
+  if (parent === "universes" && projectSlug) {
+    return { universe_id: projectSlug, project_id: null };
+  }
+
+  if (universeMarker === "universes" && universeId && universeProjectSlug) {
+    return { universe_id: universeId, project_id: `${universeId}/${universeProjectSlug}` };
+  }
+
+  return null;
+}
+
+function inferReferenceProjectAndUniverse(syncDir, filePath) {
+  const rel = path.relative(syncDir, filePath).split(path.sep).join("/").toLowerCase();
+  const scoped = inferReferenceScopeFromSyncDir(syncDir);
+  if (
+    scoped
+    && (rel.startsWith("world/reference/") || rel.startsWith("notes/"))
+  ) {
+    return scoped;
+  }
+
+  return inferProjectAndUniverse(syncDir, filePath);
+}
+
+function slugifyReferencePart(value) {
+  return String(value ?? "")
+    .toLowerCase()
+    .replace(/\.(md|txt)$/i, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+export function deriveReferenceDocId(syncDir, filePath, meta = {}) {
+  if (typeof meta.doc_id === "string" && meta.doc_id.trim()) return meta.doc_id.trim();
+
+  const rel = path.relative(syncDir, filePath).split(path.sep).join("/");
+  const slug = rel
+    .split("/")
+    .map(slugifyReferencePart)
+    .filter(Boolean)
+    .join("-");
+  return `ref-${slug}`;
+}
+
+export function deriveReferenceTitle(filePath, meta = {}, content = "") {
+  if (typeof meta.title === "string" && meta.title.trim()) return meta.title.trim();
+
+  const heading = content.match(/^\s*#\s+(.+?)\s*$/m)?.[1]?.trim();
+  if (heading) return heading;
+
+  const base = path.basename(filePath, path.extname(filePath));
+  return base
+    .replace(/[-_]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+export function normalizeReferenceTags(tags) {
+  const values = Array.isArray(tags)
+    ? tags
+    : typeof tags === "string"
+      ? tags.split(",")
+      : [];
+
+  return [...new Set(
+    values
+      .map(tag => String(tag).trim())
+      .filter(Boolean)
+  )];
+}
+
+export function deriveReferenceSummary(meta = {}, content = "") {
+  if (typeof meta.summary === "string" && meta.summary.trim()) return meta.summary.trim();
+
+  const body = content
+    .split("\n")
+    .map(line => line.trim())
+    .filter(line => line && !line.startsWith("#"))
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!body) return null;
+  return body.length <= 240 ? body : `${body.slice(0, 237).trimEnd()}...`;
+}
+
 export function worldEntityKindForPath(syncDir, filePath) {
   const rel = path.relative(syncDir, filePath);
   if (rel.includes(`${path.sep}characters${path.sep}`) || rel.includes("/characters/")) return "character";
@@ -463,6 +575,82 @@ export function indexWorldFile(db, syncDir, file, meta) {
   }
 }
 
+export function indexReferenceFile(db, syncDir, file, meta = {}, content = "") {
+  const { universe_id, project_id } = inferReferenceProjectAndUniverse(syncDir, file);
+  const docId = deriveReferenceDocId(syncDir, file, meta);
+  const type = inferReferenceDocType(syncDir, file);
+  const title = deriveReferenceTitle(file, meta, content);
+  const summary = deriveReferenceSummary(meta, content);
+  const tags = normalizeReferenceTags(meta.tags);
+
+  db.prepare(`
+    INSERT INTO reference_docs (doc_id, project_id, universe_id, type, title, summary, file_path)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT (doc_id) DO UPDATE SET
+      project_id = excluded.project_id,
+      universe_id = excluded.universe_id,
+      type = excluded.type,
+      title = excluded.title,
+      summary = excluded.summary,
+      file_path = excluded.file_path
+  `).run(
+    docId,
+    project_id ?? null,
+    universe_id ?? null,
+    type,
+    title,
+    summary ?? null,
+    file
+  );
+
+  db.prepare(`DELETE FROM reference_doc_tags WHERE doc_id = ?`).run(docId);
+  for (const tag of tags) {
+    db.prepare(`INSERT OR IGNORE INTO reference_doc_tags (doc_id, tag) VALUES (?, ?)`).run(docId, tag);
+  }
+
+  db.prepare(`DELETE FROM reference_docs_fts WHERE doc_id = ?`).run(docId);
+  db.prepare(`
+    INSERT INTO reference_docs_fts (doc_id, project_id, title, summary, tags)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(
+    docId,
+    project_id ?? "",
+    title,
+    summary ?? "",
+    tags.join(" ")
+  );
+
+  return docId;
+}
+
+function pruneMissingReferenceDocs(db, seenDocIds) {
+  const rows = db.prepare(`SELECT doc_id FROM reference_docs`).all();
+  for (const row of rows) {
+    if (seenDocIds.has(row.doc_id)) continue;
+    db.prepare(`DELETE FROM reference_doc_tags WHERE doc_id = ?`).run(row.doc_id);
+    db.prepare(`DELETE FROM reference_docs_fts WHERE doc_id = ?`).run(row.doc_id);
+    db.prepare(`DELETE FROM reference_docs WHERE doc_id = ?`).run(row.doc_id);
+  }
+}
+
+function canPruneReferenceDocs(syncDir) {
+  const resolvedSyncDir = path.resolve(syncDir);
+  const scopedRoot = inferReferenceScopeFromSyncDir(resolvedSyncDir);
+  if (scopedRoot) return true;
+
+  // Flat project roots and broad workspace roots can safely prune because
+  // they can observe the full set of reference docs in their scope.
+  const hasBroadRootChild = ["projects", "universes", "scenes"].some((name) => {
+    try {
+      return fs.statSync(path.join(resolvedSyncDir, name)).isDirectory();
+    } catch {
+      return false;
+    }
+  });
+
+  return hasBroadRootChild;
+}
+
 export function indexSceneFile(db, syncDir, file, meta, prose) {
   const { universe_id, project_id } = inferProjectAndUniverse(syncDir, file);
 
@@ -639,6 +827,7 @@ export function syncAll(db, syncDir, { quiet = false, writable = false } = {}) {
   let sidecarsMigrated = 0;
   const seenSceneIds = new Map(); // scene_id+project_id → file path, for duplicate detection
   const indexedSceneIds = new Set(); // scene_id only — for orphaned sidecar move detection
+  const indexedReferenceDocIds = new Set();
   const warnings = [];
 
   const scanFiles = [];
@@ -650,9 +839,20 @@ export function syncAll(db, syncDir, { quiet = false, writable = false } = {}) {
     scanFiles.push(file);
   }
 
-  // --- Pass 1: world files (characters/places must be indexed before scenes
-  // so that character name → ID resolution in scene_characters works) ---
+  // --- Pass 1: world files and reference docs (characters/places must be indexed
+  // before scenes so that character name -> ID resolution in scene_characters works) ---
   for (const file of scanFiles) {
+    if (isReferenceFile(syncDir, file)) {
+      try {
+        const { data, content } = parseFile(file);
+        const docId = indexReferenceFile(db, syncDir, file, data, content);
+        indexedReferenceDocIds.add(docId);
+      } catch (err) {
+        process.stderr.write(`[mcp-writing] Failed to index ${file}: ${err.message}\n`);
+      }
+      continue;
+    }
+
     if (!isWorldFile(syncDir, file)) continue;
     try {
       const { meta } = readMeta(file, syncDir, { writable });
@@ -667,9 +867,13 @@ export function syncAll(db, syncDir, { quiet = false, writable = false } = {}) {
     }
   }
 
+  if (canPruneReferenceDocs(syncDir)) {
+    pruneMissingReferenceDocs(db, indexedReferenceDocIds);
+  }
+
   // --- Pass 2: scene files ---
   for (const file of scanFiles) {
-    if (isWorldFile(syncDir, file)) continue;
+    if (isWorldFile(syncDir, file) || isReferenceFile(syncDir, file)) continue;
     try {
       const { meta, sourceMeta, sidecarGenerated, derived, mismatches } = readMeta(file, syncDir, { writable });
       if (sidecarGenerated) sidecarsMigrated++;

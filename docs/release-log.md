@@ -8,6 +8,14 @@ This complements `CHANGELOG.md`:
 
 ## Unreleased
 
+### 2026-04-30 — Add reference document search
+
+- What changed: `sync()` now indexes lightweight metadata for reference docs, and a new `search_reference` tool can discover world/reference and Notes documents by title, summary, and tags.
+- Why it matters: Writers and agents can find relevant setting, continuity, research, and style notes without loading whole reference files or relying only on scene metadata.
+- Who is affected: Anyone using Writing MCP to navigate project reference material.
+- Action needed: Add optional frontmatter like `title`, `summary`, `tags`, or `doc_id` to reference docs if you want better search quality and stable identifiers.
+- PR: #146
+
 ### 2026-04-30 — Keep published package focused after test move
 
 - What changed: Tightened `package.json` publish allowlist so the npm package includes production `src/*` modules without unintentionally shipping `src/test`.

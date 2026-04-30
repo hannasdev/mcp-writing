@@ -5,6 +5,8 @@ import fs from "node:fs";
 import path from "node:path";
 import {
   checksumProse, inferProjectAndUniverse, inferScenePositionFromPath,
+  inferReferenceDocType, isReferenceFile, deriveReferenceDocId,
+  deriveReferenceSummary, deriveReferenceTitle, normalizeReferenceTags,
   isCanonicalWorldEntityFile, getSyncOwnershipDiagnostics, getFileWriteDiagnostics,
   isWorldFile, readMeta, isSyncDirWritable, sidecarPath, syncAll,
   walkFiles, walkSidecars, worldEntityFolderKey, worldEntityKindForPath,
@@ -372,6 +374,58 @@ describe("isWorldFile", () => {
   });
 });
 
+describe("reference docs", () => {
+  const syncDir = "/sync";
+
+  test("detects reference files in world/reference paths", () => {
+    assert.equal(isReferenceFile(syncDir, "/sync/projects/novel/world/reference/vampirism.md"), true);
+  });
+
+  test("detects reference files in project-root world/reference paths", () => {
+    assert.equal(isReferenceFile("/sync/projects/novel", "/sync/projects/novel/world/reference/vampirism.md"), true);
+  });
+
+  test("detects reference files in Notes paths", () => {
+    assert.equal(isReferenceFile(syncDir, "/sync/projects/novel/Notes/continuity/blood.md"), true);
+  });
+
+  test("infers reference doc types from path", () => {
+    assert.equal(inferReferenceDocType(syncDir, "/sync/projects/novel/world/reference/vampirism.md"), "world");
+    assert.equal(inferReferenceDocType(syncDir, "/sync/projects/novel/Notes/continuity/blood.md"), "continuity");
+    assert.equal(inferReferenceDocType(syncDir, "/sync/projects/novel/Notes/research/boats.md"), "research");
+  });
+
+  test("infers reference doc types for project-root sync layouts", () => {
+    assert.equal(inferReferenceDocType("/sync/projects/novel", "/sync/projects/novel/world/reference/vampirism.md"), "world");
+    assert.equal(inferReferenceDocType("/sync/projects/novel", "/sync/projects/novel/Notes/continuity/blood.md"), "continuity");
+  });
+
+  test("derives stable doc ids from relative path when doc_id is missing", () => {
+    assert.equal(
+      deriveReferenceDocId(syncDir, "/sync/projects/novel/world/reference/vampirism.md", {}),
+      "ref-projects-novel-world-reference-vampirism"
+    );
+  });
+
+  test("prefers explicit title and summary when provided", () => {
+    assert.equal(
+      deriveReferenceTitle("/sync/projects/novel/world/reference/vampirism.md", { title: "Custom Title" }, "# Ignored"),
+      "Custom Title"
+    );
+    assert.equal(
+      deriveReferenceSummary({ summary: "Custom summary" }, "Ignored body"),
+      "Custom summary"
+    );
+  });
+
+  test("normalizes tags from strings and removes duplicates", () => {
+    assert.deepEqual(
+      normalizeReferenceTags(["blood", " blood ", "lore"]),
+      ["blood", "lore"]
+    );
+  });
+});
+
 describe("world entity canonical detection", () => {
   const syncDir = "/sync";
 
@@ -478,6 +532,222 @@ describe("syncAll", () => {
     const places = db.prepare("SELECT * FROM places").all();
     assert.equal(places.length, 1);
     assert.equal(places[0].place_id, "harbor");
+
+    db.close();
+    fs.rmSync(dir, { recursive: true });
+  });
+
+  test("indexes reference docs with inferred type, summary, and tags", () => {
+    const dir = makeTempSync();
+    const db = openDb(":memory:");
+    fs.mkdirSync(path.join(dir, "projects", "test-novel", "world", "reference"), { recursive: true });
+    fs.mkdirSync(path.join(dir, "projects", "test-novel", "Notes", "continuity"), { recursive: true });
+    fs.writeFileSync(
+      path.join(dir, "projects", "test-novel", "world", "reference", "vampirism.md"),
+      "---\ntitle: Vampirism in this universe\nsummary: Rules of vampirism.\ntags:\n  - vampirism\n  - lore\n---\nReference body."
+    );
+    fs.writeFileSync(
+      path.join(dir, "projects", "test-novel", "Notes", "continuity", "blood-replacement.md"),
+      "---\ntitle: Sebastian's struggle for blood replacement\ntags:\n  - continuity\n  - blood\n---\nSebastian catalogues failed inventions."
+    );
+
+    syncAll(db, dir, { quiet: true });
+
+    const docs = db.prepare(`
+      SELECT doc_id, type, title, summary
+      FROM reference_docs
+      ORDER BY doc_id
+    `).all();
+    assert.equal(docs.length, 2);
+    assert.equal(docs[0].type, "continuity");
+    assert.equal(docs[1].type, "world");
+    assert.equal(docs[1].summary, "Rules of vampirism.");
+
+    const tags = db.prepare(`
+      SELECT tag
+      FROM reference_doc_tags
+      WHERE doc_id = ?
+      ORDER BY tag
+    `).all("ref-projects-test-novel-world-reference-vampirism").map(row => row.tag);
+    assert.deepEqual(tags, ["lore", "vampirism"]);
+
+    const matches = db.prepare(`
+      SELECT doc_id
+      FROM reference_docs_fts
+      WHERE reference_docs_fts MATCH 'vampirism'
+    `).all();
+    assert.equal(matches.length, 1);
+
+    db.close();
+    fs.rmSync(dir, { recursive: true });
+  });
+
+  test("prunes deleted reference docs from search tables on re-sync", () => {
+    const dir = makeTempSync();
+    const db = openDb(":memory:");
+    const refPath = path.join(dir, "projects", "test-novel", "world", "reference", "vampirism.md");
+    fs.mkdirSync(path.dirname(refPath), { recursive: true });
+    fs.writeFileSync(
+      refPath,
+      "---\ntitle: Vampirism in this universe\ntags:\n  - vampirism\n---\nReference body."
+    );
+
+    syncAll(db, dir, { quiet: true });
+    assert.equal(db.prepare(`SELECT COUNT(*) AS count FROM reference_docs`).get().count, 1);
+
+    fs.rmSync(refPath);
+    syncAll(db, dir, { quiet: true });
+
+    assert.equal(db.prepare(`SELECT COUNT(*) AS count FROM reference_docs`).get().count, 0);
+    assert.equal(db.prepare(`SELECT COUNT(*) AS count FROM reference_doc_tags`).get().count, 0);
+    assert.equal(db.prepare(`SELECT COUNT(*) AS count FROM reference_docs_fts`).get().count, 0);
+
+    db.close();
+    fs.rmSync(dir, { recursive: true });
+  });
+
+  test("keeps one FTS row per reference doc across repeated sync runs", () => {
+    const dir = makeTempSync();
+    const db = openDb(":memory:");
+    const refPath = path.join(dir, "projects", "test-novel", "world", "reference", "vampirism.md");
+    fs.mkdirSync(path.dirname(refPath), { recursive: true });
+    fs.writeFileSync(
+      refPath,
+      "---\ntitle: Vampirism in this universe\ntags:\n  - vampirism\n---\nReference body."
+    );
+
+    syncAll(db, dir, { quiet: true });
+    syncAll(db, dir, { quiet: true });
+
+    assert.equal(
+      db.prepare(`SELECT COUNT(*) AS count FROM reference_docs_fts WHERE doc_id = ?`).get("ref-projects-test-novel-world-reference-vampirism").count,
+      1
+    );
+
+    db.close();
+    fs.rmSync(dir, { recursive: true });
+  });
+
+  test("indexes reference docs with correct project metadata from a project-root sync dir", () => {
+    const syncRoot = fs.mkdtempSync(path.join(os.tmpdir(), "sync-project-root-"));
+    const projectRoot = path.join(syncRoot, "projects", "project-root-novel");
+    const db = openDb(":memory:");
+    fs.mkdirSync(path.join(projectRoot, "world", "reference"), { recursive: true });
+    fs.mkdirSync(path.join(projectRoot, "Notes", "continuity"), { recursive: true });
+    fs.writeFileSync(
+      path.join(projectRoot, "world", "reference", "vampirism.md"),
+      "---\ntitle: Vampirism in this universe\n---\nReference body."
+    );
+    fs.writeFileSync(
+      path.join(projectRoot, "Notes", "continuity", "blood-replacement.md"),
+      "---\ntitle: Sebastian's struggle for blood replacement\n---\nReference body."
+    );
+
+    syncAll(db, projectRoot, { quiet: true });
+
+    const docs = db.prepare(`
+      SELECT doc_id, project_id, type
+      FROM reference_docs
+      ORDER BY doc_id
+    `).all().map(row => ({ ...row }));
+    assert.deepEqual(docs, [
+      {
+        doc_id: "ref-notes-continuity-blood-replacement",
+        project_id: "project-root-novel",
+        type: "continuity",
+      },
+      {
+        doc_id: "ref-world-reference-vampirism",
+        project_id: "project-root-novel",
+        type: "world",
+      },
+    ]);
+
+    db.close();
+    fs.rmSync(syncRoot, { recursive: true });
+  });
+
+  test("indexes universe-root reference docs with correct universe metadata", () => {
+    const syncRoot = fs.mkdtempSync(path.join(os.tmpdir(), "sync-universe-root-"));
+    const universeRoot = path.join(syncRoot, "universes", "aether");
+    const db = openDb(":memory:");
+    fs.mkdirSync(path.join(universeRoot, "world", "reference"), { recursive: true });
+    fs.writeFileSync(
+      path.join(universeRoot, "world", "reference", "vampirism.md"),
+      "---\ntitle: Vampirism in this universe\n---\nReference body."
+    );
+
+    syncAll(db, universeRoot, { quiet: true });
+
+    const docs = db.prepare(`
+      SELECT doc_id, project_id, universe_id, type
+      FROM reference_docs
+      ORDER BY doc_id
+    `).all().map(row => ({ ...row }));
+    assert.deepEqual(docs, [
+      {
+        doc_id: "ref-world-reference-vampirism",
+        project_id: null,
+        universe_id: "aether",
+        type: "world",
+      },
+    ]);
+
+    db.close();
+    fs.rmSync(syncRoot, { recursive: true });
+  });
+
+  test("does not prune reference docs when sync root is narrowed to scenes", () => {
+    const dir = makeTempSync();
+    const db = openDb(":memory:");
+    const refPath = path.join(dir, "projects", "test-novel", "world", "reference", "vampirism.md");
+    fs.mkdirSync(path.dirname(refPath), { recursive: true });
+    fs.writeFileSync(
+      refPath,
+      "---\ntitle: Vampirism in this universe\ntags:\n  - vampirism\n---\nReference body."
+    );
+    writeScene(dir, "sc-001");
+
+    syncAll(db, dir, { quiet: true });
+    assert.equal(db.prepare(`SELECT COUNT(*) AS count FROM reference_docs`).get().count, 1);
+
+    const scenesRoot = path.join(dir, "projects", "test-novel", "scenes");
+    syncAll(db, scenesRoot, { quiet: true });
+
+    assert.equal(db.prepare(`SELECT COUNT(*) AS count FROM reference_docs`).get().count, 1);
+    assert.equal(
+      db.prepare(`SELECT COUNT(*) AS count FROM reference_docs_fts WHERE reference_docs_fts MATCH 'vampirism'`).get().count,
+      1
+    );
+
+    db.close();
+    fs.rmSync(dir, { recursive: true });
+  });
+
+  test("does not prune reference docs when sync root is a deeper scenes subtree", () => {
+    const dir = makeTempSync();
+    const db = openDb(":memory:");
+    const refPath = path.join(dir, "projects", "test-novel", "world", "reference", "vampirism.md");
+    fs.mkdirSync(path.dirname(refPath), { recursive: true });
+    fs.writeFileSync(
+      refPath,
+      "---\ntitle: Vampirism in this universe\ntags:\n  - vampirism\n---\nReference body."
+    );
+    const chapterDir = path.join(dir, "projects", "test-novel", "scenes", "chapter-1");
+    fs.mkdirSync(chapterDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(chapterDir, "sc-001.md"),
+      "---\nscene_id: sc-001\ntitle: Scene sc-001\npart: 1\nchapter: 1\npov: elena\n---\nProse content for scene sc-001."
+    );
+
+    syncAll(db, dir, { quiet: true });
+    syncAll(db, chapterDir, { quiet: true });
+
+    assert.equal(db.prepare(`SELECT COUNT(*) AS count FROM reference_docs`).get().count, 1);
+    assert.equal(
+      db.prepare(`SELECT COUNT(*) AS count FROM reference_docs_fts WHERE reference_docs_fts MATCH 'vampirism'`).get().count,
+      1
+    );
 
     db.close();
     fs.rmSync(dir, { recursive: true });

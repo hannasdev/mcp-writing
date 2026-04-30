@@ -285,6 +285,39 @@ describe("search_metadata tool", () => {
   });
 });
 
+describe("search_reference tool", () => {
+  test("finds reference docs by title and summary text", async () => {
+    const text = await callTool("search_reference", { query: "vampirism" });
+    const parsed = JSON.parse(text);
+    assert.equal(parsed.length, 1);
+    assert.equal(parsed[0].type, "world");
+    assert.equal(parsed[0].title, "Vampirism in this universe");
+    assert.ok(parsed[0].tags.includes("vampirism"));
+  });
+
+  test("supports exact tag filtering", async () => {
+    const text = await callTool("search_reference", { query: "blood", tag: "continuity" });
+    const parsed = JSON.parse(text);
+    assert.equal(parsed.length, 1);
+    assert.equal(parsed[0].type, "continuity");
+    assert.equal(parsed[0].title, "Sebastian's struggle for blood replacement");
+  });
+
+  test("supports type filtering", async () => {
+    const text = await callTool("search_reference", { query: "blood", type: "world" });
+    const parsed = JSON.parse(text);
+    assert.equal(parsed.length, 1);
+    assert.equal(parsed[0].type, "world");
+  });
+
+  test("returns INVALID_QUERY on malformed FTS syntax", async () => {
+    const text = await callTool("search_reference", { query: '"unmatched' });
+    const parsed = JSON.parse(text);
+    assert.equal(parsed.ok, false);
+    assert.equal(parsed.error.code, "INVALID_QUERY");
+  });
+});
+
 describe("list_threads tool", () => {
   test("returns structured empty result when none created", async () => {
     const text = await callTool("list_threads", { project_id: "test-novel" });

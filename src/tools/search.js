@@ -424,6 +424,67 @@ export function registerSearchTools(s, {
     }
   );
 
+  // ---- search_reference ----------------------------------------------------
+  s.tool(
+    "search_reference",
+    "Full-text search across indexed reference document titles, summaries, and tags. Use this to discover world-building notes, continuity references, research docs, and other reference material without loading full file contents.",
+    {
+      query: z.string().describe("Search terms (e.g. 'vampirism' or 'blood replacement'). FTS5 syntax supported."),
+      type: z.string().optional().describe("Optional reference type filter (for example: 'world', 'continuity', 'research', 'style')."),
+      tag: z.string().optional().describe("Optional exact tag filter."),
+    },
+    async ({ query, type, tag }) => {
+      let matchRows;
+      try {
+        matchRows = db.prepare(`
+          SELECT doc_id, rank
+          FROM reference_docs_fts
+          WHERE reference_docs_fts MATCH ?
+          ORDER BY rank
+        `).all(query);
+      } catch (err) {
+        return errorResponse("INVALID_QUERY", "Invalid reference search query syntax. Use plain keywords or quoted phrases.", { detail: err.message });
+      }
+
+      if (matchRows.length === 0) {
+        return errorResponse("NO_RESULTS", "No reference documents matched the search query.");
+      }
+
+      const rows = [];
+      const docStmt = db.prepare(`
+        SELECT doc_id, project_id, universe_id, type, title, summary, file_path
+        FROM reference_docs
+        WHERE doc_id = ?
+      `);
+      const tagsStmt = db.prepare(`
+        SELECT tag
+        FROM reference_doc_tags
+        WHERE doc_id = ?
+        ORDER BY tag
+      `);
+
+      for (const match of matchRows) {
+        const doc = docStmt.get(match.doc_id);
+        if (!doc) continue;
+
+        const tags = tagsStmt.all(match.doc_id).map(row => row.tag);
+        if (type && doc.type !== type) continue;
+        if (tag && !tags.includes(tag)) continue;
+
+        rows.push({
+          ...doc,
+          tags,
+        });
+      }
+
+      if (rows.length === 0) {
+        return errorResponse("NO_RESULTS", "No reference documents matched the provided filters.");
+      }
+
+      return { content: [{ type: "text", text: JSON.stringify(rows, null, 2) }] };
+    }
+  );
+
   // ---- list_threads --------------------------------------------------------
   s.tool(
     "list_threads",
