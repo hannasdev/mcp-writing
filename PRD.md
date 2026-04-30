@@ -156,13 +156,13 @@ Semantic search for queries that require understanding meaning, not just keyword
 
 ---
 
-### 📚 [Reference Document Querying](docs/prd/todo/reference-docs.md) 📋
+### 📚 [Reference Document Querying](docs/prd/in-progress/reference-docs.md) 🚧
 
 Index and link world-building notes, research, and continuity scratchpads as a reference system.
 
 **Example:** "Find all continuity notes mentioning Elena", "What are the rules of magic in this world?", or "What reference docs directly inform this scene?"
 
-**Status:** Deferred backlog (not active). Pending decision on initial schema, link authoring model, and indexing scope.
+**Status:** In progress. Phase 4A is shipped and Phase 4B is underway.
 
 ---
 

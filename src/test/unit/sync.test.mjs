@@ -7,6 +7,7 @@ import {
   checksumProse, inferProjectAndUniverse, inferScenePositionFromPath,
   inferReferenceDocType, isReferenceFile, deriveReferenceDocId,
   deriveReferenceSummary, deriveReferenceTitle, normalizeReferenceTags,
+  normalizeReferenceIdList,
   isCanonicalWorldEntityFile, getSyncOwnershipDiagnostics, getFileWriteDiagnostics,
   isWorldFile, readMeta, isSyncDirWritable, sidecarPath, syncAll,
   walkFiles, walkSidecars, worldEntityFolderKey, worldEntityKindForPath,
@@ -424,6 +425,13 @@ describe("reference docs", () => {
       ["blood", "lore"]
     );
   });
+
+  test("normalizes reference ids from strings and removes duplicates", () => {
+    assert.deepEqual(
+      normalizeReferenceIdList("ref-vampirism, ref-blood, ref-vampirism"),
+      ["ref-vampirism", "ref-blood"]
+    );
+  });
 });
 
 describe("world entity canonical detection", () => {
@@ -582,6 +590,53 @@ describe("syncAll", () => {
     fs.rmSync(dir, { recursive: true });
   });
 
+  test("indexes scene->reference and reference->reference links from metadata", () => {
+    const dir = makeTempSync();
+    const db = openDb(":memory:");
+
+    fs.mkdirSync(path.join(dir, "projects", "test-novel", "world", "reference"), { recursive: true });
+    fs.mkdirSync(path.join(dir, "projects", "test-novel", "Notes", "continuity"), { recursive: true });
+
+    fs.writeFileSync(
+      path.join(dir, "projects", "test-novel", "world", "reference", "vampirism.md"),
+      "---\ndoc_id: ref-vampirism\ntitle: Vampirism in this universe\nrelated_reference_ids:\n  - ref-blood-replacement\n  - ref-vampirism\n---\nReference body."
+    );
+    fs.writeFileSync(
+      path.join(dir, "projects", "test-novel", "Notes", "continuity", "blood-replacement.md"),
+      "---\ndoc_id: ref-blood-replacement\ntitle: Sebastian's struggle for blood replacement\n---\nReference body."
+    );
+
+    writeScene(dir, "sc-001", {
+      reference_ids: ["ref-vampirism", "ref-blood-replacement"],
+    });
+
+    syncAll(db, dir, { quiet: true });
+
+    const sceneLinks = db.prepare(`
+      SELECT source_kind, source_project_id, source_id, target_doc_id, relation
+      FROM reference_links
+      WHERE source_kind = 'scene' AND source_project_id = 'test-novel' AND source_id = 'sc-001'
+      ORDER BY target_doc_id
+    `).all().map(row => ({ ...row }));
+    assert.deepEqual(sceneLinks, [
+      { source_kind: "scene", source_project_id: "test-novel", source_id: "sc-001", target_doc_id: "ref-blood-replacement", relation: "informs" },
+      { source_kind: "scene", source_project_id: "test-novel", source_id: "sc-001", target_doc_id: "ref-vampirism", relation: "informs" },
+    ]);
+
+    const referenceLinks = db.prepare(`
+      SELECT source_kind, source_project_id, source_id, target_doc_id, relation
+      FROM reference_links
+      WHERE source_kind = 'reference' AND source_project_id = 'test-novel' AND source_id = 'ref-vampirism'
+      ORDER BY target_doc_id
+    `).all().map(row => ({ ...row }));
+    assert.deepEqual(referenceLinks, [
+      { source_kind: "reference", source_project_id: "test-novel", source_id: "ref-vampirism", target_doc_id: "ref-blood-replacement", relation: "related" },
+    ]);
+
+    db.close();
+    fs.rmSync(dir, { recursive: true });
+  });
+
   test("prunes deleted reference docs from search tables on re-sync", () => {
     const dir = makeTempSync();
     const db = openDb(":memory:");
@@ -601,6 +656,80 @@ describe("syncAll", () => {
     assert.equal(db.prepare(`SELECT COUNT(*) AS count FROM reference_docs`).get().count, 0);
     assert.equal(db.prepare(`SELECT COUNT(*) AS count FROM reference_doc_tags`).get().count, 0);
     assert.equal(db.prepare(`SELECT COUNT(*) AS count FROM reference_docs_fts`).get().count, 0);
+
+    db.close();
+    fs.rmSync(dir, { recursive: true });
+  });
+
+  test("prunes reference_links that target deleted reference docs on re-sync", () => {
+    const dir = makeTempSync();
+    const db = openDb(":memory:");
+    const targetPath = path.join(dir, "projects", "test-novel", "world", "reference", "vampirism.md");
+    const sourcePath = path.join(dir, "projects", "test-novel", "Notes", "continuity", "blood-replacement.md");
+    fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+    fs.mkdirSync(path.dirname(sourcePath), { recursive: true });
+
+    fs.writeFileSync(
+      targetPath,
+      "---\ndoc_id: ref-vampirism\ntitle: Vampirism in this universe\n---\nReference body."
+    );
+    fs.writeFileSync(
+      sourcePath,
+      "---\ndoc_id: ref-blood\ntitle: Blood replacement notes\nrelated_reference_ids:\n  - ref-vampirism\n---\nReference body."
+    );
+
+    syncAll(db, dir, { quiet: true });
+    assert.equal(db.prepare(`SELECT COUNT(*) AS count FROM reference_links`).get().count, 1);
+
+    fs.rmSync(targetPath);
+    syncAll(db, dir, { quiet: true });
+
+    assert.equal(db.prepare(`SELECT COUNT(*) AS count FROM reference_docs WHERE doc_id = 'ref-vampirism'`).get().count, 0);
+    assert.equal(db.prepare(`SELECT COUNT(*) AS count FROM reference_links`).get().count, 0);
+
+    db.close();
+    fs.rmSync(dir, { recursive: true });
+  });
+
+  test("keeps scene->reference links isolated when the same scene_id exists in multiple projects", () => {
+    const dir = makeTempSync();
+    const db = openDb(":memory:");
+
+    fs.mkdirSync(path.join(dir, "projects", "alpha-novel", "scenes"), { recursive: true });
+    fs.mkdirSync(path.join(dir, "projects", "alpha-novel", "world", "reference"), { recursive: true });
+    fs.mkdirSync(path.join(dir, "projects", "beta-novel", "scenes"), { recursive: true });
+    fs.mkdirSync(path.join(dir, "projects", "beta-novel", "world", "reference"), { recursive: true });
+
+    fs.writeFileSync(
+      path.join(dir, "projects", "alpha-novel", "scenes", "sc-001.md"),
+      "---\nscene_id: sc-001\ntitle: Alpha Scene\nreference_ids:\n  - ref-alpha\n---\nAlpha prose."
+    );
+    fs.writeFileSync(
+      path.join(dir, "projects", "beta-novel", "scenes", "sc-001.md"),
+      "---\nscene_id: sc-001\ntitle: Beta Scene\nreference_ids:\n  - ref-beta\n---\nBeta prose."
+    );
+    fs.writeFileSync(
+      path.join(dir, "projects", "alpha-novel", "world", "reference", "alpha.md"),
+      "---\ndoc_id: ref-alpha\ntitle: Alpha reference\n---\nAlpha reference body."
+    );
+    fs.writeFileSync(
+      path.join(dir, "projects", "beta-novel", "world", "reference", "beta.md"),
+      "---\ndoc_id: ref-beta\ntitle: Beta reference\n---\nBeta reference body."
+    );
+
+    syncAll(db, dir, { quiet: true });
+
+    const sceneLinks = db.prepare(`
+      SELECT source_kind, source_project_id, source_id, target_doc_id, relation
+      FROM reference_links
+      WHERE source_kind = 'scene' AND source_id = 'sc-001'
+      ORDER BY source_project_id, target_doc_id
+    `).all().map(row => ({ ...row }));
+
+    assert.deepEqual(sceneLinks, [
+      { source_kind: "scene", source_project_id: "alpha-novel", source_id: "sc-001", target_doc_id: "ref-alpha", relation: "informs" },
+      { source_kind: "scene", source_project_id: "beta-novel", source_id: "sc-001", target_doc_id: "ref-beta", relation: "informs" },
+    ]);
 
     db.close();
     fs.rmSync(dir, { recursive: true });
@@ -787,6 +916,129 @@ describe("syncAll", () => {
 
     const scene = db.prepare("SELECT metadata_stale FROM scenes WHERE scene_id = ?").get("sc-001");
     assert.equal(scene.metadata_stale, 1);
+
+    db.close();
+    fs.rmSync(dir, { recursive: true });
+  });
+
+  test("prunes deleted scenes and related scene links on re-sync", () => {
+    const dir = makeTempSync();
+    const db = openDb(":memory:");
+
+    fs.mkdirSync(path.join(dir, "projects", "test-novel", "world", "reference"), { recursive: true });
+    fs.writeFileSync(
+      path.join(dir, "projects", "test-novel", "world", "reference", "vampirism.md"),
+      "---\ndoc_id: ref-vampirism\ntitle: Vampirism in this universe\n---\nReference body."
+    );
+
+    writeScene(dir, "sc-001", { reference_ids: ["ref-vampirism"] });
+    syncAll(db, dir, { quiet: true });
+    assert.equal(db.prepare(`SELECT COUNT(*) AS count FROM scenes WHERE scene_id = 'sc-001'`).get().count, 1);
+    assert.equal(
+      db.prepare(`SELECT COUNT(*) AS count FROM reference_links WHERE source_kind = 'scene' AND source_id = 'sc-001'`).get().count,
+      1
+    );
+
+    fs.rmSync(path.join(dir, "projects", "test-novel", "scenes", "sc-001.md"));
+    syncAll(db, dir, { quiet: true });
+
+    assert.equal(db.prepare(`SELECT COUNT(*) AS count FROM scenes WHERE scene_id = 'sc-001'`).get().count, 0);
+    assert.equal(
+      db.prepare(`SELECT COUNT(*) AS count FROM reference_links WHERE source_kind = 'scene' AND source_id = 'sc-001'`).get().count,
+      0
+    );
+
+    db.close();
+    fs.rmSync(dir, { recursive: true });
+  });
+
+  test("pruning one project does not clear scene metadata for same scene_id in another project", () => {
+    const dir = makeTempSync();
+    const db = openDb(":memory:");
+
+    fs.mkdirSync(path.join(dir, "projects", "alpha-novel", "scenes"), { recursive: true });
+    fs.mkdirSync(path.join(dir, "projects", "beta-novel", "scenes"), { recursive: true });
+
+    fs.writeFileSync(
+      path.join(dir, "projects", "alpha-novel", "scenes", "sc-shared.md"),
+      "---\nscene_id: sc-shared\ntitle: Alpha Scene\ncharacters:\n  - alpha-hero\n---\nAlpha prose."
+    );
+    fs.writeFileSync(
+      path.join(dir, "projects", "beta-novel", "scenes", "sc-shared.md"),
+      "---\nscene_id: sc-shared\ntitle: Beta Scene\ncharacters:\n  - beta-hero\n---\nBeta prose."
+    );
+
+    syncAll(db, dir, { quiet: true });
+
+    fs.rmSync(path.join(dir, "projects", "alpha-novel", "scenes", "sc-shared.md"));
+    syncAll(db, dir, { quiet: true });
+
+    assert.equal(
+      db.prepare(`SELECT COUNT(*) AS count FROM scenes WHERE scene_id = 'sc-shared' AND project_id = 'alpha-novel'`).get().count,
+      0
+    );
+    assert.equal(
+      db.prepare(`SELECT COUNT(*) AS count FROM scenes WHERE scene_id = 'sc-shared' AND project_id = 'beta-novel'`).get().count,
+      1
+    );
+    assert.deepEqual(
+      db.prepare(`SELECT character_id FROM scene_characters WHERE scene_id = 'sc-shared' ORDER BY character_id`)
+        .all()
+        .map(row => row.character_id),
+      ["beta-hero"]
+    );
+
+    db.close();
+    fs.rmSync(dir, { recursive: true });
+  });
+
+  test("does not prune existing scenes when scene indexing fails", () => {
+    const dir = makeTempSync();
+    const db = openDb(":memory:");
+
+    writeScene(dir, "sc-001");
+    syncAll(db, dir, { quiet: true });
+    assert.equal(db.prepare(`SELECT COUNT(*) AS count FROM scenes WHERE scene_id = 'sc-001'`).get().count, 1);
+
+    fs.writeFileSync(
+      path.join(dir, "projects", "test-novel", "scenes", "sc-001.meta.yaml"),
+      "scene_id: [invalid"
+    );
+    syncAll(db, dir, { quiet: true });
+
+    assert.equal(db.prepare(`SELECT COUNT(*) AS count FROM scenes WHERE scene_id = 'sc-001'`).get().count, 1);
+
+    db.close();
+    fs.rmSync(dir, { recursive: true });
+  });
+
+  test("does not prune scenes when sync root is a deeper scenes subtree", () => {
+    const dir = makeTempSync();
+    const db = openDb(":memory:");
+
+    fs.mkdirSync(path.join(dir, "projects", "test-novel", "scenes", "chapter-1"), { recursive: true });
+    fs.writeFileSync(
+      path.join(dir, "projects", "test-novel", "scenes", "chapter-1", "sc-001.md"),
+      "---\nscene_id: sc-001\ntitle: Scene one\n---\nScene prose."
+    );
+    fs.writeFileSync(
+      path.join(dir, "projects", "test-novel", "scenes", "sc-002.md"),
+      "---\nscene_id: sc-002\ntitle: Scene two\n---\nScene prose."
+    );
+
+    syncAll(db, dir, { quiet: true });
+    assert.equal(
+      db.prepare(`SELECT COUNT(*) AS count FROM scenes WHERE project_id = 'test-novel'`).get().count,
+      2
+    );
+
+    const chapterRoot = path.join(dir, "projects", "test-novel", "scenes", "chapter-1");
+    syncAll(db, chapterRoot, { quiet: true });
+
+    assert.equal(
+      db.prepare(`SELECT COUNT(*) AS count FROM scenes WHERE project_id = 'test-novel'`).get().count,
+      2
+    );
 
     db.close();
     fs.rmSync(dir, { recursive: true });

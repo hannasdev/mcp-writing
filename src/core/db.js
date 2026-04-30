@@ -118,6 +118,18 @@ export const SCHEMA = `
     PRIMARY KEY (doc_id, tag)
   );
 
+  CREATE TABLE IF NOT EXISTS reference_links (
+    source_kind   TEXT NOT NULL,
+    source_project_id TEXT NOT NULL DEFAULT '',
+    source_id     TEXT NOT NULL,
+    target_doc_id TEXT NOT NULL,
+    relation      TEXT NOT NULL,
+    PRIMARY KEY (source_kind, source_project_id, source_id, target_doc_id, relation)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_reference_links_target_doc_id
+    ON reference_links(target_doc_id);
+
   CREATE VIRTUAL TABLE IF NOT EXISTS scenes_fts USING fts5(
     scene_id, project_id, logline, title, keywords
   );
@@ -195,6 +207,72 @@ const MIGRATIONS = [
         );
       `);
     }
+  },
+  // 4: add explicit reference links table
+  (db) => {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS reference_links (
+        source_kind   TEXT NOT NULL,
+        source_project_id TEXT NOT NULL DEFAULT '',
+        source_id     TEXT NOT NULL,
+        target_doc_id TEXT NOT NULL,
+        relation      TEXT NOT NULL,
+        PRIMARY KEY (source_kind, source_project_id, source_id, target_doc_id, relation)
+      );
+    `);
+
+    db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_reference_links_target_doc_id
+        ON reference_links(target_doc_id);
+    `);
+  },
+  // 5: ensure reference_links has project-scoped source key and target_doc_id index
+  (db) => {
+    const tables = db.prepare(`
+      SELECT name
+      FROM sqlite_master
+      WHERE type = 'table' AND name = 'reference_links'
+    `).all();
+
+    if (tables.length === 0) {
+      db.exec(`
+        CREATE TABLE reference_links (
+          source_kind   TEXT NOT NULL,
+          source_project_id TEXT NOT NULL DEFAULT '',
+          source_id     TEXT NOT NULL,
+          target_doc_id TEXT NOT NULL,
+          relation      TEXT NOT NULL,
+          PRIMARY KEY (source_kind, source_project_id, source_id, target_doc_id, relation)
+        );
+      `);
+    } else {
+      const columns = db.prepare(`PRAGMA table_info(reference_links)`).all();
+      if (!columns.some(c => c.name === "source_project_id")) {
+        db.exec(`
+          CREATE TABLE reference_links_migrating (
+            source_kind   TEXT NOT NULL,
+            source_project_id TEXT NOT NULL DEFAULT '',
+            source_id     TEXT NOT NULL,
+            target_doc_id TEXT NOT NULL,
+            relation      TEXT NOT NULL,
+            PRIMARY KEY (source_kind, source_project_id, source_id, target_doc_id, relation)
+          );
+        `);
+        db.exec(`
+          INSERT OR IGNORE INTO reference_links_migrating
+            (source_kind, source_project_id, source_id, target_doc_id, relation)
+          SELECT source_kind, '', source_id, target_doc_id, relation
+          FROM reference_links;
+        `);
+        db.exec(`DROP TABLE reference_links;`);
+        db.exec(`ALTER TABLE reference_links_migrating RENAME TO reference_links;`);
+      }
+    }
+
+    db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_reference_links_target_doc_id
+        ON reference_links(target_doc_id);
+    `);
   },
 ];
 

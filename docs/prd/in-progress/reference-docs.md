@@ -1,6 +1,6 @@
 # Reference Document Querying
 
-**Status:** 📋 Deferred backlog (not active)
+**Status:** 🚧 In progress (Phase 4A shipped; Phase 4B in progress)
 
 ## Motivation
 
@@ -189,6 +189,23 @@ Do not require semantic auto-linking in the first version.
 - Phase 4A: Reference docs become indexed entities with lightweight search
 - Phase 4B: Add explicit scene-to-reference and reference-to-reference links
 - Phase 4C: Optional helper flows for authoring/suggesting links
+
+## Current Implementation Status
+
+Completed (Phase 4A):
+- `reference_docs` metadata indexing is implemented
+- folder-based type inference is implemented (`/world/reference/`, `/Notes/*`)
+- FTS indexing on title/summary/tags is implemented
+- `search_reference(query, type?, tag?)` is implemented
+
+In progress (Phase 4B):
+- explicit `reference_links` schema is implemented
+- `sync()` now indexes direct scene-to-reference (`informs`) and reference-to-reference (`related`) links from metadata
+
+Not started:
+- `list_scene_references(scene_id)`
+- `get_reference_doc(doc_id, include_related?)`
+- `upsert_reference_link(source_kind, source_id, target_doc_id, relation)`
 
 ## Validation and Test Strategy
 

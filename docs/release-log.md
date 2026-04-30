@@ -8,6 +8,14 @@ This complements `CHANGELOG.md`:
 
 ## Unreleased
 
+### 2026-04-30 — Add persisted scene and reference document links
+
+- What changed: `sync()` now stores explicit links from scenes to reference docs (`reference_ids`) and between reference docs (`related_reference_ids`), and keeps those links pruned as files are removed.
+- Why it matters: Agents can traverse stable reference relationships instead of relying only on keyword matching, making continuity and lore lookups more reliable.
+- Who is affected: Anyone using Writing MCP reference docs and scene metadata for reasoning workflows.
+- Action needed: Add optional `reference_ids` on scenes and `related_reference_ids` on reference docs to get the most value from link-aware queries.
+- PR: #147
+
 ### 2026-04-30 — Add reference document search
 
 - What changed: `sync()` now indexes lightweight metadata for reference docs, and a new `search_reference` tool can discover world/reference and Notes documents by title, summary, and tags.
