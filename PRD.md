@@ -164,8 +164,8 @@ See [ideas-and-questions.md](docs/prd/inbox/ideas-and-questions.md) for:
 - Feature ideas (tag enhancements, relationship graphs, continuity checker)
 - Operational improvements (first-time setup, permission warnings)
 
-Additional in-progress proposal:
-- [Root Structure Reorganization](docs/prd/in-progress/root-structure-reorganization.md)
+Additional completed structural proposal:
+- [Root Structure Reorganization](docs/prd/done/root-structure-reorganization.md)
 
 ---
 
