@@ -119,8 +119,9 @@ search_reference(query, type?, tag?)
   - returns matching reference docs by title/summary/tags
   - does not load full content
 
-list_scene_references(scene_id)
+list_scene_references(scene_id, project_id?)
   - returns direct scene -> reference links only
+  - if `scene_id` is ambiguous across projects and `project_id` is omitted, returns a conflict with candidate project IDs
 
 get_reference_doc(doc_id, include_related?)
   - returns reference metadata and optionally one hop of related references
@@ -162,7 +163,7 @@ Rules:
 - default tool responses should be shallow
 
 Default behavior:
-- `list_scene_references(scene_id)` returns only direct scene links
+- `list_scene_references(scene_id, project_id?)` returns only direct scene links
 - `get_reference_doc(doc_id, include_related=true)` returns the doc plus one hop of related references
 - no tool should recursively walk the full graph by default
 
@@ -173,7 +174,7 @@ Default behavior:
 3. Add folder-based type inference (`/world/reference/` -> type 'world', `/Notes/continuity/` -> type 'continuity')
 4. Implement lightweight FTS indexing on title, summary, and tags
 5. Implement `search_reference(query, type?, tag?)`
-6. Implement `list_scene_references(scene_id)`
+6. Implement `list_scene_references(scene_id, project_id?)`
 7. Implement `get_reference_doc(doc_id, include_related?)`
 8. Add `sync()` support for detecting and indexing reference docs and their links
 9. Optionally add authoring helpers for writing/updating links later
@@ -218,7 +219,7 @@ Unit tests:
 Integration tests:
 - `sync()` indexes reference docs and links correctly
 - `search_reference()` returns lightweight results without loading full content
-- `list_scene_references(scene_id)` returns only direct scene links
+- `list_scene_references(scene_id, project_id?)` returns only direct scene links
 - `get_reference_doc(doc_id, include_related=true)` returns one-hop related references without looping
 
 Behavioral guardrails:

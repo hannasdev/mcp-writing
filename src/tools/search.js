@@ -488,7 +488,7 @@ export function registerSearchTools(s, {
   // ---- list_scene_references -----------------------------------------------
   s.tool(
     "list_scene_references",
-    "List direct reference documents linked from a scene via metadata (for example, reference_ids). Returns only one-hop scene -> reference links and does not recursively traverse related references.",
+    "List direct reference documents linked from a scene via metadata (for example, reference_ids). Returns only one-hop scene -> reference links and does not recursively traverse related references. If scene IDs are reused across projects, omitting project_id returns CONFLICT with candidate project_ids.",
     {
       scene_id: z.string().describe("Scene ID to inspect."),
       project_id: z.string().optional().describe("Optional project ID to disambiguate duplicate scene IDs across projects."),

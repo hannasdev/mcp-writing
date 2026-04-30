@@ -300,7 +300,7 @@ Full-text search across indexed reference document titles, summaries, and tags. 
 
 ## list_scene_references
 
-List direct reference documents linked from a scene via metadata (for example, reference_ids). Returns only one-hop scene -> reference links and does not recursively traverse related references.
+List direct reference documents linked from a scene via metadata (for example, reference_ids). Returns only one-hop scene -> reference links and does not recursively traverse related references. If scene IDs are reused across projects, omitting project_id returns CONFLICT with candidate project_ids.
 
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |

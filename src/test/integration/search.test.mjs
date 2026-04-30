@@ -8,20 +8,22 @@ import { createTestContext } from "../helpers/server.js";
 const ctx = createTestContext(3075, 3074);
 let writeSyncDir, readSyncDir;
 
-before(async () => {
-  await ctx.setup();
-  writeSyncDir = ctx.writeSyncDir;
-  readSyncDir = ctx.readSyncDir;
-});
+describe("search tools integration suite", { concurrency: 1 }, () => {
+  before(async () => {
+    await ctx.setup();
+    writeSyncDir = ctx.writeSyncDir;
+    readSyncDir = ctx.readSyncDir;
+  });
 
-after(async () => {
-  await ctx.teardown();
-});
+  after(async () => {
+    await ctx.teardown();
+  });
 
-const callTool = (n, a) => ctx.callTool(n, a);
-const callWriteTool = (n, a) => ctx.callWriteTool(n, a);
-const waitForAsyncJob = (id, t) => ctx.waitForAsyncJob(id, t);
-describe("find_scenes tool", () => {
+  const callTool = (n, a) => ctx.callTool(n, a);
+  const callWriteTool = (n, a) => ctx.callWriteTool(n, a);
+  const waitForAsyncJob = (id, t) => ctx.waitForAsyncJob(id, t);
+
+  describe("find_scenes tool", () => {
   test("returns all 3 scenes with no filters", async () => {
     const text = await callTool("find_scenes");
     const parsed = JSON.parse(text);
@@ -508,12 +510,13 @@ describe("upsert_thread_link tool", () => {
   });
 });
 
-describe("get_relationship_arc tool", () => {
-  test("returns no data message when no relationships exist", async () => {
-    const text = await callTool("get_relationship_arc", {
-      from_character: "elena",
-      to_character: "marcus",
+  describe("get_relationship_arc tool", () => {
+    test("returns no data message when no relationships exist", async () => {
+      const text = await callTool("get_relationship_arc", {
+        from_character: "elena",
+        to_character: "marcus",
+      });
+      assert.ok(text.toLowerCase().includes("no relationship data"));
     });
-    assert.ok(text.toLowerCase().includes("no relationship data"));
   });
 });

@@ -32,7 +32,7 @@ function makeToolHarness(db) {
     SYNC_DIR: "",
     GIT_ENABLED: false,
     errorResponse,
-    paginateRows: ({ rows }) => ({ paginated: false, rows, meta: {} }),
+    paginateRows: (rows, _opts) => ({ paginated: false, rows, meta: null }),
     DEFAULT_METADATA_PAGE_SIZE: 20,
     MAX_CHAPTER_SCENES: 20,
     getSceneProseAtCommit: () => "",
