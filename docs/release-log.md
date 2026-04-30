@@ -14,7 +14,7 @@ This complements `CHANGELOG.md`:
 - Why it matters: Agents can now move from scene context into relevant lore/continuity notes without broad keyword-only search or unbounded graph traversal.
 - Who is affected: Anyone using Writing MCP for continuity and world-reference reasoning.
 - Action needed: Optional but recommended: keep `reference_ids` on scenes and `related_reference_ids` on reference docs up to date for best results.
-- PR: #TBD
+- PR: https://github.com/hannasdev/mcp-writing/compare/main...feat/reference-links-query-tools?expand=1
 
 ### 2026-04-30 — Add persisted scene and reference document links
 
