@@ -1,6 +1,6 @@
 # Reference Document Querying
 
-**Status:** ✅ Phase 4A–4C complete; Phase 4D (optional authoring helpers) in scope
+**Status:** ✅ Phase 4A–4D complete; post-Phase-4D follow-up items tracked below
 
 ## Motivation
 
@@ -194,7 +194,7 @@ Do not require semantic auto-linking in the first version.
 - Phase 4A: Reference docs become indexed entities with lightweight search
 - Phase 4B: Add explicit scene-to-reference and reference-to-reference links plus query/read tools
 - Phase 4C: Durable write-through to source metadata files and final ownership/merge rules
-- Phase 4D: Optional helper flows for authoring/suggesting links
+- Phase 4D: Optional helper flows for authoring/suggesting links (implemented)
 
 ## Current Implementation Status
 
@@ -220,7 +220,19 @@ Completed (Phase 4C durability & merge rules):
 - ownership semantics finalized: per-source-kind context (informs for scenes, related for references)
 - full test coverage for write-through, rebuild durability, and merge scenarios (v2.17.0)
 
-## Next Implementation Slice (Phase 4D)
+Completed (Phase 4D suggestion/apply helpers):
+- `upsert_reference_link` supports `character` and `place` as `source_kind` values with sidecar write-through for canonical character/place files
+- `sync()` indexes character/place explicit reference links with existing explicit-vs-inferred precedence rules
+- `suggest_scene_references(scene_id, project_id?, mode?, selected_doc_ids?, max_apply?, min_score?)` is implemented with preview/apply modes
+- project isolation hardening is implemented for scene suggestions:
+  - successful metadata reads are authoritative (including empty entity lists)
+  - join-table fallback is used only when metadata cannot be read/no indexed file path
+- suggestion safety hardening is implemented:
+  - candidates whose target docs are missing from `reference_docs` are filtered out
+  - apply mode deduplicates by `doc_id` with deterministic ordering (one applied relation per doc per call)
+  - explicit scene-link index upsert is atomic (transaction/savepoint-safe)
+
+## Phase 4D Design (Implemented)
 
 Authoring and auto-suggestion helpers through entity-based reference linking.
 
@@ -308,14 +320,20 @@ Behavioral guardrails:
 - missing target docs should produce warnings, not crashes
 - cyclic links must not cause repeated or recursive output
 
-## Known Gaps (Phase 4D candidates)
+## Follow-up Backlog (Post-Phase-4D candidates)
 
-- No finalized authoring UX helpers for suggesting links based on scene/reference proximity
-- No auto-suggestion flow for likely scene references based on keyword overlap or character mentions
+- Authoring UX beyond preview/apply remains open (for example, structured approval and batch-confirmation flows)
+- No secondary suggestion model based on keyword overlap or mention heuristics (entity-link aggregation is implemented)
 - Deferred feature: reference-document "logline-like" summaries as explicit metadata fields
 - Open design for deferred feature: summaries may be handwritten by users or generated/suggested and then user-edited
 - Bulk link editing workflows (especially cross-project scenarios) not yet scoped
 - Cross-project/shared-universe ownership enforcement may need refinement once used on larger series projects
+
+## Issue Tracking
+
+- No dedicated follow-up issue exists yet for most post-Phase-4D backlog bullets.
+- Potentially related (partial overlap): https://github.com/hannasdev/mcp-writing/issues/155
+- Recommendation: open one issue per backlog bullet when the item is pulled into active planning.
 
 ## Resolved Items
 
