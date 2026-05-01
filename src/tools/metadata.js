@@ -1,46 +1,13 @@
 import { z } from "zod";
 import fs from "node:fs";
 import matter from "gray-matter";
-import { readMeta, writeMeta, indexSceneFile, normalizeSceneMetaForPath, normalizeReferenceLinkList } from "../sync/sync.js";
+import { readMeta, writeMeta, indexSceneFile, normalizeSceneMetaForPath } from "../sync/sync.js";
 import { validateProjectId, validateUniverseId } from "../sync/importer.js";
-
-function upsertSerializedReferenceLinks(existing, targetDocId, relation, { defaultRelation }) {
-  const normalized = normalizeReferenceLinkList(existing ?? [], { defaultRelation });
-  const filtered = normalized.filter((entry) => entry.targetDocId !== targetDocId);
-  filtered.push({ targetDocId, relation });
-  return filtered.map((entry) => ({
-    target_doc_id: entry.targetDocId,
-    relation: entry.relation,
-  }));
-}
-
-function persistSceneReferenceLink({ scenePath, syncDir, targetDocId, relation }) {
-  const { meta } = readMeta(scenePath, syncDir, { writable: true });
-  const existingExplicit = [
-    ...(Array.isArray(meta.reference_links) ? meta.reference_links : meta.reference_links ? [meta.reference_links] : []),
-    ...(Array.isArray(meta.explicit_reference_links) ? meta.explicit_reference_links : meta.explicit_reference_links ? [meta.explicit_reference_links] : []),
-  ];
-  const nextReferenceLinks = upsertSerializedReferenceLinks(existingExplicit, targetDocId, relation, {
-    defaultRelation: "informs",
-  });
-
-  const nextMeta = {
-    ...meta,
-    reference_links: nextReferenceLinks,
-  };
-  delete nextMeta.explicit_reference_links;
-
-  if (relation === "informs") {
-    const existingIds = Array.isArray(meta.reference_ids)
-      ? meta.reference_ids
-      : typeof meta.reference_ids === "string"
-        ? meta.reference_ids.split(",")
-        : [];
-    nextMeta.reference_ids = [...new Set([...existingIds.map((value) => String(value).trim()).filter(Boolean), targetDocId])];
-  }
-
-  writeMeta(scenePath, nextMeta);
-}
+import {
+  persistSceneReferenceLink,
+  upsertExplicitReferenceLinkRow,
+  upsertSerializedReferenceLinks,
+} from "./reference-link-persistence.js";
 
 function persistReferenceDocLink({ filePath, targetDocId, relation }) {
   const raw = fs.readFileSync(filePath, "utf8");
@@ -110,6 +77,129 @@ function persistPlaceReferenceLink({ placePath, syncDir, targetDocId, relation }
   delete nextMeta.explicit_reference_links;
 
   writeMeta(placePath, nextMeta);
+}
+
+function resolveProjectScopedSource({
+  db,
+  errorResponse,
+  sourceKind,
+  sourceId,
+  sourceProjectId,
+  table,
+  idColumn,
+  label,
+}) {
+  if (sourceProjectId) {
+    const scoped = db.prepare(`
+      SELECT ${idColumn} AS source_id, project_id, file_path
+      FROM ${table}
+      WHERE ${idColumn} = ? AND project_id = ?
+      LIMIT 1
+    `).get(sourceId, sourceProjectId);
+    if (!scoped) {
+      return { error: errorResponse("NOT_FOUND", `${label} '${sourceId}' not found in project '${sourceProjectId}'.`) };
+    }
+    return {
+      value: {
+        resolvedSourceProjectId: scoped.project_id ?? "",
+        sourceFilePath: scoped.file_path,
+      },
+    };
+  }
+
+  const matches = db.prepare(`
+    SELECT ${idColumn} AS source_id, project_id, file_path
+    FROM ${table}
+    WHERE ${idColumn} = ?
+    ORDER BY project_id
+  `).all(sourceId);
+
+  if (matches.length === 0) {
+    return { error: errorResponse("NOT_FOUND", `${label} '${sourceId}' not found.`) };
+  }
+  if (matches.length > 1) {
+    return {
+      error: errorResponse(
+        "CONFLICT",
+        `${label} ID '${sourceId}' exists in multiple projects. Provide source_project_id to disambiguate.`,
+        { source_id: sourceId, project_ids: matches.map((row) => row.project_id) }
+      ),
+    };
+  }
+
+  return {
+    value: {
+      resolvedSourceProjectId: matches[0].project_id ?? "",
+      sourceFilePath: matches[0].file_path,
+    },
+  };
+}
+
+function resolveReferenceLinkSource({
+  db,
+  errorResponse,
+  sourceKind,
+  sourceId,
+  sourceProjectId,
+  targetDocId,
+}) {
+  if (sourceKind === "reference") {
+    const sourceDoc = db.prepare(`
+      SELECT doc_id, project_id, file_path
+      FROM reference_docs
+      WHERE doc_id = ?
+      LIMIT 1
+    `).get(sourceId);
+    if (!sourceDoc) {
+      return { error: errorResponse("NOT_FOUND", `Source reference doc '${sourceId}' not found.`) };
+    }
+    if (sourceId === targetDocId) {
+      return { error: errorResponse("VALIDATION_ERROR", "Self-links are not allowed for reference sources.") };
+    }
+    const resolvedSourceProjectId = sourceDoc.project_id ?? "";
+    if ((sourceProjectId ?? "") !== "" && sourceProjectId !== resolvedSourceProjectId) {
+      const resolvedSourceProjectLabel = resolvedSourceProjectId === ""
+        ? "unscoped/no project"
+        : `project '${resolvedSourceProjectId}'`;
+      const requestedSourceProjectLabel = sourceProjectId === ""
+        ? "unscoped/no project"
+        : `project '${sourceProjectId}'`;
+      return {
+        error: errorResponse(
+          "CONFLICT",
+          `Source reference doc '${sourceId}' belongs to ${resolvedSourceProjectLabel}, not ${requestedSourceProjectLabel}.`,
+          {
+            source_id: sourceId,
+            source_project_id: sourceProjectId,
+            resolved_source_project_id: resolvedSourceProjectId,
+          }
+        ),
+      };
+    }
+    return {
+      value: {
+        resolvedSourceProjectId,
+        sourceFilePath: sourceDoc.file_path,
+      },
+    };
+  }
+
+  const sourceConfigByKind = {
+    scene: { table: "scenes", idColumn: "scene_id", label: "Scene" },
+    character: { table: "characters", idColumn: "character_id", label: "Character" },
+    place: { table: "places", idColumn: "place_id", label: "Place" },
+  };
+  const config = sourceConfigByKind[sourceKind];
+  return resolveProjectScopedSource({
+    db,
+    errorResponse,
+    sourceKind,
+    sourceId,
+    sourceProjectId,
+    table: config.table,
+    idColumn: config.idColumn,
+    label: config.label,
+  });
 }
 
 export function registerMetadataTools(s, {
@@ -312,208 +402,77 @@ export function registerMetadataTools(s, {
         return errorResponse("NOT_FOUND", `Target reference doc '${target_doc_id}' not found.`);
       }
 
-      let resolvedSourceProjectId;
-      let sourceScenePath = null;
-      let sourceCharacterPath = null;
-      let sourcePlacePath = null;
-      let sourceReferencePath = null;
-
-      if (source_kind === "scene") {
-        if (source_project_id) {
-          const scene = db.prepare(`
-            SELECT scene_id, project_id, file_path
-            FROM scenes
-            WHERE scene_id = ? AND project_id = ?
-            LIMIT 1
-          `).get(source_id, source_project_id);
-          if (!scene) {
-            return errorResponse("NOT_FOUND", `Scene '${source_id}' not found in project '${source_project_id}'.`);
-          }
-          resolvedSourceProjectId = scene.project_id ?? "";
-          sourceScenePath = scene.file_path;
-        } else {
-          const matches = db.prepare(`
-            SELECT scene_id, project_id, file_path
-            FROM scenes
-            WHERE scene_id = ?
-            ORDER BY project_id
-          `).all(source_id);
-          if (matches.length === 0) {
-            return errorResponse("NOT_FOUND", `Scene '${source_id}' not found.`);
-          }
-          if (matches.length > 1) {
-            return errorResponse(
-              "CONFLICT",
-              `Scene ID '${source_id}' exists in multiple projects. Provide source_project_id to disambiguate.`,
-              { source_id, project_ids: matches.map(row => row.project_id) }
-            );
-          }
-          resolvedSourceProjectId = matches[0].project_id ?? "";
-          sourceScenePath = matches[0].file_path;
-        }
-      } else if (source_kind === "character") {
-        if (source_project_id) {
-          const character = db.prepare(`
-            SELECT character_id, project_id, file_path
-            FROM characters
-            WHERE character_id = ? AND project_id = ?
-            LIMIT 1
-          `).get(source_id, source_project_id);
-          if (!character) {
-            return errorResponse("NOT_FOUND", `Character '${source_id}' not found in project '${source_project_id}'.`);
-          }
-          resolvedSourceProjectId = character.project_id ?? "";
-          sourceCharacterPath = character.file_path;
-        } else {
-          const matches = db.prepare(`
-            SELECT character_id, project_id, file_path
-            FROM characters
-            WHERE character_id = ?
-            ORDER BY project_id
-          `).all(source_id);
-          if (matches.length === 0) {
-            return errorResponse("NOT_FOUND", `Character '${source_id}' not found.`);
-          }
-          if (matches.length > 1) {
-            return errorResponse(
-              "CONFLICT",
-              `Character ID '${source_id}' exists in multiple projects. Provide source_project_id to disambiguate.`,
-              { source_id, project_ids: matches.map(row => row.project_id) }
-            );
-          }
-          resolvedSourceProjectId = matches[0].project_id ?? "";
-          sourceCharacterPath = matches[0].file_path;
-        }
-      } else if (source_kind === "place") {
-        if (source_project_id) {
-          const place = db.prepare(`
-            SELECT place_id, project_id, file_path
-            FROM places
-            WHERE place_id = ? AND project_id = ?
-            LIMIT 1
-          `).get(source_id, source_project_id);
-          if (!place) {
-            return errorResponse("NOT_FOUND", `Place '${source_id}' not found in project '${source_project_id}'.`);
-          }
-          resolvedSourceProjectId = place.project_id ?? "";
-          sourcePlacePath = place.file_path;
-        } else {
-          const matches = db.prepare(`
-            SELECT place_id, project_id, file_path
-            FROM places
-            WHERE place_id = ?
-            ORDER BY project_id
-          `).all(source_id);
-          if (matches.length === 0) {
-            return errorResponse("NOT_FOUND", `Place '${source_id}' not found.`);
-          }
-          if (matches.length > 1) {
-            return errorResponse(
-              "CONFLICT",
-              `Place ID '${source_id}' exists in multiple projects. Provide source_project_id to disambiguate.`,
-              { source_id, project_ids: matches.map(row => row.project_id) }
-            );
-          }
-          resolvedSourceProjectId = matches[0].project_id ?? "";
-          sourcePlacePath = matches[0].file_path;
-        }
-      } else {
-        const sourceDoc = db.prepare(`
-          SELECT doc_id, project_id, file_path
-          FROM reference_docs
-          WHERE doc_id = ?
-          LIMIT 1
-        `).get(source_id);
-        if (!sourceDoc) {
-          return errorResponse("NOT_FOUND", `Source reference doc '${source_id}' not found.`);
-        }
-        if (source_id === target_doc_id) {
-          return errorResponse("VALIDATION_ERROR", "Self-links are not allowed for reference sources.");
-        }
-        resolvedSourceProjectId = sourceDoc.project_id ?? "";
-        if ((source_project_id ?? "") !== "" && source_project_id !== resolvedSourceProjectId) {
-          const resolvedSourceProjectLabel = resolvedSourceProjectId === ""
-            ? "unscoped/no project"
-            : `project '${resolvedSourceProjectId}'`;
-          const requestedSourceProjectLabel = source_project_id === ""
-            ? "unscoped/no project"
-            : `project '${source_project_id}'`;
-          return errorResponse(
-            "CONFLICT",
-            `Source reference doc '${source_id}' belongs to ${resolvedSourceProjectLabel}, not ${requestedSourceProjectLabel}.`,
-            {
-              source_id,
-              source_project_id,
-              resolved_source_project_id: resolvedSourceProjectId,
-            }
-          );
-        }
-        sourceReferencePath = sourceDoc.file_path;
+      const sourceResolution = resolveReferenceLinkSource({
+        db,
+        errorResponse,
+        sourceKind: source_kind,
+        sourceId: source_id,
+        sourceProjectId: source_project_id,
+        targetDocId: target_doc_id,
+      });
+      if (sourceResolution.error) {
+        return sourceResolution.error;
       }
+      const { resolvedSourceProjectId, sourceFilePath } = sourceResolution.value;
 
       try {
         if (source_kind === "scene") {
-          if (!sourceScenePath) {
+          if (!sourceFilePath) {
             return errorResponse("STALE_PATH", `Scene '${source_id}' has no indexed file path. Run sync() to refresh.`, {
               source_id,
               source_project_id: resolvedSourceProjectId,
             });
           }
           persistSceneReferenceLink({
-            scenePath: sourceScenePath,
+            scenePath: sourceFilePath,
             syncDir: SYNC_DIR,
             targetDocId: target_doc_id,
             relation: normalizedRelation,
           });
         } else if (source_kind === "character") {
-          if (!sourceCharacterPath) {
+          if (!sourceFilePath) {
             return errorResponse("STALE_PATH", `Character '${source_id}' has no indexed file path. Run sync() to refresh.`, {
               source_id,
               source_project_id: resolvedSourceProjectId,
             });
           }
           persistCharacterReferenceLink({
-            characterPath: sourceCharacterPath,
+            characterPath: sourceFilePath,
             syncDir: SYNC_DIR,
             targetDocId: target_doc_id,
             relation: normalizedRelation,
           });
         } else if (source_kind === "place") {
-          if (!sourcePlacePath) {
+          if (!sourceFilePath) {
             return errorResponse("STALE_PATH", `Place '${source_id}' has no indexed file path. Run sync() to refresh.`, {
               source_id,
               source_project_id: resolvedSourceProjectId,
             });
           }
           persistPlaceReferenceLink({
-            placePath: sourcePlacePath,
+            placePath: sourceFilePath,
             syncDir: SYNC_DIR,
             targetDocId: target_doc_id,
             relation: normalizedRelation,
           });
         } else {
-          if (!sourceReferencePath) {
+          if (!sourceFilePath) {
             return errorResponse("STALE_PATH", `Reference doc '${source_id}' has no indexed file path. Run sync() to refresh.`, {
               source_id,
             });
           }
           persistReferenceDocLink({
-            filePath: sourceReferencePath,
+            filePath: sourceFilePath,
             targetDocId: target_doc_id,
             relation: normalizedRelation,
           });
         }
       } catch (err) {
         if (err?.code === "ENOENT") {
-          let indexedPath;
-          if (source_kind === "scene") indexedPath = sourceScenePath;
-          else if (source_kind === "character") indexedPath = sourceCharacterPath;
-          else if (source_kind === "place") indexedPath = sourcePlacePath;
-          else indexedPath = sourceReferencePath;
           return errorResponse(
             "STALE_PATH",
             `Source file for ${source_kind} '${source_id}' not found at indexed path — run sync() to refresh.`,
-            { indexed_path: indexedPath }
+            { indexed_path: sourceFilePath }
           );
         }
         return errorResponse("IO_ERROR", `Failed to persist link metadata: ${err.message}`);
@@ -521,16 +480,13 @@ export function registerMetadataTools(s, {
 
       try {
         db.exec("BEGIN");
-        db.prepare(`
-          DELETE FROM reference_links
-          WHERE source_kind = ? AND source_project_id = ? AND source_id = ? AND target_doc_id = ?
-        `).run(source_kind, resolvedSourceProjectId, source_id, target_doc_id);
-
-        db.prepare(`
-          INSERT INTO reference_links (
-            source_kind, source_project_id, source_id, target_doc_id, relation, origin
-          ) VALUES (?, ?, ?, ?, ?, 'explicit')
-        `).run(source_kind, resolvedSourceProjectId, source_id, target_doc_id, normalizedRelation);
+        upsertExplicitReferenceLinkRow(db, {
+          sourceKind: source_kind,
+          sourceProjectId: resolvedSourceProjectId,
+          sourceId: source_id,
+          targetDocId: target_doc_id,
+          relation: normalizedRelation,
+        });
         db.exec("COMMIT");
       } catch (err) {
         try {

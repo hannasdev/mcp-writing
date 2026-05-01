@@ -1,44 +1,23 @@
 import { z } from "zod";
 import fs from "node:fs";
 import matter from "gray-matter";
-import { readMeta, writeMeta, normalizeReferenceLinkList } from "../sync/sync.js";
+import { persistSceneReferenceLink, upsertExplicitReferenceLinkRow } from "./reference-link-persistence.js";
 
-function upsertSerializedReferenceLinks(existing, targetDocId, relation, { defaultRelation }) {
-  const normalized = normalizeReferenceLinkList(existing ?? [], { defaultRelation });
-  const filtered = normalized.filter((entry) => entry.targetDocId !== targetDocId);
-  filtered.push({ targetDocId, relation });
-  return filtered.map((entry) => ({
-    target_doc_id: entry.targetDocId,
-    relation: entry.relation,
-  }));
-}
-
-function persistSceneReferenceLink({ scenePath, syncDir, targetDocId, relation }) {
-  const { meta } = readMeta(scenePath, syncDir, { writable: true });
-  const existingExplicit = [
-    ...(Array.isArray(meta.reference_links) ? meta.reference_links : meta.reference_links ? [meta.reference_links] : []),
-    ...(Array.isArray(meta.explicit_reference_links) ? meta.explicit_reference_links : meta.explicit_reference_links ? [meta.explicit_reference_links] : []),
-  ];
-  const nextReferenceLinks = upsertSerializedReferenceLinks(existingExplicit, targetDocId, relation, {
-    defaultRelation: "informs",
-  });
-
-  const nextMeta = {
-    ...meta,
-    reference_links: nextReferenceLinks,
-  };
-  delete nextMeta.explicit_reference_links;
-
-  if (relation === "informs") {
-    const existingIds = Array.isArray(meta.reference_ids)
-      ? meta.reference_ids
-      : typeof meta.reference_ids === "string"
-        ? meta.reference_ids.split(",")
-        : [];
-    nextMeta.reference_ids = [...new Set([...existingIds.map((value) => String(value).trim()).filter(Boolean), targetDocId])];
+function accumulateSuggestionScore(scoreMap, rows, sourceLabel) {
+  for (const row of rows) {
+    const key = `${row.target_doc_id}:${row.relation}`;
+    if (!scoreMap.has(key)) {
+      scoreMap.set(key, {
+        doc_id: row.target_doc_id,
+        relation: row.relation,
+        score: 0,
+        sources: [],
+      });
+    }
+    const entry = scoreMap.get(key);
+    entry.score += 1;
+    entry.sources.push(`${sourceLabel}: ${row.source_name ?? row.source_id}`);
   }
-
-  writeMeta(scenePath, nextMeta);
 }
 
 export function registerSearchTools(s, {
@@ -842,7 +821,7 @@ export function registerSearchTools(s, {
       // Load all character/place source links in project scope and aggregate in memory.
       const characterReferenceLinks = characters.length > 0
         ? db.prepare(`
-            SELECT rl.target_doc_id, rl.relation, rl.source_id AS character_id, c.name AS character_name
+            SELECT rl.target_doc_id, rl.relation, rl.source_id AS source_id, c.name AS source_name
             FROM reference_links rl
             LEFT JOIN characters c
               ON c.character_id = rl.source_id
@@ -855,7 +834,7 @@ export function registerSearchTools(s, {
 
       const placeReferenceLinks = places.length > 0
         ? db.prepare(`
-            SELECT rl.target_doc_id, rl.relation, rl.source_id AS place_id, p.name AS place_name
+            SELECT rl.target_doc_id, rl.relation, rl.source_id AS source_id, p.name AS source_name
             FROM reference_links rl
             LEFT JOIN places p
               ON p.place_id = rl.source_id
@@ -868,36 +847,8 @@ export function registerSearchTools(s, {
 
       // Merge and score
       const scoreMap = new Map(); // key: "doc_id:relation" → { doc_id, relation, score, sources: [...] }
-
-      for (const row of characterReferenceLinks) {
-        const key = `${row.target_doc_id}:${row.relation}`;
-        if (!scoreMap.has(key)) {
-          scoreMap.set(key, {
-            doc_id: row.target_doc_id,
-            relation: row.relation,
-            score: 0,
-            sources: [],
-          });
-        }
-        const entry = scoreMap.get(key);
-        entry.score += 1;
-        entry.sources.push(`character: ${row.character_name ?? row.character_id}`);
-      }
-
-      for (const row of placeReferenceLinks) {
-        const key = `${row.target_doc_id}:${row.relation}`;
-        if (!scoreMap.has(key)) {
-          scoreMap.set(key, {
-            doc_id: row.target_doc_id,
-            relation: row.relation,
-            score: 0,
-            sources: [],
-          });
-        }
-        const entry = scoreMap.get(key);
-        entry.score += 1;
-        entry.sources.push(`place: ${row.place_name ?? row.place_id}`);
-      }
+      accumulateSuggestionScore(scoreMap, characterReferenceLinks, "character");
+      accumulateSuggestionScore(scoreMap, placeReferenceLinks, "place");
 
       // Filter out already explicit scene links and deduplicate sources
       const candidates = Array.from(scoreMap.values())
@@ -963,55 +914,50 @@ export function registerSearchTools(s, {
           .slice(0, max_apply ?? enriched.length);
 
         const appliedLinks = [];
-        for (const candidate of toApply) {
-          try {
+        try {
+          db.exec("BEGIN");
+
+          for (const candidate of toApply) {
             persistSceneReferenceLink({
               scenePath: resolvedScene.file_path,
               syncDir: SYNC_DIR,
               targetDocId: candidate.doc_id,
               relation: candidate.relation,
             });
-          } catch (err) {
-            if (err?.code === "ENOENT") {
-              return errorResponse(
-                "STALE_PATH",
-                `Scene file for '${scene_id}' not found at indexed path — run sync() to refresh.`,
-                { indexed_path: resolvedScene.file_path }
-              );
-            }
-            return errorResponse("IO_ERROR", `Failed to persist scene reference link metadata: ${err.message}`);
+
+            upsertExplicitReferenceLinkRow(db, {
+              sourceKind: "scene",
+              sourceProjectId: resolvedProjectId,
+              sourceId: scene_id,
+              targetDocId: candidate.doc_id,
+              relation: candidate.relation,
+            });
+
+            appliedLinks.push({
+              source_kind: "scene",
+              source_project_id: resolvedProjectId,
+              source_id: scene_id,
+              target_doc_id: candidate.doc_id,
+              relation: candidate.relation,
+              origin: "explicit",
+            });
           }
 
+          db.exec("COMMIT");
+        } catch (err) {
           try {
-            db.exec("BEGIN");
-            db.prepare(`
-              DELETE FROM reference_links
-              WHERE source_kind = 'scene' AND source_project_id = ? AND source_id = ? AND target_doc_id = ?
-            `).run(resolvedProjectId, scene_id, candidate.doc_id);
-
-            db.prepare(`
-              INSERT INTO reference_links (
-                source_kind, source_project_id, source_id, target_doc_id, relation, origin
-              ) VALUES ('scene', ?, ?, ?, ?, 'explicit')
-            `).run(resolvedProjectId, scene_id, candidate.doc_id, candidate.relation);
-            db.exec("COMMIT");
-          } catch (err) {
-            try {
-              db.exec("ROLLBACK");
-            } catch (rollbackErr) {
-              void rollbackErr;
-            }
-            return errorResponse("IO_ERROR", `Failed to persist scene reference link index row: ${err.message}`);
+            db.exec("ROLLBACK");
+          } catch (rollbackErr) {
+            void rollbackErr;
           }
-
-          appliedLinks.push({
-            source_kind: "scene",
-            source_project_id: resolvedProjectId,
-            source_id: scene_id,
-            target_doc_id: candidate.doc_id,
-            relation: candidate.relation,
-            origin: "explicit",
-          });
+          if (err?.code === "ENOENT") {
+            return errorResponse(
+              "STALE_PATH",
+              `Scene file for '${scene_id}' not found at indexed path — run sync() to refresh.`,
+              { indexed_path: resolvedScene.file_path }
+            );
+          }
+          return errorResponse("IO_ERROR", `Failed to persist scene reference link index rows: ${err.message}`);
         }
 
         return {
