@@ -126,6 +126,16 @@ Direct ingestion from Scrivener project internals (`.scriv`/`.scrivx`) for riche
 
 ---
 
+### 📚 [Reference Document Querying](docs/prd/done/reference-docs.md) ✅
+
+Index and link world-building notes, research, and continuity scratchpads as a reference system.
+
+**Example:** "Find all continuity notes mentioning Elena", "What are the rules of magic in this world?", or "What reference docs directly inform this scene?"
+
+**Status:** Completed. Phase 4A–4D are shipped; follow-up candidates are documented in the PRD.
+
+---
+
 ## Active Development
 
 ### 🚀 [OpenClaw Integration](docs/prd/in-progress/openclaw-integration.md) 🚧
@@ -153,16 +163,6 @@ Semantic search for queries that require understanding meaning, not just keyword
 **Example:** "Find scenes with confrontation near water" (currently impossible with FTS5 alone)
 
 **Status:** Deferred backlog (not active). Pending evaluation of embedding backend (OpenAI vs Ollama vs Hugging Face), cost, and performance.
-
----
-
-### 📚 [Reference Document Querying](docs/prd/done/reference-docs.md) ✅
-
-Index and link world-building notes, research, and continuity scratchpads as a reference system.
-
-**Example:** "Find all continuity notes mentioning Elena", "What are the rules of magic in this world?", or "What reference docs directly inform this scene?"
-
-**Status:** Completed. Phase 4A–4D are shipped; follow-up candidates are documented in the PRD.
 
 ---
 
@@ -234,7 +234,7 @@ Writing MCP is now in continuous development rather than sequential phase delive
 
 - **Core platform complete:** metadata architecture, import/sync, prose editing, search/analysis, review bundles, and Scrivener Direct extraction are all implemented.
 - **Active development:** OpenClaw integration and guideline generation.
-- **Deferred backlog:** embeddings search and the reference document system.
+- **Deferred backlog:** embeddings search.
 - **Ideas and open questions:** tracked separately so future exploration does not distort the active roadmap.
 
 ---
