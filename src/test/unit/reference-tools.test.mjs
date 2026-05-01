@@ -1,9 +1,12 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { openDb } from "../../core/db.js";
 import { registerSearchTools } from "../../tools/search.js";
 
-function makeToolHarness(db) {
+function makeToolHarness(db, { syncDir = "", writable = false } = {}) {
   const handlers = new Map();
   const server = {
     tool(name, _description, _schema, handler) {
@@ -29,7 +32,8 @@ function makeToolHarness(db) {
 
   registerSearchTools(server, {
     db,
-    SYNC_DIR: "",
+    SYNC_DIR: syncDir,
+    SYNC_DIR_WRITABLE: writable,
     GIT_ENABLED: false,
     errorResponse,
     paginateRows: (rows, _opts) => ({ paginated: false, rows, meta: null }),
@@ -410,6 +414,86 @@ describe("reference link search tools", () => {
       assert.equal(result.error.code, "NOT_FOUND");
     } finally {
       db.close();
+    }
+  });
+
+  test("suggest_scene_references apply mode returns READ_ONLY when sync dir is not writable", async () => {
+    const db = openDb(":memory:");
+    try {
+      seedProject(db, "test-novel");
+      seedScene(db, { sceneId: "sc-001", projectId: "test-novel" });
+
+      const tools = makeToolHarness(db, { writable: false });
+      const result = await tools.call("suggest_scene_references", {
+        scene_id: "sc-001",
+        project_id: "test-novel",
+        mode: "apply",
+      });
+
+      assert.equal(result.ok, false);
+      assert.equal(result.error.code, "READ_ONLY");
+    } finally {
+      db.close();
+    }
+  });
+
+  test("suggest_scene_references apply mode persists explicit scene links", async () => {
+    const db = openDb(":memory:");
+    const syncDir = fs.mkdtempSync(path.join(os.tmpdir(), "ref-apply-"));
+    try {
+      seedProject(db, "test-novel");
+
+      const sceneDir = path.join(syncDir, "projects", "test-novel", "scenes");
+      fs.mkdirSync(sceneDir, { recursive: true });
+      const scenePath = path.join(sceneDir, "sc-001.md");
+      fs.writeFileSync(scenePath, "---\nscene_id: sc-001\ntitle: Scene 1\n---\nScene prose.", "utf8");
+
+      db.prepare(`
+        INSERT INTO scenes (
+          scene_id, project_id, title, file_path, prose_checksum, metadata_stale, updated_at
+        ) VALUES (?, ?, ?, ?, ?, 0, ?)
+      `).run("sc-001", "test-novel", "Scene 1", scenePath, "deadbeef", new Date().toISOString());
+
+      db.prepare(`
+        INSERT INTO characters (character_id, project_id, name, file_path)
+        VALUES (?, ?, ?, ?)
+      `).run("char-mira", "test-novel", "Mira", "/tmp/mira.md");
+      db.prepare(`INSERT INTO scene_characters (scene_id, character_id) VALUES (?, ?)`).run("sc-001", "char-mira");
+
+      seedReferenceDoc(db, { docId: "ref-vampirism", projectId: "test-novel", title: "Vampirism", type: "world" });
+      seedReferenceLink(db, {
+        sourceKind: "character",
+        sourceProjectId: "test-novel",
+        sourceId: "char-mira",
+        targetDocId: "ref-vampirism",
+        relation: "informs",
+      });
+
+      const tools = makeToolHarness(db, { syncDir, writable: true });
+      const result = await tools.call("suggest_scene_references", {
+        scene_id: "sc-001",
+        project_id: "test-novel",
+        mode: "apply",
+      });
+
+      assert.equal(result.applied_count, 1);
+      assert.equal(result.applied_links.length, 1);
+      assert.equal(result.applied_links[0].target_doc_id, "ref-vampirism");
+
+      const row = db.prepare(`
+        SELECT relation, origin
+        FROM reference_links
+        WHERE source_kind = 'scene' AND source_project_id = 'test-novel' AND source_id = 'sc-001' AND target_doc_id = 'ref-vampirism'
+      `).get();
+      assert.equal(row.relation, "informs");
+      assert.equal(row.origin, "explicit");
+
+      const sidecar = fs.readFileSync(scenePath.replace(/\.md$/, ".meta.yaml"), "utf8");
+      assert.match(sidecar, /reference_links:/);
+      assert.match(sidecar, /target_doc_id: ref-vampirism/);
+    } finally {
+      db.close();
+      fs.rmSync(syncDir, { recursive: true, force: true });
     }
   });
 });

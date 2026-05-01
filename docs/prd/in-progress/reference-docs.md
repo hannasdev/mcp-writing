@@ -232,7 +232,7 @@ Authoring and auto-suggestion helpers through entity-based reference linking.
 - Links are persisted to character/place `.meta.yaml` sidecars parallel to scene sidecars
 - Write-through helpers: `persistCharacterReferenceLink()`, `persistPlaceReferenceLink()`
 
-**Suggestion mechanism:** `suggest_scene_references(scene_id, project_id?)`
+**Suggestion mechanism:** `suggest_scene_references(scene_id, project_id?, mode?, selected_doc_ids?, max_apply?, min_score?)`
 
 - Query: Find all characters and places in the scene
 - Query: For each character/place, retrieve linked references
@@ -244,10 +244,24 @@ Authoring and auto-suggestion helpers through entity-based reference linking.
 - Exclude any already-explicit scene → reference links
 - Include source attribution (e.g., "linked via character X" or "linked via place Y" or "linked via both")
 
+**Simplified UX modes:**
+
+- `mode: "preview"` (default) returns weighted candidates only
+- `mode: "apply"` persists selected/top suggestions as explicit `scene -> reference` links in one call
+- `selected_doc_ids` optionally limits which suggested doc IDs are applied
+- `max_apply` optionally caps the number of suggestions applied in a single call
+- `min_score` optionally filters low-confidence candidates from preview/apply
+
 **Manual linking:** Users can always call `upsert_reference_link` directly
 
 - `upsert_reference_link('scene', scene_id, project_id, target_doc_id, relation)` creates explicit scene links
 - Explicit scene links take precedence over any suggestion (not overridden by suggestions)
+
+**Order of operations guidance:**
+
+- Common flow can now be single-step with `suggest_scene_references(..., mode="apply")`
+- For manual review/approval, use `suggest_scene_references(..., mode="preview")` then `upsert_reference_link`
+- After external file edits (outside tools), run `sync()` before preview/apply to refresh index state
 
 **Sync indexing:** Extend `sync()` to index character/place → reference links
 

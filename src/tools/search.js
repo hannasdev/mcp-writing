@@ -1,10 +1,50 @@
 import { z } from "zod";
 import fs from "node:fs";
 import matter from "gray-matter";
+import { readMeta, writeMeta, normalizeReferenceLinkList } from "../sync/sync.js";
+
+function upsertSerializedReferenceLinks(existing, targetDocId, relation, { defaultRelation }) {
+  const normalized = normalizeReferenceLinkList(existing ?? [], { defaultRelation });
+  const filtered = normalized.filter((entry) => entry.targetDocId !== targetDocId);
+  filtered.push({ targetDocId, relation });
+  return filtered.map((entry) => ({
+    target_doc_id: entry.targetDocId,
+    relation: entry.relation,
+  }));
+}
+
+function persistSceneReferenceLink({ scenePath, syncDir, targetDocId, relation }) {
+  const { meta } = readMeta(scenePath, syncDir, { writable: true });
+  const existingExplicit = [
+    ...(Array.isArray(meta.reference_links) ? meta.reference_links : meta.reference_links ? [meta.reference_links] : []),
+    ...(Array.isArray(meta.explicit_reference_links) ? meta.explicit_reference_links : meta.explicit_reference_links ? [meta.explicit_reference_links] : []),
+  ];
+  const nextReferenceLinks = upsertSerializedReferenceLinks(existingExplicit, targetDocId, relation, {
+    defaultRelation: "informs",
+  });
+
+  const nextMeta = {
+    ...meta,
+    reference_links: nextReferenceLinks,
+  };
+  delete nextMeta.explicit_reference_links;
+
+  if (relation === "informs") {
+    const existingIds = Array.isArray(meta.reference_ids)
+      ? meta.reference_ids
+      : typeof meta.reference_ids === "string"
+        ? meta.reference_ids.split(",")
+        : [];
+    nextMeta.reference_ids = [...new Set([...existingIds.map((value) => String(value).trim()).filter(Boolean), targetDocId])];
+  }
+
+  writeMeta(scenePath, nextMeta);
+}
 
 export function registerSearchTools(s, {
   db,
   SYNC_DIR,
+  SYNC_DIR_WRITABLE,
   GIT_ENABLED,
   errorResponse,
   paginateRows,
@@ -744,14 +784,18 @@ export function registerSearchTools(s, {
   // ---- suggest_scene_references --------------------------------------------
   s.tool(
     "suggest_scene_references",
-    "Suggest reference documents for a scene by aggregating links from the scene's characters and places. Returns weighted candidates ranked by how many entities in the scene link to each reference. Excludes any explicit scene → reference links already present. Helpful for discovering relevant conceptual documents during scene review.",
+    "Suggest reference documents for a scene by aggregating links from the scene's characters and places. Returns weighted candidates ranked by how many entities in the scene link to each reference. Excludes any explicit scene → reference links already present. In apply mode, can persist selected suggestions as explicit scene links in one call.",
     {
       scene_id: z.string().describe("Scene ID (e.g. 'sc-011-sebastian')."),
       project_id: z.string().optional().describe("Optional project scope to disambiguate an ambiguous scene_id across projects."),
+      mode: z.enum(["preview", "apply"]).optional().describe("Use 'preview' (default) to list candidates only, or 'apply' to persist selected suggestions as explicit scene links."),
+      selected_doc_ids: z.array(z.string()).optional().describe("Optional allowlist of doc_ids to apply when mode='apply'. If omitted, applies top-ranked candidates."),
+      max_apply: z.number().int().min(1).optional().describe("Optional cap for how many candidates to apply when mode='apply'."),
+      min_score: z.number().int().min(1).optional().describe("Optional minimum candidate score. Candidates below this are excluded from preview/apply. Defaults to 1."),
     },
-    async ({ scene_id, project_id }) => {
+    async ({ scene_id, project_id, mode = "preview", selected_doc_ids, max_apply, min_score = 1 }) => {
       // Resolve scene
-      let sceneQuery = `SELECT scene_id, project_id FROM scenes WHERE scene_id = ?`;
+      let sceneQuery = `SELECT scene_id, project_id, file_path FROM scenes WHERE scene_id = ?`;
       const sceneParams = [scene_id];
       if (project_id) {
         sceneQuery += ` AND project_id = ?`;
@@ -772,6 +816,10 @@ export function registerSearchTools(s, {
 
       const resolvedScene = scenes[0];
       const resolvedProjectId = resolvedScene.project_id ?? "";
+
+      if (mode === "apply" && !SYNC_DIR_WRITABLE) {
+        return errorResponse("READ_ONLY", "Cannot apply suggestions: sync dir is read-only.");
+      }
 
       // Get characters in the scene
       const characters = db.prepare(`
@@ -854,6 +902,7 @@ export function registerSearchTools(s, {
       // Filter out already explicit scene links and deduplicate sources
       const candidates = Array.from(scoreMap.values())
         .filter(entry => !existingSceneLinkKeys.has(`${entry.doc_id}:${entry.relation}`))
+        .filter(entry => entry.score >= min_score)
         .map(entry => ({
           ...entry,
           sources: [...new Set(entry.sources)], // deduplicate
@@ -892,13 +941,94 @@ export function registerSearchTools(s, {
               scene_id,
               project_id: resolvedProjectId,
               total_candidates: 0,
-              message: "No reference suggestions found. Scene characters and places have no linked references.",
+                message: "No reference suggestions found. Scene characters and places have no linked references.",
               candidates: [],
             }, null, 2),
           }],
         };
       }
 
+
+      if (mode === "apply") {
+        if (!resolvedScene.file_path) {
+          return errorResponse("STALE_PATH", `Scene '${scene_id}' has no indexed file path. Run sync() to refresh.`, {
+            scene_id,
+            project_id: resolvedProjectId,
+          });
+        }
+
+        const selectedSet = selected_doc_ids ? new Set(selected_doc_ids) : null;
+        const toApply = enriched
+          .filter(candidate => !selectedSet || selectedSet.has(candidate.doc_id))
+          .slice(0, max_apply ?? enriched.length);
+
+        const appliedLinks = [];
+        for (const candidate of toApply) {
+          try {
+            persistSceneReferenceLink({
+              scenePath: resolvedScene.file_path,
+              syncDir: SYNC_DIR,
+              targetDocId: candidate.doc_id,
+              relation: candidate.relation,
+            });
+          } catch (err) {
+            if (err?.code === "ENOENT") {
+              return errorResponse(
+                "STALE_PATH",
+                `Scene file for '${scene_id}' not found at indexed path — run sync() to refresh.`,
+                { indexed_path: resolvedScene.file_path }
+              );
+            }
+            return errorResponse("IO_ERROR", `Failed to persist scene reference link metadata: ${err.message}`);
+          }
+
+          try {
+            db.exec("BEGIN");
+            db.prepare(`
+              DELETE FROM reference_links
+              WHERE source_kind = 'scene' AND source_project_id = ? AND source_id = ? AND target_doc_id = ?
+            `).run(resolvedProjectId, scene_id, candidate.doc_id);
+
+            db.prepare(`
+              INSERT INTO reference_links (
+                source_kind, source_project_id, source_id, target_doc_id, relation, origin
+              ) VALUES ('scene', ?, ?, ?, ?, 'explicit')
+            `).run(resolvedProjectId, scene_id, candidate.doc_id, candidate.relation);
+            db.exec("COMMIT");
+          } catch (err) {
+            try {
+              db.exec("ROLLBACK");
+            } catch (rollbackErr) {
+              void rollbackErr;
+            }
+            return errorResponse("IO_ERROR", `Failed to persist scene reference link index row: ${err.message}`);
+          }
+
+          appliedLinks.push({
+            source_kind: "scene",
+            source_project_id: resolvedProjectId,
+            source_id: scene_id,
+            target_doc_id: candidate.doc_id,
+            relation: candidate.relation,
+            origin: "explicit",
+          });
+        }
+
+        return {
+          content: [{
+            type: "text",
+            text: JSON.stringify({
+              scene_id,
+              project_id: resolvedProjectId,
+              mode,
+              total_candidates: enriched.length,
+              applied_count: appliedLinks.length,
+              applied_links: appliedLinks,
+              candidates: enriched,
+            }, null, 2),
+          }],
+        };
+      }
       return {
         content: [{
           type: "text",
