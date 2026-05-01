@@ -1,6 +1,7 @@
 import { z } from "zod";
 import fs from "node:fs";
 import matter from "gray-matter";
+import { readMeta } from "../sync/sync.js";
 import { persistSceneReferenceLink, upsertExplicitReferenceLinkRow } from "./reference-link-persistence.js";
 
 function accumulateSuggestionScore(scoreMap, rows, sourceLabel) {
@@ -18,6 +19,24 @@ function accumulateSuggestionScore(scoreMap, rows, sourceLabel) {
     entry.score += 1;
     entry.sources.push(`${sourceLabel}: ${row.source_name ?? row.source_id}`);
   }
+}
+
+function normalizeEntityIdList(value) {
+  if (Array.isArray(value)) {
+    return value.map((entry) => String(entry).trim()).filter(Boolean);
+  }
+  if (typeof value === "string") {
+    return value.split(",").map((entry) => entry.trim()).filter(Boolean);
+  }
+  return [];
+}
+
+function readSceneEntityIdsFromMetadata({ scenePath, syncDir }) {
+  const { meta } = readMeta(scenePath, syncDir, { writable: false });
+  return {
+    characterIds: normalizeEntityIdList(meta.characters),
+    placeIds: normalizeEntityIdList(meta.places),
+  };
 }
 
 export function registerSearchTools(s, {
@@ -800,26 +819,47 @@ export function registerSearchTools(s, {
         return errorResponse("READ_ONLY", "Cannot apply suggestions: sync dir is read-only.");
       }
 
-      // Get characters in the scene
-      const characters = db.prepare(`
-        SELECT character_id FROM scene_characters WHERE scene_id = ?
-      `).all(scene_id);
+      let characterIds = [];
+      let placeIds = [];
+      let loadedSceneEntitiesFromMetadata = false;
 
-      // Get places in the scene
-      const places = db.prepare(`
-        SELECT place_id FROM scene_places WHERE scene_id = ?
-      `).all(scene_id);
+      if (resolvedScene.file_path) {
+        try {
+          const entities = readSceneEntityIdsFromMetadata({
+            scenePath: resolvedScene.file_path,
+            syncDir: SYNC_DIR,
+          });
+          if (entities.characterIds.length > 0 || entities.placeIds.length > 0) {
+            characterIds = entities.characterIds;
+            placeIds = entities.placeIds;
+            loadedSceneEntitiesFromMetadata = true;
+          }
+        } catch (err) {
+          void err;
+        }
+      }
+
+      if (!loadedSceneEntitiesFromMetadata) {
+        // Fallback for scenes without readable indexed file paths.
+        characterIds = db.prepare(`
+          SELECT character_id FROM scene_characters WHERE scene_id = ?
+        `).all(scene_id).map((row) => row.character_id);
+
+        placeIds = db.prepare(`
+          SELECT place_id FROM scene_places WHERE scene_id = ?
+        `).all(scene_id).map((row) => row.place_id);
+      }
 
       // Get explicit scene → reference links already present
       const existingSceneLinks = db.prepare(`
-        SELECT target_doc_id, relation
+        SELECT target_doc_id
         FROM reference_links
         WHERE source_kind = 'scene' AND source_project_id = ? AND source_id = ? AND origin = 'explicit'
       `).all(resolvedProjectId, scene_id);
-      const existingSceneLinkKeys = new Set(existingSceneLinks.map(link => `${link.target_doc_id}:${link.relation}`));
+      const existingSceneDocIds = new Set(existingSceneLinks.map((link) => link.target_doc_id));
 
       // Load all character/place source links in project scope and aggregate in memory.
-      const characterReferenceLinks = characters.length > 0
+      const characterReferenceLinks = characterIds.length > 0
         ? db.prepare(`
             SELECT rl.target_doc_id, rl.relation, rl.source_id AS source_id, c.name AS source_name
             FROM reference_links rl
@@ -828,11 +868,11 @@ export function registerSearchTools(s, {
              AND c.project_id = rl.source_project_id
             WHERE rl.source_kind = 'character'
               AND rl.source_project_id = ?
-              AND rl.source_id IN (${characters.map(() => "?").join(",")})
-          `).all(resolvedProjectId, ...characters.map(c => c.character_id))
+              AND rl.source_id IN (${characterIds.map(() => "?").join(",")})
+          `).all(resolvedProjectId, ...characterIds)
         : [];
 
-      const placeReferenceLinks = places.length > 0
+      const placeReferenceLinks = placeIds.length > 0
         ? db.prepare(`
             SELECT rl.target_doc_id, rl.relation, rl.source_id AS source_id, p.name AS source_name
             FROM reference_links rl
@@ -841,8 +881,8 @@ export function registerSearchTools(s, {
              AND p.project_id = rl.source_project_id
             WHERE rl.source_kind = 'place'
               AND rl.source_project_id = ?
-              AND rl.source_id IN (${places.map(() => "?").join(",")})
-          `).all(resolvedProjectId, ...places.map(p => p.place_id))
+              AND rl.source_id IN (${placeIds.map(() => "?").join(",")})
+          `).all(resolvedProjectId, ...placeIds)
         : [];
 
       // Merge and score
@@ -852,7 +892,7 @@ export function registerSearchTools(s, {
 
       // Filter out already explicit scene links and deduplicate sources
       const candidates = Array.from(scoreMap.values())
-        .filter(entry => !existingSceneLinkKeys.has(`${entry.doc_id}:${entry.relation}`))
+        .filter(entry => !existingSceneDocIds.has(entry.doc_id))
         .filter(entry => entry.score >= min_score)
         .map(entry => ({
           ...entry,

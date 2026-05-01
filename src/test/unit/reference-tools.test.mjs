@@ -336,6 +336,49 @@ describe("reference link search tools", () => {
     }
   });
 
+  test("suggest_scene_references excludes explicit scene links even when relation differs", async () => {
+    const db = openDb(":memory:");
+    try {
+      seedProject(db, "test-novel");
+      seedScene(db, { sceneId: "sc-001", projectId: "test-novel" });
+
+      db.prepare(`
+        INSERT INTO characters (character_id, project_id, name, file_path)
+        VALUES (?, ?, ?, ?)
+      `).run("char-mira", "test-novel", "Mira", "/tmp/mira.md");
+
+      db.prepare(`INSERT INTO scene_characters (scene_id, character_id) VALUES (?, ?)`).run("sc-001", "char-mira");
+
+      seedReferenceDoc(db, { docId: "ref-vampirism", projectId: "test-novel", title: "Vampirism", type: "world" });
+
+      seedReferenceLink(db, {
+        sourceKind: "character",
+        sourceProjectId: "test-novel",
+        sourceId: "char-mira",
+        targetDocId: "ref-vampirism",
+        relation: "informs",
+      });
+
+      // Explicit scene link points to the same doc with a different relation.
+      seedReferenceLink(db, {
+        sourceKind: "scene",
+        sourceProjectId: "test-novel",
+        sourceId: "sc-001",
+        targetDocId: "ref-vampirism",
+        relation: "see_also",
+        origin: "explicit",
+      });
+
+      const tools = makeToolHarness(db);
+      const suggestions = await tools.call("suggest_scene_references", { scene_id: "sc-001", project_id: "test-novel" });
+
+      assert.equal(suggestions.total_candidates, 0);
+      assert.equal(suggestions.candidates.length, 0);
+    } finally {
+      db.close();
+    }
+  });
+
   test("suggest_scene_references ignores links from other projects", async () => {
     const db = openDb(":memory:");
     try {
@@ -399,6 +442,83 @@ describe("reference link search tools", () => {
       assert.equal(suggestions.candidates[0].sources.length, 2);
     } finally {
       db.close();
+    }
+  });
+
+  test("suggest_scene_references uses resolved scene metadata to avoid cross-project scene_id leakage", async () => {
+    const db = openDb(":memory:");
+    const syncDir = fs.mkdtempSync(path.join(os.tmpdir(), "ref-suggest-meta-"));
+    try {
+      seedProject(db, "test-novel");
+      seedProject(db, "other-novel");
+
+      const testSceneDir = path.join(syncDir, "projects", "test-novel", "scenes");
+      fs.mkdirSync(testSceneDir, { recursive: true });
+      const testScenePath = path.join(testSceneDir, "sc-001.md");
+      fs.writeFileSync(
+        testScenePath,
+        "---\nscene_id: sc-001\ncharacters:\n  - char-mira\n---\nScene prose.",
+        "utf8"
+      );
+
+      // Same scene_id in another project to reproduce potential join-table leakage.
+      const otherScenePath = path.join(syncDir, "projects", "other-novel", "scenes", "sc-001.md");
+      fs.mkdirSync(path.dirname(otherScenePath), { recursive: true });
+      fs.writeFileSync(otherScenePath, "---\nscene_id: sc-001\ncharacters:\n  - char-ghost\n---\nOther prose.", "utf8");
+
+      db.prepare(`
+        INSERT INTO scenes (
+          scene_id, project_id, title, file_path, prose_checksum, metadata_stale, updated_at
+        ) VALUES (?, ?, ?, ?, ?, 0, ?)
+      `).run("sc-001", "test-novel", "Scene 1", testScenePath, "deadbeef", new Date().toISOString());
+
+      db.prepare(`
+        INSERT INTO scenes (
+          scene_id, project_id, title, file_path, prose_checksum, metadata_stale, updated_at
+        ) VALUES (?, ?, ?, ?, ?, 0, ?)
+      `).run("sc-001", "other-novel", "Scene 1", otherScenePath, "deadbeef", new Date().toISOString());
+
+      db.prepare(`
+        INSERT INTO characters (character_id, project_id, name, file_path)
+        VALUES (?, ?, ?, ?)
+      `).run("char-mira", "test-novel", "Mira", "/tmp/mira.md");
+
+      db.prepare(`
+        INSERT INTO characters (character_id, project_id, name, file_path)
+        VALUES (?, ?, ?, ?)
+      `).run("char-ghost", "test-novel", "Ghost", "/tmp/ghost.md");
+
+      // Join table contains both rows because it is not project-scoped.
+      db.prepare(`INSERT INTO scene_characters (scene_id, character_id) VALUES (?, ?)`).run("sc-001", "char-mira");
+      db.prepare(`INSERT INTO scene_characters (scene_id, character_id) VALUES (?, ?)`).run("sc-001", "char-ghost");
+
+      seedReferenceDoc(db, { docId: "ref-correct", projectId: "test-novel", title: "Correct Doc", type: "world" });
+      seedReferenceDoc(db, { docId: "ref-leaked", projectId: "test-novel", title: "Leaked Doc", type: "world" });
+
+      seedReferenceLink(db, {
+        sourceKind: "character",
+        sourceProjectId: "test-novel",
+        sourceId: "char-mira",
+        targetDocId: "ref-correct",
+        relation: "informs",
+      });
+      seedReferenceLink(db, {
+        sourceKind: "character",
+        sourceProjectId: "test-novel",
+        sourceId: "char-ghost",
+        targetDocId: "ref-leaked",
+        relation: "informs",
+      });
+
+      const tools = makeToolHarness(db, { syncDir, writable: true });
+      const suggestions = await tools.call("suggest_scene_references", { scene_id: "sc-001", project_id: "test-novel" });
+
+      assert.equal(suggestions.total_candidates, 1);
+      assert.equal(suggestions.candidates[0].doc_id, "ref-correct");
+      assert.equal(suggestions.candidates[0].score, 1);
+    } finally {
+      db.close();
+      fs.rmSync(syncDir, { recursive: true, force: true });
     }
   });
 
