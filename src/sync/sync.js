@@ -281,6 +281,50 @@ export function normalizeReferenceIdList(values) {
   )];
 }
 
+function normalizeReferenceRelation(value, fallbackRelation) {
+  const normalized = String(value ?? fallbackRelation ?? "").trim().toLowerCase();
+  if (/^[a-z][a-z0-9_-]*$/.test(normalized)) return normalized;
+  return String(fallbackRelation ?? "related").trim().toLowerCase();
+}
+
+export function normalizeReferenceLinkList(values, { defaultRelation = "related" } = {}) {
+  const rawValues = Array.isArray(values)
+    ? values
+    : typeof values === "string"
+      ? values.split(",")
+      : [];
+
+  const links = [];
+  for (const value of rawValues) {
+    if (typeof value === "string") {
+      const parts = value.split(",").map((part) => part.trim()).filter(Boolean);
+      for (const targetDocId of parts) {
+        links.push({ targetDocId, relation: normalizeReferenceRelation(defaultRelation, defaultRelation) });
+      }
+      continue;
+    }
+
+    if (!value || typeof value !== "object") continue;
+    const targetDocId = String(value.target_doc_id ?? value.doc_id ?? value.id ?? "").trim();
+    if (!targetDocId) continue;
+    links.push({
+      targetDocId,
+      relation: normalizeReferenceRelation(value.relation, defaultRelation),
+    });
+  }
+
+  const deduped = [];
+  const seen = new Set();
+  for (const link of links) {
+    const key = `${link.targetDocId}::${link.relation}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(link);
+  }
+
+  return deduped;
+}
+
 export function deriveReferenceSummary(meta = {}, content = "") {
   if (typeof meta.summary === "string" && meta.summary.trim()) return meta.summary.trim();
 
@@ -338,6 +382,59 @@ function indexReferenceLinksForSource(db, {
       targetDocId
     );
   }
+}
+
+function indexExplicitReferenceLinksForSource(db, {
+  sourceKind,
+  sourceProjectId = "",
+  sourceId,
+  links,
+  defaultRelation,
+}) {
+  db.prepare(`
+    DELETE FROM reference_links
+    WHERE source_kind = ? AND source_project_id = ? AND source_id = ? AND origin = 'explicit'
+  `).run(sourceKind, sourceProjectId, sourceId);
+
+  const insertReferenceLink = db.prepare(`
+    INSERT OR IGNORE INTO reference_links (
+      source_kind, source_project_id, source_id, target_doc_id, relation, origin
+    ) VALUES (?, ?, ?, ?, ?, 'explicit')
+  `);
+
+  for (const link of links) {
+    if (sourceKind === "reference" && sourceId === link.targetDocId) continue;
+    insertReferenceLink.run(
+      sourceKind,
+      sourceProjectId,
+      sourceId,
+      link.targetDocId,
+      normalizeReferenceRelation(link.relation, defaultRelation)
+    );
+  }
+}
+
+function collectExplicitReferenceLinks(meta, fields, { defaultRelation }) {
+  const hasField = fields.some((field) => Object.prototype.hasOwnProperty.call(meta, field));
+  if (!hasField) {
+    return { hasField: false, links: [] };
+  }
+
+  const rawValues = [];
+  for (const field of fields) {
+    if (!Object.prototype.hasOwnProperty.call(meta, field)) continue;
+    const value = meta[field];
+    if (Array.isArray(value)) {
+      rawValues.push(...value);
+    } else if (value !== undefined && value !== null) {
+      rawValues.push(value);
+    }
+  }
+
+  return {
+    hasField: true,
+    links: normalizeReferenceLinkList(rawValues, { defaultRelation }),
+  };
 }
 
 export function worldEntityKindForPath(syncDir, filePath) {
@@ -643,6 +740,11 @@ export function indexReferenceFile(db, syncDir, file, meta = {}, content = "") {
   const relatedReferenceIds = normalizeReferenceIdList(
     meta.related_reference_ids ?? meta.related_references ?? meta.related_docs ?? meta.related
   );
+  const explicitReferenceLinks = collectExplicitReferenceLinks(
+    meta,
+    ["reference_links", "related_reference_links", "explicit_reference_links"],
+    { defaultRelation: "related" }
+  );
 
   db.prepare(`
     INSERT INTO reference_docs (doc_id, project_id, universe_id, type, title, summary, file_path)
@@ -680,6 +782,16 @@ export function indexReferenceFile(db, syncDir, file, meta = {}, content = "") {
     summary ?? "",
     tags.join(" ")
   );
+
+  if (explicitReferenceLinks.hasField) {
+    indexExplicitReferenceLinksForSource(db, {
+      sourceKind: "reference",
+      sourceProjectId: project_id ?? "",
+      sourceId: docId,
+      links: explicitReferenceLinks.links,
+      defaultRelation: "related",
+    });
+  }
 
   indexReferenceLinksForSource(db, {
     sourceKind: "reference",
@@ -798,6 +910,11 @@ function pruneMissingScenes(db, seenSceneKeys, syncDir) {
 export function indexSceneFile(db, syncDir, file, meta, prose) {
   const { universe_id, project_id } = inferProjectAndUniverse(syncDir, file);
   const referenceIds = normalizeReferenceIdList(meta.reference_ids ?? meta.references);
+  const explicitSceneLinks = collectExplicitReferenceLinks(
+    meta,
+    ["reference_links", "explicit_reference_links"],
+    { defaultRelation: "informs" }
+  );
 
   if (universe_id) {
     db.prepare(`INSERT OR IGNORE INTO universes (universe_id, name) VALUES (?, ?)`).run(
@@ -921,6 +1038,16 @@ export function indexSceneFile(db, syncDir, file, meta, prose) {
     meta.title ?? "",
     keywordTokens,
   );
+
+  if (explicitSceneLinks.hasField) {
+    indexExplicitReferenceLinksForSource(db, {
+      sourceKind: "scene",
+      sourceProjectId: project_id ?? "",
+      sourceId: meta.scene_id,
+      links: explicitSceneLinks.links,
+      defaultRelation: "informs",
+    });
+  }
 
   indexReferenceLinksForSource(db, {
     sourceKind: "scene",

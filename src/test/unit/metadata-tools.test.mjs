@@ -1,7 +1,17 @@
-import { describe, test } from "node:test";
+import { after, describe, test } from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { openDb } from "../../core/db.js";
 import { registerMetadataTools } from "../../tools/metadata.js";
+
+const SEED_TMP_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-writing-metadata-tools-"));
+let seedCounter = 0;
+
+after(() => {
+  fs.rmSync(SEED_TMP_DIR, { recursive: true, force: true });
+});
 
 function makeToolHarness(db, { writable = true } = {}) {
   const handlers = new Map();
@@ -55,19 +65,33 @@ function seedProject(db, projectId) {
 }
 
 function seedScene(db, { sceneId, projectId }) {
+  seedCounter += 1;
+  const scenePath = path.join(SEED_TMP_DIR, `${projectId}-${sceneId}-${seedCounter}.md`);
+  fs.writeFileSync(
+    scenePath,
+    `---\nscene_id: ${sceneId}\ntitle: ${sceneId}\n---\nScene prose.`,
+    "utf8"
+  );
   db.prepare(`
     INSERT INTO scenes (
       scene_id, project_id, title, file_path, prose_checksum, metadata_stale, updated_at
     ) VALUES (?, ?, ?, ?, ?, 0, ?)
-  `).run(sceneId, projectId, sceneId, `/tmp/${projectId}-${sceneId}.md`, "deadbeef", new Date().toISOString());
+  `).run(sceneId, projectId, sceneId, scenePath, "deadbeef", new Date().toISOString());
 }
 
 function seedReferenceDoc(db, { docId, projectId, title }) {
+  seedCounter += 1;
+  const referencePath = path.join(SEED_TMP_DIR, `${projectId ?? "global"}-${docId}-${seedCounter}.md`);
+  fs.writeFileSync(
+    referencePath,
+    `---\ndoc_id: ${docId}\ntitle: ${title}\n---\nReference body.`,
+    "utf8"
+  );
   db.prepare(`
     INSERT INTO reference_docs (
       doc_id, project_id, universe_id, type, title, summary, file_path
     ) VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).run(docId, projectId, null, "world", title, null, `/tmp/${projectId}-${docId}.md`);
+  `).run(docId, projectId, null, "world", title, null, referencePath);
 }
 
 describe("metadata upsert_reference_link tool", () => {

@@ -1,8 +1,78 @@
 import { z } from "zod";
 import fs from "node:fs";
 import matter from "gray-matter";
-import { readMeta, writeMeta, indexSceneFile, normalizeSceneMetaForPath } from "../sync/sync.js";
+import { readMeta, writeMeta, indexSceneFile, normalizeSceneMetaForPath, normalizeReferenceLinkList } from "../sync/sync.js";
 import { validateProjectId, validateUniverseId } from "../sync/importer.js";
+
+function upsertSerializedReferenceLinks(existing, targetDocId, relation, { defaultRelation }) {
+  const normalized = normalizeReferenceLinkList(existing ?? [], { defaultRelation });
+  const filtered = normalized.filter((entry) => entry.targetDocId !== targetDocId);
+  filtered.push({ targetDocId, relation });
+  return filtered.map((entry) => ({
+    target_doc_id: entry.targetDocId,
+    relation: entry.relation,
+  }));
+}
+
+function persistSceneReferenceLink({ scenePath, syncDir, targetDocId, relation }) {
+  const { meta } = readMeta(scenePath, syncDir, { writable: true });
+  const existingExplicit = [
+    ...(Array.isArray(meta.reference_links) ? meta.reference_links : meta.reference_links ? [meta.reference_links] : []),
+    ...(Array.isArray(meta.explicit_reference_links) ? meta.explicit_reference_links : meta.explicit_reference_links ? [meta.explicit_reference_links] : []),
+  ];
+  const nextReferenceLinks = upsertSerializedReferenceLinks(existingExplicit, targetDocId, relation, {
+    defaultRelation: "informs",
+  });
+
+  const nextMeta = {
+    ...meta,
+    reference_links: nextReferenceLinks,
+  };
+  delete nextMeta.explicit_reference_links;
+
+  if (relation === "informs") {
+    const existingIds = Array.isArray(meta.reference_ids)
+      ? meta.reference_ids
+      : typeof meta.reference_ids === "string"
+        ? meta.reference_ids.split(",")
+        : [];
+    nextMeta.reference_ids = [...new Set([...existingIds.map((value) => String(value).trim()).filter(Boolean), targetDocId])];
+  }
+
+  writeMeta(scenePath, nextMeta);
+}
+
+function persistReferenceDocLink({ filePath, targetDocId, relation }) {
+  const raw = fs.readFileSync(filePath, "utf8");
+  const parsed = matter(raw);
+  const data = parsed.data ?? {};
+  const existingExplicit = [
+    ...(Array.isArray(data.reference_links) ? data.reference_links : data.reference_links ? [data.reference_links] : []),
+    ...(Array.isArray(data.related_reference_links) ? data.related_reference_links : data.related_reference_links ? [data.related_reference_links] : []),
+    ...(Array.isArray(data.explicit_reference_links) ? data.explicit_reference_links : data.explicit_reference_links ? [data.explicit_reference_links] : []),
+  ];
+  const nextReferenceLinks = upsertSerializedReferenceLinks(existingExplicit, targetDocId, relation, {
+    defaultRelation: "related",
+  });
+
+  const nextData = {
+    ...data,
+    reference_links: nextReferenceLinks,
+  };
+  delete nextData.related_reference_links;
+  delete nextData.explicit_reference_links;
+
+  if (relation === "related") {
+    const existingIds = Array.isArray(data.related_reference_ids)
+      ? data.related_reference_ids
+      : typeof data.related_reference_ids === "string"
+        ? data.related_reference_ids.split(",")
+        : [];
+    nextData.related_reference_ids = [...new Set([...existingIds.map((value) => String(value).trim()).filter(Boolean), targetDocId])];
+  }
+
+  fs.writeFileSync(filePath, matter.stringify(parsed.content, nextData), "utf8");
+}
 
 export function registerMetadataTools(s, {
   db,
@@ -205,10 +275,12 @@ export function registerMetadataTools(s, {
       }
 
       let resolvedSourceProjectId;
+      let sourceScenePath = null;
+      let sourceReferencePath = null;
       if (source_kind === "scene") {
         if (source_project_id) {
           const scene = db.prepare(`
-            SELECT scene_id, project_id
+            SELECT scene_id, project_id, file_path
             FROM scenes
             WHERE scene_id = ? AND project_id = ?
             LIMIT 1
@@ -217,9 +289,10 @@ export function registerMetadataTools(s, {
             return errorResponse("NOT_FOUND", `Scene '${source_id}' not found in project '${source_project_id}'.`);
           }
           resolvedSourceProjectId = scene.project_id ?? "";
+          sourceScenePath = scene.file_path;
         } else {
           const matches = db.prepare(`
-            SELECT scene_id, project_id
+            SELECT scene_id, project_id, file_path
             FROM scenes
             WHERE scene_id = ?
             ORDER BY project_id
@@ -235,10 +308,11 @@ export function registerMetadataTools(s, {
             );
           }
           resolvedSourceProjectId = matches[0].project_id ?? "";
+          sourceScenePath = matches[0].file_path;
         }
       } else {
         const sourceDoc = db.prepare(`
-          SELECT doc_id, project_id
+          SELECT doc_id, project_id, file_path
           FROM reference_docs
           WHERE doc_id = ?
           LIMIT 1
@@ -267,6 +341,45 @@ export function registerMetadataTools(s, {
             }
           );
         }
+        sourceReferencePath = sourceDoc.file_path;
+      }
+
+      try {
+        if (source_kind === "scene") {
+          if (!sourceScenePath) {
+            return errorResponse("STALE_PATH", `Scene '${source_id}' has no indexed file path. Run sync() to refresh.`, {
+              source_id,
+              source_project_id: resolvedSourceProjectId,
+            });
+          }
+          persistSceneReferenceLink({
+            scenePath: sourceScenePath,
+            syncDir: SYNC_DIR,
+            targetDocId: target_doc_id,
+            relation: normalizedRelation,
+          });
+        } else {
+          if (!sourceReferencePath) {
+            return errorResponse("STALE_PATH", `Reference doc '${source_id}' has no indexed file path. Run sync() to refresh.`, {
+              source_id,
+            });
+          }
+          persistReferenceDocLink({
+            filePath: sourceReferencePath,
+            targetDocId: target_doc_id,
+            relation: normalizedRelation,
+          });
+        }
+      } catch (err) {
+        if (err?.code === "ENOENT") {
+          const indexedPath = source_kind === "scene" ? sourceScenePath : sourceReferencePath;
+          return errorResponse(
+            "STALE_PATH",
+            `Source file for ${source_kind} '${source_id}' not found at indexed path — run sync() to refresh.`,
+            { indexed_path: indexedPath }
+          );
+        }
+        return errorResponse("IO_ERROR", `Failed to persist link metadata: ${err.message}`);
       }
 
       try {
