@@ -39,6 +39,21 @@ function readSceneEntityIdsFromMetadata({ scenePath, syncDir }) {
   };
 }
 
+function selectApplyCandidates(enrichedCandidates, selectedDocIds, maxApply) {
+  const selectedSet = selectedDocIds ? new Set(selectedDocIds) : null;
+  const chosenByDocId = new Map();
+
+  for (const candidate of enrichedCandidates) {
+    if (selectedSet && !selectedSet.has(candidate.doc_id)) continue;
+    if (!chosenByDocId.has(candidate.doc_id)) {
+      chosenByDocId.set(candidate.doc_id, candidate);
+    }
+  }
+
+  const uniqueCandidates = Array.from(chosenByDocId.values());
+  return uniqueCandidates.slice(0, maxApply ?? uniqueCandidates.length);
+}
+
 export function registerSearchTools(s, {
   db,
   SYNC_DIR,
@@ -829,11 +844,9 @@ export function registerSearchTools(s, {
             scenePath: resolvedScene.file_path,
             syncDir: SYNC_DIR,
           });
-          if (entities.characterIds.length > 0 || entities.placeIds.length > 0) {
             characterIds = entities.characterIds;
             placeIds = entities.placeIds;
             loadedSceneEntitiesFromMetadata = true;
-          }
         } catch (err) {
           void err;
         }
@@ -891,14 +904,14 @@ export function registerSearchTools(s, {
       accumulateSuggestionScore(scoreMap, placeReferenceLinks, "place");
 
       // Filter out already explicit scene links and deduplicate sources
-      const candidates = Array.from(scoreMap.values())
+        const candidates = Array.from(scoreMap.values())
         .filter(entry => !existingSceneDocIds.has(entry.doc_id))
         .filter(entry => entry.score >= min_score)
         .map(entry => ({
           ...entry,
           sources: [...new Set(entry.sources)], // deduplicate
         }))
-        .sort((a, b) => b.score - a.score || a.doc_id.localeCompare(b.doc_id));
+          .sort((a, b) => b.score - a.score || a.doc_id.localeCompare(b.doc_id) || a.relation.localeCompare(b.relation));
 
       const candidateDocIds = [...new Set(candidates.map(candidate => candidate.doc_id))];
       const docsById = candidateDocIds.length > 0
@@ -914,15 +927,19 @@ export function registerSearchTools(s, {
         : new Map();
 
       // Enrich with reference doc metadata
-      const enriched = candidates.map(candidate => {
-        const doc = docsById.get(candidate.doc_id);
-        return {
-          ...candidate,
-          title: doc?.title || candidate.doc_id,
-          type: doc?.type || "unknown",
-          summary: doc?.summary || null,
-        };
-      });
+        const enriched = candidates
+          .filter(candidate => docsById.has(candidate.doc_id))
+          .map(candidate => {
+            const doc = docsById.get(candidate.doc_id);
+            return {
+              ...candidate,
+              title: doc.title,
+              type: doc.type,
+              summary: doc.summary,
+            };
+          });
+
+        const skippedMissingDocIds = candidateDocIds.filter((docId) => !docsById.has(docId));
 
       if (enriched.length === 0) {
         return {
@@ -932,7 +949,8 @@ export function registerSearchTools(s, {
               scene_id,
               project_id: resolvedProjectId,
               total_candidates: 0,
-                message: "No reference suggestions found. Scene characters and places have no linked references.",
+              message: "No reference suggestions found. Scene characters and places have no linked references.",
+              skipped_missing_doc_ids: skippedMissingDocIds,
               candidates: [],
             }, null, 2),
           }],
@@ -948,10 +966,7 @@ export function registerSearchTools(s, {
           });
         }
 
-        const selectedSet = selected_doc_ids ? new Set(selected_doc_ids) : null;
-        const toApply = enriched
-          .filter(candidate => !selectedSet || selectedSet.has(candidate.doc_id))
-          .slice(0, max_apply ?? enriched.length);
+          const toApply = selectApplyCandidates(enriched, selected_doc_ids, max_apply);
 
         const appliedLinks = [];
         const failedLinks = [];
@@ -1014,6 +1029,7 @@ export function registerSearchTools(s, {
               project_id: resolvedProjectId,
               mode,
               total_candidates: enriched.length,
+                skipped_missing_doc_ids: skippedMissingDocIds,
               applied_count: appliedLinks.length,
               applied_links: appliedLinks,
               failed_count: failedLinks.length,
@@ -1030,6 +1046,7 @@ export function registerSearchTools(s, {
             scene_id,
             project_id: resolvedProjectId,
             total_candidates: enriched.length,
+              skipped_missing_doc_ids: skippedMissingDocIds,
             candidates: enriched,
           }, null, 2),
         }],

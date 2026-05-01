@@ -63,11 +63,12 @@ function seedProject(db, projectId) {
 }
 
 function seedScene(db, { sceneId, projectId }) {
+  const missingPath = path.join(os.tmpdir(), `mcp-writing-missing-${projectId}-${sceneId}-${Date.now()}-${Math.random().toString(36).slice(2)}.md`);
   db.prepare(`
     INSERT INTO scenes (
       scene_id, project_id, title, file_path, prose_checksum, metadata_stale, updated_at
     ) VALUES (?, ?, ?, ?, ?, 0, ?)
-  `).run(sceneId, projectId, sceneId, `/tmp/${projectId}-${sceneId}.md`, "deadbeef", new Date().toISOString());
+  `).run(sceneId, projectId, sceneId, missingPath, "deadbeef", new Date().toISOString());
 }
 
 function seedReferenceDoc(db, { docId, projectId, title, type = "reference", summary = null }) {
@@ -592,6 +593,158 @@ describe("reference link search tools", () => {
     }
   });
 
+  test("suggest_scene_references treats readable metadata as authoritative even when entity lists are empty", async () => {
+    const db = openDb(":memory:");
+    const syncDir = fs.mkdtempSync(path.join(os.tmpdir(), "ref-suggest-empty-meta-"));
+    try {
+      seedProject(db, "test-novel");
+      seedProject(db, "other-novel");
+
+      const sceneDir = path.join(syncDir, "projects", "test-novel", "scenes");
+      fs.mkdirSync(sceneDir, { recursive: true });
+      const scenePath = path.join(sceneDir, "sc-001.md");
+      fs.writeFileSync(scenePath, "---\nscene_id: sc-001\n---\nScene prose.", "utf8");
+
+      db.prepare(`
+        INSERT INTO scenes (
+          scene_id, project_id, title, file_path, prose_checksum, metadata_stale, updated_at
+        ) VALUES (?, ?, ?, ?, ?, 0, ?)
+      `).run("sc-001", "test-novel", "Scene 1", scenePath, "deadbeef", new Date().toISOString());
+
+      db.prepare(`
+        INSERT INTO characters (character_id, project_id, name, file_path)
+        VALUES (?, ?, ?, ?)
+      `).run("char-leaked", "test-novel", "Leaked", "/tmp/leaked.md");
+
+      // Non-project-scoped join table row that should not be used when metadata read succeeds.
+      db.prepare(`INSERT INTO scene_characters (scene_id, character_id) VALUES (?, ?)`).run("sc-001", "char-leaked");
+
+      seedReferenceDoc(db, { docId: "ref-leaked", projectId: "test-novel", title: "Leaked Doc", type: "world" });
+      seedReferenceLink(db, {
+        sourceKind: "character",
+        sourceProjectId: "test-novel",
+        sourceId: "char-leaked",
+        targetDocId: "ref-leaked",
+        relation: "informs",
+      });
+
+      const tools = makeToolHarness(db, { syncDir, writable: true });
+      const suggestions = await tools.call("suggest_scene_references", { scene_id: "sc-001", project_id: "test-novel" });
+
+      assert.equal(suggestions.total_candidates, 0);
+      assert.equal(suggestions.candidates.length, 0);
+    } finally {
+      db.close();
+      fs.rmSync(syncDir, { recursive: true, force: true });
+    }
+  });
+
+  test("suggest_scene_references filters out links to missing reference docs", async () => {
+    const db = openDb(":memory:");
+    try {
+      seedProject(db, "test-novel");
+      seedScene(db, { sceneId: "sc-001", projectId: "test-novel" });
+
+      db.prepare(`
+        INSERT INTO characters (character_id, project_id, name, file_path)
+        VALUES (?, ?, ?, ?)
+      `).run("char-mira", "test-novel", "Mira", "/tmp/mira.md");
+      db.prepare(`INSERT INTO scene_characters (scene_id, character_id) VALUES (?, ?)`).run("sc-001", "char-mira");
+
+      seedReferenceDoc(db, { docId: "ref-existing", projectId: "test-novel", title: "Existing", type: "world" });
+
+      seedReferenceLink(db, {
+        sourceKind: "character",
+        sourceProjectId: "test-novel",
+        sourceId: "char-mira",
+        targetDocId: "ref-existing",
+        relation: "informs",
+      });
+      seedReferenceLink(db, {
+        sourceKind: "character",
+        sourceProjectId: "test-novel",
+        sourceId: "char-mira",
+        targetDocId: "ref-missing",
+        relation: "informs",
+      });
+
+      const tools = makeToolHarness(db);
+      const suggestions = await tools.call("suggest_scene_references", { scene_id: "sc-001", project_id: "test-novel" });
+
+      assert.equal(suggestions.total_candidates, 1);
+      assert.equal(suggestions.candidates[0].doc_id, "ref-existing");
+      assert.deepEqual(suggestions.skipped_missing_doc_ids, ["ref-missing"]);
+    } finally {
+      db.close();
+    }
+  });
+
+  test("suggest_scene_references apply mode applies at most one relation per doc_id", async () => {
+    const db = openDb(":memory:");
+    const syncDir = fs.mkdtempSync(path.join(os.tmpdir(), "ref-apply-dedupe-"));
+    try {
+      seedProject(db, "test-novel");
+
+      const sceneDir = path.join(syncDir, "projects", "test-novel", "scenes");
+      fs.mkdirSync(sceneDir, { recursive: true });
+      const scenePath = path.join(sceneDir, "sc-001.md");
+      fs.writeFileSync(scenePath, "---\nscene_id: sc-001\ncharacters:\n  - char-mira\nplaces:\n  - place-lab\n---\nScene prose.", "utf8");
+
+      db.prepare(`
+        INSERT INTO scenes (
+          scene_id, project_id, title, file_path, prose_checksum, metadata_stale, updated_at
+        ) VALUES (?, ?, ?, ?, ?, 0, ?)
+      `).run("sc-001", "test-novel", "Scene 1", scenePath, "deadbeef", new Date().toISOString());
+
+      db.prepare(`
+        INSERT INTO characters (character_id, project_id, name, file_path)
+        VALUES (?, ?, ?, ?)
+      `).run("char-mira", "test-novel", "Mira", "/tmp/mira.md");
+      db.prepare(`
+        INSERT INTO places (place_id, project_id, name, file_path)
+        VALUES (?, ?, ?, ?)
+      `).run("place-lab", "test-novel", "Lab", "/tmp/lab.md");
+
+      seedReferenceDoc(db, { docId: "ref-vampirism", projectId: "test-novel", title: "Vampirism", type: "world" });
+      seedReferenceLink(db, {
+        sourceKind: "character",
+        sourceProjectId: "test-novel",
+        sourceId: "char-mira",
+        targetDocId: "ref-vampirism",
+        relation: "see_also",
+      });
+      seedReferenceLink(db, {
+        sourceKind: "place",
+        sourceProjectId: "test-novel",
+        sourceId: "place-lab",
+        targetDocId: "ref-vampirism",
+        relation: "history_of",
+      });
+
+      const tools = makeToolHarness(db, { syncDir, writable: true });
+      const result = await tools.call("suggest_scene_references", {
+        scene_id: "sc-001",
+        project_id: "test-novel",
+        mode: "apply",
+        selected_doc_ids: ["ref-vampirism"],
+      });
+
+      assert.equal(result.applied_count, 1);
+      assert.equal(result.applied_links.length, 1);
+      assert.equal(result.applied_links[0].target_doc_id, "ref-vampirism");
+
+      const rows = db.prepare(`
+        SELECT relation
+        FROM reference_links
+        WHERE source_kind = 'scene' AND source_project_id = 'test-novel' AND source_id = 'sc-001' AND target_doc_id = 'ref-vampirism' AND origin = 'explicit'
+      `).all();
+      assert.equal(rows.length, 1);
+    } finally {
+      db.close();
+      fs.rmSync(syncDir, { recursive: true, force: true });
+    }
+  });
+
   test("suggest_scene_references returns not-found for non-existent scene", async () => {
     const db = openDb(":memory:");
     try {
@@ -636,7 +789,7 @@ describe("reference link search tools", () => {
       const sceneDir = path.join(syncDir, "projects", "test-novel", "scenes");
       fs.mkdirSync(sceneDir, { recursive: true });
       const scenePath = path.join(sceneDir, "sc-001.md");
-      fs.writeFileSync(scenePath, "---\nscene_id: sc-001\ntitle: Scene 1\n---\nScene prose.", "utf8");
+      fs.writeFileSync(scenePath, "---\nscene_id: sc-001\ntitle: Scene 1\ncharacters:\n  - char-mira\n---\nScene prose.", "utf8");
 
       db.prepare(`
         INSERT INTO scenes (
