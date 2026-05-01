@@ -700,6 +700,13 @@ export function indexWorldFile(db, syncDir, file, meta) {
 
   if (kind === "character") {
     if (!meta.character_id) return;
+    
+    const explicitReferenceLinks = collectExplicitReferenceLinks(
+      meta,
+      ["reference_links", "explicit_reference_links"],
+      { defaultRelation: "informs" }
+    );
+
     db.prepare(`
       INSERT INTO characters (character_id, project_id, universe_id, name, role, arc_summary, first_appearance, file_path)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -717,8 +724,25 @@ export function indexWorldFile(db, syncDir, file, meta) {
         meta.character_id, t
       );
     }
+
+    if (explicitReferenceLinks.hasField) {
+      indexExplicitReferenceLinksForSource(db, {
+        sourceKind: "character",
+        sourceProjectId: project_id ?? "",
+        sourceId: meta.character_id,
+        links: explicitReferenceLinks.links,
+        defaultRelation: "informs",
+      });
+    }
   } else if (kind === "place") {
     if (!meta.place_id) return;
+    
+    const explicitReferenceLinks = collectExplicitReferenceLinks(
+      meta,
+      ["reference_links", "explicit_reference_links"],
+      { defaultRelation: "informs" }
+    );
+
     db.prepare(`
       INSERT INTO places (place_id, project_id, universe_id, name, file_path)
       VALUES (?, ?, ?, ?, ?)
@@ -727,6 +751,16 @@ export function indexWorldFile(db, syncDir, file, meta) {
       meta.place_id, project_id ?? null, universe_id ?? null,
       meta.name ?? meta.place_id, file
     );
+
+    if (explicitReferenceLinks.hasField) {
+      indexExplicitReferenceLinksForSource(db, {
+        sourceKind: "place",
+        sourceProjectId: project_id ?? "",
+        sourceId: meta.place_id,
+        links: explicitReferenceLinks.links,
+        defaultRelation: "informs",
+      });
+    }
   }
 }
 

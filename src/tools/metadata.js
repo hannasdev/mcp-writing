@@ -74,6 +74,44 @@ function persistReferenceDocLink({ filePath, targetDocId, relation }) {
   fs.writeFileSync(filePath, matter.stringify(parsed.content, nextData), "utf8");
 }
 
+function persistCharacterReferenceLink({ characterPath, syncDir, targetDocId, relation }) {
+  const { meta } = readMeta(characterPath, syncDir, { writable: true });
+  const existingExplicit = [
+    ...(Array.isArray(meta.reference_links) ? meta.reference_links : meta.reference_links ? [meta.reference_links] : []),
+    ...(Array.isArray(meta.explicit_reference_links) ? meta.explicit_reference_links : meta.explicit_reference_links ? [meta.explicit_reference_links] : []),
+  ];
+  const nextReferenceLinks = upsertSerializedReferenceLinks(existingExplicit, targetDocId, relation, {
+    defaultRelation: "informs",
+  });
+
+  const nextMeta = {
+    ...meta,
+    reference_links: nextReferenceLinks,
+  };
+  delete nextMeta.explicit_reference_links;
+
+  writeMeta(characterPath, nextMeta);
+}
+
+function persistPlaceReferenceLink({ placePath, syncDir, targetDocId, relation }) {
+  const { meta } = readMeta(placePath, syncDir, { writable: true });
+  const existingExplicit = [
+    ...(Array.isArray(meta.reference_links) ? meta.reference_links : meta.reference_links ? [meta.reference_links] : []),
+    ...(Array.isArray(meta.explicit_reference_links) ? meta.explicit_reference_links : meta.explicit_reference_links ? [meta.explicit_reference_links] : []),
+  ];
+  const nextReferenceLinks = upsertSerializedReferenceLinks(existingExplicit, targetDocId, relation, {
+    defaultRelation: "informs",
+  });
+
+  const nextMeta = {
+    ...meta,
+    reference_links: nextReferenceLinks,
+  };
+  delete nextMeta.explicit_reference_links;
+
+  writeMeta(placePath, nextMeta);
+}
+
 export function registerMetadataTools(s, {
   db,
   SYNC_DIR,
@@ -243,11 +281,11 @@ export function registerMetadataTools(s, {
   // ---- upsert_reference_link -----------------------------------------------
   s.tool(
     "upsert_reference_link",
-    "Create or update an explicit reference link from a scene or reference doc to a target reference doc. If a link already exists between the same source and target, this updates the relation. Only available when the sync dir is writable.",
+    "Create or update an explicit reference link from a scene, character, place, or reference doc to a target reference doc. If a link already exists between the same source and target, this updates the relation. Only available when the sync dir is writable.",
     {
-      source_kind: z.enum(["scene", "reference"]).describe("Link source kind."),
-      source_id: z.string().describe("Source scene_id or reference doc_id."),
-      source_project_id: z.string().optional().describe("Optional project scope for the source. For scene sources, use this to disambiguate an ambiguous scene_id across projects. For reference sources, when provided, it is treated as an ownership check and must match the source reference doc's project."),
+      source_kind: z.enum(["scene", "character", "place", "reference"]).describe("Link source kind."),
+      source_id: z.string().describe("Source scene_id, character_id, place_id, or reference doc_id."),
+      source_project_id: z.string().optional().describe("Optional project scope for the source. For scene/character/place sources, use this to disambiguate an ambiguous source_id across projects. For reference sources, when provided, it is treated as an ownership check and must match the source reference doc's project."),
       target_doc_id: z.string().describe("Target reference doc_id."),
       relation: z.string().describe("Relationship label (for example: 'informs', 'related', 'history_of'). The value is trimmed and lowercased before validation."),
     },
@@ -276,7 +314,10 @@ export function registerMetadataTools(s, {
 
       let resolvedSourceProjectId;
       let sourceScenePath = null;
+      let sourceCharacterPath = null;
+      let sourcePlacePath = null;
       let sourceReferencePath = null;
+
       if (source_kind === "scene") {
         if (source_project_id) {
           const scene = db.prepare(`
@@ -309,6 +350,72 @@ export function registerMetadataTools(s, {
           }
           resolvedSourceProjectId = matches[0].project_id ?? "";
           sourceScenePath = matches[0].file_path;
+        }
+      } else if (source_kind === "character") {
+        if (source_project_id) {
+          const character = db.prepare(`
+            SELECT character_id, project_id, file_path
+            FROM characters
+            WHERE character_id = ? AND project_id = ?
+            LIMIT 1
+          `).get(source_id, source_project_id);
+          if (!character) {
+            return errorResponse("NOT_FOUND", `Character '${source_id}' not found in project '${source_project_id}'.`);
+          }
+          resolvedSourceProjectId = character.project_id ?? "";
+          sourceCharacterPath = character.file_path;
+        } else {
+          const matches = db.prepare(`
+            SELECT character_id, project_id, file_path
+            FROM characters
+            WHERE character_id = ?
+            ORDER BY project_id
+          `).all(source_id);
+          if (matches.length === 0) {
+            return errorResponse("NOT_FOUND", `Character '${source_id}' not found.`);
+          }
+          if (matches.length > 1) {
+            return errorResponse(
+              "CONFLICT",
+              `Character ID '${source_id}' exists in multiple projects. Provide source_project_id to disambiguate.`,
+              { source_id, project_ids: matches.map(row => row.project_id) }
+            );
+          }
+          resolvedSourceProjectId = matches[0].project_id ?? "";
+          sourceCharacterPath = matches[0].file_path;
+        }
+      } else if (source_kind === "place") {
+        if (source_project_id) {
+          const place = db.prepare(`
+            SELECT place_id, project_id, file_path
+            FROM places
+            WHERE place_id = ? AND project_id = ?
+            LIMIT 1
+          `).get(source_id, source_project_id);
+          if (!place) {
+            return errorResponse("NOT_FOUND", `Place '${source_id}' not found in project '${source_project_id}'.`);
+          }
+          resolvedSourceProjectId = place.project_id ?? "";
+          sourcePlacePath = place.file_path;
+        } else {
+          const matches = db.prepare(`
+            SELECT place_id, project_id, file_path
+            FROM places
+            WHERE place_id = ?
+            ORDER BY project_id
+          `).all(source_id);
+          if (matches.length === 0) {
+            return errorResponse("NOT_FOUND", `Place '${source_id}' not found.`);
+          }
+          if (matches.length > 1) {
+            return errorResponse(
+              "CONFLICT",
+              `Place ID '${source_id}' exists in multiple projects. Provide source_project_id to disambiguate.`,
+              { source_id, project_ids: matches.map(row => row.project_id) }
+            );
+          }
+          resolvedSourceProjectId = matches[0].project_id ?? "";
+          sourcePlacePath = matches[0].file_path;
         }
       } else {
         const sourceDoc = db.prepare(`
@@ -358,6 +465,32 @@ export function registerMetadataTools(s, {
             targetDocId: target_doc_id,
             relation: normalizedRelation,
           });
+        } else if (source_kind === "character") {
+          if (!sourceCharacterPath) {
+            return errorResponse("STALE_PATH", `Character '${source_id}' has no indexed file path. Run sync() to refresh.`, {
+              source_id,
+              source_project_id: resolvedSourceProjectId,
+            });
+          }
+          persistCharacterReferenceLink({
+            characterPath: sourceCharacterPath,
+            syncDir: SYNC_DIR,
+            targetDocId: target_doc_id,
+            relation: normalizedRelation,
+          });
+        } else if (source_kind === "place") {
+          if (!sourcePlacePath) {
+            return errorResponse("STALE_PATH", `Place '${source_id}' has no indexed file path. Run sync() to refresh.`, {
+              source_id,
+              source_project_id: resolvedSourceProjectId,
+            });
+          }
+          persistPlaceReferenceLink({
+            placePath: sourcePlacePath,
+            syncDir: SYNC_DIR,
+            targetDocId: target_doc_id,
+            relation: normalizedRelation,
+          });
         } else {
           if (!sourceReferencePath) {
             return errorResponse("STALE_PATH", `Reference doc '${source_id}' has no indexed file path. Run sync() to refresh.`, {
@@ -372,7 +505,11 @@ export function registerMetadataTools(s, {
         }
       } catch (err) {
         if (err?.code === "ENOENT") {
-          const indexedPath = source_kind === "scene" ? sourceScenePath : sourceReferencePath;
+          let indexedPath;
+          if (source_kind === "scene") indexedPath = sourceScenePath;
+          else if (source_kind === "character") indexedPath = sourceCharacterPath;
+          else if (source_kind === "place") indexedPath = sourcePlacePath;
+          else indexedPath = sourceReferencePath;
           return errorResponse(
             "STALE_PATH",
             `Source file for ${source_kind} '${source_id}' not found at indexed path — run sync() to refresh.`,

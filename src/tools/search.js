@@ -740,4 +740,178 @@ export function registerSearchTools(s, {
       return { content: [{ type: "text", text: JSON.stringify(rows, null, 2) }] };
     }
   );
+
+  // ---- suggest_scene_references --------------------------------------------
+  s.tool(
+    "suggest_scene_references",
+    "Suggest reference documents for a scene by aggregating links from the scene's characters and places. Returns weighted candidates ranked by how many entities in the scene link to each reference. Excludes any explicit scene → reference links already present. Helpful for discovering relevant conceptual documents during scene review.",
+    {
+      scene_id: z.string().describe("Scene ID (e.g. 'sc-011-sebastian')."),
+      project_id: z.string().optional().describe("Optional project scope to disambiguate an ambiguous scene_id across projects."),
+    },
+    async ({ scene_id, project_id }) => {
+      // Resolve scene
+      let sceneQuery = `SELECT scene_id, project_id FROM scenes WHERE scene_id = ?`;
+      const sceneParams = [scene_id];
+      if (project_id) {
+        sceneQuery += ` AND project_id = ?`;
+        sceneParams.push(project_id);
+      }
+      
+      const scenes = db.prepare(sceneQuery).all(...sceneParams);
+      if (scenes.length === 0) {
+        return errorResponse("NOT_FOUND", `Scene '${scene_id}' not found${project_id ? ` in project '${project_id}'` : ""}.`);
+      }
+      if (scenes.length > 1) {
+        return errorResponse(
+          "CONFLICT",
+          `Scene ID '${scene_id}' exists in multiple projects. Provide project_id to disambiguate.`,
+          { scene_id, project_ids: scenes.map(s => s.project_id) }
+        );
+      }
+
+      const resolvedScene = scenes[0];
+      const resolvedProjectId = resolvedScene.project_id ?? "";
+
+      // Get characters in the scene
+      const characters = db.prepare(`
+        SELECT character_id FROM scene_characters WHERE scene_id = ?
+      `).all(scene_id);
+
+      // Get places in the scene
+      const places = db.prepare(`
+        SELECT place_id FROM scene_places WHERE scene_id = ?
+      `).all(scene_id);
+
+      // Get explicit scene → reference links already present
+      const existingSceneLinks = db.prepare(`
+        SELECT target_doc_id, relation
+        FROM reference_links
+        WHERE source_kind = 'scene' AND source_project_id = ? AND source_id = ? AND origin = 'explicit'
+      `).all(resolvedProjectId, scene_id);
+      const existingSceneLinkKeys = new Set(existingSceneLinks.map(link => `${link.target_doc_id}:${link.relation}`));
+
+      // Aggregate reference links from characters
+      const characterReferenceLinks = characters.length > 0
+        ? db.prepare(`
+            SELECT target_doc_id, relation, COUNT(*) as source_count
+            FROM reference_links
+            WHERE source_kind = 'character' AND source_id IN (${characters.map(() => "?").join(",")})
+            GROUP BY target_doc_id, relation
+          `).all(...characters.map(c => c.character_id))
+        : [];
+
+      // Aggregate reference links from places
+      const placeReferenceLinks = places.length > 0
+        ? db.prepare(`
+            SELECT target_doc_id, relation, COUNT(*) as source_count
+            FROM reference_links
+            WHERE source_kind = 'place' AND source_id IN (${places.map(() => "?").join(",")})
+            GROUP BY target_doc_id, relation
+          `).all(...places.map(p => p.place_id))
+        : [];
+
+      // Merge and score
+      const scoreMap = new Map(); // key: "doc_id:relation" → { doc_id, relation, score, sources: [...] }
+      
+      for (const link of characterReferenceLinks) {
+        const key = `${link.target_doc_id}:${link.relation}`;
+        if (!scoreMap.has(key)) {
+          scoreMap.set(key, {
+            doc_id: link.target_doc_id,
+            relation: link.relation,
+            score: 0,
+            sources: [],
+          });
+        }
+        const entry = scoreMap.get(key);
+        entry.score += link.source_count;
+        for (const char of characters) {
+          const charLink = db.prepare(`
+            SELECT relation FROM reference_links
+            WHERE source_kind = 'character' AND source_project_id = ? AND source_id = ? AND target_doc_id = ? AND relation = ?
+          `).get(resolvedProjectId, char.character_id, link.target_doc_id, link.relation);
+          if (charLink) {
+            const charName = db.prepare(`SELECT name FROM characters WHERE character_id = ?`).get(char.character_id)?.name || char.character_id;
+            entry.sources.push(`character: ${charName}`);
+          }
+        }
+      }
+
+      for (const link of placeReferenceLinks) {
+        const key = `${link.target_doc_id}:${link.relation}`;
+        if (!scoreMap.has(key)) {
+          scoreMap.set(key, {
+            doc_id: link.target_doc_id,
+            relation: link.relation,
+            score: 0,
+            sources: [],
+          });
+        }
+        const entry = scoreMap.get(key);
+        entry.score += link.source_count;
+        for (const place of places) {
+          const placeLink = db.prepare(`
+            SELECT relation FROM reference_links
+            WHERE source_kind = 'place' AND source_project_id = ? AND source_id = ? AND target_doc_id = ? AND relation = ?
+          `).get(resolvedProjectId, place.place_id, link.target_doc_id, link.relation);
+          if (placeLink) {
+            const placeName = db.prepare(`SELECT name FROM places WHERE place_id = ?`).get(place.place_id)?.name || place.place_id;
+            entry.sources.push(`place: ${placeName}`);
+          }
+        }
+      }
+
+      // Filter out already explicit scene links and deduplicate sources
+      const candidates = Array.from(scoreMap.values())
+        .filter(entry => !existingSceneLinkKeys.has(`${entry.doc_id}:${entry.relation}`))
+        .map(entry => ({
+          ...entry,
+          sources: [...new Set(entry.sources)], // deduplicate
+        }))
+        .sort((a, b) => b.score - a.score || a.doc_id.localeCompare(b.doc_id));
+
+      // Enrich with reference doc metadata
+      const enriched = candidates.map(candidate => {
+        const doc = db.prepare(`
+          SELECT doc_id, type, title, summary, project_id, universe_id
+          FROM reference_docs
+          WHERE doc_id = ?
+        `).get(candidate.doc_id);
+        return {
+          ...candidate,
+          title: doc?.title || candidate.doc_id,
+          type: doc?.type || "unknown",
+          summary: doc?.summary || null,
+        };
+      });
+
+      if (enriched.length === 0) {
+        return {
+          content: [{
+            type: "text",
+            text: JSON.stringify({
+              scene_id,
+              project_id: resolvedProjectId,
+              total_candidates: 0,
+              message: "No reference suggestions found. Scene characters and places have no linked references.",
+              candidates: [],
+            }, null, 2),
+          }],
+        };
+      }
+
+      return {
+        content: [{
+          type: "text",
+          text: JSON.stringify({
+            scene_id,
+            project_id: resolvedProjectId,
+            total_candidates: enriched.length,
+            candidates: enriched,
+          }, null, 2),
+        }],
+      };
+    }
+  );
 }

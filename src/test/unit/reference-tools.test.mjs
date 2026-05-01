@@ -86,12 +86,13 @@ function seedReferenceLink(db, {
   sourceId,
   targetDocId,
   relation,
+  origin = "inferred",
 }) {
   db.prepare(`
     INSERT INTO reference_links (
-      source_kind, source_project_id, source_id, target_doc_id, relation
-    ) VALUES (?, ?, ?, ?, ?)
-  `).run(sourceKind, sourceProjectId, sourceId, targetDocId, relation);
+      source_kind, source_project_id, source_id, target_doc_id, relation, origin
+    ) VALUES (?, ?, ?, ?, ?, ?)
+  `).run(sourceKind, sourceProjectId, sourceId, targetDocId, relation, origin);
 }
 
 describe("reference link search tools", () => {
@@ -207,6 +208,140 @@ describe("reference link search tools", () => {
       assert.equal(withRelated.related[0].doc_id, "ref-related");
       assert.deepEqual(withRelated.related[0].tags, ["related"]);
       assert.ok(!withRelated.related.some(item => item.doc_id === "ref-deep"));
+    } finally {
+      db.close();
+    }
+  });
+
+  test("suggest_scene_references scores references by character/place links", async () => {
+    const db = openDb(":memory:");
+    try {
+      seedProject(db, "test-novel");
+      seedScene(db, { sceneId: "sc-001", projectId: "test-novel" });
+      
+      // Create characters and places
+      db.prepare(`
+        INSERT INTO characters (character_id, project_id, name, file_path)
+        VALUES (?, ?, ?, ?)
+      `).run("char-mira", "test-novel", "Mira", "/tmp/mira.md");
+      
+      db.prepare(`
+        INSERT INTO characters (character_id, project_id, name, file_path)
+        VALUES (?, ?, ?, ?)
+      `).run("char-sebastian", "test-novel", "Sebastian", "/tmp/sebastian.md");
+      
+      db.prepare(`
+        INSERT INTO places (place_id, project_id, name, file_path)
+        VALUES (?, ?, ?, ?)
+      `).run("place-hospital", "test-novel", "Hospital", "/tmp/hospital.md");
+      
+      // Add scene characters and places
+      db.prepare(`INSERT INTO scene_characters (scene_id, character_id) VALUES (?, ?)`).run("sc-001", "char-mira");
+      db.prepare(`INSERT INTO scene_characters (scene_id, character_id) VALUES (?, ?)`).run("sc-001", "char-sebastian");
+      db.prepare(`INSERT INTO scene_places (scene_id, place_id) VALUES (?, ?)`).run("sc-001", "place-hospital");
+      
+      // Create reference docs
+      seedReferenceDoc(db, { docId: "ref-vampirism", projectId: "test-novel", title: "Vampirism in the World", type: "world" });
+      seedReferenceDoc(db, { docId: "ref-hospital-layout", projectId: "test-novel", title: "Hospital Layout", type: "world" });
+      seedReferenceDoc(db, { docId: "ref-unrelated", projectId: "test-novel", title: "Unrelated Doc", type: "world" });
+      
+      // Link references to characters and places
+      seedReferenceLink(db, {
+        sourceKind: "character",
+        sourceProjectId: "test-novel",
+        sourceId: "char-mira",
+        targetDocId: "ref-vampirism",
+        relation: "informs",
+      });
+      seedReferenceLink(db, {
+        sourceKind: "character",
+        sourceProjectId: "test-novel",
+        sourceId: "char-sebastian",
+        targetDocId: "ref-vampirism",
+        relation: "informs",
+      });
+      seedReferenceLink(db, {
+        sourceKind: "place",
+        sourceProjectId: "test-novel",
+        sourceId: "place-hospital",
+        targetDocId: "ref-hospital-layout",
+        relation: "informs",
+      });
+      
+      const tools = makeToolHarness(db);
+      const suggestions = await tools.call("suggest_scene_references", { scene_id: "sc-001", project_id: "test-novel" });
+      
+      assert.equal(suggestions.scene_id, "sc-001");
+      assert.equal(suggestions.total_candidates, 2);
+      
+      // Check scoring: vampirism should be first (score 2: 2 characters link to it)
+      assert.equal(suggestions.candidates[0].doc_id, "ref-vampirism");
+      assert.equal(suggestions.candidates[0].score, 2);
+      assert.equal(suggestions.candidates[0].sources.length, 2);
+      
+      // Hospital layout should be second (score 1: 1 place links to it)
+      assert.equal(suggestions.candidates[1].doc_id, "ref-hospital-layout");
+      assert.equal(suggestions.candidates[1].score, 1);
+      assert.equal(suggestions.candidates[1].sources.length, 1);
+    } finally {
+      db.close();
+    }
+  });
+
+  test("suggest_scene_references excludes already-explicit scene links", async () => {
+    const db = openDb(":memory:");
+    try {
+      seedProject(db, "test-novel");
+      seedScene(db, { sceneId: "sc-001", projectId: "test-novel" });
+      
+      db.prepare(`
+        INSERT INTO characters (character_id, project_id, name, file_path)
+        VALUES (?, ?, ?, ?)
+      `).run("char-mira", "test-novel", "Mira", "/tmp/mira.md");
+      
+      db.prepare(`INSERT INTO scene_characters (scene_id, character_id) VALUES (?, ?)`).run("sc-001", "char-mira");
+      
+      seedReferenceDoc(db, { docId: "ref-vampirism", projectId: "test-novel", title: "Vampirism", type: "world" });
+      
+      seedReferenceLink(db, {
+        sourceKind: "character",
+        sourceProjectId: "test-novel",
+        sourceId: "char-mira",
+        targetDocId: "ref-vampirism",
+        relation: "informs",
+      });
+      
+      // Add an explicit scene link to the same reference
+      seedReferenceLink(db, {
+        sourceKind: "scene",
+        sourceProjectId: "test-novel",
+        sourceId: "sc-001",
+        targetDocId: "ref-vampirism",
+        relation: "informs",
+        origin: "explicit",
+      });
+      
+      const tools = makeToolHarness(db);
+      const suggestions = await tools.call("suggest_scene_references", { scene_id: "sc-001", project_id: "test-novel" });
+      
+      // Should return empty suggestions because the only candidate is already explicitly linked
+      assert.equal(suggestions.total_candidates, 0);
+      assert.equal(suggestions.candidates.length, 0);
+    } finally {
+      db.close();
+    }
+  });
+
+  test("suggest_scene_references returns not-found for non-existent scene", async () => {
+    const db = openDb(":memory:");
+    try {
+      seedProject(db, "test-novel");
+      
+      const tools = makeToolHarness(db);
+      const result = await tools.call("suggest_scene_references", { scene_id: "sc-nonexistent", project_id: "test-novel" });
+      
+      assert.equal(result.ok, false);
+      assert.equal(result.error.code, "NOT_FOUND");
     } finally {
       db.close();
     }

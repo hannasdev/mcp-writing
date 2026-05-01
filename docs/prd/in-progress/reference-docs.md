@@ -222,12 +222,50 @@ Completed (Phase 4C durability & merge rules):
 
 ## Next Implementation Slice (Phase 4D)
 
-Optional enhancement: authoring and auto-suggestion helpers.
+Authoring and auto-suggestion helpers through entity-based reference linking.
 
-- Implement helper flows for suggesting/authoring links based on scene/reference proximity.
-- Consider inferred link suggestions from keyword overlap or character mentions.
-- Define UX/approval flow for bulk link operations (especially cross-project scenarios).
-- Support link batch editing in CLI or tool workflows.
+### Phase 4D Design
+
+**New source kinds:** `character` and `place` for reference links
+
+- Extend `upsert_reference_link` tool to support `character` and `place` as `source_kind` values
+- Links are persisted to character/place `.meta.yaml` sidecars parallel to scene sidecars
+- Write-through helpers: `persistCharacterReferenceLink()`, `persistPlaceReferenceLink()`
+
+**Suggestion mechanism:** `suggest_scene_references(scene_id, project_id?)`
+
+- Query: Find all characters and places in the scene
+- Query: For each character/place, retrieve linked references
+- Score references by link count:
+  - +1 for each character in the scene with a link to that reference
+  - +1 for each place in the scene with a link to that reference
+  - Deduplicate on (doc_id, relation) pair; sum scores
+- Return candidates sorted by score descending
+- Exclude any already-explicit scene → reference links
+- Include source attribution (e.g., "linked via character X" or "linked via place Y" or "linked via both")
+
+**Manual linking:** Users can always call `upsert_reference_link` directly
+
+- `upsert_reference_link('scene', scene_id, project_id, target_doc_id, relation)` creates explicit scene links
+- Explicit scene links take precedence over any suggestion (not overridden by suggestions)
+
+**Sync indexing:** Extend `sync()` to index character/place → reference links
+
+- Index links alongside scene/reference links during sync
+- Preserve `origin` tracking (explicit vs inferred from metadata)
+- Parallel to existing scene/reference indexing
+
+### Example Scoring
+
+Scene "Sebastian's experiment" contains:
+- Character: Sebastian (linked to reference "Vampirism in this universe")
+- Character: Mira (linked to reference "Vampirism in this universe")
+- Place: Laboratory (linked to reference "Alchemy in Sebastian's world")
+- Place: Laboratory (linked to reference "Vampirism in this universe")
+
+Suggestion scores:
+- "Vampirism in this universe": score 3 (Sebastian, Mira, Laboratory all link to it)
+- "Alchemy in Sebastian's world": score 1 (Laboratory links to it)
 
 Phase 4C Completion Notes (v2.17.0):
 ✅ Explicit links survive full DB reset/rebuild from source files via write-through.
@@ -260,7 +298,8 @@ Behavioral guardrails:
 
 - No finalized authoring UX helpers for suggesting links based on scene/reference proximity
 - No auto-suggestion flow for likely scene references based on keyword overlap or character mentions
-- No decision yet on whether summaries are handwritten only or can be inferred from content
+- Deferred feature: reference-document "logline-like" summaries as explicit metadata fields
+- Open design for deferred feature: summaries may be handwritten by users or generated/suggested and then user-edited
 - Bulk link editing workflows (especially cross-project scenarios) not yet scoped
 - Cross-project/shared-universe ownership enforcement may need refinement once used on larger series projects
 
