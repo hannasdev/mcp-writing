@@ -297,9 +297,10 @@ export function normalizeReferenceLinkList(values, { defaultRelation = "related"
   const links = [];
   for (const value of rawValues) {
     if (typeof value === "string") {
-      const targetDocId = value.trim();
-      if (!targetDocId) continue;
-      links.push({ targetDocId, relation: normalizeReferenceRelation(defaultRelation, defaultRelation) });
+      const parts = value.split(",").map((part) => part.trim()).filter(Boolean);
+      for (const targetDocId of parts) {
+        links.push({ targetDocId, relation: normalizeReferenceRelation(defaultRelation, defaultRelation) });
+      }
       continue;
     }
 
@@ -782,14 +783,6 @@ export function indexReferenceFile(db, syncDir, file, meta = {}, content = "") {
     tags.join(" ")
   );
 
-  indexReferenceLinksForSource(db, {
-    sourceKind: "reference",
-    sourceProjectId: project_id ?? "",
-    sourceId: docId,
-    targetDocIds: relatedReferenceIds,
-    relation: "related",
-  });
-
   if (explicitReferenceLinks.hasField) {
     indexExplicitReferenceLinksForSource(db, {
       sourceKind: "reference",
@@ -799,6 +792,14 @@ export function indexReferenceFile(db, syncDir, file, meta = {}, content = "") {
       defaultRelation: "related",
     });
   }
+
+  indexReferenceLinksForSource(db, {
+    sourceKind: "reference",
+    sourceProjectId: project_id ?? "",
+    sourceId: docId,
+    targetDocIds: relatedReferenceIds,
+    relation: "related",
+  });
 
   return docId;
 }
@@ -1038,14 +1039,6 @@ export function indexSceneFile(db, syncDir, file, meta, prose) {
     keywordTokens,
   );
 
-  indexReferenceLinksForSource(db, {
-    sourceKind: "scene",
-    sourceProjectId: project_id ?? "",
-    sourceId: meta.scene_id,
-    targetDocIds: referenceIds,
-    relation: "informs",
-  });
-
   if (explicitSceneLinks.hasField) {
     indexExplicitReferenceLinksForSource(db, {
       sourceKind: "scene",
@@ -1055,6 +1048,14 @@ export function indexSceneFile(db, syncDir, file, meta, prose) {
       defaultRelation: "informs",
     });
   }
+
+  indexReferenceLinksForSource(db, {
+    sourceKind: "scene",
+    sourceProjectId: project_id ?? "",
+    sourceId: meta.scene_id,
+    targetDocIds: referenceIds,
+    relation: "informs",
+  });
 
   return { isStale };
 }

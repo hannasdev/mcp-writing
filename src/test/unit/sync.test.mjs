@@ -768,6 +768,35 @@ describe("syncAll", () => {
     fs.rmSync(dir, { recursive: true });
   });
 
+  test("single sync pass prefers explicit relation when inferred and explicit target overlap", () => {
+    const dir = makeTempSync();
+    const db = openDb(":memory:");
+
+    fs.mkdirSync(path.join(dir, "projects", "test-novel", "scenes"), { recursive: true });
+    fs.mkdirSync(path.join(dir, "projects", "test-novel", "world", "reference"), { recursive: true });
+    fs.writeFileSync(
+      path.join(dir, "projects", "test-novel", "world", "reference", "vamp.md"),
+      "---\ndoc_id: ref-vamp\ntitle: Vamp\nrelated_reference_ids:\n  - ref-vamp\nreference_links:\n  - target_doc_id: ref-vamp\n    relation: history_of\n---\nReference body."
+    );
+    fs.writeFileSync(
+      path.join(dir, "projects", "test-novel", "scenes", "sc-001.md"),
+      "---\nscene_id: sc-001\ntitle: Scene\nreference_ids:\n  - ref-vamp\nreference_links:\n  - target_doc_id: ref-vamp\n    relation: see_also\n---\nScene prose."
+    );
+
+    syncAll(db, dir, { quiet: true });
+
+    const sceneLinks = db.prepare(`
+      SELECT relation, origin
+      FROM reference_links
+      WHERE source_kind = 'scene' AND source_project_id = 'test-novel' AND source_id = 'sc-001' AND target_doc_id = 'ref-vamp'
+      ORDER BY relation
+    `).all().map((row) => ({ ...row }));
+    assert.deepEqual(sceneLinks, [{ relation: "see_also", origin: "explicit" }]);
+
+    db.close();
+    fs.rmSync(dir, { recursive: true });
+  });
+
   test("rebuilds explicit links from source metadata after DB reset", () => {
     const dir = makeTempSync();
     const scenePath = path.join(dir, "projects", "test-novel", "scenes", "sc-001.md");

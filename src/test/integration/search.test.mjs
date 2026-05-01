@@ -661,6 +661,39 @@ describe("upsert_reference_link tool", () => {
     assert.ok(sourceRefFrontmatter.includes("relation: history_of"));
   });
 
+  test("canonicalizes legacy explicit link fields on reference upsert", async () => {
+    const sourceRefPath = path.join(writeSyncDir, "projects", "test-novel", "world", "reference", "ref-upsert-source.md");
+    fs.writeFileSync(
+      sourceRefPath,
+      "---\ndoc_id: ref-upsert-source\ntitle: Upsert Source\nrelated_reference_links:\n  - target_doc_id: ref-upsert-target-2\n    relation: see_also\nexplicit_reference_links:\n  - target_doc_id: ref-upsert-target-2\n    relation: depends_on\n---\nSource body."
+    );
+    await callWriteTool("sync");
+
+    const updatedText = await callWriteTool("upsert_reference_link", {
+      source_kind: "reference",
+      source_id: "ref-upsert-source",
+      source_project_id: "test-novel",
+      target_doc_id: "ref-upsert-target-2",
+      relation: "related",
+    });
+    const updated = JSON.parse(updatedText);
+    assert.equal(updated.ok, true);
+
+    const canonicalFrontmatter = fs.readFileSync(sourceRefPath, "utf8");
+    assert.ok(canonicalFrontmatter.includes("reference_links:"));
+    assert.ok(!canonicalFrontmatter.includes("related_reference_links:"));
+    assert.ok(!canonicalFrontmatter.includes("explicit_reference_links:"));
+
+    const referenceDocText = await callWriteTool("get_reference_doc", {
+      doc_id: "ref-upsert-source",
+      include_related: true,
+    });
+    const referenceDoc = JSON.parse(referenceDocText);
+    const targetRows = referenceDoc.related.filter((row) => row.doc_id === "ref-upsert-target-2");
+    assert.equal(targetRows.length, 1);
+    assert.equal(targetRows[0].relation, "related");
+  });
+
   test("returns conflict for reference source with mismatched source_project_id", async () => {
     const text = await callWriteTool("upsert_reference_link", {
       source_kind: "reference",

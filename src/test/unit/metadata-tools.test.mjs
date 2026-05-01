@@ -1,8 +1,17 @@
-import { describe, test } from "node:test";
+import { after, describe, test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { openDb } from "../../core/db.js";
 import { registerMetadataTools } from "../../tools/metadata.js";
+
+const SEED_TMP_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-writing-metadata-tools-"));
+let seedCounter = 0;
+
+after(() => {
+  fs.rmSync(SEED_TMP_DIR, { recursive: true, force: true });
+});
 
 function makeToolHarness(db, { writable = true } = {}) {
   const handlers = new Map();
@@ -56,7 +65,8 @@ function seedProject(db, projectId) {
 }
 
 function seedScene(db, { sceneId, projectId }) {
-  const scenePath = `/tmp/${projectId}-${sceneId}.md`;
+  seedCounter += 1;
+  const scenePath = path.join(SEED_TMP_DIR, `${projectId}-${sceneId}-${seedCounter}.md`);
   fs.writeFileSync(
     scenePath,
     `---\nscene_id: ${sceneId}\ntitle: ${sceneId}\n---\nScene prose.`,
@@ -70,7 +80,8 @@ function seedScene(db, { sceneId, projectId }) {
 }
 
 function seedReferenceDoc(db, { docId, projectId, title }) {
-  const referencePath = `/tmp/${projectId ?? "global"}-${docId}.md`;
+  seedCounter += 1;
+  const referencePath = path.join(SEED_TMP_DIR, `${projectId ?? "global"}-${docId}-${seedCounter}.md`);
   fs.writeFileSync(
     referencePath,
     `---\ndoc_id: ${docId}\ntitle: ${title}\n---\nReference body.`,

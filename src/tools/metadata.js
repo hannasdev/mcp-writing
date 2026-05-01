@@ -4,8 +4,8 @@ import matter from "gray-matter";
 import { readMeta, writeMeta, indexSceneFile, normalizeSceneMetaForPath, normalizeReferenceLinkList } from "../sync/sync.js";
 import { validateProjectId, validateUniverseId } from "../sync/importer.js";
 
-function upsertSerializedReferenceLinks(existing, targetDocId, relation) {
-  const normalized = normalizeReferenceLinkList(existing ?? [], { defaultRelation: "related" });
+function upsertSerializedReferenceLinks(existing, targetDocId, relation, { defaultRelation }) {
+  const normalized = normalizeReferenceLinkList(existing ?? [], { defaultRelation });
   const filtered = normalized.filter((entry) => entry.targetDocId !== targetDocId);
   filtered.push({ targetDocId, relation });
   return filtered.map((entry) => ({
@@ -16,13 +16,19 @@ function upsertSerializedReferenceLinks(existing, targetDocId, relation) {
 
 function persistSceneReferenceLink({ scenePath, syncDir, targetDocId, relation }) {
   const { meta } = readMeta(scenePath, syncDir, { writable: true });
-  const existingExplicit = meta.reference_links ?? meta.explicit_reference_links ?? [];
-  const nextReferenceLinks = upsertSerializedReferenceLinks(existingExplicit, targetDocId, relation);
+  const existingExplicit = [
+    ...(Array.isArray(meta.reference_links) ? meta.reference_links : meta.reference_links ? [meta.reference_links] : []),
+    ...(Array.isArray(meta.explicit_reference_links) ? meta.explicit_reference_links : meta.explicit_reference_links ? [meta.explicit_reference_links] : []),
+  ];
+  const nextReferenceLinks = upsertSerializedReferenceLinks(existingExplicit, targetDocId, relation, {
+    defaultRelation: "informs",
+  });
 
   const nextMeta = {
     ...meta,
     reference_links: nextReferenceLinks,
   };
+  delete nextMeta.explicit_reference_links;
 
   if (relation === "informs") {
     const existingIds = Array.isArray(meta.reference_ids)
@@ -40,13 +46,21 @@ function persistReferenceDocLink({ filePath, targetDocId, relation }) {
   const raw = fs.readFileSync(filePath, "utf8");
   const parsed = matter(raw);
   const data = parsed.data ?? {};
-  const existingExplicit = data.reference_links ?? data.related_reference_links ?? data.explicit_reference_links ?? [];
-  const nextReferenceLinks = upsertSerializedReferenceLinks(existingExplicit, targetDocId, relation);
+  const existingExplicit = [
+    ...(Array.isArray(data.reference_links) ? data.reference_links : data.reference_links ? [data.reference_links] : []),
+    ...(Array.isArray(data.related_reference_links) ? data.related_reference_links : data.related_reference_links ? [data.related_reference_links] : []),
+    ...(Array.isArray(data.explicit_reference_links) ? data.explicit_reference_links : data.explicit_reference_links ? [data.explicit_reference_links] : []),
+  ];
+  const nextReferenceLinks = upsertSerializedReferenceLinks(existingExplicit, targetDocId, relation, {
+    defaultRelation: "related",
+  });
 
   const nextData = {
     ...data,
     reference_links: nextReferenceLinks,
   };
+  delete nextData.related_reference_links;
+  delete nextData.explicit_reference_links;
 
   if (relation === "related") {
     const existingIds = Array.isArray(data.related_reference_ids)
