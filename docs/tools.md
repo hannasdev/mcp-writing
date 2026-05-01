@@ -30,6 +30,7 @@
 - [`list_threads`](#list_threads)
 - [`get_thread_arc`](#get_thread_arc)
 - [`get_relationship_arc`](#get_relationship_arc)
+- [`suggest_scene_references`](#suggest_scene_references)
 - [`create_character_sheet`](#create_character_sheet)
 - [`create_place_sheet`](#create_place_sheet)
 - [`upsert_thread_link`](#upsert_thread_link)
@@ -357,6 +358,21 @@ Show how the relationship between two characters evolves across scenes, in order
 
 ---
 
+## suggest_scene_references
+
+Suggest reference documents for a scene by aggregating links from the scene's characters and places. Returns weighted candidates ranked by how many entities in the scene link to each reference. Excludes any explicit scene → reference links already present. In apply mode, can persist selected suggestions as explicit scene links in one call.
+
+| Parameter | Type | Required | Description |
+| --- | --- | :---: | --- |
+| `scene_id` | `string` | Yes | Scene ID (e.g. 'sc-011-sebastian'). |
+| `project_id` | `string` | No | Optional project scope to disambiguate an ambiguous scene_id across projects. |
+| `mode` | `enum("preview","apply")` | No | Use 'preview' (default) to list candidates only, or 'apply' to persist selected suggestions as explicit scene links. |
+| `selected_doc_ids` | `string[]` | No | Optional allowlist of doc_ids to apply when mode='apply'. If omitted, applies top-ranked candidates. |
+| `max_apply` | `integer` | No | Optional cap for how many candidates to apply when mode='apply'. |
+| `min_score` | `integer` | No | Optional minimum candidate score. Candidates below this are excluded from preview/apply. Defaults to 1. |
+
+---
+
 ## create_character_sheet
 
 Create or reuse a canonical character sheet folder with sheet.md and sheet.meta.yaml so the character can be indexed immediately. If the folder already exists, missing canonical files are backfilled and the existing sheet is preserved.
@@ -402,13 +418,13 @@ Create or update a thread and link it to a scene. Idempotent: if the link alread
 
 ## upsert_reference_link
 
-Create or update an explicit reference link from a scene or reference doc to a target reference doc. If a link already exists between the same source and target, this updates the relation. Only available when the sync dir is writable.
+Create or update an explicit reference link from a scene, character, place, or reference doc to a target reference doc. If a link already exists between the same source and target, this updates the relation. Only available when the sync dir is writable.
 
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |
-| `source_kind` | `enum("scene","reference")` | Yes | Link source kind. |
-| `source_id` | `string` | Yes | Source scene_id or reference doc_id. |
-| `source_project_id` | `string` | No | Optional project scope for the source. For scene sources, use this to disambiguate an ambiguous scene_id across projects. For reference sources, when provided, it is treated as an ownership check and must match the source reference doc's project. |
+| `source_kind` | `enum("scene","character","place","reference")` | Yes | Link source kind. |
+| `source_id` | `string` | Yes | Source scene_id, character_id, place_id, or reference doc_id. |
+| `source_project_id` | `string` | No | Optional project scope for the source. For scene/character/place sources, use this to disambiguate an ambiguous source_id across projects. For reference sources, when provided, it is treated as an ownership check and must match the source reference doc's project. |
 | `target_doc_id` | `string` | Yes | Target reference doc_id. |
 | `relation` | `string` | Yes | Relationship label (for example: 'informs', 'related', 'history_of'). The value is trimmed and lowercased before validation. |
 
