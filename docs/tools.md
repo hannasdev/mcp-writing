@@ -60,7 +60,7 @@
 
 ## describe_workflows
 
-Return a map of available task workflows and the current project context. Call this at the start of a session or whenever you are unsure what to do next. Never write scripts to invoke tools — call them directly.
+Return the default workflow map and current project context for this server. Call this first in most sessions and again whenever you are unsure what to do next. Never write scripts to invoke tools — call them directly.
 
 _No parameters._
 
@@ -223,7 +223,7 @@ Load the full prose for every scene in a chapter, concatenated in order. Expensi
 
 ## get_arc
 
-Get every scene a character appears in, ordered by part/chapter/position. Returns scene metadata only — no prose. Use this to trace a character's arc through the story. Supports pagination via page/page_size and auto-paginates large result sets with total_count. Call list_characters first to get the character_id.
+Get every scene a character appears in, ordered by part/chapter/position. Returns scene metadata only — no prose. Use this as the primary structural entry point when the question is about a character's progression through the manuscript. Supports pagination via page/page_size and auto-paginates large result sets with total_count. Use list_characters only when you need help finding a character_id.
 
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |
@@ -236,7 +236,7 @@ Get every scene a character appears in, ordered by part/chapter/position. Return
 
 ## list_characters
 
-List all indexed characters with their character_id, name, role, and arc_summary. Call this first whenever you need to filter scenes by character or look up a character sheet — it gives you the character_id values required by other tools.
+List indexed characters with their character_id, name, role, and arc_summary. Use this mainly as a lookup and disambiguation helper when you need to find a character_id for a broader reasoning task.
 
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |
@@ -247,7 +247,7 @@ List all indexed characters with their character_id, name, role, and arc_summary
 
 ## get_character_sheet
 
-Get full character details: role, arc_summary, traits, the canonical sheet content, and any adjacent support notes when the character uses a folder-based layout. Use list_characters first to get the character_id.
+Get full character details: role, arc_summary, traits, the canonical sheet content, and any adjacent support notes when the character uses a folder-based layout. Use this when the reasoning task needs the character's canonical profile rather than only their scene progression.
 
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |
@@ -257,7 +257,7 @@ Get full character details: role, arc_summary, traits, the canonical sheet conte
 
 ## list_places
 
-List all indexed places with their place_id and name. Use this to find place_id values for scene filtering or to get an overview of the story's locations.
+List indexed places with their place_id and name. Use this mainly as a lookup and disambiguation helper when place context becomes relevant to the current reasoning task.
 
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |
@@ -268,7 +268,7 @@ List all indexed places with their place_id and name. Use this to find place_id 
 
 ## get_place_sheet
 
-Get full place details: associated_characters, tags, the canonical sheet content, and any adjacent support notes when the place uses a folder-based layout. Use list_places first to get the place_id.
+Get full place details: associated_characters, tags, the canonical sheet content, and any adjacent support notes when the place uses a folder-based layout. Use this when the current scene or question makes the place itself materially relevant.
 
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |
@@ -324,7 +324,7 @@ Get metadata for a reference document by doc_id. Optionally includes exactly one
 
 ## list_threads
 
-List all subplot/storyline threads for a project. Returns a structured JSON envelope with results and total_count. Use this to discover valid thread_id values before calling get_thread_arc or upsert_thread_link. Supports pagination via page/page_size.
+List subplot/storyline threads for a project. Returns a structured JSON envelope with results and total_count. Use this mainly as a lookup and disambiguation helper before deeper thread reasoning with get_thread_arc. Supports pagination via page/page_size.
 
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |
@@ -336,7 +336,7 @@ List all subplot/storyline threads for a project. Returns a structured JSON enve
 
 ## get_thread_arc
 
-Get ordered scene metadata for all scenes belonging to a thread, including the per-thread beat. Returns a structured JSON envelope with thread metadata, results, and total_count. Use list_threads first to find a valid thread_id, then call get_scene_prose for close reading of specific scenes. Supports pagination via page/page_size.
+Get ordered scene metadata for all scenes belonging to a thread, including the per-thread beat. Returns a structured JSON envelope with thread metadata, results, and total_count. Use this when the question is about subplot movement, continuity, or recurring storyline structure across scenes. Supports pagination via page/page_size.
 
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |

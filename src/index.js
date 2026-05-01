@@ -307,7 +307,7 @@ function createMcpServer() {
   // ---- describe_workflows --------------------------------------------------
   s.tool(
     "describe_workflows",
-    "Return a map of available task workflows and the current project context. Call this at the start of a session or whenever you are unsure what to do next. Never write scripts to invoke tools — call them directly.",
+    "Return the default workflow map and current project context for this server. Call this first in most sessions and again whenever you are unsure what to do next. Never write scripts to invoke tools — call them directly.",
     {},
     async () => {
       const projectRow = db.prepare(
@@ -356,6 +356,7 @@ function createMcpServer() {
         workflows: WORKFLOW_CATALOGUE,
         notes: [
           "Never write JavaScript or shell scripts to invoke tools. Call them directly.",
+          "Use describe_workflows as the default starting point for most sessions and whenever you are uncertain which tool path fits the task.",
           "If a tool returns a next_step field (in a success or error response), follow it before trying anything else.",
           "Use find_scenes without filters to discover what project_ids are indexed.",
           "When calling bootstrap_prose_styleguide_config or check_prose_styleguide_drift, set max_scenes to context.scene_count to avoid the default limit.",

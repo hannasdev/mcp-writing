@@ -296,19 +296,38 @@ describe("describe_workflows tool", () => {
     const ids = parsed.workflows.map(w => w.id);
 
     const expected = [
+      "question_driven_discovery",
+      "targeted_scene_reading",
+      "safe_scene_revision",
+      "character_understanding",
+      "place_understanding",
+      "thread_understanding",
+      "parity_recovery",
+      "review_preparation",
       "first_time_setup",
       "styleguide_setup_new",
       "styleguide_drift_check",
-      "manuscript_exploration",
-      "prose_editing",
-      "character_management",
-      "place_management",
-      "review_bundle",
       "async_job_tracking",
     ];
     for (const id of expected) {
       assert.ok(ids.includes(id), `Missing workflow: ${id}`);
     }
+  });
+
+  test("front-loads discovery and scene workflows ahead of setup/styleguide workflows", async () => {
+    const text = await callWriteTool("describe_workflows");
+    const parsed = JSON.parse(text);
+    const ids = parsed.workflows.map(w => w.id);
+
+    assert.deepEqual(ids.slice(0, 4), [
+      "question_driven_discovery",
+      "targeted_scene_reading",
+      "safe_scene_revision",
+      "character_understanding",
+    ]);
+
+    assert.ok(ids.indexOf("first_time_setup") > ids.indexOf("review_preparation"));
+    assert.ok(ids.indexOf("styleguide_setup_new") > ids.indexOf("first_time_setup"));
   });
 
   test("context.scene_count matches indexed scenes", async () => {
