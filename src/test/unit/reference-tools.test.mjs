@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { openDb } from "../../core/db.js";
 import { registerSearchTools } from "../../tools/search.js";
+import { upsertExplicitReferenceLinkRow } from "../../tools/reference-link-persistence.js";
 
 function makeToolHarness(db, { syncDir = "", writable = false } = {}) {
   const handlers = new Map();
@@ -100,6 +101,75 @@ function seedReferenceLink(db, {
 }
 
 describe("reference link search tools", () => {
+  test("upsertExplicitReferenceLinkRow is atomic when insert fails", () => {
+    class FakeDb {
+      constructor() {
+        this.rows = [
+          {
+            source_kind: "scene",
+            source_project_id: "test-novel",
+            source_id: "sc-001",
+            target_doc_id: "ref-vampirism",
+            relation: "informs",
+            origin: "explicit",
+          },
+        ];
+      }
+
+      prepare(sql) {
+        if (sql.includes("DELETE FROM reference_links")) {
+          return {
+            run: (sourceKind, sourceProjectId, sourceId, targetDocId) => {
+              this.rows = this.rows.filter((row) => !(
+                row.source_kind === sourceKind
+                && row.source_project_id === sourceProjectId
+                && row.source_id === sourceId
+                && row.target_doc_id === targetDocId
+              ));
+            },
+          };
+        }
+
+        if (sql.includes("INSERT INTO reference_links")) {
+          return {
+            run: () => {
+              throw new Error("simulated insert failure");
+            },
+          };
+        }
+
+        throw new Error(`Unexpected SQL in fake db: ${sql}`);
+      }
+
+      transaction(fn) {
+        return () => {
+          const snapshot = structuredClone(this.rows);
+          try {
+            fn();
+          } catch (err) {
+            this.rows = snapshot;
+            throw err;
+          }
+        };
+      }
+    }
+
+    const db = new FakeDb();
+    assert.throws(
+      () => upsertExplicitReferenceLinkRow(db, {
+        sourceKind: "scene",
+        sourceProjectId: "test-novel",
+        sourceId: "sc-001",
+        targetDocId: "ref-vampirism",
+        relation: "see_also",
+      }),
+      /simulated insert failure/
+    );
+
+    assert.equal(db.rows.length, 1);
+    assert.equal(db.rows[0].relation, "informs");
+  });
+
   test("list_scene_references returns conflict when scene_id is ambiguous across projects", async () => {
     const db = openDb(":memory:");
     try {

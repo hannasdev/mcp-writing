@@ -1,5 +1,7 @@
 import { readMeta, writeMeta, normalizeReferenceLinkList } from "../sync/sync.js";
 
+let savepointCounter = 0;
+
 export function upsertSerializedReferenceLinks(existing, targetDocId, relation, { defaultRelation }) {
   const normalized = normalizeReferenceLinkList(existing ?? [], { defaultRelation });
   const filtered = normalized.filter((entry) => entry.targetDocId !== targetDocId);
@@ -42,14 +44,34 @@ export function upsertExplicitReferenceLinkRow(
   db,
   { sourceKind, sourceProjectId, sourceId, targetDocId, relation }
 ) {
-  db.prepare(`
+  const deleteStmt = db.prepare(`
     DELETE FROM reference_links
     WHERE source_kind = ? AND source_project_id = ? AND source_id = ? AND target_doc_id = ?
-  `).run(sourceKind, sourceProjectId, sourceId, targetDocId);
-
-  db.prepare(`
+  `);
+  const insertStmt = db.prepare(`
     INSERT INTO reference_links (
       source_kind, source_project_id, source_id, target_doc_id, relation, origin
     ) VALUES (?, ?, ?, ?, ?, 'explicit')
-  `).run(sourceKind, sourceProjectId, sourceId, targetDocId, relation);
+  `);
+
+  const runUpsertBody = () => {
+    deleteStmt.run(sourceKind, sourceProjectId, sourceId, targetDocId);
+    insertStmt.run(sourceKind, sourceProjectId, sourceId, targetDocId, relation);
+  };
+
+  if (typeof db.transaction === "function") {
+    db.transaction(runUpsertBody)();
+    return;
+  }
+
+  const savepointName = `reference_link_upsert_${savepointCounter += 1}`;
+  db.exec(`SAVEPOINT ${savepointName};`);
+  try {
+    runUpsertBody();
+    db.exec(`RELEASE SAVEPOINT ${savepointName};`);
+  } catch (err) {
+    db.exec(`ROLLBACK TO SAVEPOINT ${savepointName};`);
+    db.exec(`RELEASE SAVEPOINT ${savepointName};`);
+    throw err;
+  }
 }
