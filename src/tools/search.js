@@ -791,75 +791,64 @@ export function registerSearchTools(s, {
       `).all(resolvedProjectId, scene_id);
       const existingSceneLinkKeys = new Set(existingSceneLinks.map(link => `${link.target_doc_id}:${link.relation}`));
 
-      // Aggregate reference links from characters
+      // Load all character/place source links in project scope and aggregate in memory.
       const characterReferenceLinks = characters.length > 0
         ? db.prepare(`
-            SELECT target_doc_id, relation, COUNT(*) as source_count
-            FROM reference_links
-            WHERE source_kind = 'character' AND source_project_id = ? AND source_id IN (${characters.map(() => "?").join(",")})
-            GROUP BY target_doc_id, relation
+            SELECT rl.target_doc_id, rl.relation, rl.source_id AS character_id, c.name AS character_name
+            FROM reference_links rl
+            LEFT JOIN characters c
+              ON c.character_id = rl.source_id
+             AND c.project_id = rl.source_project_id
+            WHERE rl.source_kind = 'character'
+              AND rl.source_project_id = ?
+              AND rl.source_id IN (${characters.map(() => "?").join(",")})
           `).all(resolvedProjectId, ...characters.map(c => c.character_id))
         : [];
 
-      // Aggregate reference links from places
       const placeReferenceLinks = places.length > 0
         ? db.prepare(`
-            SELECT target_doc_id, relation, COUNT(*) as source_count
-            FROM reference_links
-            WHERE source_kind = 'place' AND source_project_id = ? AND source_id IN (${places.map(() => "?").join(",")})
-            GROUP BY target_doc_id, relation
+            SELECT rl.target_doc_id, rl.relation, rl.source_id AS place_id, p.name AS place_name
+            FROM reference_links rl
+            LEFT JOIN places p
+              ON p.place_id = rl.source_id
+             AND p.project_id = rl.source_project_id
+            WHERE rl.source_kind = 'place'
+              AND rl.source_project_id = ?
+              AND rl.source_id IN (${places.map(() => "?").join(",")})
           `).all(resolvedProjectId, ...places.map(p => p.place_id))
         : [];
 
       // Merge and score
       const scoreMap = new Map(); // key: "doc_id:relation" → { doc_id, relation, score, sources: [...] }
-      
-      for (const link of characterReferenceLinks) {
-        const key = `${link.target_doc_id}:${link.relation}`;
+
+      for (const row of characterReferenceLinks) {
+        const key = `${row.target_doc_id}:${row.relation}`;
         if (!scoreMap.has(key)) {
           scoreMap.set(key, {
-            doc_id: link.target_doc_id,
-            relation: link.relation,
+            doc_id: row.target_doc_id,
+            relation: row.relation,
             score: 0,
             sources: [],
           });
         }
         const entry = scoreMap.get(key);
-        entry.score += link.source_count;
-        for (const char of characters) {
-          const charLink = db.prepare(`
-            SELECT relation FROM reference_links
-            WHERE source_kind = 'character' AND source_project_id = ? AND source_id = ? AND target_doc_id = ? AND relation = ?
-          `).get(resolvedProjectId, char.character_id, link.target_doc_id, link.relation);
-          if (charLink) {
-            const charName = db.prepare(`SELECT name FROM characters WHERE character_id = ? AND project_id = ?`).get(char.character_id, resolvedProjectId)?.name || char.character_id;
-            entry.sources.push(`character: ${charName}`);
-          }
-        }
+        entry.score += 1;
+        entry.sources.push(`character: ${row.character_name ?? row.character_id}`);
       }
 
-      for (const link of placeReferenceLinks) {
-        const key = `${link.target_doc_id}:${link.relation}`;
+      for (const row of placeReferenceLinks) {
+        const key = `${row.target_doc_id}:${row.relation}`;
         if (!scoreMap.has(key)) {
           scoreMap.set(key, {
-            doc_id: link.target_doc_id,
-            relation: link.relation,
+            doc_id: row.target_doc_id,
+            relation: row.relation,
             score: 0,
             sources: [],
           });
         }
         const entry = scoreMap.get(key);
-        entry.score += link.source_count;
-        for (const place of places) {
-          const placeLink = db.prepare(`
-            SELECT relation FROM reference_links
-            WHERE source_kind = 'place' AND source_project_id = ? AND source_id = ? AND target_doc_id = ? AND relation = ?
-          `).get(resolvedProjectId, place.place_id, link.target_doc_id, link.relation);
-          if (placeLink) {
-            const placeName = db.prepare(`SELECT name FROM places WHERE place_id = ? AND project_id = ?`).get(place.place_id, resolvedProjectId)?.name || place.place_id;
-            entry.sources.push(`place: ${placeName}`);
-          }
-        }
+        entry.score += 1;
+        entry.sources.push(`place: ${row.place_name ?? row.place_id}`);
       }
 
       // Filter out already explicit scene links and deduplicate sources
@@ -871,13 +860,22 @@ export function registerSearchTools(s, {
         }))
         .sort((a, b) => b.score - a.score || a.doc_id.localeCompare(b.doc_id));
 
+      const candidateDocIds = [...new Set(candidates.map(candidate => candidate.doc_id))];
+      const docsById = candidateDocIds.length > 0
+        ? new Map(
+            db.prepare(`
+              SELECT doc_id, type, title, summary, project_id, universe_id
+              FROM reference_docs
+              WHERE doc_id IN (${candidateDocIds.map(() => "?").join(",")})
+            `)
+              .all(...candidateDocIds)
+              .map(row => [row.doc_id, row])
+          )
+        : new Map();
+
       // Enrich with reference doc metadata
       const enriched = candidates.map(candidate => {
-        const doc = db.prepare(`
-          SELECT doc_id, type, title, summary, project_id, universe_id
-          FROM reference_docs
-          WHERE doc_id = ?
-        `).get(candidate.doc_id);
+        const doc = docsById.get(candidate.doc_id);
         return {
           ...candidate,
           title: doc?.title || candidate.doc_id,
