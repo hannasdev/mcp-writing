@@ -735,7 +735,7 @@ describe("syncAll", () => {
     fs.rmSync(dir, { recursive: true });
   });
 
-  test("preserves explicit reference links across sync and skips inferred overwrite for same target", () => {
+  test("indexes explicit links from metadata fields and skips inferred overwrite for the same target", () => {
     const dir = makeTempSync();
     const db = openDb(":memory:");
 
@@ -744,7 +744,7 @@ describe("syncAll", () => {
 
     fs.writeFileSync(
       path.join(dir, "projects", "test-novel", "scenes", "sc-001.md"),
-      "---\nscene_id: sc-001\ntitle: Scene\ntags: [test]\nreference_ids:\n  - ref-vamp\n---\nScene prose."
+      "---\nscene_id: sc-001\ntitle: Scene\ntags: [test]\nreference_ids:\n  - ref-vamp\nreference_links:\n  - target_doc_id: ref-vamp\n    relation: see_also\n---\nScene prose."
     );
     fs.writeFileSync(
       path.join(dir, "projects", "test-novel", "world", "reference", "vamp.md"),
@@ -752,17 +752,6 @@ describe("syncAll", () => {
     );
 
     syncAll(db, dir, { quiet: true });
-
-    db.prepare(`
-      DELETE FROM reference_links
-      WHERE source_kind = 'scene' AND source_project_id = 'test-novel' AND source_id = 'sc-001' AND target_doc_id = 'ref-vamp'
-    `).run();
-    db.prepare(`
-      INSERT INTO reference_links (
-        source_kind, source_project_id, source_id, target_doc_id, relation, origin
-      ) VALUES (?, ?, ?, ?, ?, ?)
-    `).run("scene", "test-novel", "sc-001", "ref-vamp", "see_also", "explicit");
-
     syncAll(db, dir, { quiet: true });
 
     const links = db.prepare(`
@@ -776,6 +765,70 @@ describe("syncAll", () => {
     ]);
 
     db.close();
+    fs.rmSync(dir, { recursive: true });
+  });
+
+  test("rebuilds explicit links from source metadata after DB reset", () => {
+    const dir = makeTempSync();
+    const scenePath = path.join(dir, "projects", "test-novel", "scenes", "sc-001.md");
+    const sourceRefPath = path.join(dir, "projects", "test-novel", "world", "reference", "source.md");
+    const targetRefPath = path.join(dir, "projects", "test-novel", "world", "reference", "target.md");
+
+    fs.mkdirSync(path.dirname(scenePath), { recursive: true });
+    fs.mkdirSync(path.dirname(sourceRefPath), { recursive: true });
+
+    fs.writeFileSync(
+      scenePath,
+      "---\nscene_id: sc-001\ntitle: Scene\nreference_links:\n  - target_doc_id: ref-target\n    relation: history_of\n---\nScene prose."
+    );
+    fs.writeFileSync(
+      sourceRefPath,
+      "---\ndoc_id: ref-source\ntitle: Source\nreference_links:\n  - target_doc_id: ref-target\n    relation: depends_on\n---\nSource body."
+    );
+    fs.writeFileSync(
+      targetRefPath,
+      "---\ndoc_id: ref-target\ntitle: Target\n---\nTarget body."
+    );
+
+    const db1 = openDb(":memory:");
+    syncAll(db1, dir, { quiet: true });
+
+    const linksAfterFirstSync = db1.prepare(`
+      SELECT source_kind, source_project_id, source_id, target_doc_id, relation, origin
+      FROM reference_links
+      ORDER BY source_kind, source_id, relation
+    `).all().map(row => ({ ...row }));
+    assert.deepEqual(linksAfterFirstSync, [
+      {
+        source_kind: "reference",
+        source_project_id: "test-novel",
+        source_id: "ref-source",
+        target_doc_id: "ref-target",
+        relation: "depends_on",
+        origin: "explicit",
+      },
+      {
+        source_kind: "scene",
+        source_project_id: "test-novel",
+        source_id: "sc-001",
+        target_doc_id: "ref-target",
+        relation: "history_of",
+        origin: "explicit",
+      },
+    ]);
+    db1.close();
+
+    const db2 = openDb(":memory:");
+    syncAll(db2, dir, { quiet: true });
+
+    const linksAfterRebuild = db2.prepare(`
+      SELECT source_kind, source_project_id, source_id, target_doc_id, relation, origin
+      FROM reference_links
+      ORDER BY source_kind, source_id, relation
+    `).all().map(row => ({ ...row }));
+    assert.deepEqual(linksAfterRebuild, linksAfterFirstSync);
+
+    db2.close();
     fs.rmSync(dir, { recursive: true });
   });
 

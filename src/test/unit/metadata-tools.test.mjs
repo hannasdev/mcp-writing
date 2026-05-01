@@ -1,5 +1,6 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import { openDb } from "../../core/db.js";
 import { registerMetadataTools } from "../../tools/metadata.js";
 
@@ -55,19 +56,31 @@ function seedProject(db, projectId) {
 }
 
 function seedScene(db, { sceneId, projectId }) {
+  const scenePath = `/tmp/${projectId}-${sceneId}.md`;
+  fs.writeFileSync(
+    scenePath,
+    `---\nscene_id: ${sceneId}\ntitle: ${sceneId}\n---\nScene prose.`,
+    "utf8"
+  );
   db.prepare(`
     INSERT INTO scenes (
       scene_id, project_id, title, file_path, prose_checksum, metadata_stale, updated_at
     ) VALUES (?, ?, ?, ?, ?, 0, ?)
-  `).run(sceneId, projectId, sceneId, `/tmp/${projectId}-${sceneId}.md`, "deadbeef", new Date().toISOString());
+  `).run(sceneId, projectId, sceneId, scenePath, "deadbeef", new Date().toISOString());
 }
 
 function seedReferenceDoc(db, { docId, projectId, title }) {
+  const referencePath = `/tmp/${projectId ?? "global"}-${docId}.md`;
+  fs.writeFileSync(
+    referencePath,
+    `---\ndoc_id: ${docId}\ntitle: ${title}\n---\nReference body.`,
+    "utf8"
+  );
   db.prepare(`
     INSERT INTO reference_docs (
       doc_id, project_id, universe_id, type, title, summary, file_path
     ) VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).run(docId, projectId, null, "world", title, null, `/tmp/${projectId}-${docId}.md`);
+  `).run(docId, projectId, null, "world", title, null, referencePath);
 }
 
 describe("metadata upsert_reference_link tool", () => {

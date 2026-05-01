@@ -544,6 +544,11 @@ describe("upsert_reference_link tool", () => {
     assert.equal(parsed.link.source_id, "sc-upsert-ref-001");
     assert.equal(parsed.link.target_doc_id, "ref-upsert-target");
     assert.equal(parsed.link.relation, "informs");
+
+    const sidecarText = fs.readFileSync(scenePath.replace(/\.md$/, ".meta.yaml"), "utf8");
+    assert.ok(sidecarText.includes("reference_links:"));
+    assert.ok(sidecarText.includes("target_doc_id: ref-upsert-target"));
+    assert.ok(sidecarText.includes("relation: informs"));
   });
 
   test("updates existing relation for same source and target", async () => {
@@ -649,6 +654,11 @@ describe("upsert_reference_link tool", () => {
     assert.equal(referenceDoc.related.length, 1);
     assert.equal(referenceDoc.related[0].doc_id, "ref-upsert-target-2");
     assert.equal(referenceDoc.related[0].relation, "history_of");
+
+    const sourceRefFrontmatter = fs.readFileSync(sourceRefPath, "utf8");
+    assert.ok(sourceRefFrontmatter.includes("reference_links:"));
+    assert.ok(sourceRefFrontmatter.includes("target_doc_id: ref-upsert-target-2"));
+    assert.ok(sourceRefFrontmatter.includes("relation: history_of"));
   });
 
   test("returns conflict for reference source with mismatched source_project_id", async () => {
