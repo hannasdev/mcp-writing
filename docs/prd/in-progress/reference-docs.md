@@ -1,6 +1,6 @@
 # Reference Document Querying
 
-**Status:** 🚧 In progress (Phase 4A shipped; Phase 4B in progress)
+**Status:** 🚧 In progress (Phase 4A shipped; Phase 4B core shipped; durability follow-up remains)
 
 ## Motivation
 
@@ -91,9 +91,11 @@ reference_docs(
 
 reference_links(
   source_kind,
+  source_project_id,
   source_id,
   target_doc_id,
-  relation
+  relation,
+  origin
 )
 ```
 
@@ -114,7 +116,7 @@ This should start small. We do not need an elaborate ontology before the feature
 
 If we add querying, it should be symmetric with prose search:
 
-```
+```text
 search_reference(query, type?, tag?)
   - returns matching reference docs by title/summary/tags
   - does not load full content
@@ -126,8 +128,9 @@ list_scene_references(scene_id, project_id?)
 get_reference_doc(doc_id, include_related?)
   - returns reference metadata and optionally one hop of related references
 
-upsert_reference_link(source_kind, source_id, target_doc_id, relation)
+upsert_reference_link(source_kind, source_id, source_project_id?, target_doc_id, relation)
   - creates or updates explicit links
+  - requires `source_project_id` when a scene source is ambiguous across projects
 ```
 
 ### Integration with Scenes
@@ -189,8 +192,9 @@ Do not require semantic auto-linking in the first version.
 ## Rollout
 
 - Phase 4A: Reference docs become indexed entities with lightweight search
-- Phase 4B: Add explicit scene-to-reference and reference-to-reference links
-- Phase 4C: Optional helper flows for authoring/suggesting links
+- Phase 4B: Add explicit scene-to-reference and reference-to-reference links plus query/read tools
+- Phase 4C: Durable write-through to source metadata files and final ownership/merge rules
+- Phase 4D: Optional helper flows for authoring/suggesting links
 
 ## Current Implementation Status
 
@@ -200,16 +204,41 @@ Completed (Phase 4A):
 - FTS indexing on title/summary/tags is implemented
 - `search_reference(query, type?, tag?)` is implemented
 
-In progress (Phase 4B):
+Completed (Phase 4B core):
 - explicit `reference_links` schema is implemented
 - `sync()` now indexes direct scene-to-reference (`informs`) and reference-to-reference (`related`) links from metadata
 - `list_scene_references(scene_id, project_id?)` is implemented with project-aware disambiguation
 - `get_reference_doc(doc_id, include_related?)` is implemented with one-hop related expansion
 - `upsert_reference_link(source_kind, source_id, source_project_id?, target_doc_id, relation)` is implemented for explicit scene/reference link authoring with relation normalization and conflict-safe source resolution
+- explicit tool-authored links are preserved across `sync()` via `origin` tracking (`explicit` vs `inferred`)
 
-Not started (durability follow-up):
+Remaining (Phase 4C durability/policy follow-up):
 - `upsert_reference_link` should write through to source metadata files so explicit links are not lost on DB reset/rebuild
 - define merge rules between inferred links from files and explicit tool-authored links when both exist for the same source/target
+- finalize ownership semantics for cross-project/shared-universe reference documents
+
+## Next Implementation Slice (Phase 4C)
+
+- Persist explicit links to source metadata files.
+
+- Scene sources: write explicit links to scene sidecar/frontmatter `reference_ids` (or canonical replacement field).
+- Reference sources: write explicit links to reference frontmatter `related_reference_ids` (or canonical replacement field).
+
+- Define deterministic merge precedence during sync.
+
+- Source of truth order: explicit tool-authored metadata > inferred metadata links from files.
+- Preserve explicit relation labels where possible when source/target already exists.
+
+- Finalize shared ownership rules.
+
+- Define who can write links for shared reference docs across projects in the same universe.
+- Define conflict behavior when `source_project_id` does not match ownership policy.
+
+Minimum acceptance criteria for Phase 4C:
+- Explicit links survive full DB reset/rebuild from source files.
+- Sync is idempotent when explicit and inferred links coexist.
+- Conflicts are surfaced as structured tool errors (`CONFLICT`/`VALIDATION_ERROR`) with actionable details.
+- Integration tests cover scene-source and reference-source write-through plus rebuild durability.
 
 ## Validation and Test Strategy
 
@@ -225,6 +254,7 @@ Integration tests:
 - `list_scene_references(scene_id, project_id?)` returns only direct scene links
 - `get_reference_doc(doc_id, include_related=true)` returns one-hop related references without looping
 - explicit links authored via tools remain present after `sync()`
+- project-aware disambiguation is covered for duplicated `scene_id` values across projects
 
 Behavioral guardrails:
 - no automatic deep expansion in scene query tools
@@ -235,6 +265,7 @@ Behavioral guardrails:
 
 - No finalized authoring UX for creating links inside markdown/sidecars yet
 - Explicit tool-authored links are not yet guaranteed to round-trip into source metadata files for DB rebuild durability
+- The PRD schema example is intentionally minimal; the live implementation also tracks `source_project_id` and `origin` for scoping and inferred/explicit preservation
 - No auto-suggestion flow for likely scene references yet
 - No decision yet on whether summaries are handwritten only or can be inferred from content
 - Cross-project/shared-universe reference ownership rules may need refinement once used on larger series projects
