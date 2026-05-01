@@ -219,17 +219,17 @@ Remaining (Phase 4C durability/policy follow-up):
 
 ## Next Implementation Slice (Phase 4C)
 
-1. Persist explicit links to source metadata files.
+- Persist explicit links to source metadata files.
 
 - Scene sources: write explicit links to scene sidecar/frontmatter `reference_ids` (or canonical replacement field).
 - Reference sources: write explicit links to reference frontmatter `related_reference_ids` (or canonical replacement field).
 
-1. Define deterministic merge precedence during sync.
+- Define deterministic merge precedence during sync.
 
 - Source of truth order: explicit tool-authored metadata > inferred metadata links from files.
 - Preserve explicit relation labels where possible when source/target already exists.
 
-1. Finalize shared ownership rules.
+- Finalize shared ownership rules.
 
 - Define who can write links for shared reference docs across projects in the same universe.
 - Define conflict behavior when `source_project_id` does not match ownership policy.
