@@ -421,6 +421,49 @@ describe("reference link tools", () => {
     assert.equal(parsed.related[0].doc_id, "ref-vamp-history");
     assert.ok(parsed.related[0].tags.includes("history"));
   });
+
+  test("suggest_scene_references apply mode persists explicit scene links on write server", async () => {
+    const refPath = path.join(writeSyncDir, "projects", "test-novel", "world", "reference", "apply-mode-target.md");
+    fs.mkdirSync(path.dirname(refPath), { recursive: true });
+    fs.writeFileSync(
+      refPath,
+      "---\ndoc_id: ref-apply-mode\ntitle: Apply Mode Target\n---\nReference body."
+    );
+
+    await callWriteTool("sync");
+
+    const linkText = await callWriteTool("upsert_reference_link", {
+      source_kind: "character",
+      source_id: "elena",
+      source_project_id: "test-novel",
+      target_doc_id: "ref-apply-mode",
+      relation: "informs",
+    });
+    const linkParsed = JSON.parse(linkText);
+    assert.equal(linkParsed.ok, true);
+
+    const applyText = await callWriteTool("suggest_scene_references", {
+      scene_id: "sc-001",
+      project_id: "test-novel",
+      mode: "apply",
+      selected_doc_ids: ["ref-apply-mode"],
+      max_apply: 1,
+    });
+    const applyParsed = JSON.parse(applyText);
+
+    assert.equal(applyParsed.mode, "apply");
+    assert.equal(applyParsed.applied_count, 1);
+    assert.equal(applyParsed.applied_links[0].target_doc_id, "ref-apply-mode");
+    assert.equal(applyParsed.applied_links[0].origin, "explicit");
+
+    const listedText = await callWriteTool("list_scene_references", {
+      scene_id: "sc-001",
+      project_id: "test-novel",
+    });
+    const listedParsed = JSON.parse(listedText);
+    assert.ok(listedParsed.references.some((row) => row.doc_id === "ref-apply-mode"));
+  });
+
 });
 
 describe("list_threads tool", () => {

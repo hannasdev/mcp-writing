@@ -1,10 +1,63 @@
 import { z } from "zod";
 import fs from "node:fs";
 import matter from "gray-matter";
+import { readMeta } from "../sync/sync.js";
+import { persistSceneReferenceLink, upsertExplicitReferenceLinkRow } from "./reference-link-persistence.js";
+
+function accumulateSuggestionScore(scoreMap, rows, sourceLabel) {
+  for (const row of rows) {
+    const key = `${row.target_doc_id}:${row.relation}`;
+    if (!scoreMap.has(key)) {
+      scoreMap.set(key, {
+        doc_id: row.target_doc_id,
+        relation: row.relation,
+        score: 0,
+        sources: [],
+      });
+    }
+    const entry = scoreMap.get(key);
+    entry.score += 1;
+    entry.sources.push(`${sourceLabel}: ${row.source_name ?? row.source_id}`);
+  }
+}
+
+function normalizeEntityIdList(value) {
+  if (Array.isArray(value)) {
+    return value.map((entry) => String(entry).trim()).filter(Boolean);
+  }
+  if (typeof value === "string") {
+    return value.split(",").map((entry) => entry.trim()).filter(Boolean);
+  }
+  return [];
+}
+
+function readSceneEntityIdsFromMetadata({ scenePath, syncDir }) {
+  const { meta } = readMeta(scenePath, syncDir, { writable: false });
+  return {
+    characterIds: normalizeEntityIdList(meta.characters),
+    placeIds: normalizeEntityIdList(meta.places),
+  };
+}
+
+function selectApplyCandidates(enrichedCandidates, selectedDocIds, maxApply) {
+  const selectedSet = selectedDocIds ? new Set(selectedDocIds) : null;
+  const chosenByDocId = new Map();
+
+  for (const candidate of enrichedCandidates) {
+    if (selectedSet && !selectedSet.has(candidate.doc_id)) continue;
+    if (!chosenByDocId.has(candidate.doc_id)) {
+      chosenByDocId.set(candidate.doc_id, candidate);
+    }
+  }
+
+  const uniqueCandidates = Array.from(chosenByDocId.values());
+  return uniqueCandidates.slice(0, maxApply ?? uniqueCandidates.length);
+}
 
 export function registerSearchTools(s, {
   db,
   SYNC_DIR,
+  SYNC_DIR_WRITABLE,
   GIT_ENABLED,
   errorResponse,
   paginateRows,
@@ -738,6 +791,266 @@ export function registerSearchTools(s, {
         return errorResponse("NO_RESULTS", `No relationship data found between '${from_character}' and '${to_character}'.`);
       }
       return { content: [{ type: "text", text: JSON.stringify(rows, null, 2) }] };
+    }
+  );
+
+  // ---- suggest_scene_references --------------------------------------------
+  s.tool(
+    "suggest_scene_references",
+    "Suggest reference documents for a scene by aggregating links from the scene's characters and places. Returns weighted candidates ranked by how many entities in the scene link to each reference. Excludes any explicit scene → reference links already present. In apply mode, can persist selected suggestions as explicit scene links in one call.",
+    {
+      scene_id: z.string().describe("Scene ID (e.g. 'sc-011-sebastian')."),
+      project_id: z.string().optional().describe("Optional project scope to disambiguate an ambiguous scene_id across projects."),
+      mode: z.enum(["preview", "apply"]).optional().describe("Use 'preview' (default) to list candidates only, or 'apply' to persist selected suggestions as explicit scene links."),
+      selected_doc_ids: z.array(z.string()).optional().describe("Optional allowlist of doc_ids to apply when mode='apply'. If omitted, applies top-ranked candidates."),
+      max_apply: z.number().int().min(1).optional().describe("Optional cap for how many candidates to apply when mode='apply'."),
+      min_score: z.number().int().min(1).optional().describe("Optional minimum candidate score. Candidates below this are excluded from preview/apply. Defaults to 1."),
+    },
+    async ({ scene_id, project_id, mode = "preview", selected_doc_ids, max_apply, min_score = 1 }) => {
+      // Resolve scene
+      let sceneQuery = `SELECT scene_id, project_id, file_path FROM scenes WHERE scene_id = ?`;
+      const sceneParams = [scene_id];
+      if (project_id) {
+        sceneQuery += ` AND project_id = ?`;
+        sceneParams.push(project_id);
+      }
+      
+      const scenes = db.prepare(sceneQuery).all(...sceneParams);
+      if (scenes.length === 0) {
+        return errorResponse("NOT_FOUND", `Scene '${scene_id}' not found${project_id ? ` in project '${project_id}'` : ""}.`);
+      }
+      if (scenes.length > 1) {
+        return errorResponse(
+          "CONFLICT",
+          `Scene ID '${scene_id}' exists in multiple projects. Provide project_id to disambiguate.`,
+          { scene_id, project_ids: scenes.map(s => s.project_id) }
+        );
+      }
+
+      const resolvedScene = scenes[0];
+      const resolvedProjectId = resolvedScene.project_id ?? "";
+
+      if (mode === "apply" && !SYNC_DIR_WRITABLE) {
+        return errorResponse("READ_ONLY", "Cannot apply suggestions: sync dir is read-only.");
+      }
+
+      let characterIds = [];
+      let placeIds = [];
+      let loadedSceneEntitiesFromMetadata = false;
+
+      if (resolvedScene.file_path) {
+        try {
+          const entities = readSceneEntityIdsFromMetadata({
+            scenePath: resolvedScene.file_path,
+            syncDir: SYNC_DIR,
+          });
+            characterIds = entities.characterIds;
+            placeIds = entities.placeIds;
+            loadedSceneEntitiesFromMetadata = true;
+        } catch (err) {
+          void err;
+        }
+      }
+
+      if (!loadedSceneEntitiesFromMetadata) {
+        // Fallback for scenes without readable indexed file paths.
+        characterIds = db.prepare(`
+          SELECT character_id FROM scene_characters WHERE scene_id = ?
+        `).all(scene_id).map((row) => row.character_id);
+
+        placeIds = db.prepare(`
+          SELECT place_id FROM scene_places WHERE scene_id = ?
+        `).all(scene_id).map((row) => row.place_id);
+      }
+
+      // Get explicit scene → reference links already present
+      const existingSceneLinks = db.prepare(`
+        SELECT target_doc_id
+        FROM reference_links
+        WHERE source_kind = 'scene' AND source_project_id = ? AND source_id = ? AND origin = 'explicit'
+      `).all(resolvedProjectId, scene_id);
+      const existingSceneDocIds = new Set(existingSceneLinks.map((link) => link.target_doc_id));
+
+      // Load all character/place source links in project scope and aggregate in memory.
+      const characterReferenceLinks = characterIds.length > 0
+        ? db.prepare(`
+            SELECT rl.target_doc_id, rl.relation, rl.source_id AS source_id, c.name AS source_name
+            FROM reference_links rl
+            LEFT JOIN characters c
+              ON c.character_id = rl.source_id
+             AND c.project_id = rl.source_project_id
+            WHERE rl.source_kind = 'character'
+              AND rl.source_project_id = ?
+              AND rl.source_id IN (${characterIds.map(() => "?").join(",")})
+          `).all(resolvedProjectId, ...characterIds)
+        : [];
+
+      const placeReferenceLinks = placeIds.length > 0
+        ? db.prepare(`
+            SELECT rl.target_doc_id, rl.relation, rl.source_id AS source_id, p.name AS source_name
+            FROM reference_links rl
+            LEFT JOIN places p
+              ON p.place_id = rl.source_id
+             AND p.project_id = rl.source_project_id
+            WHERE rl.source_kind = 'place'
+              AND rl.source_project_id = ?
+              AND rl.source_id IN (${placeIds.map(() => "?").join(",")})
+          `).all(resolvedProjectId, ...placeIds)
+        : [];
+
+      // Merge and score
+      const scoreMap = new Map(); // key: "doc_id:relation" → { doc_id, relation, score, sources: [...] }
+      accumulateSuggestionScore(scoreMap, characterReferenceLinks, "character");
+      accumulateSuggestionScore(scoreMap, placeReferenceLinks, "place");
+
+      // Filter out already explicit scene links and deduplicate sources
+        const candidates = Array.from(scoreMap.values())
+        .filter(entry => !existingSceneDocIds.has(entry.doc_id))
+        .filter(entry => entry.score >= min_score)
+        .map(entry => ({
+          ...entry,
+          sources: [...new Set(entry.sources)], // deduplicate
+        }))
+          .sort((a, b) => b.score - a.score || a.doc_id.localeCompare(b.doc_id) || a.relation.localeCompare(b.relation));
+
+      const candidateDocIds = [...new Set(candidates.map(candidate => candidate.doc_id))];
+      const docsById = candidateDocIds.length > 0
+        ? new Map(
+            db.prepare(`
+              SELECT doc_id, type, title, summary, project_id, universe_id
+              FROM reference_docs
+              WHERE doc_id IN (${candidateDocIds.map(() => "?").join(",")})
+            `)
+              .all(...candidateDocIds)
+              .map(row => [row.doc_id, row])
+          )
+        : new Map();
+
+      // Enrich with reference doc metadata
+        const enriched = candidates
+          .filter(candidate => docsById.has(candidate.doc_id))
+          .map(candidate => {
+            const doc = docsById.get(candidate.doc_id);
+            return {
+              ...candidate,
+              title: doc.title,
+              type: doc.type,
+              summary: doc.summary,
+            };
+          });
+
+        const skippedMissingDocIds = candidateDocIds.filter((docId) => !docsById.has(docId));
+
+      if (enriched.length === 0) {
+        return {
+          content: [{
+            type: "text",
+            text: JSON.stringify({
+              scene_id,
+              project_id: resolvedProjectId,
+              total_candidates: 0,
+              message: "No reference suggestions found. Scene characters and places have no linked references.",
+              skipped_missing_doc_ids: skippedMissingDocIds,
+              candidates: [],
+            }, null, 2),
+          }],
+        };
+      }
+
+
+      if (mode === "apply") {
+        if (!resolvedScene.file_path) {
+          return errorResponse("STALE_PATH", `Scene '${scene_id}' has no indexed file path. Run sync() to refresh.`, {
+            scene_id,
+            project_id: resolvedProjectId,
+          });
+        }
+
+          const toApply = selectApplyCandidates(enriched, selected_doc_ids, max_apply);
+
+        const appliedLinks = [];
+        const failedLinks = [];
+
+        for (const candidate of toApply) {
+          try {
+            persistSceneReferenceLink({
+              scenePath: resolvedScene.file_path,
+              syncDir: SYNC_DIR,
+              targetDocId: candidate.doc_id,
+              relation: candidate.relation,
+            });
+          } catch (err) {
+            failedLinks.push({
+              target_doc_id: candidate.doc_id,
+              relation: candidate.relation,
+              stage: "metadata",
+              code: err?.code ?? "IO_ERROR",
+              message: err?.code === "ENOENT"
+                ? `Scene file for '${scene_id}' not found at indexed path — run sync() to refresh.`
+                : `Failed to persist scene reference link metadata: ${err.message}`,
+            });
+            continue;
+          }
+
+          try {
+            upsertExplicitReferenceLinkRow(db, {
+              sourceKind: "scene",
+              sourceProjectId: resolvedProjectId,
+              sourceId: scene_id,
+              targetDocId: candidate.doc_id,
+              relation: candidate.relation,
+            });
+          } catch (err) {
+            failedLinks.push({
+              target_doc_id: candidate.doc_id,
+              relation: candidate.relation,
+              stage: "index",
+              code: err?.code ?? "IO_ERROR",
+              message: `Failed to persist scene reference link index row: ${err.message}`,
+            });
+            continue;
+          }
+
+          appliedLinks.push({
+            source_kind: "scene",
+            source_project_id: resolvedProjectId,
+            source_id: scene_id,
+            target_doc_id: candidate.doc_id,
+            relation: candidate.relation,
+            origin: "explicit",
+          });
+        }
+
+        return {
+          content: [{
+            type: "text",
+            text: JSON.stringify({
+              scene_id,
+              project_id: resolvedProjectId,
+              mode,
+              total_candidates: enriched.length,
+                skipped_missing_doc_ids: skippedMissingDocIds,
+              applied_count: appliedLinks.length,
+              applied_links: appliedLinks,
+              failed_count: failedLinks.length,
+              failed_links: failedLinks,
+              candidates: enriched,
+            }, null, 2),
+          }],
+        };
+      }
+      return {
+        content: [{
+          type: "text",
+          text: JSON.stringify({
+            scene_id,
+            project_id: resolvedProjectId,
+            total_candidates: enriched.length,
+              skipped_missing_doc_ids: skippedMissingDocIds,
+            candidates: enriched,
+          }, null, 2),
+        }],
+      };
     }
   );
 }

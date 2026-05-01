@@ -698,8 +698,27 @@ export function indexWorldFile(db, syncDir, file, meta) {
 
   if (!kind || !isCanonicalWorldEntityFile(syncDir, file, meta)) return;
 
+  const indexWorldEntityReferenceLinks = ({ sourceKind, sourceId }) => {
+    const explicitReferenceLinks = collectExplicitReferenceLinks(
+      meta,
+      ["reference_links", "explicit_reference_links"],
+      { defaultRelation: "informs" }
+    );
+
+    if (explicitReferenceLinks.hasField) {
+      indexExplicitReferenceLinksForSource(db, {
+        sourceKind,
+        sourceProjectId: project_id ?? "",
+        sourceId,
+        links: explicitReferenceLinks.links,
+        defaultRelation: "informs",
+      });
+    }
+  };
+
   if (kind === "character") {
     if (!meta.character_id) return;
+
     db.prepare(`
       INSERT INTO characters (character_id, project_id, universe_id, name, role, arc_summary, first_appearance, file_path)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -717,8 +736,10 @@ export function indexWorldFile(db, syncDir, file, meta) {
         meta.character_id, t
       );
     }
+    indexWorldEntityReferenceLinks({ sourceKind: "character", sourceId: meta.character_id });
   } else if (kind === "place") {
     if (!meta.place_id) return;
+
     db.prepare(`
       INSERT INTO places (place_id, project_id, universe_id, name, file_path)
       VALUES (?, ?, ?, ?, ?)
@@ -727,6 +748,7 @@ export function indexWorldFile(db, syncDir, file, meta) {
       meta.place_id, project_id ?? null, universe_id ?? null,
       meta.name ?? meta.place_id, file
     );
+    indexWorldEntityReferenceLinks({ sourceKind: "place", sourceId: meta.place_id });
   }
 }
 
