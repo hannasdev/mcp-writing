@@ -914,17 +914,30 @@ export function registerSearchTools(s, {
           .slice(0, max_apply ?? enriched.length);
 
         const appliedLinks = [];
-        try {
-          db.exec("BEGIN");
+        const failedLinks = [];
 
-          for (const candidate of toApply) {
+        for (const candidate of toApply) {
+          try {
             persistSceneReferenceLink({
               scenePath: resolvedScene.file_path,
               syncDir: SYNC_DIR,
               targetDocId: candidate.doc_id,
               relation: candidate.relation,
             });
+          } catch (err) {
+            failedLinks.push({
+              target_doc_id: candidate.doc_id,
+              relation: candidate.relation,
+              stage: "metadata",
+              code: err?.code ?? "IO_ERROR",
+              message: err?.code === "ENOENT"
+                ? `Scene file for '${scene_id}' not found at indexed path — run sync() to refresh.`
+                : `Failed to persist scene reference link metadata: ${err.message}`,
+            });
+            continue;
+          }
 
+          try {
             upsertExplicitReferenceLinkRow(db, {
               sourceKind: "scene",
               sourceProjectId: resolvedProjectId,
@@ -932,32 +945,25 @@ export function registerSearchTools(s, {
               targetDocId: candidate.doc_id,
               relation: candidate.relation,
             });
-
-            appliedLinks.push({
-              source_kind: "scene",
-              source_project_id: resolvedProjectId,
-              source_id: scene_id,
+          } catch (err) {
+            failedLinks.push({
               target_doc_id: candidate.doc_id,
               relation: candidate.relation,
-              origin: "explicit",
+              stage: "index",
+              code: err?.code ?? "IO_ERROR",
+              message: `Failed to persist scene reference link index row: ${err.message}`,
             });
+            continue;
           }
 
-          db.exec("COMMIT");
-        } catch (err) {
-          try {
-            db.exec("ROLLBACK");
-          } catch (rollbackErr) {
-            void rollbackErr;
-          }
-          if (err?.code === "ENOENT") {
-            return errorResponse(
-              "STALE_PATH",
-              `Scene file for '${scene_id}' not found at indexed path — run sync() to refresh.`,
-              { indexed_path: resolvedScene.file_path }
-            );
-          }
-          return errorResponse("IO_ERROR", `Failed to persist scene reference link index rows: ${err.message}`);
+          appliedLinks.push({
+            source_kind: "scene",
+            source_project_id: resolvedProjectId,
+            source_id: scene_id,
+            target_doc_id: candidate.doc_id,
+            relation: candidate.relation,
+            origin: "explicit",
+          });
         }
 
         return {
@@ -970,6 +976,8 @@ export function registerSearchTools(s, {
               total_candidates: enriched.length,
               applied_count: appliedLinks.length,
               applied_links: appliedLinks,
+              failed_count: failedLinks.length,
+              failed_links: failedLinks,
               candidates: enriched,
             }, null, 2),
           }],

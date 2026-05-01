@@ -496,4 +496,48 @@ describe("reference link search tools", () => {
       fs.rmSync(syncDir, { recursive: true, force: true });
     }
   });
+
+  test("suggest_scene_references apply mode reports failures when scene path is stale", async () => {
+    const db = openDb(":memory:");
+    try {
+      seedProject(db, "test-novel");
+
+      db.prepare(`
+        INSERT INTO scenes (
+          scene_id, project_id, title, file_path, prose_checksum, metadata_stale, updated_at
+        ) VALUES (?, ?, ?, ?, ?, 0, ?)
+      `).run("sc-001", "test-novel", "Scene 1", "/tmp/missing-scene.md", "deadbeef", new Date().toISOString());
+
+      db.prepare(`
+        INSERT INTO characters (character_id, project_id, name, file_path)
+        VALUES (?, ?, ?, ?)
+      `).run("char-mira", "test-novel", "Mira", "/tmp/mira.md");
+      db.prepare(`INSERT INTO scene_characters (scene_id, character_id) VALUES (?, ?)`).run("sc-001", "char-mira");
+
+      seedReferenceDoc(db, { docId: "ref-vampirism", projectId: "test-novel", title: "Vampirism", type: "world" });
+      seedReferenceLink(db, {
+        sourceKind: "character",
+        sourceProjectId: "test-novel",
+        sourceId: "char-mira",
+        targetDocId: "ref-vampirism",
+        relation: "informs",
+      });
+
+      const tools = makeToolHarness(db, { writable: true });
+      const result = await tools.call("suggest_scene_references", {
+        scene_id: "sc-001",
+        project_id: "test-novel",
+        mode: "apply",
+      });
+
+      assert.equal(result.applied_count, 0);
+      assert.equal(result.failed_count, 1);
+      assert.equal(result.failed_links.length, 1);
+      assert.equal(result.failed_links[0].target_doc_id, "ref-vampirism");
+      assert.equal(result.failed_links[0].stage, "metadata");
+      assert.equal(result.failed_links[0].code, "ENOENT");
+    } finally {
+      db.close();
+    }
+  });
 });

@@ -82,7 +82,6 @@ function persistPlaceReferenceLink({ placePath, syncDir, targetDocId, relation }
 function resolveProjectScopedSource({
   db,
   errorResponse,
-  sourceKind,
   sourceId,
   sourceProjectId,
   table,
@@ -193,7 +192,6 @@ function resolveReferenceLinkSource({
   return resolveProjectScopedSource({
     db,
     errorResponse,
-    sourceKind,
     sourceId,
     sourceProjectId,
     table: config.table,
