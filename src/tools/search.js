@@ -796,9 +796,9 @@ export function registerSearchTools(s, {
         ? db.prepare(`
             SELECT target_doc_id, relation, COUNT(*) as source_count
             FROM reference_links
-            WHERE source_kind = 'character' AND source_id IN (${characters.map(() => "?").join(",")})
+            WHERE source_kind = 'character' AND source_project_id = ? AND source_id IN (${characters.map(() => "?").join(",")})
             GROUP BY target_doc_id, relation
-          `).all(...characters.map(c => c.character_id))
+          `).all(resolvedProjectId, ...characters.map(c => c.character_id))
         : [];
 
       // Aggregate reference links from places
@@ -806,9 +806,9 @@ export function registerSearchTools(s, {
         ? db.prepare(`
             SELECT target_doc_id, relation, COUNT(*) as source_count
             FROM reference_links
-            WHERE source_kind = 'place' AND source_id IN (${places.map(() => "?").join(",")})
+            WHERE source_kind = 'place' AND source_project_id = ? AND source_id IN (${places.map(() => "?").join(",")})
             GROUP BY target_doc_id, relation
-          `).all(...places.map(p => p.place_id))
+          `).all(resolvedProjectId, ...places.map(p => p.place_id))
         : [];
 
       // Merge and score
@@ -832,7 +832,7 @@ export function registerSearchTools(s, {
             WHERE source_kind = 'character' AND source_project_id = ? AND source_id = ? AND target_doc_id = ? AND relation = ?
           `).get(resolvedProjectId, char.character_id, link.target_doc_id, link.relation);
           if (charLink) {
-            const charName = db.prepare(`SELECT name FROM characters WHERE character_id = ?`).get(char.character_id)?.name || char.character_id;
+            const charName = db.prepare(`SELECT name FROM characters WHERE character_id = ? AND project_id = ?`).get(char.character_id, resolvedProjectId)?.name || char.character_id;
             entry.sources.push(`character: ${charName}`);
           }
         }
@@ -856,7 +856,7 @@ export function registerSearchTools(s, {
             WHERE source_kind = 'place' AND source_project_id = ? AND source_id = ? AND target_doc_id = ? AND relation = ?
           `).get(resolvedProjectId, place.place_id, link.target_doc_id, link.relation);
           if (placeLink) {
-            const placeName = db.prepare(`SELECT name FROM places WHERE place_id = ?`).get(place.place_id)?.name || place.place_id;
+            const placeName = db.prepare(`SELECT name FROM places WHERE place_id = ? AND project_id = ?`).get(place.place_id, resolvedProjectId)?.name || place.place_id;
             entry.sources.push(`place: ${placeName}`);
           }
         }

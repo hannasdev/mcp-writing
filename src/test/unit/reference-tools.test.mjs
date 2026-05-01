@@ -332,6 +332,72 @@ describe("reference link search tools", () => {
     }
   });
 
+  test("suggest_scene_references ignores links from other projects", async () => {
+    const db = openDb(":memory:");
+    try {
+      seedProject(db, "test-novel");
+      seedProject(db, "other-novel");
+      seedScene(db, { sceneId: "sc-001", projectId: "test-novel" });
+
+      db.prepare(`
+        INSERT INTO characters (character_id, project_id, name, file_path)
+        VALUES (?, ?, ?, ?)
+      `).run("char-mira", "test-novel", "Mira", "/tmp/mira.md");
+
+      db.prepare(`
+        INSERT INTO places (place_id, project_id, name, file_path)
+        VALUES (?, ?, ?, ?)
+      `).run("place-hospital", "test-novel", "Hospital", "/tmp/hospital.md");
+
+      db.prepare(`INSERT INTO scene_characters (scene_id, character_id) VALUES (?, ?)`).run("sc-001", "char-mira");
+      db.prepare(`INSERT INTO scene_places (scene_id, place_id) VALUES (?, ?)`).run("sc-001", "place-hospital");
+
+      seedReferenceDoc(db, { docId: "ref-correct", projectId: "test-novel", title: "Correct Doc", type: "world" });
+      seedReferenceDoc(db, { docId: "ref-foreign", projectId: "other-novel", title: "Foreign Doc", type: "world" });
+
+      seedReferenceLink(db, {
+        sourceKind: "character",
+        sourceProjectId: "test-novel",
+        sourceId: "char-mira",
+        targetDocId: "ref-correct",
+        relation: "informs",
+      });
+      seedReferenceLink(db, {
+        sourceKind: "place",
+        sourceProjectId: "test-novel",
+        sourceId: "place-hospital",
+        targetDocId: "ref-correct",
+        relation: "informs",
+      });
+
+      // Same source IDs, but links from another project should not affect score or candidates.
+      seedReferenceLink(db, {
+        sourceKind: "character",
+        sourceProjectId: "other-novel",
+        sourceId: "char-mira",
+        targetDocId: "ref-foreign",
+        relation: "informs",
+      });
+      seedReferenceLink(db, {
+        sourceKind: "place",
+        sourceProjectId: "other-novel",
+        sourceId: "place-hospital",
+        targetDocId: "ref-foreign",
+        relation: "informs",
+      });
+
+      const tools = makeToolHarness(db);
+      const suggestions = await tools.call("suggest_scene_references", { scene_id: "sc-001", project_id: "test-novel" });
+
+      assert.equal(suggestions.total_candidates, 1);
+      assert.equal(suggestions.candidates[0].doc_id, "ref-correct");
+      assert.equal(suggestions.candidates[0].score, 2);
+      assert.equal(suggestions.candidates[0].sources.length, 2);
+    } finally {
+      db.close();
+    }
+  });
+
   test("suggest_scene_references returns not-found for non-existent scene", async () => {
     const db = openDb(":memory:");
     try {
