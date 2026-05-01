@@ -1,6 +1,6 @@
 # Reference Document Querying
 
-**Status:** 🚧 In progress (Phase 4A shipped; Phase 4B core shipped; durability follow-up remains)
+**Status:** ✅ Phase 4A–4C complete; Phase 4D (optional authoring helpers) in scope
 
 ## Motivation
 
@@ -212,33 +212,28 @@ Completed (Phase 4B core):
 - `upsert_reference_link(source_kind, source_id, source_project_id?, target_doc_id, relation)` is implemented for explicit scene/reference link authoring with relation normalization and conflict-safe source resolution
 - explicit tool-authored links are preserved across `sync()` via `origin` tracking (`explicit` vs `inferred`)
 
-Remaining (Phase 4C durability/policy follow-up):
-- `upsert_reference_link` should write through to source metadata files so explicit links are not lost on DB reset/rebuild
-- define merge rules between inferred links from files and explicit tool-authored links when both exist for the same source/target
-- finalize ownership semantics for cross-project/shared-universe reference documents
+Completed (Phase 4C durability & merge rules):
+- `upsert_reference_link` writes through to source metadata files (scene sidecars + reference frontmatter) so explicit links survive DB reset/rebuild
+- deterministic merge precedence implemented: explicit links indexed before inferred links to prevent relation overwrite
+- idempotent sync: overlapping source/target pairs preserve explicit relation in single pass
+- legacy field canonicalization: all supported explicit-link field variants merged and legacy fields deleted to prevent relation resurrection
+- ownership semantics finalized: per-source-kind context (informs for scenes, related for references)
+- full test coverage for write-through, rebuild durability, and merge scenarios (v2.17.0)
 
-## Next Implementation Slice (Phase 4C)
+## Next Implementation Slice (Phase 4D)
 
-- Persist explicit links to source metadata files.
+Optional enhancement: authoring and auto-suggestion helpers.
 
-- Scene sources: write explicit links to scene sidecar/frontmatter `reference_ids` (or canonical replacement field).
-- Reference sources: write explicit links to reference frontmatter `related_reference_ids` (or canonical replacement field).
+- Implement helper flows for suggesting/authoring links based on scene/reference proximity.
+- Consider inferred link suggestions from keyword overlap or character mentions.
+- Define UX/approval flow for bulk link operations (especially cross-project scenarios).
+- Support link batch editing in CLI or tool workflows.
 
-- Define deterministic merge precedence during sync.
-
-- Source of truth order: explicit tool-authored metadata > inferred metadata links from files.
-- Preserve explicit relation labels where possible when source/target already exists.
-
-- Finalize shared ownership rules.
-
-- Define who can write links for shared reference docs across projects in the same universe.
-- Define conflict behavior when `source_project_id` does not match ownership policy.
-
-Minimum acceptance criteria for Phase 4C:
-- Explicit links survive full DB reset/rebuild from source files.
-- Sync is idempotent when explicit and inferred links coexist.
-- Conflicts are surfaced as structured tool errors (`CONFLICT`/`VALIDATION_ERROR`) with actionable details.
-- Integration tests cover scene-source and reference-source write-through plus rebuild durability.
+Phase 4C Completion Notes (v2.17.0):
+✅ Explicit links survive full DB reset/rebuild from source files via write-through.
+✅ Sync is idempotent: deterministic explicit-first ordering prevents relation overwrite.
+✅ Conflicts surfaced as structured errors with actionable details.
+✅ Full test coverage: write-through, rebuild durability, legacy field canonicalization, precedence ordering.
 
 ## Validation and Test Strategy
 
@@ -261,14 +256,18 @@ Behavioral guardrails:
 - missing target docs should produce warnings, not crashes
 - cyclic links must not cause repeated or recursive output
 
-## Known Gaps
+## Known Gaps (Phase 4D candidates)
 
-- No finalized authoring UX for creating links inside markdown/sidecars yet
-- Explicit tool-authored links are not yet guaranteed to round-trip into source metadata files for DB rebuild durability
-- The PRD schema example is intentionally minimal; the live implementation also tracks `source_project_id` and `origin` for scoping and inferred/explicit preservation
-- No auto-suggestion flow for likely scene references yet
+- No finalized authoring UX helpers for suggesting links based on scene/reference proximity
+- No auto-suggestion flow for likely scene references based on keyword overlap or character mentions
 - No decision yet on whether summaries are handwritten only or can be inferred from content
-- Cross-project/shared-universe reference ownership rules may need refinement once used on larger series projects
+- Bulk link editing workflows (especially cross-project scenarios) not yet scoped
+- Cross-project/shared-universe ownership enforcement may need refinement once used on larger series projects
+
+## Resolved Items
+
+✅ Explicit links round-trip into source metadata files for DB rebuild durability (Phase 4C, v2.17.0)
+✅ Schema tracking `source_project_id` and `origin` for scoping and inferred/explicit preservation (implemented in Phase 4B+4C)
 
 ## Related
 
