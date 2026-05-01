@@ -14,7 +14,7 @@ This complements `CHANGELOG.md`:
 - Why it matters: Users can now move from discovery to explicit scene linking in a single tool call, reducing multi-step orchestration as the tool surface grows.
 - Who is affected: Anyone using reference docs and continuity workflows through MCP tools.
 - Action needed: Optional: run `sync()` after external file edits before using `suggest_scene_references` to ensure candidates reflect latest metadata.
-- PR: (pending)
+- PR: [#163](https://github.com/hannasdev/mcp-writing/pull/163)
 
 ### 2026-04-30 — Add explicit reference link upsert tool
 
