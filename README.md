@@ -62,24 +62,24 @@ New workflow IDs added:
 
 Styleguide workflows are still available, but no longer positioned as part of the primary daily workflow surface.
 
-### `find_scenes` response-shape guidance note
+### `find_scenes` and `get_arc` response-shape standardization
 
-`find_scenes` now may return a structured envelope for non-paginated calls when stale-scene guidance is present.
+`find_scenes` and `get_arc` now always return structured envelopes, including non-paginated calls.
 
-- Paginated path: always envelope (`results`, `total_count`, page metadata).
-- Non-paginated clean path: raw array of scenes.
-- Non-paginated stale-guidance path: envelope (`results`, `total_count`, `warning`, `next_step`).
+- Envelope fields: `results`, `total_count`.
+- Pagination fields are included when paging is active.
+- `warning` / `next_step` are included when relevant.
 
-If your integration assumed `find_scenes` without pagination arguments always returns an array, update parsing to accept both shapes.
+If your integration previously handled raw arrays for non-paginated calls, update it to parse envelopes consistently.
 
 Safe parsing pattern:
 
 ```js
 const parsed = JSON.parse(toolText);
-const scenes = Array.isArray(parsed) ? parsed : (parsed.results ?? []);
-const totalCount = Array.isArray(parsed) ? parsed.length : (parsed.total_count ?? scenes.length);
-const warning = Array.isArray(parsed) ? null : (parsed.warning ?? null);
-const nextStep = Array.isArray(parsed) ? null : (parsed.next_step ?? null);
+const scenes = parsed.results ?? [];
+const totalCount = parsed.total_count ?? scenes.length;
+const warning = parsed.warning ?? null;
+const nextStep = parsed.next_step ?? null;
 ```
 
 ## Usage scenarios

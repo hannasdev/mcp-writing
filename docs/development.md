@@ -229,16 +229,16 @@ Fix:
 2. You do not need to create the output directory first; the tool creates it if it does not already exist.
 3. Use a simple `bundle_name` with alphanumeric characters and hyphens — special characters are slugified to a safe name, and if nothing usable remains the tool falls back to `review-bundle`.
 
-### `find_scenes` parsing breaks after stale-guidance updates
+### `find_scenes` / `get_arc` parsing after response-contract cleanup
 
-If your client assumed non-paginated `find_scenes` responses are always a raw array, parsing may fail when stale-scene guidance is present.
+As of the `3.0.0` cleanup stage, `find_scenes` and `get_arc` always return envelope responses, including non-paginated calls.
 
 Current behavior:
 
-1. Paginated calls return an envelope (`results`, `total_count`, page fields).
-2. Non-paginated clean calls return a raw array.
-3. Non-paginated calls with stale guidance return an envelope (`results`, `total_count`, `warning`, `next_step`).
+1. Both tools always return `results` and `total_count`.
+2. Pagination metadata is included when paging is active.
+3. `warning` and `next_step` are included only when relevant.
 
 Fix:
 
-Normalize both shapes in your client and read scenes from `Array.isArray(parsed) ? parsed : parsed.results`.
+Parse these tools as envelope-only responses and read scenes from `parsed.results`.

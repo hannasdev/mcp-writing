@@ -27,21 +27,15 @@ describe("search tools integration suite", { concurrency: 1 }, () => {
   test("returns all 3 scenes with no filters", async () => {
     const text = await callTool("find_scenes");
     const parsed = JSON.parse(text);
-    if (Array.isArray(parsed)) {
-      assert.equal(parsed.length, 3);
-    } else {
-      assert.equal(parsed.total_count, 3);
-    }
+    assert.equal(Array.isArray(parsed.results), true);
+    assert.equal(parsed.total_count, 3);
   });
 
   test("filters by character: elena appears in all 3 scenes", async () => {
     const text = await callTool("find_scenes", { character: "elena" });
     const parsed = JSON.parse(text);
-    if (Array.isArray(parsed)) {
-      assert.equal(parsed.length, 3);
-    } else {
-      assert.equal(parsed.total_count, 3);
-    }
+    assert.equal(Array.isArray(parsed.results), true);
+    assert.equal(parsed.total_count, 3);
   });
 
   test("filters by character: marcus appears in 2 scenes", async () => {
@@ -213,11 +207,8 @@ describe("get_arc tool", () => {
   test("elena arc returns 3 scenes", async () => {
     const text = await callTool("get_arc", { character_id: "elena" });
     const parsed = JSON.parse(text);
-    if (Array.isArray(parsed)) {
-      assert.equal(parsed.length, 3);
-    } else {
-      assert.equal(parsed.total_count, 3);
-    }
+    assert.equal(Array.isArray(parsed.results), true);
+    assert.equal(parsed.total_count, 3);
   });
 
   test("elena arc first scene is sc-001", async () => {

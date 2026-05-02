@@ -70,7 +70,7 @@ export function registerSearchTools(s, {
   // ---- find_scenes ---------------------------------------------------------
   s.tool(
     "find_scenes",
-    "Find scenes by filtering on character, Save the Cat beat, tags, part, chapter, or POV. Returns ordered scene metadata only — no prose. All filters are optional and combinable. Supports pagination via page/page_size and auto-paginates large result sets with total_count. Warns if any matching scenes have stale metadata. Response shape note: paginated responses always return an envelope (`results` + pagination fields). Non-paginated responses return a raw array unless stale-scene guidance is present, in which case an envelope is returned (`results`, `total_count`, `warning`, `next_step`).",
+    "Find scenes by filtering on character, Save the Cat beat, tags, part, chapter, or POV. Returns ordered scene metadata only — no prose. All filters are optional and combinable. Supports pagination via page/page_size and auto-paginates large result sets with total_count. Warns if any matching scenes have stale metadata. Response shape note: always returns a structured envelope (`results`, `total_count`, with pagination fields when paging is active).",
     {
       project_id: z.string().optional().describe("Project ID (e.g. 'the-lamb'). Use to scope results to one project."),
       character:  z.string().optional().describe("A character_id (e.g. 'char-mira-nystrom'). Returns only scenes that character appears in. Use list_characters first to find valid IDs."),
@@ -137,14 +137,14 @@ export function registerSearchTools(s, {
               ? "Touch stale scenes as you work and run enrich_scene(scene_id, project_id) to recover metadata parity incrementally."
               : undefined,
           }
-        : staleCount > 0
-          ? {
-              results: rows,
-              total_count: rows.length,
-              warning,
-              next_step: "Touch stale scenes as you work and run enrich_scene(scene_id, project_id) to recover metadata parity incrementally.",
-            }
-          : rows;
+        : {
+            results: rows,
+            total_count: rows.length,
+            warning,
+            next_step: staleCount > 0
+              ? "Touch stale scenes as you work and run enrich_scene(scene_id, project_id) to recover metadata parity incrementally."
+              : undefined,
+          };
 
       return {
         content: [{
@@ -268,7 +268,7 @@ export function registerSearchTools(s, {
   // ---- get_arc -------------------------------------------------------------
   s.tool(
     "get_arc",
-    "Get every scene a character appears in, ordered by part/chapter/position. Returns scene metadata only — no prose. Use this as the primary structural entry point when the question is about a character's progression through the manuscript. Supports pagination via page/page_size and auto-paginates large result sets with total_count. Use list_characters only when you need help finding a character_id. Response shape note: paginated responses always return an envelope (`results` + pagination fields). Non-paginated responses return a raw array unless stale-scene guidance is present, in which case an envelope is returned (`results`, `total_count`, `warning`, `next_step`).",
+    "Get every scene a character appears in, ordered by part/chapter/position. Returns scene metadata only — no prose. Use this as the primary structural entry point when the question is about a character's progression through the manuscript. Supports pagination via page/page_size and auto-paginates large result sets with total_count. Use list_characters only when you need help finding a character_id. Response shape note: always returns a structured envelope (`results`, `total_count`, with pagination fields when paging is active).",
     {
       character_id: z.string().describe("The character_id to trace (e.g. 'char-mira-nystrom'). Use list_characters to find valid IDs."),
       project_id:   z.string().optional().describe("Limit to a specific project (e.g. 'the-lamb')."),
@@ -313,14 +313,14 @@ export function registerSearchTools(s, {
               ? "Touch stale scenes as you work and run enrich_scene(scene_id, project_id) to recover metadata parity incrementally."
               : undefined,
           }
-        : staleCount > 0
-          ? {
-              results: rows,
-              total_count: rows.length,
-              warning,
-              next_step: "Touch stale scenes as you work and run enrich_scene(scene_id, project_id) to recover metadata parity incrementally.",
-            }
-          : rows;
+        : {
+            results: rows,
+            total_count: rows.length,
+            warning,
+            next_step: staleCount > 0
+              ? "Touch stale scenes as you work and run enrich_scene(scene_id, project_id) to recover metadata parity incrementally."
+              : undefined,
+          };
 
       return { content: [{ type: "text", text: JSON.stringify(payload, null, 2) }] };
     }

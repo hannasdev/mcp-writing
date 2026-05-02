@@ -29,19 +29,19 @@ The milestone assumptions in this document have been checked against the current
 Overall conclusion:
 
 - the milestone order still looks sound;
-- some milestones are already well-supported by current tools and mostly need surfacing changes;
-- some milestones have solid primitives but still speak the wrong product language;
-- some milestones need meaningful product-behavior work before the milestone assumptions are actually true.
+- the branch now covers the main milestone-value work across discovery, targeted prose, safe editing, contextual understanding, and review preparation;
+- the catch-up milestone is implemented in its intended first local-recovery slice;
+- the main remaining cross-milestone gap is the planned final response-contract cleanup before `3.0.0`.
 
-The most important validation findings are:
+The most important validation findings are now:
 
-- scene-scoped prose and editing flows are not yet project-safe when `scene_id` is duplicated across projects;
-- `describe_workflows` still reflects an older tool-centric and styleguide-heavy worldview rather than the new outcome-first direction;
-- low-parity recovery tools exist, but the product does not yet surface parity state as a coherent catch-up workflow;
-- stale-metadata guidance is inconsistent across metadata-oriented read tools;
-- discovery results are data-rich, but not yet especially guided toward next steps.
+- scene-scoped prose and editing flows are project-safe when `scene_id` is duplicated across projects;
+- `describe_workflows` reflects the new outcome-first discovery-oriented direction;
+- low-parity recovery is surfaced through local next-step guidance in normal usage;
+- stale-metadata guidance is aligned across the main metadata-oriented read flows;
+- broader parity-category behavior and parity tracking remain intentionally deferred to future product work.
 
-These findings should shape implementation sequencing inside the milestones below.
+These findings should guide the final cleanup stage and any follow-on PRDs, rather than milestone-value implementation sequencing.
 
 ## Guidance Model
 
@@ -125,23 +125,23 @@ Users can begin with metadata and reach likely scenes without needing to guess w
 
 ### Current-state validation
 
-This milestone is partially validated by the current implementation.
+This milestone is now largely implemented on the current branch.
 
-What already supports it well:
+What now supports it well:
 
+- `describe_workflows` fronts question-driven discovery as the default starting point;
 - `find_scenes` is metadata-only, filterable, and paginated;
 - `search_metadata` is a strong fallback for fuzzy or thematic queries;
-- both tools already reinforce the idea that prose should not be the first retrieval layer.
+- discovery responses now provide lightweight next-step guidance and consistent stale-scene signaling.
 
-What does not yet fully match the milestone:
+What remains:
 
-- `describe_workflows` does not yet front this outcome as clearly as it should;
-- discovery responses mostly return records rather than strong next-step guidance;
-- stale metadata warnings are inconsistent because `find_scenes` only includes warning data in paginated payloads.
+- non-paginated metadata reads still use mixed raw-array vs envelope response shapes;
+- that contract normalization is intentionally deferred to the final `3.0.0` cleanup stage.
 
 Implementation implication:
 
-- this milestone likely needs workflow and response-shaping work more than major new core capability work.
+- milestone-value work for discovery is complete enough to move on; remaining work is contract consistency cleanup rather than product-surface redesign.
 
 ### Implementation plan (ready-to-execute)
 
@@ -267,25 +267,25 @@ Low-parity projects gradually move toward metadata-first usage instead of stayin
 
 ### Current-state validation
 
-This milestone is only partially validated, and it is one of the biggest current gaps.
+This milestone is now partially implemented in the intended first slice.
 
-What already supports it:
+What now supports it:
 
+- `describe_workflows` includes an explicit parity-recovery workflow;
+- `sync` surfaces local catch-up guidance;
+- `find_scenes`, `get_scene_prose`, `get_arc`, and `get_thread_arc` now surface stale-scene guidance with explicit next steps;
 - `enrich_scene` provides lightweight per-scene recovery;
-- `enrich_scene_characters_batch` already has useful guardrails such as `dry_run`, `max_scenes`, and `only_stale`;
-- async job tracking for large catch-up work already exists;
-- reference suggestion and linking tools can support parity improvement for scene-reference relationships.
+- batch and async recovery tools remain available when broader catch-up work is warranted.
 
-What is missing today:
+What remains intentionally deferred:
 
-- `sync` does not currently return a structured parity signal that can be used to drive catch-up guidance;
-- `describe_workflows` has no explicit parity-recovery workflow;
-- the product does not yet suggest simple next-step recovery when the user touches stale or unindexed material;
-- the current recovery experience is a set of tools, not yet a coherent local next-step behavior.
+- project-wide parity tracking, counts, and reporting are out of scope for this PRD;
+- broader parity categories such as missing links and sparse coverage will be handled in a separate future feature PRD;
+- this milestone intentionally focuses on local recovery suggestions rather than broad parity orchestration.
 
 Implementation implication:
 
-- this milestone should start with simple local recovery suggestions rather than a complex parity-management system.
+- the initial milestone target has been met: keep the current local-recovery behavior, and defer broader parity-management surfaces to later dedicated work.
 
 ## Milestone 3: Inspect Targeted Prose With Context
 
@@ -357,23 +357,24 @@ Users read the right prose at the right time rather than expanding into broad re
 
 ### Current-state validation
 
-This milestone is partially validated by the current implementation.
+This milestone is now largely implemented on the current branch.
 
-What already supports it:
+What now supports it:
 
 - `get_scene_prose` clearly positions itself as the targeted prose path;
-- `get_chapter_prose` is already described as expensive and secondary;
-- the tool surface already encodes the intended escalation from metadata to prose.
+- `get_chapter_prose` is described as expensive and secondary;
+- the tool surface encodes the intended escalation from metadata to prose;
+- `get_scene_prose` is project-safe when `scene_id` is duplicated across projects;
+- prose reads now include lightweight next-step guidance without introducing heavy orchestration.
 
-What does not yet fully match the milestone:
+What remains intentionally light-touch:
 
-- `get_scene_prose` is not project-safe when `scene_id` is duplicated across projects;
-- prose fetches do not currently provide even lightweight next-step guidance about when to keep reading or escalate further;
-- `describe_workflows` still presents chapter-wide reading too casually inside manuscript exploration.
+- this milestone still relies on prioritization and guidance rather than strict prose-access orchestration;
+- chapter-wide reads remain available, but clearly positioned as heavier and more specialized.
 
 Implementation implication:
 
-- this milestone needs safer targeting and light-touch contextual framing, not strict reading guidance or a heavy prose-orchestration layer.
+- the milestone goals are effectively met; remaining work is polish only unless the product direction changes toward stronger prose orchestration.
 
 ## Milestone 4: Revise Scenes Safely
 
@@ -440,23 +441,24 @@ Users can revise scenes safely without confusion about when changes are proposed
 
 ### Current-state validation
 
-This milestone is mostly validated by the current implementation.
+This milestone is now implemented for its key safety and guidance goals.
 
-What already supports it strongly:
+What now supports it strongly:
 
 - `propose_edit` and `commit_edit` are cleanly separated;
 - edits remain explicit and approval-based;
 - write-time diagnostics and snapshot behavior are already built in;
-- `discard_edit` cleanly supports rejection of a proposed change.
+- `discard_edit` cleanly supports rejection of a proposed change;
+- edit flows are now project-safe when duplicated `scene_id` values exist across projects;
+- edit responses now include clearer next-step guidance around propose, commit, and discard.
 
-What still falls short:
+What remains:
 
-- edit flows share the same scene-resolution problem as prose reads when scene IDs are duplicated across projects;
-- the workflow is conceptually strong, but still depends on an older workflow catalogue that has not been updated to the new usability direction.
+- no major milestone-level gap remains here; any further work is polish or eventual contract cleanup outside the edit model itself.
 
 Implementation implication:
 
-- this milestone likely needs surface polish and safer scene targeting more than deep rework of edit behavior.
+- this milestone can be treated as complete for the current PRD scope.
 
 ## Milestone 5: Understand Entities And Threads In Context
 
@@ -536,22 +538,24 @@ Users can ask structural questions about the manuscript and get useful contextua
 
 ### Current-state validation
 
-This milestone is partially validated by the current implementation.
+This milestone is now largely implemented on the current branch.
 
-What already supports it:
+What now supports it:
 
-- `get_arc`, `get_character_sheet`, `get_place_sheet`, and `get_thread_arc` already support structural manuscript reasoning;
-- the underlying data surface is broader than simple scene discovery and can answer more structural questions.
+- `get_arc`, `get_character_sheet`, `get_place_sheet`, and `get_thread_arc` support structural manuscript reasoning;
+- the underlying data surface is broader than simple scene discovery and can answer more structural questions;
+- workflow and tool language now emphasize understanding rather than management;
+- `get_character_sheet`, `get_place_sheet`, and `list_threads` include clearer contextual next-step guidance;
+- stale guidance is aligned across `get_arc` and `get_thread_arc`.
 
-What does not yet fully match the milestone:
+What remains intentionally secondary:
 
-- the workflow language still frames these areas as management rather than understanding;
-- lookup tools such as `list_characters`, `list_places`, and `list_threads` still occupy more narrative weight than they should;
-- stale metadata warnings are not consistently surfaced on non-paginated metadata reads.
+- lookup tools still exist and remain necessary for disambiguation, but they are now framed as helpers rather than the main structural entry points;
+- broader contract normalization for metadata-read response shapes remains deferred to the final cleanup stage.
 
 Implementation implication:
 
-- this milestone likely needs reframing and workflow rewriting more than new tool primitives.
+- milestone-value work is complete enough here; remaining work is mostly contract consistency cleanup rather than product-behavior redesign.
 
 ## Milestone 6: Prepare Review Material
 
@@ -612,21 +616,21 @@ Users can produce review bundles reliably without needing to understand underlyi
 
 ### Current-state validation
 
-This milestone is mostly validated by the current implementation.
+This milestone is now implemented for the core workflow behavior the PRD called for.
 
-What already supports it strongly:
+What now supports it strongly:
 
-- `preview_review_bundle` and `create_review_bundle` already form a coherent two-step workflow;
-- strictness handling, warnings, deterministic planning, and provenance are already present;
-- this area already behaves much more like a finished outcome-oriented flow than several earlier milestones.
+- `preview_review_bundle` and `create_review_bundle` form a coherent two-step workflow;
+- strictness handling, warnings, deterministic planning, and provenance are present;
+- preview and create responses now include explicit next-step guidance for proceed and blocked paths.
 
-What still remains:
+What remains:
 
-- this workflow should be placed correctly in the new surface hierarchy so it does not crowd more foundational reasoning outcomes.
+- no major milestone-level gap remains here; this flow mainly depends on the overall surface hierarchy already established in `describe_workflows`.
 
 Implementation implication:
 
-- this milestone likely needs positioning and polish more than major behavior change.
+- this milestone can be treated as complete for the current PRD scope.
 
 ## Cross-Milestone Notes
 
@@ -679,45 +683,47 @@ These capabilities remain valuable but should not dominate the primary surface:
 - direct metadata update tools
 - batch enrichment tools
 
-### Likely to need product design work
+### Work that needed product design and is now largely implemented
 
-These areas likely need more than reordering or documentation:
+These areas required more than reordering or documentation, and are now largely implemented on the branch:
 
 - rewriting `describe_workflows` around outcome-first navigation;
 - fixing project-safe scene targeting for prose and editing flows;
-- defining and surfacing parity signals;
+- surfacing local parity signals in normal usage;
 - integrating low-parity recovery into normal usage without making it feel mandatory;
 - reframing entity and thread flows away from management language and toward understanding.
 
+### Work intentionally left for follow-on stages
+
+- final response-contract cleanup for `3.0.0`;
+- any future parity-tracking or broader parity-category behavior covered by a separate PRD.
+
 ## Validation Summary By Milestone
 
-### Mostly validated
-
-- Milestone 4: Revise scenes safely
-- Milestone 6: Prepare review material
-
-### Strong primitives, but surface needs reframing
+### Implemented or effectively complete for current PRD scope
 
 - Milestone 1: Find relevant scenes
 - Milestone 3: Inspect targeted prose with context
+- Milestone 4: Revise scenes safely
 - Milestone 5: Understand entities and threads in context
+- Milestone 6: Prepare review material
 
-### Needs meaningful product-behavior work
+### Implemented first slice, with broader follow-on intentionally deferred
 
 - Milestone 2: Catch-up guidance for low-parity projects
 
-Milestone 2 should now be understood as needing simple local recovery behavior rather than a broad parity-management system.
+Milestone 2 should now be understood as intentionally limited to local recovery behavior rather than a broad parity-management system. Broader parity tracking and additional parity categories are deferred to separate future product work.
 
 ## Validation-Driven Near-Term Priorities
 
-The validation work suggests a few high-leverage changes that cut across multiple milestones:
+The validation and implementation work identified a few high-leverage changes that cut across multiple milestones, and these are now implemented on the branch:
 
 1. Rewrite `describe_workflows` around the new outcome-first model.
 2. Make scene-scoped prose and edit flows project-safe.
-3. Add structured parity signaling and catch-up guidance around `sync`.
-4. Normalize stale-metadata guidance across metadata-oriented read flows.
+3. Add local parity signaling and catch-up guidance around `sync` and stale reads.
+4. Normalize stale-metadata guidance across the main metadata-oriented read flows.
 
-These changes would reduce the gap between the milestone assumptions and the current product behavior without requiring every milestone to be implemented at once.
+The main remaining cross-milestone cleanup is response-contract consistency for integrators before `3.0.0`.
 
 ## Last Cleanup Stage (Post-Milestones)
 
