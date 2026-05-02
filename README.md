@@ -41,6 +41,27 @@ Instead of feeding an entire manuscript to an AI and hoping it fits in the conte
 | [docs/tools.md](docs/tools.md) | Full tool reference — auto-generated from source |
 | [docs/development.md](docs/development.md) | Running locally, tests, environment variables, troubleshooting |
 
+## Breaking changes
+
+### `describe_workflows` surface redesign
+
+`describe_workflows` now exposes an outcome-first, discovery-first workflow map. This is a breaking change if your prompts or automation depend on previous workflow IDs or ordering.
+
+Update integrations using this mapping:
+
+- `manuscript_exploration` -> `question_driven_discovery` (or `targeted_scene_reading` when the task is prose inspection)
+- `prose_editing` -> `safe_scene_revision`
+- `character_management` -> `character_understanding`
+- `place_management` -> `place_understanding`
+- `review_bundle` -> `review_preparation`
+
+New workflow IDs added:
+
+- `thread_understanding`
+- `parity_recovery`
+
+Styleguide workflows are still available, but no longer positioned as part of the primary daily workflow surface.
+
 ## Usage scenarios
 
 ### 1) Continuity pass before sending chapters to beta readers
