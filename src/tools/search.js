@@ -358,7 +358,9 @@ export function registerSearchTools(s, {
     async ({ character_id }) => {
       const character = db.prepare(`SELECT * FROM characters WHERE character_id = ?`).get(character_id);
       if (!character) {
-        return errorResponse("NOT_FOUND", `Character '${character_id}' not found.`);
+        return errorResponse("NOT_FOUND", `Character '${character_id}' not found.`, {
+          next_step: "Call list_characters to find valid character_id values, then retry get_character_sheet or get_arc.",
+        });
       }
 
       const traits = db.prepare(`SELECT trait FROM character_traits WHERE character_id = ?`)
@@ -421,7 +423,9 @@ export function registerSearchTools(s, {
     async ({ place_id }) => {
       const place = db.prepare(`SELECT * FROM places WHERE place_id = ?`).get(place_id);
       if (!place) {
-        return errorResponse("NOT_FOUND", `Place '${place_id}' not found.`);
+        return errorResponse("NOT_FOUND", `Place '${place_id}' not found.`, {
+          next_step: "Call list_places to find valid place_id values, then retry get_place_sheet.",
+        });
       }
 
       let notes = "";
@@ -755,11 +759,13 @@ export function registerSearchTools(s, {
             project_id,
             results: paged.rows,
             ...paged.meta,
+            next_step: "Use a thread_id from results with get_thread_arc to inspect storyline progression across scenes.",
           }
         : {
             project_id,
             results: rows,
             total_count: rows.length,
+            next_step: "Use a thread_id from results with get_thread_arc to inspect storyline progression across scenes.",
           };
 
       return { content: [{ type: "text", text: JSON.stringify(payload, null, 2) }] };

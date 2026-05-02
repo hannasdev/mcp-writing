@@ -310,6 +310,15 @@ describe("get_character_sheet tool", () => {
     assert.equal(parsed.supporting_notes[0].file_name, "arc.md");
     assert.equal(parsed.supporting_notes[0].content, "Alba support arc notes.");
   });
+
+  test("returns next_step guidance on unknown character", async () => {
+    const text = await callTool("get_character_sheet", { character_id: "char-does-not-exist" });
+    const parsed = JSON.parse(text);
+    assert.equal(parsed.ok, false);
+    assert.equal(parsed.error.code, "NOT_FOUND");
+    assert.equal(typeof parsed.error.details?.next_step, "string");
+    assert.ok(parsed.error.details.next_step.includes("list_characters"));
+  });
 });
 
 describe("list_places tool", () => {
@@ -350,6 +359,15 @@ describe("get_place_sheet tool", () => {
     assert.equal(parsed.supporting_notes.length, 1);
     assert.equal(parsed.supporting_notes[0].file_name, "history.md");
     assert.equal(parsed.supporting_notes[0].content, "Aevi Labs support history notes.");
+  });
+
+  test("returns next_step guidance on unknown place", async () => {
+    const text = await callTool("get_place_sheet", { place_id: "place-does-not-exist" });
+    const parsed = JSON.parse(text);
+    assert.equal(parsed.ok, false);
+    assert.equal(parsed.error.code, "NOT_FOUND");
+    assert.equal(typeof parsed.error.details?.next_step, "string");
+    assert.ok(parsed.error.details.next_step.includes("list_places"));
   });
 });
 
@@ -575,6 +593,8 @@ describe("list_threads tool", () => {
     assert.equal(parsed.total_count, 0);
     assert.equal(Array.isArray(parsed.results), true);
     assert.equal(parsed.results.length, 0);
+    assert.equal(typeof parsed.next_step, "string");
+    assert.ok(parsed.next_step.includes("get_thread_arc"));
   });
 
   test("supports pagination fields on explicit page request", async () => {
@@ -586,6 +606,8 @@ describe("list_threads tool", () => {
     assert.equal(parsed.page_size, 1);
     assert.equal(parsed.total_pages, 1);
     assert.equal(Array.isArray(parsed.results), true);
+    assert.equal(typeof parsed.next_step, "string");
+    assert.ok(parsed.next_step.includes("get_thread_arc"));
   });
 });
 
