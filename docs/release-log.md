@@ -8,6 +8,14 @@ This complements `CHANGELOG.md`:
 
 ## Unreleased
 
+### 2026-05-02 — Redesign MCP workflow surface and harden scene ID safety
+
+- What changed: Reworked `describe_workflows` to an outcome-first discovery surface, updated key tool contracts (`find_scenes`, `get_arc`, `get_scene_prose`, `list_snapshots`) for envelope/disambiguation clarity, and hardened project-scoped scene joins to prevent cross-project leakage when scene IDs are reused.
+- Why it matters: Day-to-day MCP prompting becomes more guided and predictable, while duplicate `scene_id` cases are handled safely instead of returning ambiguous or cross-project results.
+- Who is affected: Anyone using MCP workflows, search/editing tools, or automation that depended on previous workflow IDs/order or text-only response assumptions.
+- Action needed: Update prompt/automation mappings to new workflow IDs and parse structured envelopes (`results`, `total_count`, pagination fields, and `structuredContent` advisories) where applicable.
+- PR: [#165](https://github.com/hannasdev/mcp-writing/pull/165)
+
 ### 2026-05-01 — Add scene reference suggestion/apply workflow
 
 - What changed: Expanded reference linking to include character/place sources and added `suggest_scene_references` with `preview` and one-call `apply` modes to persist scene links directly from suggestions.
