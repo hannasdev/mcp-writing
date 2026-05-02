@@ -258,7 +258,10 @@ export function registerSearchTools(s, {
       const warning = truncated
         ? `\n\n⚠️ Chapter has ${allScenes.length} scenes — only the first ${MAX_CHAPTER_SCENES} were loaded. Set MAX_CHAPTER_SCENES to increase this limit.`
         : "";
-      return { content: [{ type: "text", text: parts.join("\n\n---\n\n") + warning }] };
+      const nextStep = truncated
+        ? "\n\nSuggested next step: narrow with find_scenes and inspect key scenes individually with get_scene_prose before expanding chapter scope."
+        : "\n\nSuggested next step: if you only need a subset, switch to find_scenes + get_scene_prose for tighter context control.";
+      return { content: [{ type: "text", text: parts.join("\n\n---\n\n") + warning + nextStep }] };
     }
   );
 

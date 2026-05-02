@@ -110,6 +110,9 @@ export function registerEditingTools(s, {
           note: noop
             ? "This proposal matches the current scene file. Calling commit_edit will be a no-op."
             : "Review the diff above. Call commit_edit with this proposal_id to apply the change.",
+          next_step: noop
+            ? "If this was intentional, no action is required. Otherwise, adjust revised_prose and call propose_edit again."
+            : "Review diff_preview, then call commit_edit to apply or discard_edit to reject.",
         });
       } catch (err) {
         if (err.code === "ENOENT") {
@@ -212,6 +215,7 @@ export function registerEditingTools(s, {
             snapshot_commit: null,
             noop: true,
             message: `Proposal for scene '${scene_id}' matches the current file. Nothing was written.`,
+            next_step: "No changes were applied. If you still need edits, call propose_edit with revised prose.",
           });
         }
 
@@ -233,6 +237,7 @@ export function registerEditingTools(s, {
           snapshot_commit: snapshot.commit_hash,
           noop: false,
           message: `Applied edit to scene '${scene_id}'${snapshot.commit_hash ? ` (snapshot: ${snapshot.commit_hash.substring(0, 7)})` : " (no pre-edit snapshot needed)"}`,
+          next_step: "Edit applied. Run get_scene_prose to verify prose, then continue with additional targeted edits if needed.",
         });
       } catch (err) {
         if (err.code === "ENOENT") {
@@ -261,6 +266,7 @@ export function registerEditingTools(s, {
         ok: true,
         proposal_id,
         message: `Discarded proposal '${proposal_id}' for scene '${proposal.scene_id}'.`,
+        next_step: "Proposal discarded. Call propose_edit again if you want to stage a revised alternative.",
       });
     }
   );

@@ -204,6 +204,8 @@ describe("get_chapter_prose tool", () => {
     });
     assert.ok(text.includes("gangway") || text.includes("bait shed"),
       `Expected chapter prose keywords, got: ${text.slice(0, 200)}`);
+    assert.ok(text.includes("Suggested next step"));
+    assert.ok(text.includes("find_scenes + get_scene_prose"));
   });
 });
 

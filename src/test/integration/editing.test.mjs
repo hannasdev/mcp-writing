@@ -38,6 +38,8 @@ describe("commit_edit behavior", { concurrency: 1 }, () => {
     const proposal = JSON.parse(proposalText);
 
     assert.equal(proposal.noop, false);
+    assert.equal(typeof proposal.next_step, "string");
+    assert.ok(proposal.next_step.includes("commit_edit"));
 
     const commitText = await callWriteTool("commit_edit", {
       scene_id: "sc-001",
@@ -53,6 +55,8 @@ describe("commit_edit behavior", { concurrency: 1 }, () => {
       commitResult.snapshot_commit === null || typeof commitResult.snapshot_commit === "string",
       "snapshot_commit should be either null or a commit hash string",
     );
+    assert.equal(typeof commitResult.next_step, "string");
+    assert.ok(commitResult.next_step.includes("get_scene_prose"));
     if (typeof commitResult.snapshot_commit === "string") {
       assert.notEqual(commitResult.snapshot_commit, "");
     }
@@ -86,6 +90,8 @@ describe("commit_edit behavior", { concurrency: 1 }, () => {
 
     assert.equal(proposal.noop, true);
     assert.equal(proposal.diff_preview, "(no changes)");
+    assert.equal(typeof proposal.next_step, "string");
+    assert.ok(proposal.next_step.includes("no action"));
 
     const commitText = await callWriteTool("commit_edit", {
       scene_id: "sc-002",
@@ -98,6 +104,8 @@ describe("commit_edit behavior", { concurrency: 1 }, () => {
     assert.equal(commitResult.noop, true);
     assert.equal(commitResult.snapshot_commit, null);
     assert.match(commitResult.message, /Nothing was written\./);
+    assert.equal(typeof commitResult.next_step, "string");
+    assert.ok(commitResult.next_step.includes("propose_edit"));
     assert.equal(after, normalizedRaw);
   });
 
@@ -306,6 +314,8 @@ describe("commit_edit behavior", { concurrency: 1 }, () => {
     const commitResult = JSON.parse(commitText);
     assert.equal(commitResult.ok, true);
     assert.equal(commitResult.project_id, "beta-edit");
+    assert.equal(typeof commitResult.next_step, "string");
+    assert.ok(commitResult.next_step.includes("get_scene_prose"));
 
     const betaScenePath = path.join(writeSyncDir, "projects", "beta-edit", "scenes", "shared.md");
     const alphaScenePath = path.join(writeSyncDir, "projects", "alpha-edit", "scenes", "shared.md");
@@ -335,5 +345,21 @@ describe("commit_edit behavior", { concurrency: 1 }, () => {
     assert.equal(commitResult.ok, false);
     assert.equal(commitResult.error.code, "INVALID_EDIT");
     assert.match(commitResult.error.message, /for project 'alpha-edit'/);
+  });
+
+  test("discard_edit returns next_step guidance", async () => {
+    const proposalText = await callWriteTool("propose_edit", {
+      scene_id: "sc-003",
+      instruction: "Draft and discard test",
+      revised_prose: "Discarded rewrite candidate.",
+    });
+    const proposal = JSON.parse(proposalText);
+    assert.ok(proposal.proposal_id);
+
+    const discardText = await callWriteTool("discard_edit", { proposal_id: proposal.proposal_id });
+    const discarded = JSON.parse(discardText);
+    assert.equal(discarded.ok, true);
+    assert.equal(typeof discarded.next_step, "string");
+    assert.ok(discarded.next_step.includes("propose_edit"));
   });
 });
