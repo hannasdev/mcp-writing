@@ -60,10 +60,27 @@ function resolveStyleguideSnapshot({ syncDir, projectId, errorResponse }) {
     PROSE_STYLEGUIDE_SKILL_DIRNAME,
     PROSE_STYLEGUIDE_SKILL_BASENAME
   );
-  const skillExists = fs.existsSync(skillPath);
-  const skillDigest = skillExists
-    ? digestFor(fs.readFileSync(skillPath, "utf8"))
-    : null;
+  let skillExists;
+  let skillDigest = null;
+  try {
+    skillExists = fs.existsSync(skillPath);
+    if (skillExists) {
+      skillDigest = digestFor(fs.readFileSync(skillPath, "utf8"));
+    }
+  } catch (error) {
+    const err = error instanceof Error ? error : new Error(String(error));
+    return {
+      ok: false,
+      response: errorResponse(
+        "STYLEGUIDE_SKILL_IO_ERROR",
+        "Failed to read skills/prose-styleguide.md while resolving styleguide snapshot.",
+        {
+          file_path: skillPath,
+          reason: err.message,
+        }
+      ),
+    };
+  }
   const fingerprint = buildStyleguideFingerprint({
     resolvedConfig: resolved.resolved_config,
     sources: resolved.sources,
@@ -80,7 +97,7 @@ function resolveStyleguideSnapshot({ syncDir, projectId, errorResponse }) {
       sources: resolved.sources,
       resolved_config: resolved.resolved_config,
       skill_file_path: skillPath,
-      skill_found: skillExists,
+      skill_found: Boolean(skillExists),
       skill_digest: skillDigest,
       fingerprint,
     },
