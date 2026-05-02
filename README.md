@@ -72,6 +72,16 @@ Styleguide workflows are still available, but no longer positioned as part of th
 
 If your integration assumed `find_scenes` without pagination arguments always returns an array, update parsing to accept both shapes.
 
+Safe parsing pattern:
+
+```js
+const parsed = JSON.parse(toolText);
+const scenes = Array.isArray(parsed) ? parsed : (parsed.results ?? []);
+const totalCount = Array.isArray(parsed) ? parsed.length : (parsed.total_count ?? scenes.length);
+const warning = Array.isArray(parsed) ? null : (parsed.warning ?? null);
+const nextStep = Array.isArray(parsed) ? null : (parsed.next_step ?? null);
+```
+
 ## Usage scenarios
 
 ### 1) Continuity pass before sending chapters to beta readers

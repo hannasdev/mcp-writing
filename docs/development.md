@@ -228,3 +228,17 @@ Fix:
 1. Verify that `output_dir` is an absolute path pointing to a writable location inside the manuscript sync folder (`WRITING_SYNC_DIR`).
 2. You do not need to create the output directory first; the tool creates it if it does not already exist.
 3. Use a simple `bundle_name` with alphanumeric characters and hyphens — special characters are slugified to a safe name, and if nothing usable remains the tool falls back to `review-bundle`.
+
+### `find_scenes` parsing breaks after stale-guidance updates
+
+If your client assumed non-paginated `find_scenes` responses are always a raw array, parsing may fail when stale-scene guidance is present.
+
+Current behavior:
+
+1. Paginated calls return an envelope (`results`, `total_count`, page fields).
+2. Non-paginated clean calls return a raw array.
+3. Non-paginated calls with stale guidance return an envelope (`results`, `total_count`, `warning`, `next_step`).
+
+Fix:
+
+Normalize both shapes in your client and read scenes from `Array.isArray(parsed) ? parsed : parsed.results`.
