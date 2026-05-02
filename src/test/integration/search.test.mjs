@@ -279,8 +279,11 @@ describe("list_characters tool", () => {
 describe("get_character_sheet tool", () => {
   test("elena sheet includes traits", async () => {
     const text = await callTool("get_character_sheet", { character_id: "elena" });
-    assert.ok(text.includes("driven") || text.includes("walls"),
+    const parsed = JSON.parse(text);
+    assert.ok((text.includes("driven") || text.includes("walls")),
       `Expected trait keywords for elena, got: ${text.slice(0, 200)}`);
+    assert.equal(typeof parsed.next_step, "string");
+    assert.ok(parsed.next_step.includes("get_arc"));
   });
 
   test("marcus sheet includes arc_summary", async () => {
@@ -324,6 +327,8 @@ describe("get_place_sheet tool", () => {
     assert.ok(parsed.associated_characters.includes("elena"));
     assert.ok(parsed.tags.includes("urban"));
     assert.ok(parsed.notes.includes("brine and diesel"));
+    assert.equal(typeof parsed.next_step, "string");
+    assert.ok(parsed.next_step.includes("find_scenes"));
   });
 
   test("returns adjacent support notes for nested place folders", async () => {

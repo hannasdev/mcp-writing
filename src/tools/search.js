@@ -380,6 +380,7 @@ export function registerSearchTools(s, {
         traits,
         notes: notes || undefined,
         supporting_notes: supportingNotes.length ? supportingNotes : undefined,
+        next_step: "Use get_arc with this character_id to trace scene-level progression, then open specific scenes with get_scene_prose when prose evidence is needed.",
       };
       return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
     }
@@ -447,6 +448,7 @@ export function registerSearchTools(s, {
         tags: tags.length ? tags : undefined,
         notes: notes || undefined,
         supporting_notes: supportingNotes.length ? supportingNotes : undefined,
+        next_step: "Use find_scenes with related filters to locate scenes where this place matters, then open targeted scenes with get_scene_prose when prose context is needed.",
       };
       return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
     }
