@@ -428,8 +428,9 @@ describe("merge_scrivener_project_beta tool", () => {
 
     const scenesText = await callWriteTool("find_scenes", { project_id: projectId });
     const scenes = JSON.parse(scenesText);
-    assert.equal(scenes[0].chapter, 1);
-    assert.equal(scenes[0].chapter_title, "Arrival");
+    assert.ok(Array.isArray(scenes.results));
+    assert.equal(scenes.results[0].chapter, 1);
+    assert.equal(scenes.results[0].chapter_title, "Arrival");
   });
 
   test("organize_by_chapters: false keeps scenes in place", async () => {
@@ -468,7 +469,8 @@ describe("merge_scrivener_project_beta tool", () => {
 
     const scenesText = await callWriteTool("find_scenes", { project_id: projectId });
     const scenes = JSON.parse(scenesText);
-    assert.equal(scenes[0].chapter, 1);
+    assert.ok(Array.isArray(scenes.results));
+    assert.equal(scenes.results[0].chapter, 1);
   });
 });
 
