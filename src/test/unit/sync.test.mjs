@@ -1108,7 +1108,7 @@ describe("syncAll", () => {
       1
     );
     assert.deepEqual(
-      db.prepare(`SELECT character_id FROM scene_characters WHERE scene_id = 'sc-shared' ORDER BY character_id`)
+      db.prepare(`SELECT character_id FROM scene_characters WHERE scene_id = 'sc-shared' AND project_id = 'beta-novel' ORDER BY character_id`)
         .all()
         .map(row => row.character_id),
       ["beta-hero"]
@@ -1192,7 +1192,7 @@ describe("syncAll", () => {
 
     syncAll(db, dir, { quiet: true });
 
-    const rows = db.prepare("SELECT * FROM scene_characters WHERE scene_id = 'sc-001'").all();
+    const rows = db.prepare("SELECT * FROM scene_characters WHERE scene_id = 'sc-001' AND project_id = 'test-novel'").all();
     assert.equal(rows.length, 2);
     const ids = rows.map(r => r.character_id).sort();
     assert.deepEqual(ids, ["elena", "marcus"]);

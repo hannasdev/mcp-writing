@@ -70,7 +70,7 @@ export function registerSearchTools(s, {
   // ---- find_scenes ---------------------------------------------------------
   s.tool(
     "find_scenes",
-    "Find scenes by filtering on character, Save the Cat beat, tags, part, chapter, or POV. Returns ordered scene metadata only — no prose. All filters are optional and combinable. Supports pagination via page/page_size and auto-paginates large result sets with total_count. Warns if any matching scenes have stale metadata.",
+    "Find scenes by filtering on character, Save the Cat beat, tags, part, chapter, or POV. Returns ordered scene metadata only — no prose. All filters are optional and combinable. Supports pagination via page/page_size and auto-paginates large result sets with total_count. Warns if any matching scenes have stale metadata. Response shape note: always returns a structured envelope (`results`, `total_count`, with pagination fields when paging is active).",
     {
       project_id: z.string().optional().describe("Project ID (e.g. 'the-lamb'). Use to scope results to one project."),
       character:  z.string().optional().describe("A character_id (e.g. 'char-mira-nystrom'). Returns only scenes that character appears in. Use list_characters first to find valid IDs."),
@@ -95,11 +95,11 @@ export function registerSearchTools(s, {
       const params = [];
 
       if (character) {
-        joins.push(`JOIN scene_characters sc ON sc.scene_id = s.scene_id AND sc.character_id = ?`);
+        joins.push(`JOIN scene_characters sc ON sc.scene_id = s.scene_id AND sc.project_id = s.project_id AND sc.character_id = ?`);
         params.push(character);
       }
       if (tag) {
-        joins.push(`JOIN scene_tags st ON st.scene_id = s.scene_id AND st.tag = ?`);
+        joins.push(`JOIN scene_tags st ON st.scene_id = s.scene_id AND st.project_id = s.project_id AND st.tag = ?`);
         params.push(tag);
       }
       if (project_id)  { conditions.push(`s.project_id = ?`);        params.push(project_id); }
@@ -133,8 +133,18 @@ export function registerSearchTools(s, {
             results: paged.rows,
             ...paged.meta,
             warning,
+            next_step: staleCount > 0
+              ? "Touch stale scenes as you work and run enrich_scene(scene_id, project_id) to recover metadata parity incrementally."
+              : undefined,
           }
-        : rows;
+        : {
+            results: rows,
+            total_count: rows.length,
+            warning,
+            next_step: staleCount > 0
+              ? "Touch stale scenes as you work and run enrich_scene(scene_id, project_id) to recover metadata parity incrementally."
+              : undefined,
+          };
 
       return {
         content: [{
@@ -148,15 +158,36 @@ export function registerSearchTools(s, {
   // ---- get_scene_prose -----------------------------------------------------
   s.tool(
     "get_scene_prose",
-    "Load the full prose text of a single scene. Use this for close reading, continuity checks, or when you need the actual writing. For overview or filtering, use find_scenes instead — it is much cheaper. Optionally retrieve a past version from git history.",
+    "Load the full prose text of a single scene. Use this for close reading, continuity checks, or when you need the actual writing. For overview or filtering, use find_scenes instead — it is much cheaper. Optionally retrieve a past version from git history. If scene IDs are reused across projects, omitting project_id returns CONFLICT with candidate project_ids.",
     {
       scene_id: z.string().describe("The scene_id to retrieve (e.g. 'sc-001-prologue'). Get this from find_scenes or get_arc."),
+      project_id: z.string().optional().describe("Optional project ID to disambiguate duplicate scene IDs across projects."),
       commit: z.string().optional().describe("Optional git commit hash to retrieve a past version. Use list_snapshots to find valid hashes. If omitted, returns the current prose."),
     },
-    async ({ scene_id, commit }) => {
-      const scene = db.prepare(`SELECT file_path, metadata_stale FROM scenes WHERE scene_id = ?`).get(scene_id);
-      if (!scene) {
-        return errorResponse("NOT_FOUND", `Scene '${scene_id}' not found. Run sync() if you just added it.`);
+    async ({ scene_id, project_id, commit }) => {
+      let scene;
+      if (project_id) {
+        scene = db.prepare(`SELECT file_path, metadata_stale, project_id FROM scenes WHERE scene_id = ? AND project_id = ?`).get(scene_id, project_id);
+        if (!scene) {
+          return errorResponse("NOT_FOUND", `Scene '${scene_id}' not found in project '${project_id}'. Run sync() if you just added it.`, {
+            next_step: "Run sync() to refresh the index, then call find_scenes with project_id to locate the scene by current metadata.",
+          });
+        }
+      } else {
+        const scenes = db.prepare(`SELECT file_path, metadata_stale, project_id FROM scenes WHERE scene_id = ? ORDER BY project_id`).all(scene_id);
+        if (scenes.length === 0) {
+          return errorResponse("NOT_FOUND", `Scene '${scene_id}' not found. Run sync() if you just added it.`, {
+            next_step: "Run sync() to refresh the index, then call find_scenes to locate the scene by current metadata.",
+          });
+        }
+        if (scenes.length > 1) {
+          return errorResponse(
+            "CONFLICT",
+            `Scene ID '${scene_id}' exists in multiple projects. Provide project_id to disambiguate.`,
+            { scene_id, project_ids: scenes.map(s => s.project_id) }
+          );
+        }
+        scene = scenes[0];
       }
       try {
         let rawContent;
@@ -170,10 +201,18 @@ export function registerSearchTools(s, {
 
         const { content: prose } = matter(rawContent);
         const versionNote = commit ? `\n\n(Retrieved from commit: ${commit})` : "";
-        const warning = scene.metadata_stale && !commit
-          ? `\n\n⚠️ Metadata for this scene may be stale — prose has changed since last enrichment.`
-          : "";
-        return { content: [{ type: "text", text: prose.trim() + versionNote + warning }] };
+        return {
+          content: [{
+            type: "text",
+            text: prose.trim() + versionNote,
+          }],
+          structuredContent: scene.metadata_stale && !commit
+            ? {
+                warning: "Metadata for this scene may be stale — prose has changed since last enrichment.",
+                next_step: `Run enrich_scene with scene_id ${scene_id} and project_id ${scene.project_id} after this read to recover metadata parity for this scene.`,
+              }
+            : undefined,
+        };
       } catch (err) {
         if (err.code === "ENOENT") {
           return errorResponse(
@@ -221,17 +260,24 @@ export function registerSearchTools(s, {
         }
       }
 
-      const warning = truncated
-        ? `\n\n⚠️ Chapter has ${allScenes.length} scenes — only the first ${MAX_CHAPTER_SCENES} were loaded. Set MAX_CHAPTER_SCENES to increase this limit.`
-        : "";
-      return { content: [{ type: "text", text: parts.join("\n\n---\n\n") + warning }] };
+      return {
+        content: [{ type: "text", text: parts.join("\n\n---\n\n") }],
+        structuredContent: {
+          ...(truncated
+            ? { warning: `Chapter has ${allScenes.length} scenes — only the first ${MAX_CHAPTER_SCENES} were loaded. Set MAX_CHAPTER_SCENES to increase this limit.` }
+            : {}),
+          next_step: truncated
+            ? "Narrow with find_scenes and inspect key scenes individually with get_scene_prose before expanding chapter scope."
+            : "If you only need a subset, switch to find_scenes + get_scene_prose for tighter context control.",
+        },
+      };
     }
   );
 
   // ---- get_arc -------------------------------------------------------------
   s.tool(
     "get_arc",
-    "Get every scene a character appears in, ordered by part/chapter/position. Returns scene metadata only — no prose. Use this to trace a character's arc through the story. Supports pagination via page/page_size and auto-paginates large result sets with total_count. Call list_characters first to get the character_id.",
+    "Get every scene a character appears in, ordered by part/chapter/position. Returns scene metadata only — no prose. Use this as the primary structural entry point when the question is about a character's progression through the manuscript. Supports pagination via page/page_size and auto-paginates large result sets with total_count. Use list_characters only when you need help finding a character_id. Response shape note: always returns a structured envelope (`results`, `total_count`, with pagination fields when paging is active).",
     {
       character_id: z.string().describe("The character_id to trace (e.g. 'char-mira-nystrom'). Use list_characters to find valid IDs."),
       project_id:   z.string().optional().describe("Limit to a specific project (e.g. 'the-lamb')."),
@@ -244,7 +290,7 @@ export function registerSearchTools(s, {
                s.scene_change, s.causality, s.stakes, s.scene_functions,
                s.save_the_cat_beat, s.timeline_position, s.story_time, s.pov, s.metadata_stale
         FROM scenes s
-        JOIN scene_characters sc ON sc.scene_id = s.scene_id
+        JOIN scene_characters sc ON sc.scene_id = s.scene_id AND sc.project_id = s.project_id
         WHERE sc.character_id = ?
       `;
       const params = [character_id];
@@ -272,8 +318,18 @@ export function registerSearchTools(s, {
             results: paged.rows,
             ...paged.meta,
             warning,
+            next_step: staleCount > 0
+              ? "Touch stale scenes as you work and run enrich_scene(scene_id, project_id) to recover metadata parity incrementally."
+              : undefined,
           }
-        : rows;
+        : {
+            results: rows,
+            total_count: rows.length,
+            warning,
+            next_step: staleCount > 0
+              ? "Touch stale scenes as you work and run enrich_scene(scene_id, project_id) to recover metadata parity incrementally."
+              : undefined,
+          };
 
       return { content: [{ type: "text", text: JSON.stringify(payload, null, 2) }] };
     }
@@ -282,7 +338,7 @@ export function registerSearchTools(s, {
   // ---- list_characters -----------------------------------------------------
   s.tool(
     "list_characters",
-    "List all indexed characters with their character_id, name, role, and arc_summary. Call this first whenever you need to filter scenes by character or look up a character sheet — it gives you the character_id values required by other tools.",
+    "List indexed characters with their character_id, name, role, and arc_summary. Use this mainly as a lookup and disambiguation helper when you need to find a character_id for a broader reasoning task. Response shape note: returns a structured envelope (`results`, `total_count`).",
     {
       project_id:  z.string().optional().describe("Limit to a specific project (e.g. 'the-lamb')."),
       universe_id: z.string().optional().describe("Limit to a specific universe (if using cross-project world-building)."),
@@ -300,21 +356,31 @@ export function registerSearchTools(s, {
       if (rows.length === 0) {
         return errorResponse("NO_RESULTS", "No characters found.");
       }
-      return { content: [{ type: "text", text: JSON.stringify(rows, null, 2) }] };
+      return {
+        content: [{
+          type: "text",
+          text: JSON.stringify({
+            results: rows,
+            total_count: rows.length,
+          }, null, 2),
+        }],
+      };
     }
   );
 
   // ---- get_character_sheet -------------------------------------------------
   s.tool(
     "get_character_sheet",
-    "Get full character details: role, arc_summary, traits, the canonical sheet content, and any adjacent support notes when the character uses a folder-based layout. Use list_characters first to get the character_id.",
+    "Get full character details: role, arc_summary, traits, the canonical sheet content, and any adjacent support notes when the character uses a folder-based layout. Use this when the reasoning task needs the character's canonical profile rather than only their scene progression.",
     {
       character_id: z.string().describe("The character_id to look up (e.g. 'char-sebastian'). Use list_characters to find valid IDs."),
     },
     async ({ character_id }) => {
       const character = db.prepare(`SELECT * FROM characters WHERE character_id = ?`).get(character_id);
       if (!character) {
-        return errorResponse("NOT_FOUND", `Character '${character_id}' not found.`);
+        return errorResponse("NOT_FOUND", `Character '${character_id}' not found.`, {
+          next_step: "Call list_characters to find valid character_id values, then retry get_character_sheet or get_arc.",
+        });
       }
 
       const traits = db.prepare(`SELECT trait FROM character_traits WHERE character_id = ?`)
@@ -336,6 +402,7 @@ export function registerSearchTools(s, {
         traits,
         notes: notes || undefined,
         supporting_notes: supportingNotes.length ? supportingNotes : undefined,
+        next_step: "Use get_arc with this character_id to trace scene-level progression, then open specific scenes with get_scene_prose when prose evidence is needed.",
       };
       return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
     }
@@ -344,7 +411,7 @@ export function registerSearchTools(s, {
   // ---- list_places ---------------------------------------------------------
   s.tool(
     "list_places",
-    "List all indexed places with their place_id and name. Use this to find place_id values for scene filtering or to get an overview of the story's locations.",
+    "List indexed places with their place_id and name. Use this mainly as a lookup and disambiguation helper when place context becomes relevant to the current reasoning task. Response shape note: returns a structured envelope (`results`, `total_count`).",
     {
       project_id:  z.string().optional().describe("Limit to a specific project (e.g. 'the-lamb')."),
       universe_id: z.string().optional().describe("Limit to a specific universe."),
@@ -362,21 +429,31 @@ export function registerSearchTools(s, {
       if (rows.length === 0) {
         return errorResponse("NO_RESULTS", "No places found.");
       }
-      return { content: [{ type: "text", text: JSON.stringify(rows, null, 2) }] };
+      return {
+        content: [{
+          type: "text",
+          text: JSON.stringify({
+            results: rows,
+            total_count: rows.length,
+          }, null, 2),
+        }],
+      };
     }
   );
 
   // ---- get_place_sheet -----------------------------------------------------
   s.tool(
     "get_place_sheet",
-    "Get full place details: associated_characters, tags, the canonical sheet content, and any adjacent support notes when the place uses a folder-based layout. Use list_places first to get the place_id.",
+    "Get full place details: associated_characters, tags, the canonical sheet content, and any adjacent support notes when the place uses a folder-based layout. Use this when the current scene or question makes the place itself materially relevant.",
     {
       place_id: z.string().describe("The place_id to look up (e.g. 'place-harbor-district'). Use list_places to find valid IDs."),
     },
     async ({ place_id }) => {
       const place = db.prepare(`SELECT * FROM places WHERE place_id = ?`).get(place_id);
       if (!place) {
-        return errorResponse("NOT_FOUND", `Place '${place_id}' not found.`);
+        return errorResponse("NOT_FOUND", `Place '${place_id}' not found.`, {
+          next_step: "Call list_places to find valid place_id values, then retry get_place_sheet.",
+        });
       }
 
       let notes = "";
@@ -403,6 +480,7 @@ export function registerSearchTools(s, {
         tags: tags.length ? tags : undefined,
         notes: notes || undefined,
         supporting_notes: supportingNotes.length ? supportingNotes : undefined,
+        next_step: "Use find_scenes with related filters to locate scenes where this place matters, then open targeted scenes with get_scene_prose when prose context is needed.",
       };
       return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
     }
@@ -445,7 +523,15 @@ export function registerSearchTools(s, {
           ORDER BY rank
         `).all(query);
 
-        return { content: [{ type: "text", text: JSON.stringify(rows, null, 2) }] };
+        return {
+          content: [{
+            type: "text",
+            text: JSON.stringify({
+              results: rows,
+              total_count: rows.length,
+            }, null, 2),
+          }],
+        };
       }
 
       const safePageSize = Math.max(1, page_size ?? DEFAULT_METADATA_PAGE_SIZE);
@@ -480,7 +566,7 @@ export function registerSearchTools(s, {
   // ---- search_reference ----------------------------------------------------
   s.tool(
     "search_reference",
-    "Full-text search across indexed reference document titles, summaries, and tags. Use this to discover world-building notes, continuity references, research docs, and other reference material without loading full file contents.",
+    "Full-text search across indexed reference document titles, summaries, and tags. Use this to discover world-building notes, continuity references, research docs, and other reference material without loading full file contents. Response shape note: returns a structured envelope (`results`, `total_count`).",
     {
       query: z.string().describe("Search terms (e.g. 'vampirism' or 'blood replacement'). FTS5 syntax supported."),
       type: z.string().optional().describe("Optional reference type filter (for example: 'world', 'continuity', 'research', 'style')."),
@@ -534,7 +620,15 @@ export function registerSearchTools(s, {
         return errorResponse("NO_RESULTS", "No reference documents matched the provided filters.");
       }
 
-      return { content: [{ type: "text", text: JSON.stringify(rows, null, 2) }] };
+      return {
+        content: [{
+          type: "text",
+          text: JSON.stringify({
+            results: rows,
+            total_count: rows.length,
+          }, null, 2),
+        }],
+      };
     }
   );
 
@@ -695,7 +789,7 @@ export function registerSearchTools(s, {
   // ---- list_threads --------------------------------------------------------
   s.tool(
     "list_threads",
-    "List all subplot/storyline threads for a project. Returns a structured JSON envelope with results and total_count. Use this to discover valid thread_id values before calling get_thread_arc or upsert_thread_link. Supports pagination via page/page_size.",
+    "List subplot/storyline threads for a project. Returns a structured JSON envelope with results and total_count. Use this mainly as a lookup and disambiguation helper before deeper thread reasoning with get_thread_arc. Supports pagination via page/page_size.",
     {
       project_id: z.string().describe("Project ID."),
       page: z.number().int().min(1).optional().describe("Optional page number for paginated responses (1-based)."),
@@ -709,11 +803,13 @@ export function registerSearchTools(s, {
             project_id,
             results: paged.rows,
             ...paged.meta,
+            next_step: "Use a thread_id from results with get_thread_arc to inspect storyline progression across scenes.",
           }
         : {
             project_id,
             results: rows,
             total_count: rows.length,
+            next_step: "Use a thread_id from results with get_thread_arc to inspect storyline progression across scenes.",
           };
 
       return { content: [{ type: "text", text: JSON.stringify(payload, null, 2) }] };
@@ -723,7 +819,7 @@ export function registerSearchTools(s, {
   // ---- get_thread_arc ------------------------------------------------------
   s.tool(
     "get_thread_arc",
-    "Get ordered scene metadata for all scenes belonging to a thread, including the per-thread beat. Returns a structured JSON envelope with thread metadata, results, and total_count. Use list_threads first to find a valid thread_id, then call get_scene_prose for close reading of specific scenes. Supports pagination via page/page_size.",
+    "Get ordered scene metadata for all scenes belonging to a thread, including the per-thread beat. Returns a structured JSON envelope with thread metadata, results, and total_count. Use this when the question is about subplot movement, continuity, or recurring storyline structure across scenes. Supports pagination via page/page_size.",
     {
       thread_id: z.string().describe("Thread ID."),
       page: z.number().int().min(1).optional().describe("Optional page number for paginated responses (1-based)."),
@@ -739,7 +835,7 @@ export function registerSearchTools(s, {
         SELECT s.scene_id, s.project_id, s.part, s.chapter, s.chapter_title, s.title, s.logline,
                st.beat AS thread_beat, s.timeline_position, s.story_time, s.metadata_stale
         FROM scenes s
-        JOIN scene_threads st ON st.scene_id = s.scene_id AND st.thread_id = ?
+        JOIN scene_threads st ON st.scene_id = s.scene_id AND st.project_id = s.project_id AND st.thread_id = ?
         ORDER BY s.part, s.chapter, s.timeline_position
       `).all(thread_id);
       const staleCount = rows.filter(r => r.metadata_stale).length;
@@ -752,12 +848,18 @@ export function registerSearchTools(s, {
             results: paged.rows,
             ...paged.meta,
             warning,
+            next_step: staleCount > 0
+              ? "Touch stale scenes as you work and run enrich_scene(scene_id, project_id) to recover metadata parity incrementally."
+              : undefined,
           }
         : {
             thread,
             results: rows,
             total_count: rows.length,
             warning,
+            next_step: staleCount > 0
+              ? "Touch stale scenes as you work and run enrich_scene(scene_id, project_id) to recover metadata parity incrementally."
+              : undefined,
           };
 
       return { content: [{ type: "text", text: JSON.stringify(payload, null, 2) }] };
@@ -855,12 +957,12 @@ export function registerSearchTools(s, {
       if (!loadedSceneEntitiesFromMetadata) {
         // Fallback for scenes without readable indexed file paths.
         characterIds = db.prepare(`
-          SELECT character_id FROM scene_characters WHERE scene_id = ?
-        `).all(scene_id).map((row) => row.character_id);
+          SELECT character_id FROM scene_characters WHERE scene_id = ? AND project_id = ?
+        `).all(scene_id, resolvedProjectId).map((row) => row.character_id);
 
         placeIds = db.prepare(`
-          SELECT place_id FROM scene_places WHERE scene_id = ?
-        `).all(scene_id).map((row) => row.place_id);
+          SELECT place_id FROM scene_places WHERE scene_id = ? AND project_id = ?
+        `).all(scene_id, resolvedProjectId).map((row) => row.place_id);
       }
 
       // Get explicit scene → reference links already present

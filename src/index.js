@@ -6,7 +6,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
-import { openDb, checkpointJobFinish, loadStalledJobs, pruneJobCheckpoints } from "./core/db.js";
+import { openDb, getDbStartupWarnings, checkpointJobFinish, loadStalledJobs, pruneJobCheckpoints } from "./core/db.js";
 import { syncAll, isSyncDirWritable, getSyncOwnershipDiagnostics, isStructuralProjectId } from "./sync/sync.js";
 import { isGitAvailable, isGitRepository, initGitRepository, getSceneProseAtCommit } from "./core/git.js";
 import { createAsyncJobManager, readJsonIfExists } from "./runtime/async-jobs.js";
@@ -134,6 +134,7 @@ function errorResponse(code, message, details) {
 // Database setup
 // ---------------------------------------------------------------------------
 const db = openDb(DB_PATH);
+const DB_STARTUP_WARNINGS = getDbStartupWarnings();
 
 // Recover jobs that were in-flight when the server last exited.
 const stalledJobs = loadStalledJobs(db);
@@ -166,6 +167,12 @@ const { pruneAsyncJobs, startAsyncJob, toPublicJob } = createAsyncJobManager({
 
 process.stderr.write(`[mcp-writing] Sync dir: ${SYNC_DIR_ABS}\n`);
 process.stderr.write(`[mcp-writing] DB path: ${DB_PATH_DISPLAY}\n`);
+if (DB_STARTUP_WARNINGS.length > 0) {
+  process.stderr.write(`[mcp-writing] WARNING: ${DB_STARTUP_WARNINGS.length} DB migration warning(s) detected.\n`);
+  for (const warning of DB_STARTUP_WARNINGS) {
+    process.stderr.write(`[mcp-writing] - ${warning.code}: ${warning.message}\n`);
+  }
+}
 
 // Check sync dir writability once at startup (needed for Phase 2 sidecar writes)
 const SYNC_DIR_WRITABLE = isSyncDirWritable(SYNC_DIR);
@@ -307,7 +314,7 @@ function createMcpServer() {
   // ---- describe_workflows --------------------------------------------------
   s.tool(
     "describe_workflows",
-    "Return a map of available task workflows and the current project context. Call this at the start of a session or whenever you are unsure what to do next. Never write scripts to invoke tools — call them directly.",
+    "Return the default workflow map and current project context for this server. Call this first in most sessions and again whenever you are unsure what to do next. Never write scripts to invoke tools — call them directly.",
     {},
     async () => {
       const projectRow = db.prepare(
@@ -352,14 +359,19 @@ function createMcpServer() {
           },
           git_available: GIT_AVAILABLE,
           pending_proposals: pendingProposals.size,
+          db_migration_warnings: DB_STARTUP_WARNINGS,
         },
         workflows: WORKFLOW_CATALOGUE,
         notes: [
           "Never write JavaScript or shell scripts to invoke tools. Call them directly.",
+          "Use describe_workflows as the default starting point for most sessions and whenever you are uncertain which tool path fits the task.",
           "If a tool returns a next_step field (in a success or error response), follow it before trying anything else.",
           "Use find_scenes without filters to discover what project_ids are indexed.",
           "When calling bootstrap_prose_styleguide_config or check_prose_styleguide_drift, set max_scenes to context.scene_count to avoid the default limit.",
           "Styleguide tools resolve config in priority order: project_root > universe_root > sync_root. If any styleguide_exists field is true, a config exists and styleguide tools will work — do not run setup_prose_styleguide_config unless ALL styleguide_exists fields are false.",
+          ...(DB_STARTUP_WARNINGS.length > 0
+            ? ["Database migration warnings are present in context.db_migration_warnings. Run sync() now, then run enrich_scene(scene_id, project_id) for stale scenes you touch."]
+            : []),
         ],
       });
     }
@@ -416,6 +428,7 @@ function createMcpServer() {
         server_version: MCP_SERVER_VERSION,
         sync_dir: SYNC_DIR_ABS,
         db_path: DB_PATH_DISPLAY,
+        db_migration_warnings: DB_STARTUP_WARNINGS,
         sync_dir_writable: SYNC_DIR_WRITABLE,
         ownership_guard_mode: OWNERSHIP_GUARD_MODE,
         permission_diagnostics: SYNC_OWNERSHIP_DIAGNOSTICS,

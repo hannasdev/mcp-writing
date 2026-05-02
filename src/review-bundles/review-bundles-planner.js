@@ -160,25 +160,26 @@ export function buildReviewBundlePlan(dbHandle, {
 
   const requestedSceneIds = resolveRequestedSceneIds(dbHandle, project_id, scene_ids);
   const conditions = ["s.project_id = ?"];
-  const params = [project_id];
   const joins = [];
+  const joinParams = [];
+  const conditionParams = [project_id];
 
   if (tag) {
-    joins.push("JOIN scene_tags st ON st.scene_id = s.scene_id AND st.tag = ?");
-    params.push(tag);
+    joins.push("JOIN scene_tags st ON st.scene_id = s.scene_id AND st.project_id = s.project_id AND st.tag = ?");
+    joinParams.push(tag);
   }
   if (Array.isArray(scene_ids) && scene_ids.length > 0) {
     const placeholders = scene_ids.map(() => "?").join(",");
     conditions.push(`s.scene_id IN (${placeholders})`);
-    params.push(...scene_ids);
+    conditionParams.push(...scene_ids);
   }
   if (part !== undefined) {
     conditions.push("s.part = ?");
-    params.push(part);
+    conditionParams.push(part);
   }
   if (chapter !== undefined) {
     conditions.push("s.chapter = ?");
-    params.push(chapter);
+    conditionParams.push(chapter);
   }
 
   let query = `
@@ -202,7 +203,7 @@ export function buildReviewBundlePlan(dbHandle, {
   }
   query += ` WHERE ${conditions.join(" AND ")}`;
 
-  const rows = dbHandle.prepare(query).all(...params).sort(sceneSort);
+  const rows = dbHandle.prepare(query).all(...joinParams, ...conditionParams).sort(sceneSort);
   if (rows.length === 0) {
     throw new ReviewBundlePlanError(
       "NO_RESULTS",

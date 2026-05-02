@@ -1,5 +1,36 @@
 import { DatabaseSync } from "node:sqlite";
 
+const dbStartupWarnings = [];
+
+function cloneWarningDetails(details) {
+  if (!details) return details;
+
+  if (typeof structuredClone === "function") {
+    try {
+      return structuredClone(details);
+    } catch {
+      // Fall through to JSON clone for plain data payloads.
+    }
+  }
+
+  try {
+    return JSON.parse(JSON.stringify(details));
+  } catch {
+    return { ...details };
+  }
+}
+
+export function getDbStartupWarnings() {
+  return dbStartupWarnings.map((warning) => ({
+    ...warning,
+    details: cloneWarningDetails(warning.details),
+  }));
+}
+
+function resetDbStartupWarnings() {
+  dbStartupWarnings.length = 0;
+}
+
 export const SCHEMA = `
   CREATE TABLE IF NOT EXISTS universes (
     universe_id TEXT PRIMARY KEY,
@@ -38,27 +69,31 @@ export const SCHEMA = `
 
   CREATE TABLE IF NOT EXISTS scene_characters (
     scene_id     TEXT NOT NULL,
+    project_id   TEXT NOT NULL,
     character_id TEXT NOT NULL,
-    PRIMARY KEY (scene_id, character_id)
+    PRIMARY KEY (scene_id, project_id, character_id)
   );
 
   CREATE TABLE IF NOT EXISTS scene_places (
-    scene_id TEXT NOT NULL,
-    place_id TEXT NOT NULL,
-    PRIMARY KEY (scene_id, place_id)
+    scene_id   TEXT NOT NULL,
+    project_id TEXT NOT NULL,
+    place_id   TEXT NOT NULL,
+    PRIMARY KEY (scene_id, project_id, place_id)
   );
 
   CREATE TABLE IF NOT EXISTS scene_tags (
-    scene_id TEXT NOT NULL,
-    tag      TEXT NOT NULL,
-    PRIMARY KEY (scene_id, tag)
+    scene_id   TEXT NOT NULL,
+    project_id TEXT NOT NULL,
+    tag        TEXT NOT NULL,
+    PRIMARY KEY (scene_id, project_id, tag)
   );
 
   CREATE TABLE IF NOT EXISTS scene_threads (
-    scene_id  TEXT NOT NULL,
-    thread_id TEXT NOT NULL,
-    beat      TEXT,
-    PRIMARY KEY (scene_id, thread_id)
+    scene_id   TEXT NOT NULL,
+    project_id TEXT NOT NULL,
+    thread_id  TEXT NOT NULL,
+    beat       TEXT,
+    PRIMARY KEY (scene_id, project_id, thread_id)
   );
 
   CREATE TABLE IF NOT EXISTS characters (
@@ -160,6 +195,33 @@ export const SCHEMA = `
 // Each migration runs inside a transaction with the version bump — crash-safe.
 // Migrations must be idempotent (guard against already-applied state).
 // Never edit existing entries — add new ones at the end.
+function migrateSceneJoinTableToProjectScope(db, tableName, tableSql, insertSql) {
+  const columns = db.prepare(`PRAGMA table_info(${tableName})`).all();
+  if (columns.some((column) => column.name === "project_id")) {
+    return {
+      migrated: false,
+      sourceCount: 0,
+      migratedCount: 0,
+      droppedCount: 0,
+    };
+  }
+
+  const sourceCount = db.prepare(`SELECT COUNT(*) AS count FROM ${tableName}`).get()?.count ?? 0;
+  db.exec(tableSql);
+  db.exec(insertSql);
+  const migratedCount = db.prepare(`SELECT COUNT(*) AS count FROM ${tableName}_migrating`).get()?.count ?? 0;
+  const droppedCount = Math.max(0, sourceCount - migratedCount);
+  db.exec(`DROP TABLE ${tableName};`);
+  db.exec(`ALTER TABLE ${tableName}_migrating RENAME TO ${tableName};`);
+
+  return {
+    migrated: true,
+    sourceCount,
+    migratedCount,
+    droppedCount,
+  };
+}
+
 const MIGRATIONS = [
   // 1: add chapter_title column to scenes
   (db) => {
@@ -282,6 +344,146 @@ const MIGRATIONS = [
       db.exec(`ALTER TABLE reference_links ADD COLUMN origin TEXT NOT NULL DEFAULT 'inferred';`);
     }
   },
+  // 7: scope scene join tables by project_id so duplicate scene IDs across projects are safe
+  (db) => {
+    const charactersMigration = migrateSceneJoinTableToProjectScope(
+      db,
+      "scene_characters",
+      `
+        CREATE TABLE scene_characters_migrating (
+          scene_id     TEXT NOT NULL,
+          project_id   TEXT NOT NULL,
+          character_id TEXT NOT NULL,
+          PRIMARY KEY (scene_id, project_id, character_id)
+        );
+      `,
+      `
+        INSERT OR IGNORE INTO scene_characters_migrating (scene_id, project_id, character_id)
+        SELECT sc.scene_id, s.project_id, sc.character_id
+        FROM scene_characters sc
+        JOIN scenes s ON s.scene_id = sc.scene_id
+        WHERE (
+          SELECT COUNT(*)
+          FROM scenes sx
+          WHERE sx.scene_id = sc.scene_id
+        ) = 1;
+      `
+    );
+
+    const placesMigration = migrateSceneJoinTableToProjectScope(
+      db,
+      "scene_places",
+      `
+        CREATE TABLE scene_places_migrating (
+          scene_id   TEXT NOT NULL,
+          project_id TEXT NOT NULL,
+          place_id   TEXT NOT NULL,
+          PRIMARY KEY (scene_id, project_id, place_id)
+        );
+      `,
+      `
+        INSERT OR IGNORE INTO scene_places_migrating (scene_id, project_id, place_id)
+        SELECT sp.scene_id, s.project_id, sp.place_id
+        FROM scene_places sp
+        JOIN scenes s ON s.scene_id = sp.scene_id
+        WHERE (
+          SELECT COUNT(*)
+          FROM scenes sx
+          WHERE sx.scene_id = sp.scene_id
+        ) = 1;
+      `
+    );
+
+    const tagsMigration = migrateSceneJoinTableToProjectScope(
+      db,
+      "scene_tags",
+      `
+        CREATE TABLE scene_tags_migrating (
+          scene_id   TEXT NOT NULL,
+          project_id TEXT NOT NULL,
+          tag        TEXT NOT NULL,
+          PRIMARY KEY (scene_id, project_id, tag)
+        );
+      `,
+      `
+        INSERT OR IGNORE INTO scene_tags_migrating (scene_id, project_id, tag)
+        SELECT st.scene_id, s.project_id, st.tag
+        FROM scene_tags st
+        JOIN scenes s ON s.scene_id = st.scene_id
+        WHERE (
+          SELECT COUNT(*)
+          FROM scenes sx
+          WHERE sx.scene_id = st.scene_id
+        ) = 1;
+      `
+    );
+
+    const threadsMigration = migrateSceneJoinTableToProjectScope(
+      db,
+      "scene_threads",
+      `
+        CREATE TABLE scene_threads_migrating (
+          scene_id   TEXT NOT NULL,
+          project_id TEXT NOT NULL,
+          thread_id  TEXT NOT NULL,
+          beat       TEXT,
+          PRIMARY KEY (scene_id, project_id, thread_id)
+        );
+      `,
+      `
+        INSERT OR IGNORE INTO scene_threads_migrating (scene_id, project_id, thread_id, beat)
+        SELECT st.scene_id, t.project_id, st.thread_id, st.beat
+        FROM scene_threads st
+        JOIN threads t ON t.thread_id = st.thread_id
+        JOIN scenes s
+          ON s.scene_id = st.scene_id
+         AND s.project_id = t.project_id;
+
+        INSERT OR IGNORE INTO scene_threads_migrating (scene_id, project_id, thread_id, beat)
+        SELECT st.scene_id, s.project_id, st.thread_id, st.beat
+        FROM scene_threads st
+        JOIN scenes s ON s.scene_id = st.scene_id
+        LEFT JOIN threads t ON t.thread_id = st.thread_id
+        WHERE t.thread_id IS NULL
+          AND (
+            SELECT COUNT(*)
+            FROM scenes sx
+            WHERE sx.scene_id = st.scene_id
+          ) = 1;
+      `
+    );
+
+    const migrationSummaries = [
+      ["scene_characters", charactersMigration],
+      ["scene_places", placesMigration],
+      ["scene_tags", tagsMigration],
+      ["scene_threads", threadsMigration],
+    ];
+    const droppedByTable = {};
+    let totalDropped = 0;
+
+    for (const [tableName, summary] of migrationSummaries) {
+      if (!summary?.migrated || summary.droppedCount <= 0) continue;
+      droppedByTable[tableName] = {
+        source_rows: summary.sourceCount,
+        migrated_rows: summary.migratedCount,
+        skipped_rows: summary.droppedCount,
+      };
+      totalDropped += summary.droppedCount;
+    }
+
+    if (totalDropped > 0) {
+      dbStartupWarnings.push({
+        code: "LEGACY_JOIN_ROWS_SKIPPED",
+        message: "Legacy scene relationship rows were skipped during migration because scene_id was ambiguous across projects or duplicate links could not be preserved safely.",
+        details: {
+          skipped_rows_total: totalDropped,
+          skipped_rows_by_table: droppedByTable,
+          next_step: "Run sync() immediately after upgrade, then run enrich_scene(scene_id, project_id) for any stale scenes you touch.",
+        },
+      });
+    }
+  },
 ];
 
 // The version every database should reach after openDb. Not the current DB value —
@@ -312,6 +514,7 @@ function applyMigrations(db) {
 }
 
 export function openDb(dbPath) {
+  resetDbStartupWarnings();
   const db = new DatabaseSync(dbPath);
   db.exec(SCHEMA);
   applyMigrations(db);

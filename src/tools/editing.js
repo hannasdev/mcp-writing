@@ -25,20 +25,37 @@ export function registerEditingTools(s, {
   // ---- propose_edit --------------------------------------------------------
   s.tool(
     "propose_edit",
-    "Generate a proposed revision for a scene. Returns a proposal_id and a diff preview. Nothing is written yet — you must call commit_edit to apply the change. This tool requires git to be available.",
+    "Generate a proposed revision for a scene. Returns a proposal_id and a diff preview. Nothing is written yet — you must call commit_edit to apply the change. This tool requires git to be available. If scene IDs are reused across projects, omitting project_id returns CONFLICT with candidate project_ids.",
     {
       scene_id: z.string().describe("The scene_id to revise (e.g. 'sc-011-sebastian')."),
+      project_id: z.string().optional().describe("Optional project ID to disambiguate duplicate scene IDs across projects."),
       instruction: z.string().describe("A brief instruction for the edit (e.g. 'Tighten the opening paragraph'). Used in the git commit message."),
       revised_prose: z.string().describe("The complete revised prose text for the scene."),
     },
-    async ({ scene_id, instruction, revised_prose }) => {
+    async ({ scene_id, project_id, instruction, revised_prose }) => {
       if (!GIT_ENABLED) {
         return errorResponse("GIT_UNAVAILABLE", "Git is not available — prose editing is not supported. Ensure git is installed and the sync directory is writable.");
       }
 
-      const scene = db.prepare(`SELECT file_path FROM scenes WHERE scene_id = ?`).get(scene_id);
-      if (!scene) {
-        return errorResponse("NOT_FOUND", `Scene '${scene_id}' not found. Hint: call find_scenes to get valid scene IDs.`);
+      let scene;
+      if (project_id) {
+        scene = db.prepare(`SELECT file_path, project_id FROM scenes WHERE scene_id = ? AND project_id = ?`).get(scene_id, project_id);
+        if (!scene) {
+          return errorResponse("NOT_FOUND", `Scene '${scene_id}' not found in project '${project_id}'. Hint: call find_scenes with project_id to get valid scene IDs.`);
+        }
+      } else {
+        const scenes = db.prepare(`SELECT file_path, project_id FROM scenes WHERE scene_id = ? ORDER BY project_id`).all(scene_id);
+        if (scenes.length === 0) {
+          return errorResponse("NOT_FOUND", `Scene '${scene_id}' not found. Hint: call find_scenes to get valid scene IDs.`);
+        }
+        if (scenes.length > 1) {
+          return errorResponse(
+            "CONFLICT",
+            `Scene ID '${scene_id}' exists in multiple projects. Provide project_id to disambiguate.`,
+            { scene_id, project_ids: scenes.map(s => s.project_id) }
+          );
+        }
+        scene = scenes[0];
       }
 
       try {
@@ -66,6 +83,7 @@ export function registerEditingTools(s, {
         const proposalId = generateProposalId();
         pendingProposals.set(proposalId, {
           scene_id,
+          project_id: scene.project_id,
           scene_file_path: scene.file_path,
           instruction,
           revised_prose,
@@ -85,12 +103,16 @@ export function registerEditingTools(s, {
         return jsonResponse({
           proposal_id: proposalId,
           scene_id,
+          project_id: scene.project_id,
           instruction,
           diff_preview: diffPreview,
           noop,
           note: noop
             ? "This proposal matches the current scene file. Calling commit_edit will be a no-op."
             : "Review the diff above. Call commit_edit with this proposal_id to apply the change.",
+          next_step: noop
+            ? "If this was intentional, no action is required. Otherwise, adjust revised_prose and call propose_edit again."
+            : "Review diff_preview, then call commit_edit to apply or discard_edit to reject.",
         });
       } catch (err) {
         if (err.code === "ENOENT") {
@@ -107,9 +129,10 @@ export function registerEditingTools(s, {
     "Apply a proposed edit and commit it to git. First creates a pre-edit snapshot, then writes the revised prose and metadata back to disk. The scene metadata stale flag is cleared.",
     {
       scene_id: z.string().describe("The scene_id being revised."),
+      project_id: z.string().optional().describe("Optional project ID. Required when scene IDs are duplicated across projects."),
       proposal_id: z.string().describe("The proposal_id returned by propose_edit."),
     },
-    async ({ scene_id, proposal_id }) => {
+    async ({ scene_id, project_id, proposal_id }) => {
       if (!GIT_ENABLED) {
         return errorResponse("GIT_UNAVAILABLE", "Git is not available — prose editing is not supported.");
       }
@@ -121,6 +144,27 @@ export function registerEditingTools(s, {
 
       if (proposal.scene_id !== scene_id) {
         return errorResponse("INVALID_EDIT", `Proposal '${proposal_id}' is for scene '${proposal.scene_id}', not '${scene_id}'.`);
+      }
+
+      if (!project_id && proposal.project_id) {
+        const projectMatches = db.prepare(`SELECT project_id FROM scenes WHERE scene_id = ? ORDER BY project_id`).all(scene_id);
+        if (projectMatches.length > 1) {
+          return errorResponse(
+            "CONFLICT",
+            `Scene ID '${scene_id}' exists in multiple projects. Provide project_id to disambiguate commit_edit.`,
+            {
+              scene_id,
+              project_ids: projectMatches.map((row) => row.project_id),
+              proposal_project_id: proposal.project_id,
+              proposal_id,
+              next_step: `Retry commit_edit with project_id '${proposal.project_id}' and the same proposal_id.`,
+            }
+          );
+        }
+      }
+
+      if (project_id && proposal.project_id && proposal.project_id !== project_id) {
+        return errorResponse("INVALID_EDIT", `Proposal '${proposal_id}' is for project '${proposal.project_id}', not '${project_id}'.`);
       }
 
       try {
@@ -184,10 +228,12 @@ export function registerEditingTools(s, {
           return jsonResponse({
             ok: true,
             scene_id,
+            project_id: proposal.project_id ?? null,
             proposal_id,
             snapshot_commit: null,
             noop: true,
             message: `Proposal for scene '${scene_id}' matches the current file. Nothing was written.`,
+            next_step: "No changes were applied. If you still need edits, call propose_edit with revised prose.",
           });
         }
 
@@ -204,10 +250,12 @@ export function registerEditingTools(s, {
         return jsonResponse({
           ok: true,
           scene_id,
+          project_id: proposal.project_id ?? null,
           proposal_id,
           snapshot_commit: snapshot.commit_hash,
           noop: false,
           message: `Applied edit to scene '${scene_id}'${snapshot.commit_hash ? ` (snapshot: ${snapshot.commit_hash.substring(0, 7)})` : " (no pre-edit snapshot needed)"}`,
+          next_step: "Edit applied. Run get_scene_prose to verify prose, then continue with additional targeted edits if needed.",
         });
       } catch (err) {
         if (err.code === "ENOENT") {
@@ -236,6 +284,7 @@ export function registerEditingTools(s, {
         ok: true,
         proposal_id,
         message: `Discarded proposal '${proposal_id}' for scene '${proposal.scene_id}'.`,
+        next_step: "Proposal discarded. Call propose_edit again if you want to stage a revised alternative.",
       });
     }
   );
@@ -293,15 +342,32 @@ export function registerEditingTools(s, {
     "List git commit history for a scene, with timestamps and commit messages. Use this to find commit hashes for get_scene_prose historical retrieval.",
     {
       scene_id: z.string().describe("The scene_id to list snapshots for."),
+      project_id: z.string().optional().describe("Optional project ID to disambiguate duplicate scene IDs across projects."),
     },
-    async ({ scene_id }) => {
+    async ({ scene_id, project_id }) => {
       if (!GIT_ENABLED) {
         return errorResponse("GIT_UNAVAILABLE", "Git is not available — snapshots cannot be retrieved.");
       }
 
-      const scene = db.prepare(`SELECT file_path FROM scenes WHERE scene_id = ?`).get(scene_id);
-      if (!scene) {
-        return errorResponse("NOT_FOUND", `Scene '${scene_id}' not found.`);
+      let scene;
+      if (project_id) {
+        scene = db.prepare(`SELECT file_path, project_id FROM scenes WHERE scene_id = ? AND project_id = ?`).get(scene_id, project_id);
+        if (!scene) {
+          return errorResponse("NOT_FOUND", `Scene '${scene_id}' not found in project '${project_id}'.`);
+        }
+      } else {
+        const scenes = db.prepare(`SELECT file_path, project_id FROM scenes WHERE scene_id = ? ORDER BY project_id`).all(scene_id);
+        if (scenes.length === 0) {
+          return errorResponse("NOT_FOUND", `Scene '${scene_id}' not found.`);
+        }
+        if (scenes.length > 1) {
+          return errorResponse(
+            "CONFLICT",
+            `Scene ID '${scene_id}' exists in multiple projects. Provide project_id to disambiguate.`,
+            { scene_id, project_ids: scenes.map((row) => row.project_id) }
+          );
+        }
+        scene = scenes[0];
       }
 
       try {
@@ -312,6 +378,7 @@ export function registerEditingTools(s, {
 
         return jsonResponse({
           scene_id,
+          project_id: scene.project_id ?? null,
           snapshots: snapshots.map(s => ({
             commit_hash: s.commit_hash,
             short_hash: s.commit_hash.substring(0, 7),

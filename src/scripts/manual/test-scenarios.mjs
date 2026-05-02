@@ -1,5 +1,6 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
+import { callToolParsed } from "./mcp-result.mjs";
 
 const BASE_URL = "http://localhost:3000";
 
@@ -22,8 +23,8 @@ async function connect() {
 }
 
 async function callTool(client, name, args = {}) {
-  const result = await client.callTool({ name, arguments: args });
-  return result.content?.[0]?.text ?? "";
+  const result = await callToolParsed(client, name, args);
+  return result.text;
 }
 
 const results = [];
@@ -45,12 +46,9 @@ async function runScenarios() {
     try {
       const text = await callTool(client, "find_scenes", { project_id: "the-lamb" });
       const parsed = JSON.parse(text);
-      const isArray = Array.isArray(parsed);
-      const isEnvelope = !isArray && parsed.results && parsed.total_count !== undefined;
-      
-      if (isArray) {
-        log("1a", "PASS", `Got array of ${parsed.length} scenes (backward compat)`);
-      } else if (isEnvelope) {
+      const isEnvelope = parsed && parsed.results && parsed.total_count !== undefined;
+
+      if (isEnvelope) {
         log("1b", "PASS", `Got envelope with results: ${parsed.results.length}, total_count: ${parsed.total_count}`);
       } else {
         log("1c", "FAIL", `Unknown shape: ${JSON.stringify(parsed).slice(0, 100)}`);
@@ -241,17 +239,23 @@ async function runScenarios() {
       const ga = JSON.parse(await callTool(client, "get_arc", { character_id: "char-mira-nystrom", page_size: 1 }));
       const sm = JSON.parse(await callTool(client, "search_metadata", { query: "scene", page_size: 1 }));
       const lt = JSON.parse(await callTool(client, "list_threads", { project_id: "the-lamb" }));
+      const lc = JSON.parse(await callTool(client, "list_characters", { project_id: "the-lamb" }));
+      const lp = JSON.parse(await callTool(client, "list_places", { project_id: "the-lamb" }));
+      const sr = JSON.parse(await callTool(client, "search_reference", { query: "scene" }));
 
       const commonFields = ["results", "total_count"];
       const fsHas = commonFields.every(f => f in fs);
       const gaHas = commonFields.every(f => f in ga);
       const smHas = commonFields.every(f => f in sm);
       const ltHas = commonFields.every(f => f in lt);
+      const lcHas = commonFields.every(f => f in lc);
+      const lpHas = commonFields.every(f => f in lp);
+      const srHas = commonFields.every(f => f in sr);
 
-      if (fsHas && gaHas && smHas && ltHas) {
-        log("11", "PASS", `All tools have results + total_count envelope`);
+      if (fsHas && gaHas && smHas && ltHas && lcHas && lpHas && srHas) {
+        log("11", "PASS", `All metadata-read tools have results + total_count envelope`);
       } else {
-        log("11", "FAIL", `Missing fields: fs=${fsHas}, ga=${gaHas}, sm=${smHas}, lt=${ltHas}`);
+        log("11", "FAIL", `Missing fields: fs=${fsHas}, ga=${gaHas}, sm=${smHas}, lt=${ltHas}, lc=${lcHas}, lp=${lpHas}, sr=${srHas}`);
       }
     } catch (err) {
       log("11", "FAIL", err.message);
@@ -267,14 +271,22 @@ async function runScenarios() {
         ga: JSON.parse(await callTool(client, "get_arc", { character_id: "char-mira-nystrom" })),
         sm: JSON.parse(await callTool(client, "search_metadata", { query: "scene" })),
         lt: JSON.parse(await callTool(client, "list_threads", { project_id: "the-lamb" })),
+        lc: JSON.parse(await callTool(client, "list_characters", { project_id: "the-lamb" })),
+        lp: JSON.parse(await callTool(client, "list_places", { project_id: "the-lamb" })),
+        sr: JSON.parse(await callTool(client, "search_reference", { query: "scene" })),
       };
 
-      const allValid = Object.values(smoke).every(obj => obj !== null && typeof obj === "object");
+      const allValid = Object.values(smoke).every(obj => (
+        obj !== null
+        && typeof obj === "object"
+        && "results" in obj
+        && "total_count" in obj
+      ));
       
       if (allValid) {
-        log("12", "PASS", `All 4 tools parsed as valid JSON objects`);
+        log("12", "PASS", `All sampled metadata-read tools returned envelope responses`);
       } else {
-        log("12", "FAIL", `Some responses did not parse as JSON`);
+        log("12", "FAIL", `Some responses did not match envelope shape`);
       }
     } catch (err) {
       log("12", "FAIL", err.message);

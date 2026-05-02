@@ -41,6 +41,47 @@ Instead of feeding an entire manuscript to an AI and hoping it fits in the conte
 | [docs/tools.md](docs/tools.md) | Full tool reference — auto-generated from source |
 | [docs/development.md](docs/development.md) | Running locally, tests, environment variables, troubleshooting |
 
+## Breaking changes
+
+### `describe_workflows` surface redesign
+
+`describe_workflows` now exposes an outcome-first, discovery-first workflow map. This is a breaking change if your prompts or automation depend on previous workflow IDs or ordering.
+
+Update integrations using this mapping:
+
+- `manuscript_exploration` -> `question_driven_discovery` (or `targeted_scene_reading` when the task is prose inspection)
+- `prose_editing` -> `safe_scene_revision`
+- `character_management` -> `character_understanding`
+- `place_management` -> `place_understanding`
+- `review_bundle` -> `review_preparation`
+
+New workflow IDs added:
+
+- `thread_understanding`
+- `parity_recovery`
+
+Styleguide workflows are still available, but no longer positioned as part of the primary daily workflow surface.
+
+### `find_scenes` and `get_arc` response-shape standardization
+
+`find_scenes` and `get_arc` now always return structured envelopes, including non-paginated calls.
+
+- Envelope fields: `results`, `total_count`.
+- Pagination fields are included when paging is active.
+- `warning` / `next_step` are included when relevant.
+
+If your integration previously handled raw arrays for non-paginated calls, update it to parse envelopes consistently.
+
+Safe parsing pattern:
+
+```js
+const parsed = JSON.parse(toolText);
+const scenes = parsed.results ?? [];
+const totalCount = parsed.total_count ?? scenes.length;
+const warning = parsed.warning ?? null;
+const nextStep = parsed.next_step ?? null;
+```
+
 ## Usage scenarios
 
 ### 1) Continuity pass before sending chapters to beta readers
@@ -98,6 +139,18 @@ Goal: rebuild scene-to-character links in a controlled way after imported prose 
 5. If you want a destructive overwrite instead of additive merge behavior, use `replace_mode=replace` with `confirm_replace=true` deliberately.
 
 Outcome: character-link maintenance becomes a preview-first batch operation instead of a one-off regex script or manual sidecar cleanup.
+
+### 6) Post-upgrade recovery after legacy migration warnings
+
+Goal: recover index confidence quickly when legacy upgrade warnings indicate ambiguous rows were skipped.
+
+1. Start by checking `get_runtime_config` (or `describe_workflows`) and confirm whether `db_migration_warnings` contains `LEGACY_JOIN_ROWS_SKIPPED`.
+2. If present, run `sync` immediately to rebuild scene relationships from current sidecars and prose metadata.
+3. Continue normal discovery (`find_scenes`, `get_arc`, `get_thread_arc`) and watch for stale-metadata warnings.
+4. When you touch stale scenes, run `enrich_scene(scene_id, project_id)` to recover metadata parity incrementally.
+5. If many scenes remain stale, switch to `enrich_scene_characters_batch` (dry-run first) for broader catch-up.
+
+Outcome: upgrade-related data loss risk becomes an explicit, operator-visible recovery workflow instead of a silent state mismatch.
 
 ## License
 AGPL-3.0-only

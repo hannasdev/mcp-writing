@@ -35,6 +35,19 @@ describe("sync tool", () => {
     const text = await callTool("sync");
     assert.match(text, /3 scenes indexed/);
   });
+
+  test("suggests local enrich_scene follow-up when sync marks stale scenes", async () => {
+    const scenePath = path.join(writeSyncDir, "projects", "test-novel", "part-1", "chapter-1", "sc-001.md");
+    const before = fs.readFileSync(scenePath, "utf8");
+    fs.writeFileSync(scenePath, `${before}\n\nParity hint marker for sync.\n`, "utf8");
+
+    const text = await callWriteTool("sync");
+    assert.match(text, /scenes marked stale/);
+    assert.match(text, /Next step:/);
+    assert.match(text, /enrich_scene/);
+
+    await callWriteTool("enrich_scene", { scene_id: "sc-001", project_id: "test-novel" });
+  });
 });
 
 describe("import_scrivener_sync tool", () => {
@@ -415,8 +428,9 @@ describe("merge_scrivener_project_beta tool", () => {
 
     const scenesText = await callWriteTool("find_scenes", { project_id: projectId });
     const scenes = JSON.parse(scenesText);
-    assert.equal(scenes[0].chapter, 1);
-    assert.equal(scenes[0].chapter_title, "Arrival");
+    assert.ok(Array.isArray(scenes.results));
+    assert.equal(scenes.results[0].chapter, 1);
+    assert.equal(scenes.results[0].chapter_title, "Arrival");
   });
 
   test("organize_by_chapters: false keeps scenes in place", async () => {
@@ -455,7 +469,8 @@ describe("merge_scrivener_project_beta tool", () => {
 
     const scenesText = await callWriteTool("find_scenes", { project_id: projectId });
     const scenes = JSON.parse(scenesText);
-    assert.equal(scenes[0].chapter, 1);
+    assert.ok(Array.isArray(scenes.results));
+    assert.equal(scenes.results[0].chapter, 1);
   });
 });
 

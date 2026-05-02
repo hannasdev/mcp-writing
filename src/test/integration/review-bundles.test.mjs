@@ -33,6 +33,8 @@ describe("preview_review_bundle tool", () => {
     assert.equal(parsed.profile, "outline_discussion");
     assert.equal(parsed.summary.scene_count, 3);
     assert.equal(parsed.strictness_result.can_proceed, true);
+    assert.equal(typeof parsed.next_step, "string");
+    assert.ok(parsed.next_step.includes("create_review_bundle"));
     assert.ok(Array.isArray(parsed.planned_outputs));
     assert.ok(parsed.planned_outputs.some(name => name.endsWith(".pdf")));
     assert.ok(parsed.planned_outputs.some(name => name.endsWith(".manifest.json")));
@@ -69,6 +71,31 @@ describe("preview_review_bundle tool", () => {
     assert.equal(parsed.ok, true);
     assert.equal(parsed.strictness_result.can_proceed, false);
     assert.ok(parsed.strictness_result.blockers.some(blocker => blocker.code === "STALE_METADATA"));
+    assert.equal(typeof parsed.next_step, "string");
+    assert.ok(parsed.next_step.includes("strictness blockers"));
+  });
+
+  test("tag filtering stays project-scoped when scene_id is reused across projects", async () => {
+    const alphaScenePath = path.join(writeSyncDir, "projects", "alpha-review", "part-1", "chapter-1", "shared.md");
+    const betaScenePath = path.join(writeSyncDir, "projects", "beta-review", "part-1", "chapter-1", "shared.md");
+    fs.mkdirSync(path.dirname(alphaScenePath), { recursive: true });
+    fs.mkdirSync(path.dirname(betaScenePath), { recursive: true });
+    fs.writeFileSync(alphaScenePath, "---\nscene_id: sc-review-shared-001\ntitle: Alpha Review\nlogline: Alpha review logline\ntimeline_position: 1\ntags:\n  - alpha-review-tag\n---\nAlpha review prose.");
+    fs.writeFileSync(betaScenePath, "---\nscene_id: sc-review-shared-001\ntitle: Beta Review\nlogline: Beta review logline\ntimeline_position: 1\ntags:\n  - beta-review-tag\n---\nBeta review prose.");
+
+    await callWriteTool("sync");
+
+    const text = await callWriteTool("preview_review_bundle", {
+      project_id: "alpha-review",
+      profile: "outline_discussion",
+      tag: "alpha-review-tag",
+    });
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.summary.scene_count, 1);
+    assert.deepEqual(parsed.ordering.map((row) => row.project_id), ["alpha-review"]);
+    assert.deepEqual(parsed.ordering.map((row) => row.scene_id), ["sc-review-shared-001"]);
   });
 
   test("beta profile preview includes planned notice + feedback outputs", async () => {
@@ -112,6 +139,8 @@ describe("create_review_bundle tool", () => {
       const parsed = JSON.parse(text);
 
       assert.equal(parsed.ok, true);
+      assert.equal(typeof parsed.next_step, "string");
+      assert.ok(parsed.next_step.includes("Share output_paths"));
       assert.ok(parsed.output_paths?.bundle_markdown);
       assert.ok(parsed.output_paths?.manifest_json);
       assert.ok(fs.existsSync(parsed.output_paths.bundle_markdown));
@@ -258,6 +287,8 @@ describe("create_review_bundle tool", () => {
 
       assert.equal(parsed.ok, false);
       assert.equal(parsed.error.code, "STRICTNESS_BLOCKED");
+      assert.equal(typeof parsed.error.details.next_step, "string");
+      assert.ok(parsed.error.details.next_step.includes("Resolve blockers"));
     } finally {
       fs.rmSync(outDir, { recursive: true, force: true });
       fs.writeFileSync(scenePath, before, "utf8");

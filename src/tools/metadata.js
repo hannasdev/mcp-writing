@@ -347,15 +347,15 @@ export function registerMetadataTools(s, {
       `).run(thread_id, project_id, thread_name, status ?? "active");
 
       db.prepare(`
-        INSERT INTO scene_threads (scene_id, thread_id, beat)
-        VALUES (?, ?, ?)
-        ON CONFLICT (scene_id, thread_id) DO UPDATE SET
+        INSERT INTO scene_threads (scene_id, project_id, thread_id, beat)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT (scene_id, project_id, thread_id) DO UPDATE SET
           beat = excluded.beat
-      `).run(scene_id, thread_id, beat ?? null);
+      `).run(scene_id, project_id, thread_id, beat ?? null);
 
       const thread = db.prepare(`SELECT * FROM threads WHERE thread_id = ?`).get(thread_id);
-      const link = db.prepare(`SELECT scene_id, thread_id, beat FROM scene_threads WHERE scene_id = ? AND thread_id = ?`)
-        .get(scene_id, thread_id);
+      const link = db.prepare(`SELECT scene_id, project_id, thread_id, beat FROM scene_threads WHERE scene_id = ? AND project_id = ? AND thread_id = ?`)
+        .get(scene_id, project_id, thread_id);
 
       return jsonResponse({
         ok: true,

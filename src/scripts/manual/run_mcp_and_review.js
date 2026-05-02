@@ -2,13 +2,11 @@ import path from "node:path";
 import process from "node:process";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { callToolParsed } from "./mcp-result.mjs";
 
 async function callCreateBundle(client, args) {
-  const result = await client.callTool({
-    name: "create_review_bundle",
-    arguments: args,
-  });
-  console.log(JSON.stringify(result, null, 2));
+  const parsed = await callToolParsed(client, "create_review_bundle", args);
+  console.log(JSON.stringify(parsed.raw, null, 2));
 }
 
 async function main() {

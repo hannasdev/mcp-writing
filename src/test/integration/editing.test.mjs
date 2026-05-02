@@ -8,6 +8,7 @@ import { createTestContext } from "../helpers/server.js";
 const ctx = createTestContext(3069, 3068);
 let writeSyncDir;
 const callWriteTool = (n, a) => ctx.callWriteTool(n, a);
+const toSceneRows = (parsed) => (Array.isArray(parsed) ? parsed : parsed.results);
 
 before(async () => {
   try {
@@ -37,6 +38,8 @@ describe("commit_edit behavior", { concurrency: 1 }, () => {
     const proposal = JSON.parse(proposalText);
 
     assert.equal(proposal.noop, false);
+    assert.equal(typeof proposal.next_step, "string");
+    assert.ok(proposal.next_step.includes("commit_edit"));
 
     const commitText = await callWriteTool("commit_edit", {
       scene_id: "sc-001",
@@ -52,6 +55,8 @@ describe("commit_edit behavior", { concurrency: 1 }, () => {
       commitResult.snapshot_commit === null || typeof commitResult.snapshot_commit === "string",
       "snapshot_commit should be either null or a commit hash string",
     );
+    assert.equal(typeof commitResult.next_step, "string");
+    assert.ok(commitResult.next_step.includes("get_scene_prose"));
     if (typeof commitResult.snapshot_commit === "string") {
       assert.notEqual(commitResult.snapshot_commit, "");
     }
@@ -85,6 +90,8 @@ describe("commit_edit behavior", { concurrency: 1 }, () => {
 
     assert.equal(proposal.noop, true);
     assert.equal(proposal.diff_preview, "(no changes)");
+    assert.equal(typeof proposal.next_step, "string");
+    assert.ok(proposal.next_step.includes("no action"));
 
     const commitText = await callWriteTool("commit_edit", {
       scene_id: "sc-002",
@@ -97,6 +104,8 @@ describe("commit_edit behavior", { concurrency: 1 }, () => {
     assert.equal(commitResult.noop, true);
     assert.equal(commitResult.snapshot_commit, null);
     assert.match(commitResult.message, /Nothing was written\./);
+    assert.equal(typeof commitResult.next_step, "string");
+    assert.ok(commitResult.next_step.includes("propose_edit"));
     assert.equal(after, normalizedRaw);
   });
 
@@ -167,7 +176,7 @@ describe("commit_edit behavior", { concurrency: 1 }, () => {
       part: 1,
       chapter: 1,
     });
-    const beforeRows = JSON.parse(beforeText);
+    const beforeRows = toSceneRows(JSON.parse(beforeText));
     const beforeScene = beforeRows.find((row) => row.scene_id === "sc-001");
     assert.ok(beforeScene);
     assert.notEqual(beforeScene.word_count, 10);
@@ -193,7 +202,7 @@ describe("commit_edit behavior", { concurrency: 1 }, () => {
       part: 1,
       chapter: 1,
     });
-    const afterRows = JSON.parse(afterText);
+    const afterRows = toSceneRows(JSON.parse(afterText));
     const afterScene = afterRows.find((row) => row.scene_id === "sc-001");
     assert.ok(afterScene);
     assert.equal(afterScene.word_count, 10);
@@ -261,5 +270,139 @@ describe("commit_edit behavior", { concurrency: 1 }, () => {
         fs.renameSync(replacementPath, originalScenePath);
       }
     }
+  });
+
+  test("propose_edit returns CONFLICT for ambiguous scene_id without project_id", async () => {
+    const alphaScenePath = path.join(writeSyncDir, "projects", "alpha-edit", "scenes", "shared.md");
+    const betaScenePath = path.join(writeSyncDir, "projects", "beta-edit", "scenes", "shared.md");
+    fs.mkdirSync(path.dirname(alphaScenePath), { recursive: true });
+    fs.mkdirSync(path.dirname(betaScenePath), { recursive: true });
+    fs.writeFileSync(alphaScenePath, "---\nscene_id: sc-edit-shared-001\ntitle: Alpha Shared\n---\nAlpha edit prose.");
+    fs.writeFileSync(betaScenePath, "---\nscene_id: sc-edit-shared-001\ntitle: Beta Shared\n---\nBeta edit prose.");
+
+    await callWriteTool("sync");
+
+    const proposalText = await callWriteTool("propose_edit", {
+      scene_id: "sc-edit-shared-001",
+      instruction: "Tighten opening line",
+      revised_prose: "Rewritten shared prose.",
+    });
+    const proposal = JSON.parse(proposalText);
+    assert.equal(proposal.ok, false);
+    assert.equal(proposal.error.code, "CONFLICT");
+    assert.ok(Array.isArray(proposal.error.details.project_ids));
+    assert.ok(proposal.error.details.project_ids.includes("alpha-edit"));
+    assert.ok(proposal.error.details.project_ids.includes("beta-edit"));
+  });
+
+  test("propose_edit + commit_edit works with explicit project_id disambiguation", async () => {
+    const proposalText = await callWriteTool("propose_edit", {
+      scene_id: "sc-edit-shared-001",
+      project_id: "beta-edit",
+      instruction: "Tighten opening line",
+      revised_prose: "Beta rewritten prose line.",
+    });
+    const proposal = JSON.parse(proposalText);
+    assert.equal(proposal.noop, false);
+    assert.equal(proposal.project_id, "beta-edit");
+
+    const commitText = await callWriteTool("commit_edit", {
+      scene_id: "sc-edit-shared-001",
+      project_id: "beta-edit",
+      proposal_id: proposal.proposal_id,
+    });
+    const commitResult = JSON.parse(commitText);
+    assert.equal(commitResult.ok, true);
+    assert.equal(commitResult.project_id, "beta-edit");
+    assert.equal(typeof commitResult.next_step, "string");
+    assert.ok(commitResult.next_step.includes("get_scene_prose"));
+
+    const betaScenePath = path.join(writeSyncDir, "projects", "beta-edit", "scenes", "shared.md");
+    const alphaScenePath = path.join(writeSyncDir, "projects", "alpha-edit", "scenes", "shared.md");
+    const betaAfter = fs.readFileSync(betaScenePath, "utf8");
+    const alphaAfter = fs.readFileSync(alphaScenePath, "utf8");
+
+    assert.ok(betaAfter.includes("Beta rewritten prose line."));
+    assert.ok(alphaAfter.includes("Alpha edit prose."));
+  });
+
+  test("commit_edit returns CONFLICT for ambiguous scene_id when project_id is omitted", async () => {
+    const proposalText = await callWriteTool("propose_edit", {
+      scene_id: "sc-edit-shared-001",
+      project_id: "alpha-edit",
+      instruction: "Adjust line",
+      revised_prose: "Alpha rewritten prose line without explicit project on commit.",
+    });
+    const proposal = JSON.parse(proposalText);
+    assert.ok(proposal.proposal_id);
+
+    const commitText = await callWriteTool("commit_edit", {
+      scene_id: "sc-edit-shared-001",
+      proposal_id: proposal.proposal_id,
+    });
+    const commitResult = JSON.parse(commitText);
+    assert.equal(commitResult.ok, false);
+    assert.equal(commitResult.error.code, "CONFLICT");
+    assert.ok(Array.isArray(commitResult.error.details.project_ids));
+    assert.ok(commitResult.error.details.project_ids.includes("alpha-edit"));
+    assert.ok(commitResult.error.details.project_ids.includes("beta-edit"));
+    assert.equal(commitResult.error.details.proposal_project_id, "alpha-edit");
+  });
+
+  test("commit_edit rejects mismatched project_id for proposal", async () => {
+    const proposalText = await callWriteTool("propose_edit", {
+      scene_id: "sc-edit-shared-001",
+      project_id: "alpha-edit",
+      instruction: "Adjust line",
+      revised_prose: "Alpha rewritten prose line.",
+    });
+    const proposal = JSON.parse(proposalText);
+    assert.ok(proposal.proposal_id);
+
+    const commitText = await callWriteTool("commit_edit", {
+      scene_id: "sc-edit-shared-001",
+      project_id: "beta-edit",
+      proposal_id: proposal.proposal_id,
+    });
+    const commitResult = JSON.parse(commitText);
+    assert.equal(commitResult.ok, false);
+    assert.equal(commitResult.error.code, "INVALID_EDIT");
+    assert.match(commitResult.error.message, /for project 'alpha-edit'/);
+  });
+
+  test("discard_edit returns next_step guidance", async () => {
+    const proposalText = await callWriteTool("propose_edit", {
+      scene_id: "sc-003",
+      instruction: "Draft and discard test",
+      revised_prose: "Discarded rewrite candidate.",
+    });
+    const proposal = JSON.parse(proposalText);
+    assert.ok(proposal.proposal_id);
+
+    const discardText = await callWriteTool("discard_edit", { proposal_id: proposal.proposal_id });
+    const discarded = JSON.parse(discardText);
+    assert.equal(discarded.ok, true);
+    assert.equal(typeof discarded.next_step, "string");
+    assert.ok(discarded.next_step.includes("propose_edit"));
+  });
+
+  test("list_snapshots returns CONFLICT for ambiguous scene_id without project_id", async () => {
+    const text = await callWriteTool("list_snapshots", { scene_id: "sc-edit-shared-001" });
+    const parsed = JSON.parse(text);
+    assert.equal(parsed.ok, false);
+    assert.equal(parsed.error.code, "CONFLICT");
+    assert.ok(parsed.error.details.project_ids.includes("alpha-edit"));
+    assert.ok(parsed.error.details.project_ids.includes("beta-edit"));
+  });
+
+  test("list_snapshots scopes history with explicit project_id", async () => {
+    const text = await callWriteTool("list_snapshots", {
+      scene_id: "sc-edit-shared-001",
+      project_id: "beta-edit",
+    });
+    const parsed = JSON.parse(text);
+    assert.equal(parsed.project_id, "beta-edit");
+    assert.ok(Array.isArray(parsed.snapshots));
+    assert.ok(parsed.snapshots.length >= 1);
   });
 });

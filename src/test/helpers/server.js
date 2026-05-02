@@ -115,9 +115,17 @@ export function createTestContext(readPort, writePort, extraEnv = {}) {
       return result.content?.[0]?.text ?? "";
     },
 
+    async callToolResult(name, args = {}) {
+      return client.callTool({ name, arguments: args });
+    },
+
     async callWriteTool(name, args = {}) {
       const result = await writeClient.callTool({ name, arguments: args });
       return result.content?.[0]?.text ?? "";
+    },
+
+    async callWriteToolResult(name, args = {}) {
+      return writeClient.callTool({ name, arguments: args });
     },
 
     async waitForAsyncJob(jobId, timeoutMs = 12000) {

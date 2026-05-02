@@ -1,5 +1,6 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
+import { callToolParsed } from "./mcp-result.mjs";
 
 const BASE_URL = "http://localhost:3000";
 
@@ -12,9 +13,10 @@ let failed = 0;
 
 async function test(label, toolName, args, check) {
   try {
-    const result = await client.callTool({ name: toolName, arguments: args });
-    const text = result.content?.[0]?.text ?? "";
-    const ok = check(text);
+    const parsed = await callToolParsed(client, toolName, args);
+    const text = parsed.text;
+    const result = parsed.raw;
+    const ok = check(text, result);
     if (ok) {
       console.log(`  ✓  ${label}`);
       passed++;
@@ -77,7 +79,12 @@ console.log("\n── get_scene_prose ──────────────
 await test(
   "returns prose for sc-001",
   "get_scene_prose", { scene_id: "sc-001" },
-  t => t.includes("gangway") && t.includes("Marcus")
+  (t, result) => {
+    if (result.structuredContent?.warning) {
+      console.log(`     warning: ${result.structuredContent.warning}`);
+    }
+    return t.includes("gangway") && t.includes("Marcus");
+  }
 );
 
 await test(

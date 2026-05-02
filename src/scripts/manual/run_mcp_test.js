@@ -2,6 +2,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import path from "path";
 import process from "process";
+import { callToolParsed } from "./mcp-result.mjs";
 
 function usage() {
   console.log("Usage: node src/scripts/manual/run_mcp_test.js <source_project_dir> [project_id] [sync_dir]");
@@ -30,17 +31,18 @@ async function runCase(env, args) {
     await client.connect(transport);
     
     // Start the async merge job
-    const startResult = await client.callTool({
-      name: "merge_scrivener_project_beta",
-      arguments: args
-    });
+    const startResult = await callToolParsed(client, "merge_scrivener_project_beta", args);
 
     if (startResult.isError) {
-      console.log(`error: ${startResult.content[0].text}`);
+      console.log(`error: ${startResult.text}`);
       return;
     }
 
-    const startData = JSON.parse(startResult.content[0].text);
+    const startData = startResult.data;
+    if (!startData) {
+      console.log("error: invalid start payload");
+      return;
+    }
     if (!startData.ok) {
       console.log(`error: ${startData.error?.code || 'unknown'}`);
       return;
@@ -57,22 +59,20 @@ async function runCase(env, args) {
     while (!settled && attempts < maxAttempts) {
       await new Promise(resolve => setTimeout(resolve, 500));
       
-      const statusResult = await client.callTool({
-        name: "get_async_job_status",
-        arguments: { job_id: jobId, include_result: true }
+      const statusResult = await callToolParsed(client, "get_async_job_status", {
+        job_id: jobId,
+        include_result: true,
       });
 
       if (statusResult.isError) {
-        console.log(`error.code/message: ${statusResult.content?.[0]?.text || "status query failed"}`);
+        console.log(`error.code/message: ${statusResult.text || "status query failed"}`);
         settled = true;
         break;
       }
 
-      let statusData;
-      try {
-        statusData = JSON.parse(statusResult.content[0].text);
-      } catch (parseError) {
-        console.log(`error.code/message: invalid status payload: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
+      const statusData = statusResult.data;
+      if (!statusData) {
+        console.log("error.code/message: invalid status payload");
         settled = true;
         break;
       }

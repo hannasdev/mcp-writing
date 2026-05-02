@@ -311,9 +311,9 @@ describe("reference link search tools", () => {
       `).run("place-hospital", "test-novel", "Hospital", "/tmp/hospital.md");
       
       // Add scene characters and places
-      db.prepare(`INSERT INTO scene_characters (scene_id, character_id) VALUES (?, ?)`).run("sc-001", "char-mira");
-      db.prepare(`INSERT INTO scene_characters (scene_id, character_id) VALUES (?, ?)`).run("sc-001", "char-sebastian");
-      db.prepare(`INSERT INTO scene_places (scene_id, place_id) VALUES (?, ?)`).run("sc-001", "place-hospital");
+      db.prepare(`INSERT INTO scene_characters (scene_id, project_id, character_id) VALUES (?, ?, ?)`).run("sc-001", "test-novel", "char-mira");
+      db.prepare(`INSERT INTO scene_characters (scene_id, project_id, character_id) VALUES (?, ?, ?)`).run("sc-001", "test-novel", "char-sebastian");
+      db.prepare(`INSERT INTO scene_places (scene_id, project_id, place_id) VALUES (?, ?, ?)`).run("sc-001", "test-novel", "place-hospital");
       
       // Create reference docs
       seedReferenceDoc(db, { docId: "ref-vampirism", projectId: "test-novel", title: "Vampirism in the World", type: "world" });
@@ -374,7 +374,7 @@ describe("reference link search tools", () => {
         VALUES (?, ?, ?, ?)
       `).run("char-mira", "test-novel", "Mira", "/tmp/mira.md");
       
-      db.prepare(`INSERT INTO scene_characters (scene_id, character_id) VALUES (?, ?)`).run("sc-001", "char-mira");
+      db.prepare(`INSERT INTO scene_characters (scene_id, project_id, character_id) VALUES (?, ?, ?)`).run("sc-001", "test-novel", "char-mira");
       
       seedReferenceDoc(db, { docId: "ref-vampirism", projectId: "test-novel", title: "Vampirism", type: "world" });
       
@@ -418,7 +418,7 @@ describe("reference link search tools", () => {
         VALUES (?, ?, ?, ?)
       `).run("char-mira", "test-novel", "Mira", "/tmp/mira.md");
 
-      db.prepare(`INSERT INTO scene_characters (scene_id, character_id) VALUES (?, ?)`).run("sc-001", "char-mira");
+      db.prepare(`INSERT INTO scene_characters (scene_id, project_id, character_id) VALUES (?, ?, ?)`).run("sc-001", "test-novel", "char-mira");
 
       seedReferenceDoc(db, { docId: "ref-vampirism", projectId: "test-novel", title: "Vampirism", type: "world" });
 
@@ -467,8 +467,8 @@ describe("reference link search tools", () => {
         VALUES (?, ?, ?, ?)
       `).run("place-hospital", "test-novel", "Hospital", "/tmp/hospital.md");
 
-      db.prepare(`INSERT INTO scene_characters (scene_id, character_id) VALUES (?, ?)`).run("sc-001", "char-mira");
-      db.prepare(`INSERT INTO scene_places (scene_id, place_id) VALUES (?, ?)`).run("sc-001", "place-hospital");
+      db.prepare(`INSERT INTO scene_characters (scene_id, project_id, character_id) VALUES (?, ?, ?)`).run("sc-001", "test-novel", "char-mira");
+      db.prepare(`INSERT INTO scene_places (scene_id, project_id, place_id) VALUES (?, ?, ?)`).run("sc-001", "test-novel", "place-hospital");
 
       seedReferenceDoc(db, { docId: "ref-correct", projectId: "test-novel", title: "Correct Doc", type: "world" });
       seedReferenceDoc(db, { docId: "ref-foreign", projectId: "other-novel", title: "Foreign Doc", type: "world" });
@@ -560,8 +560,8 @@ describe("reference link search tools", () => {
       `).run("char-ghost", "test-novel", "Ghost", "/tmp/ghost.md");
 
       // Join table contains both rows because it is not project-scoped.
-      db.prepare(`INSERT INTO scene_characters (scene_id, character_id) VALUES (?, ?)`).run("sc-001", "char-mira");
-      db.prepare(`INSERT INTO scene_characters (scene_id, character_id) VALUES (?, ?)`).run("sc-001", "char-ghost");
+      db.prepare(`INSERT INTO scene_characters (scene_id, project_id, character_id) VALUES (?, ?, ?)`).run("sc-001", "test-novel", "char-mira");
+      db.prepare(`INSERT INTO scene_characters (scene_id, project_id, character_id) VALUES (?, ?, ?)`).run("sc-001", "test-novel", "char-ghost");
 
       seedReferenceDoc(db, { docId: "ref-correct", projectId: "test-novel", title: "Correct Doc", type: "world" });
       seedReferenceDoc(db, { docId: "ref-leaked", projectId: "test-novel", title: "Leaked Doc", type: "world" });
@@ -617,7 +617,7 @@ describe("reference link search tools", () => {
       `).run("char-leaked", "test-novel", "Leaked", "/tmp/leaked.md");
 
       // Non-project-scoped join table row that should not be used when metadata read succeeds.
-      db.prepare(`INSERT INTO scene_characters (scene_id, character_id) VALUES (?, ?)`).run("sc-001", "char-leaked");
+      db.prepare(`INSERT INTO scene_characters (scene_id, project_id, character_id) VALUES (?, ?, ?)`).run("sc-001", "test-novel", "char-leaked");
 
       seedReferenceDoc(db, { docId: "ref-leaked", projectId: "test-novel", title: "Leaked Doc", type: "world" });
       seedReferenceLink(db, {
@@ -649,7 +649,7 @@ describe("reference link search tools", () => {
         INSERT INTO characters (character_id, project_id, name, file_path)
         VALUES (?, ?, ?, ?)
       `).run("char-mira", "test-novel", "Mira", "/tmp/mira.md");
-      db.prepare(`INSERT INTO scene_characters (scene_id, character_id) VALUES (?, ?)`).run("sc-001", "char-mira");
+      db.prepare(`INSERT INTO scene_characters (scene_id, project_id, character_id) VALUES (?, ?, ?)`).run("sc-001", "test-novel", "char-mira");
 
       seedReferenceDoc(db, { docId: "ref-existing", projectId: "test-novel", title: "Existing", type: "world" });
 
@@ -801,7 +801,7 @@ describe("reference link search tools", () => {
         INSERT INTO characters (character_id, project_id, name, file_path)
         VALUES (?, ?, ?, ?)
       `).run("char-mira", "test-novel", "Mira", "/tmp/mira.md");
-      db.prepare(`INSERT INTO scene_characters (scene_id, character_id) VALUES (?, ?)`).run("sc-001", "char-mira");
+      db.prepare(`INSERT INTO scene_characters (scene_id, project_id, character_id) VALUES (?, ?, ?)`).run("sc-001", "test-novel", "char-mira");
 
       seedReferenceDoc(db, { docId: "ref-vampirism", projectId: "test-novel", title: "Vampirism", type: "world" });
       seedReferenceLink(db, {
@@ -855,7 +855,7 @@ describe("reference link search tools", () => {
         INSERT INTO characters (character_id, project_id, name, file_path)
         VALUES (?, ?, ?, ?)
       `).run("char-mira", "test-novel", "Mira", "/tmp/mira.md");
-      db.prepare(`INSERT INTO scene_characters (scene_id, character_id) VALUES (?, ?)`).run("sc-001", "char-mira");
+      db.prepare(`INSERT INTO scene_characters (scene_id, project_id, character_id) VALUES (?, ?, ?)`).run("sc-001", "test-novel", "char-mira");
 
       seedReferenceDoc(db, { docId: "ref-vampirism", projectId: "test-novel", title: "Vampirism", type: "world" });
       seedReferenceLink(db, {

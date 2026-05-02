@@ -228,3 +228,28 @@ Fix:
 1. Verify that `output_dir` is an absolute path pointing to a writable location inside the manuscript sync folder (`WRITING_SYNC_DIR`).
 2. You do not need to create the output directory first; the tool creates it if it does not already exist.
 3. Use a simple `bundle_name` with alphanumeric characters and hyphens — special characters are slugified to a safe name, and if nothing usable remains the tool falls back to `review-bundle`.
+
+### `find_scenes` / `get_arc` parsing after response-contract cleanup
+
+`find_scenes` and `get_arc` return envelope responses, including non-paginated calls.
+
+Current behavior:
+
+1. Both tools always return `results` and `total_count`.
+2. Pagination metadata is included when paging is active.
+3. `warning` and `next_step` are included only when relevant.
+
+Fix:
+
+Parse these tools as envelope-only responses and read scenes from `parsed.results`.
+
+### Runtime warning: `LEGACY_JOIN_ROWS_SKIPPED`
+
+If the server prints `LEGACY_JOIN_ROWS_SKIPPED` (and the same warning appears in `get_runtime_config.db_migration_warnings` or `describe_workflows.context.db_migration_warnings`), some legacy join rows were intentionally skipped during upgrade because duplicate `scene_id` values across projects could not be disambiguated safely.
+
+Required post-upgrade step:
+
+1. Run `sync()` immediately after upgrade to rebuild index links from sidecars/prose.
+2. If stale metadata warnings remain while you work, run `enrich_scene(scene_id, project_id)` for the touched scenes.
+
+This warning is operator-visible by design and should be treated as an explicit migration follow-up signal, not a silent background event.

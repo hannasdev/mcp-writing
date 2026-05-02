@@ -27,21 +27,15 @@ describe("search tools integration suite", { concurrency: 1 }, () => {
   test("returns all 3 scenes with no filters", async () => {
     const text = await callTool("find_scenes");
     const parsed = JSON.parse(text);
-    if (Array.isArray(parsed)) {
-      assert.equal(parsed.length, 3);
-    } else {
-      assert.equal(parsed.total_count, 3);
-    }
+    assert.equal(Array.isArray(parsed.results), true);
+    assert.equal(parsed.total_count, 3);
   });
 
   test("filters by character: elena appears in all 3 scenes", async () => {
     const text = await callTool("find_scenes", { character: "elena" });
     const parsed = JSON.parse(text);
-    if (Array.isArray(parsed)) {
-      assert.equal(parsed.length, 3);
-    } else {
-      assert.equal(parsed.total_count, 3);
-    }
+    assert.equal(Array.isArray(parsed.results), true);
+    assert.equal(parsed.total_count, 3);
   });
 
   test("filters by character: marcus appears in 2 scenes", async () => {
@@ -96,6 +90,38 @@ describe("search tools integration suite", { concurrency: 1 }, () => {
     assert.equal(parsed.page, 2);
     assert.equal(parsed.results.length, 1);
   });
+
+  test("suggests local parity recovery when stale scenes are present", async () => {
+    const scenePath = path.join(writeSyncDir, "projects", "test-novel", "part-1", "chapter-1", "sc-001.md");
+    const before = fs.readFileSync(scenePath, "utf8");
+    fs.writeFileSync(scenePath, `${before}\n\nParity hint marker for find_scenes.\n`, "utf8");
+    await callWriteTool("sync");
+
+    const text = await callWriteTool("find_scenes", { character: "elena", page_size: 2, page: 1 });
+    const parsed = JSON.parse(text);
+    assert.equal(typeof parsed.warning, "string");
+    assert.ok(parsed.warning.toLowerCase().includes("stale metadata"));
+    assert.equal(typeof parsed.next_step, "string");
+    assert.ok(parsed.next_step.includes("enrich_scene"));
+
+    await callWriteTool("enrich_scene", { scene_id: "sc-001", project_id: "test-novel" });
+  });
+
+  test("includes next_step for stale unpaginated responses", async () => {
+    const scenePath = path.join(writeSyncDir, "projects", "test-novel", "part-1", "chapter-2", "sc-003.md");
+    const before = fs.readFileSync(scenePath, "utf8");
+    fs.writeFileSync(scenePath, `${before}\n\nParity hint marker for unpaginated find_scenes.\n`, "utf8");
+    await callWriteTool("sync");
+
+    const text = await callWriteTool("find_scenes", { beat: "Catalyst" });
+    const parsed = JSON.parse(text);
+    assert.equal(Array.isArray(parsed), false);
+    assert.equal(parsed.total_count, 1);
+    assert.equal(typeof parsed.next_step, "string");
+    assert.ok(parsed.next_step.includes("enrich_scene"));
+
+    await callWriteTool("enrich_scene", { scene_id: "sc-003", project_id: "test-novel" });
+  });
 });
 
 describe("get_scene_prose tool", () => {
@@ -113,19 +139,96 @@ describe("get_scene_prose tool", () => {
 
   test("returns not-found message for unknown scene", async () => {
     const text = await callTool("get_scene_prose", { scene_id: "sc-999" });
-    assert.ok(text.toLowerCase().includes("not found"));
+    const parsed = JSON.parse(text);
+    assert.equal(parsed.ok, false);
+    assert.equal(parsed.error.code, "NOT_FOUND");
+    assert.ok(parsed.error.details.next_step.includes("Run sync()"));
+  });
+
+  test("includes parity recovery suggestion when scene metadata is stale", async () => {
+    const scenePath = path.join(writeSyncDir, "projects", "test-novel", "part-1", "chapter-1", "sc-002.md");
+    const before = fs.readFileSync(scenePath, "utf8");
+    fs.writeFileSync(scenePath, `${before}\n\nParity hint marker for get_scene_prose.\n`, "utf8");
+    await callWriteTool("sync");
+
+    const result = await ctx.writeClient.callTool({ name: "get_scene_prose", arguments: { scene_id: "sc-002" } });
+    const text = result.content?.[0]?.text ?? "";
+    assert.ok(!text.includes("Metadata for this scene may be stale"));
+    assert.ok(!text.includes("Suggested next step"));
+    assert.equal(result.structuredContent.warning.includes("stale"), true);
+    assert.ok(result.structuredContent.next_step.includes("enrich_scene"));
+    assert.ok(result.structuredContent.next_step.includes("project_id test-novel"));
+
+    await callWriteTool("enrich_scene", { scene_id: "sc-002", project_id: "test-novel" });
+  });
+
+  test("returns CONFLICT for ambiguous scene_id without project_id", async () => {
+    const alphaScenePath = path.join(writeSyncDir, "projects", "alpha-prose", "scenes", "dup-scene.md");
+    const betaScenePath = path.join(writeSyncDir, "projects", "beta-prose", "scenes", "dup-scene.md");
+    fs.mkdirSync(path.dirname(alphaScenePath), { recursive: true });
+    fs.mkdirSync(path.dirname(betaScenePath), { recursive: true });
+    fs.writeFileSync(alphaScenePath, "---\nscene_id: sc-prose-shared-001\ntitle: Alpha Prose\n---\nAlpha prose body.");
+    fs.writeFileSync(betaScenePath, "---\nscene_id: sc-prose-shared-001\ntitle: Beta Prose\n---\nBeta prose body.");
+
+    await callWriteTool("sync");
+
+    const text = await callWriteTool("get_scene_prose", { scene_id: "sc-prose-shared-001" });
+    const parsed = JSON.parse(text);
+    assert.equal(parsed.ok, false);
+    assert.equal(parsed.error.code, "CONFLICT");
+    assert.ok(Array.isArray(parsed.error.details.project_ids));
+    assert.ok(parsed.error.details.project_ids.includes("alpha-prose"));
+    assert.ok(parsed.error.details.project_ids.includes("beta-prose"));
+  });
+
+  test("returns disambiguated prose when project_id is provided", async () => {
+    const text = await callWriteTool("get_scene_prose", {
+      scene_id: "sc-prose-shared-001",
+      project_id: "beta-prose",
+    });
+    assert.ok(text.includes("Beta prose body."));
+    assert.ok(!text.includes("Alpha prose body."));
+  });
+
+  test("does not leak character-filtered results across projects when scene_id is reused", async () => {
+    const alphaScenePath = path.join(writeSyncDir, "projects", "alpha-find", "scenes", "shared.md");
+    const betaScenePath = path.join(writeSyncDir, "projects", "beta-find", "scenes", "shared.md");
+    fs.mkdirSync(path.dirname(alphaScenePath), { recursive: true });
+    fs.mkdirSync(path.dirname(betaScenePath), { recursive: true });
+    fs.writeFileSync(alphaScenePath, "---\nscene_id: sc-find-shared-001\ntitle: Alpha Shared\ncharacters:\n  - alpha-hero\ntags:\n  - alpha-tag\n---\nAlpha prose body.");
+    fs.writeFileSync(betaScenePath, "---\nscene_id: sc-find-shared-001\ntitle: Beta Shared\ncharacters:\n  - beta-hero\ntags:\n  - beta-tag\n---\nBeta prose body.");
+
+    await callWriteTool("sync");
+
+    const findText = await callWriteTool("find_scenes", { character: "alpha-hero" });
+    const findParsed = JSON.parse(findText);
+    assert.equal(findParsed.total_count, 1);
+    assert.equal(findParsed.results[0].project_id, "alpha-find");
+    assert.equal(findParsed.results[0].scene_id, "sc-find-shared-001");
+
+    const arcText = await callWriteTool("get_arc", { character_id: "beta-hero" });
+    const arcParsed = JSON.parse(arcText);
+    assert.equal(arcParsed.total_count, 1);
+    assert.equal(arcParsed.results[0].project_id, "beta-find");
+    assert.equal(arcParsed.results[0].scene_id, "sc-find-shared-001");
   });
 });
 
 describe("get_chapter_prose tool", () => {
   test("returns prose for both scenes in part 1 chapter 1", async () => {
-    const text = await callTool("get_chapter_prose", {
+    const result = await ctx.client.callTool({
+      name: "get_chapter_prose",
+      arguments: {
       project_id: "test-novel",
       part: 1,
       chapter: 1,
+      },
     });
+    const text = result.content?.[0]?.text ?? "";
     assert.ok(text.includes("gangway") || text.includes("bait shed"),
       `Expected chapter prose keywords, got: ${text.slice(0, 200)}`);
+    assert.ok(!text.includes("Suggested next step"));
+    assert.ok(result.structuredContent.next_step.includes("find_scenes + get_scene_prose"));
   });
 });
 
@@ -133,11 +236,8 @@ describe("get_arc tool", () => {
   test("elena arc returns 3 scenes", async () => {
     const text = await callTool("get_arc", { character_id: "elena" });
     const parsed = JSON.parse(text);
-    if (Array.isArray(parsed)) {
-      assert.equal(parsed.length, 3);
-    } else {
-      assert.equal(parsed.total_count, 3);
-    }
+    assert.equal(Array.isArray(parsed.results), true);
+    assert.equal(parsed.total_count, 3);
   });
 
   test("elena arc first scene is sc-001", async () => {
@@ -170,21 +270,46 @@ describe("get_arc tool", () => {
     assert.equal(parsed.page, 1);
     assert.equal(parsed.results.length, 2);
   });
+
+  test("includes next_step for stale unpaginated arc responses", async () => {
+    const scenePath = path.join(writeSyncDir, "projects", "test-novel", "part-1", "chapter-1", "sc-002.md");
+    const before = fs.readFileSync(scenePath, "utf8");
+    fs.writeFileSync(scenePath, `${before}\n\nParity hint marker for unpaginated get_arc.\n`, "utf8");
+    await callWriteTool("sync");
+
+    const text = await callWriteTool("get_arc", { character_id: "marcus" });
+    const parsed = JSON.parse(text);
+    assert.equal(Array.isArray(parsed), false);
+    assert.equal(parsed.total_count, 2);
+    assert.equal(typeof parsed.warning, "string");
+    assert.ok(parsed.warning.toLowerCase().includes("stale metadata"));
+    assert.equal(typeof parsed.next_step, "string");
+    assert.ok(parsed.next_step.includes("enrich_scene"));
+
+    await callWriteTool("enrich_scene", { scene_id: "sc-002", project_id: "test-novel" });
+  });
 });
 
 describe("list_characters tool", () => {
   test("lists elena and marcus", async () => {
     const text = await callTool("list_characters");
-    assert.ok(text.includes("elena"));
-    assert.ok(text.includes("marcus"));
+    const parsed = JSON.parse(text);
+    assert.equal(Array.isArray(parsed.results), true);
+    assert.equal(parsed.total_count >= 2, true);
+    const ids = parsed.results.map((row) => row.character_id);
+    assert.ok(ids.includes("elena"));
+    assert.ok(ids.includes("marcus"));
   });
 });
 
 describe("get_character_sheet tool", () => {
   test("elena sheet includes traits", async () => {
     const text = await callTool("get_character_sheet", { character_id: "elena" });
-    assert.ok(text.includes("driven") || text.includes("walls"),
+    const parsed = JSON.parse(text);
+    assert.ok((text.includes("driven") || text.includes("walls")),
       `Expected trait keywords for elena, got: ${text.slice(0, 200)}`);
+    assert.equal(typeof parsed.next_step, "string");
+    assert.ok(parsed.next_step.includes("get_arc"));
   });
 
   test("marcus sheet includes arc_summary", async () => {
@@ -211,12 +336,25 @@ describe("get_character_sheet tool", () => {
     assert.equal(parsed.supporting_notes[0].file_name, "arc.md");
     assert.equal(parsed.supporting_notes[0].content, "Alba support arc notes.");
   });
+
+  test("returns next_step guidance on unknown character", async () => {
+    const text = await callTool("get_character_sheet", { character_id: "char-does-not-exist" });
+    const parsed = JSON.parse(text);
+    assert.equal(parsed.ok, false);
+    assert.equal(parsed.error.code, "NOT_FOUND");
+    assert.equal(typeof parsed.error.details?.next_step, "string");
+    assert.ok(parsed.error.details.next_step.includes("list_characters"));
+  });
 });
 
 describe("list_places tool", () => {
   test("lists harbor-district", async () => {
     const text = await callTool("list_places");
-    assert.ok(text.includes("harbor-district"));
+    const parsed = JSON.parse(text);
+    assert.equal(Array.isArray(parsed.results), true);
+    assert.equal(parsed.total_count >= 1, true);
+    const ids = parsed.results.map((row) => row.place_id);
+    assert.ok(ids.includes("harbor-district"));
   });
 });
 
@@ -228,6 +366,8 @@ describe("get_place_sheet tool", () => {
     assert.ok(parsed.associated_characters.includes("elena"));
     assert.ok(parsed.tags.includes("urban"));
     assert.ok(parsed.notes.includes("brine and diesel"));
+    assert.equal(typeof parsed.next_step, "string");
+    assert.ok(parsed.next_step.includes("find_scenes"));
   });
 
   test("returns adjacent support notes for nested place folders", async () => {
@@ -250,17 +390,31 @@ describe("get_place_sheet tool", () => {
     assert.equal(parsed.supporting_notes[0].file_name, "history.md");
     assert.equal(parsed.supporting_notes[0].content, "Aevi Labs support history notes.");
   });
+
+  test("returns next_step guidance on unknown place", async () => {
+    const text = await callTool("get_place_sheet", { place_id: "place-does-not-exist" });
+    const parsed = JSON.parse(text);
+    assert.equal(parsed.ok, false);
+    assert.equal(parsed.error.code, "NOT_FOUND");
+    assert.equal(typeof parsed.error.details?.next_step, "string");
+    assert.ok(parsed.error.details.next_step.includes("list_places"));
+  });
 });
 
 describe("search_metadata tool", () => {
   test("search envelope returns sc-003 (logline)", async () => {
     const text = await callTool("search_metadata", { query: "envelope" });
-    assert.ok(text.includes("sc-003"));
+    const parsed = JSON.parse(text);
+    assert.equal(Array.isArray(parsed.results), true);
+    assert.equal(parsed.total_count >= 1, true);
+    assert.ok(parsed.results.some((row) => row.scene_id === "sc-003"));
   });
 
   test("search matches metadata keyword phrases from sidecar fields", async () => {
     const text = await callTool("search_metadata", { query: '"Daniel Nystrom"' });
-    assert.ok(text.includes("sc-002"));
+    const parsed = JSON.parse(text);
+    assert.equal(Array.isArray(parsed.results), true);
+    assert.ok(parsed.results.some((row) => row.scene_id === "sc-002"));
   });
 
   test("supports pagination with total_count", async () => {
@@ -291,25 +445,25 @@ describe("search_reference tool", () => {
   test("finds reference docs by title and summary text", async () => {
     const text = await callTool("search_reference", { query: "vampirism" });
     const parsed = JSON.parse(text);
-    assert.equal(parsed.length, 1);
-    assert.equal(parsed[0].type, "world");
-    assert.equal(parsed[0].title, "Vampirism in this universe");
-    assert.ok(parsed[0].tags.includes("vampirism"));
+    assert.equal(parsed.total_count, 1);
+    assert.equal(parsed.results[0].type, "world");
+    assert.equal(parsed.results[0].title, "Vampirism in this universe");
+    assert.ok(parsed.results[0].tags.includes("vampirism"));
   });
 
   test("supports exact tag filtering", async () => {
     const text = await callTool("search_reference", { query: "blood", tag: "continuity" });
     const parsed = JSON.parse(text);
-    assert.equal(parsed.length, 1);
-    assert.equal(parsed[0].type, "continuity");
-    assert.equal(parsed[0].title, "Sebastian's struggle for blood replacement");
+    assert.equal(parsed.total_count, 1);
+    assert.equal(parsed.results[0].type, "continuity");
+    assert.equal(parsed.results[0].title, "Sebastian's struggle for blood replacement");
   });
 
   test("supports type filtering", async () => {
     const text = await callTool("search_reference", { query: "blood", type: "world" });
     const parsed = JSON.parse(text);
-    assert.equal(parsed.length, 1);
-    assert.equal(parsed[0].type, "world");
+    assert.equal(parsed.total_count, 1);
+    assert.equal(parsed.results[0].type, "world");
   });
 
   test("returns INVALID_QUERY on malformed FTS syntax", async () => {
@@ -474,6 +628,8 @@ describe("list_threads tool", () => {
     assert.equal(parsed.total_count, 0);
     assert.equal(Array.isArray(parsed.results), true);
     assert.equal(parsed.results.length, 0);
+    assert.equal(typeof parsed.next_step, "string");
+    assert.ok(parsed.next_step.includes("get_thread_arc"));
   });
 
   test("supports pagination fields on explicit page request", async () => {
@@ -485,6 +641,8 @@ describe("list_threads tool", () => {
     assert.equal(parsed.page_size, 1);
     assert.equal(parsed.total_pages, 1);
     assert.equal(Array.isArray(parsed.results), true);
+    assert.equal(typeof parsed.next_step, "string");
+    assert.ok(parsed.next_step.includes("get_thread_arc"));
   });
 });
 
@@ -494,6 +652,68 @@ describe("thread arc tool", () => {
     const parsed = JSON.parse(text);
     assert.equal(parsed.ok, false);
     assert.equal(parsed.error.code, "NOT_FOUND");
+  });
+
+  test("includes next_step for stale thread arc responses", async () => {
+    await callWriteTool("upsert_thread_link", {
+      project_id: "test-novel",
+      thread_id: "thread-stale-001",
+      thread_name: "Stale Thread",
+      scene_id: "sc-001",
+      beat: "Opening",
+    });
+
+    const scenePath = path.join(writeSyncDir, "projects", "test-novel", "part-1", "chapter-1", "sc-001.md");
+    const before = fs.readFileSync(scenePath, "utf8");
+    fs.writeFileSync(scenePath, `${before}\n\nParity hint marker for get_thread_arc.\n`, "utf8");
+    await callWriteTool("sync");
+
+    const text = await callWriteTool("get_thread_arc", { thread_id: "thread-stale-001" });
+    const parsed = JSON.parse(text);
+    assert.equal(parsed.thread.thread_id, "thread-stale-001");
+    assert.equal(typeof parsed.warning, "string");
+    assert.ok(parsed.warning.toLowerCase().includes("stale metadata"));
+    assert.equal(typeof parsed.next_step, "string");
+    assert.ok(parsed.next_step.includes("enrich_scene"));
+
+    await callWriteTool("enrich_scene", { scene_id: "sc-001", project_id: "test-novel" });
+  });
+
+  test("does not leak thread scenes across projects when scene_id is reused", async () => {
+    const alphaScenePath = path.join(writeSyncDir, "projects", "alpha-thread", "scenes", "shared.md");
+    const betaScenePath = path.join(writeSyncDir, "projects", "beta-thread", "scenes", "shared.md");
+    fs.mkdirSync(path.dirname(alphaScenePath), { recursive: true });
+    fs.mkdirSync(path.dirname(betaScenePath), { recursive: true });
+    fs.writeFileSync(alphaScenePath, "---\nscene_id: sc-thread-shared-001\ntitle: Alpha Thread Scene\n---\nAlpha thread prose.");
+    fs.writeFileSync(betaScenePath, "---\nscene_id: sc-thread-shared-001\ntitle: Beta Thread Scene\n---\nBeta thread prose.");
+
+    await callWriteTool("sync");
+    await callWriteTool("upsert_thread_link", {
+      project_id: "alpha-thread",
+      thread_id: "thread-alpha-only",
+      thread_name: "Alpha Only",
+      scene_id: "sc-thread-shared-001",
+      beat: "Alpha beat",
+    });
+    await callWriteTool("upsert_thread_link", {
+      project_id: "beta-thread",
+      thread_id: "thread-beta-only",
+      thread_name: "Beta Only",
+      scene_id: "sc-thread-shared-001",
+      beat: "Beta beat",
+    });
+
+    const alphaText = await callWriteTool("get_thread_arc", { thread_id: "thread-alpha-only" });
+    const alphaParsed = JSON.parse(alphaText);
+    assert.equal(alphaParsed.total_count, 1);
+    assert.equal(alphaParsed.results[0].project_id, "alpha-thread");
+    assert.equal(alphaParsed.results[0].thread_beat, "Alpha beat");
+
+    const betaText = await callWriteTool("get_thread_arc", { thread_id: "thread-beta-only" });
+    const betaParsed = JSON.parse(betaText);
+    assert.equal(betaParsed.total_count, 1);
+    assert.equal(betaParsed.results[0].project_id, "beta-thread");
+    assert.equal(betaParsed.results[0].thread_beat, "Beta beat");
   });
 });
 

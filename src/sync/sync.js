@@ -919,13 +919,10 @@ function pruneMissingScenes(db, seenSceneKeys, syncDir) {
       WHERE source_kind = 'scene' AND source_project_id = ? AND source_id = ?
     `).run(row.project_id ?? "", row.scene_id);
     db.prepare(`DELETE FROM scenes WHERE scene_id = ? AND project_id = ?`).run(row.scene_id, row.project_id);
-
-    const remainingScene = db.prepare(`SELECT 1 FROM scenes WHERE scene_id = ? LIMIT 1`).get(row.scene_id);
-    if (!remainingScene) {
-      db.prepare(`DELETE FROM scene_characters WHERE scene_id = ?`).run(row.scene_id);
-      db.prepare(`DELETE FROM scene_places WHERE scene_id = ?`).run(row.scene_id);
-      db.prepare(`DELETE FROM scene_tags WHERE scene_id = ?`).run(row.scene_id);
-    }
+    db.prepare(`DELETE FROM scene_characters WHERE scene_id = ? AND project_id = ?`).run(row.scene_id, row.project_id);
+    db.prepare(`DELETE FROM scene_places WHERE scene_id = ? AND project_id = ?`).run(row.scene_id, row.project_id);
+    db.prepare(`DELETE FROM scene_tags WHERE scene_id = ? AND project_id = ?`).run(row.scene_id, row.project_id);
+    db.prepare(`DELETE FROM scene_threads WHERE scene_id = ? AND project_id = ?`).run(row.scene_id, row.project_id);
   }
 }
 
@@ -994,14 +991,14 @@ export function indexSceneFile(db, syncDir, file, meta, prose) {
     new Date().toISOString()
   );
 
-  db.prepare(`DELETE FROM scene_characters WHERE scene_id = ?`).run(meta.scene_id);
-  db.prepare(`DELETE FROM scene_places WHERE scene_id = ?`).run(meta.scene_id);
-  db.prepare(`DELETE FROM scene_tags WHERE scene_id = ?`).run(meta.scene_id);
+  db.prepare(`DELETE FROM scene_characters WHERE scene_id = ? AND project_id = ?`).run(meta.scene_id, project_id);
+  db.prepare(`DELETE FROM scene_places WHERE scene_id = ? AND project_id = ?`).run(meta.scene_id, project_id);
+  db.prepare(`DELETE FROM scene_tags WHERE scene_id = ? AND project_id = ?`).run(meta.scene_id, project_id);
 
   for (const c of (meta.characters ?? [])) {
     // Version continuity markers (e.g. v7.3, v3.3b) are tracked as tags, not characters
     if (/^v\d[\d.a-z]*$/i.test(c)) {
-      db.prepare(`INSERT OR IGNORE INTO scene_tags (scene_id, tag) VALUES (?, ?)`).run(meta.scene_id, c);
+      db.prepare(`INSERT OR IGNORE INTO scene_tags (scene_id, project_id, tag) VALUES (?, ?, ?)`).run(meta.scene_id, project_id, c);
       continue;
     }
     let cid = c;
@@ -1021,23 +1018,23 @@ export function indexSceneFile(db, syncDir, file, meta, prose) {
       }
       if (row) cid = row.character_id;
     }
-    db.prepare(`INSERT OR IGNORE INTO scene_characters (scene_id, character_id) VALUES (?, ?)`).run(
-      meta.scene_id, cid
+    db.prepare(`INSERT OR IGNORE INTO scene_characters (scene_id, project_id, character_id) VALUES (?, ?, ?)`).run(
+      meta.scene_id, project_id, cid
     );
   }
   for (const p of (meta.places ?? [])) {
-    db.prepare(`INSERT OR IGNORE INTO scene_places (scene_id, place_id) VALUES (?, ?)`).run(
-      meta.scene_id, p
+    db.prepare(`INSERT OR IGNORE INTO scene_places (scene_id, project_id, place_id) VALUES (?, ?, ?)`).run(
+      meta.scene_id, project_id, p
     );
   }
   for (const t of (meta.tags ?? [])) {
-    db.prepare(`INSERT OR IGNORE INTO scene_tags (scene_id, tag) VALUES (?, ?)`).run(
-      meta.scene_id, t
+    db.prepare(`INSERT OR IGNORE INTO scene_tags (scene_id, project_id, tag) VALUES (?, ?, ?)`).run(
+      meta.scene_id, project_id, t
     );
   }
   for (const v of (meta.versions ?? [])) {
-    db.prepare(`INSERT OR IGNORE INTO scene_tags (scene_id, tag) VALUES (?, ?)`).run(
-      meta.scene_id, v
+    db.prepare(`INSERT OR IGNORE INTO scene_tags (scene_id, project_id, tag) VALUES (?, ?, ?)`).run(
+      meta.scene_id, project_id, v
     );
   }
 
