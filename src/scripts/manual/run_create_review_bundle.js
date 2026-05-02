@@ -3,6 +3,7 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import path from "path";
 import process from "process";
 import fs from "node:fs";
+import { callToolParsed } from "./mcp-result.mjs";
 
 async function main() {
   const [projectId, profile, outputDir, ...flags] = process.argv.slice(2);
@@ -64,29 +65,29 @@ async function main() {
     await client.connect(transport);
 
     if (!skipPreview) {
-      const previewResult = await client.callTool({
-        name: "preview_review_bundle",
-        arguments: baseArguments,
-      });
-      const previewText = previewResult.content?.[0]?.text ?? "";
+      const previewResult = await callToolParsed(client, "preview_review_bundle", baseArguments);
+      const previewText = previewResult.text;
       console.log("\n=== preview_review_bundle ===");
       console.log(previewText);
+      if (previewResult.structured) {
+        console.log("structuredContent:", JSON.stringify(previewResult.structured, null, 2));
+      }
     }
 
-    const result = await client.callTool({
-      name: "create_review_bundle",
-      arguments: {
-        ...baseArguments,
-        output_dir: outputDir,
-      }
+    const result = await callToolParsed(client, "create_review_bundle", {
+      ...baseArguments,
+      output_dir: outputDir,
     });
 
-    const resultText = result.content?.[0]?.text ?? "";
+    const resultText = result.text;
     console.log("\n=== create_review_bundle ===");
     console.log(resultText);
+    if (result.structured) {
+      console.log("structuredContent:", JSON.stringify(result.structured, null, 2));
+    }
 
     if (showFiles) {
-      const parsed = JSON.parse(resultText);
+      const parsed = result.data ?? {};
       if (parsed.ok && parsed.output_paths) {
         printArtifactExcerpt("Bundle Markdown", parsed.output_paths.bundle_markdown);
         printArtifactExcerpt("Manifest JSON", parsed.output_paths.manifest_json);

@@ -7,6 +7,7 @@ import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import { URL as NodeURL } from "node:url";
 import { execSync } from "node:child_process";
 import fs from "node:fs";
+import { callToolParsed } from "./manual/mcp-result.mjs";
 
 const ROOT = process.cwd();
 
@@ -38,7 +39,8 @@ async function connectClient(url) {
 
 async function callTool(client, name, args = {}) {
   try {
-    return await client.callTool({ name, arguments: args });
+    const parsed = await callToolParsed(client, name, args);
+    return parsed.raw;
   } catch (e) {
     return { error: e.message };
   }
@@ -48,12 +50,14 @@ function parseResponse(result) {
   if (result.error) return { error: result.error };
   try {
     const text = result.content?.[0]?.text;
+    const structured = result.structuredContent;
     if (!text) return { raw: result };
     // Try to parse as JSON
     try {
-      return JSON.parse(text);
+      const parsed = JSON.parse(text);
+      return structured ? { ...parsed, _structured: structured } : parsed;
     } catch {
-      return { text };
+      return structured ? { text, _structured: structured } : { text };
     }
   } catch {
     return { raw: result };
@@ -218,7 +222,10 @@ async function runPhaseB() {
       const proseRes = await callTool(client, "get_scene_prose", { scene_id: results.firstSceneId });
       const proseData = parseResponse(proseRes);
       results.proseExcerpt = proseData.prose?.slice(0, 200) || proseData.text?.slice(0, 200) || proseRes.content?.[0]?.text?.slice(0, 200) || "(no prose)";
+      results.proseWarning = proseData._structured?.warning || null;
+      results.proseNextStep = proseData._structured?.next_step || null;
       console.log("get_scene_prose excerpt:", results.proseExcerpt.slice(0, 150) + "...");
+      if (results.proseWarning) console.log("get_scene_prose warning:", results.proseWarning);
     } else {
       results.proseExcerpt = "(no scene_id available)";
     }
@@ -260,6 +267,7 @@ async function main() {
   console.log("  Place count:", phaseB.placeCount);
   console.log("  Airport search count:", phaseB.airportSearchCount);
   console.log("  First scene_id:", phaseB.firstSceneId || "N/A");
+  if (phaseB.proseWarning) console.log("  Prose warning:", phaseB.proseWarning);
   console.log("  Prose excerpt (200 chars):", phaseB.proseExcerpt?.slice(0, 200) || "N/A");
   if (phaseB.warnings.length) console.log("  Lint warnings:", phaseB.warnings.length > 0 ? "Yes (see above)" : "None");
   if (phaseB.errors.length) console.log("  Errors:", phaseB.errors);

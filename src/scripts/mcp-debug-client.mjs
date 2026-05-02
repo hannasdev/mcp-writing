@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import { URL as NodeURL } from "node:url";
+import { callToolParsed } from "./manual/mcp-result.mjs";
 
 const ROOT = process.cwd();
 
@@ -31,11 +32,11 @@ try {
   const transport = new SSEClientTransport(new NodeURL(`${BASE}/sse`));
   await client.connect(transport);
   
-  await client.callTool({ name: "sync", arguments: {} });
+  await callToolParsed(client, "sync", {});
   
-  const scenes = await client.callTool({ name: "find_scenes", arguments: { project_id: "scrivener-export", page_size: 3, page: 1 } });
+  const scenes = await callToolParsed(client, "find_scenes", { project_id: "scrivener-export", page_size: 3, page: 1 });
   console.log("=== find_scenes raw response ===");
-  console.log(JSON.stringify(scenes, null, 2));
+  console.log(JSON.stringify(scenes.raw, null, 2));
   
   await client.close();
 } finally {

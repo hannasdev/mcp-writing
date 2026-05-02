@@ -173,6 +173,173 @@ describe("openDb", () => {
       fs.rmSync(dbPath, { force: true });
     }
   });
+
+  test("migrates legacy scene join tables to include project_id", () => {
+    const dbPath = makeTempPath();
+    try {
+      const legacyDb = new DatabaseSync(dbPath);
+      legacyDb.exec(`
+        CREATE TABLE projects (
+          project_id TEXT PRIMARY KEY,
+          universe_id TEXT,
+          name TEXT NOT NULL
+        );
+        CREATE TABLE scenes (
+          scene_id TEXT NOT NULL,
+          project_id TEXT NOT NULL,
+          title TEXT,
+          file_path TEXT NOT NULL,
+          prose_checksum TEXT,
+          metadata_stale INTEGER NOT NULL DEFAULT 0,
+          updated_at TEXT NOT NULL,
+          PRIMARY KEY (scene_id, project_id)
+        );
+        CREATE TABLE scene_characters (
+          scene_id TEXT NOT NULL,
+          character_id TEXT NOT NULL,
+          PRIMARY KEY (scene_id, character_id)
+        );
+        CREATE TABLE scene_places (
+          scene_id TEXT NOT NULL,
+          place_id TEXT NOT NULL,
+          PRIMARY KEY (scene_id, place_id)
+        );
+        CREATE TABLE scene_tags (
+          scene_id TEXT NOT NULL,
+          tag TEXT NOT NULL,
+          PRIMARY KEY (scene_id, tag)
+        );
+        CREATE TABLE scene_threads (
+          scene_id TEXT NOT NULL,
+          thread_id TEXT NOT NULL,
+          beat TEXT,
+          PRIMARY KEY (scene_id, thread_id)
+        );
+        CREATE TABLE schema_version (
+          id INTEGER PRIMARY KEY CHECK (id = 1),
+          version INTEGER NOT NULL
+        );
+      `);
+      legacyDb.exec(`INSERT INTO schema_version (id, version) VALUES (1, 6);`);
+      legacyDb.prepare(`INSERT INTO projects (project_id, universe_id, name) VALUES (?, ?, ?)`).run("test-novel", null, "test-novel");
+      legacyDb.prepare(`
+        INSERT INTO scenes (scene_id, project_id, title, file_path, prose_checksum, metadata_stale, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).run("sc-001", "test-novel", "Scene 1", "/tmp/sc-001.md", "deadbeef", 0, new Date().toISOString());
+      legacyDb.prepare(`INSERT INTO scene_characters (scene_id, character_id) VALUES (?, ?)`).run("sc-001", "char-mira");
+      legacyDb.prepare(`INSERT INTO scene_places (scene_id, place_id) VALUES (?, ?)`).run("sc-001", "place-hospital");
+      legacyDb.prepare(`INSERT INTO scene_tags (scene_id, tag) VALUES (?, ?)`).run("sc-001", "harbor");
+      legacyDb.prepare(`INSERT INTO scene_threads (scene_id, thread_id, beat) VALUES (?, ?, ?)`).run("sc-001", "thread-1", "Opening");
+      legacyDb.close();
+
+      const db = openDb(dbPath);
+
+      const characterColumns = db.prepare(`PRAGMA table_info(scene_characters)`).all();
+      assert.ok(characterColumns.some((column) => column.name === "project_id"));
+      const threadColumns = db.prepare(`PRAGMA table_info(scene_threads)`).all();
+      assert.ok(threadColumns.some((column) => column.name === "project_id"));
+
+      const characterRow = db.prepare(`
+        SELECT scene_id, project_id, character_id
+        FROM scene_characters
+        WHERE scene_id = 'sc-001'
+      `).get();
+      assert.deepEqual({ ...characterRow }, {
+        scene_id: "sc-001",
+        project_id: "test-novel",
+        character_id: "char-mira",
+      });
+
+      const threadRow = db.prepare(`
+        SELECT scene_id, project_id, thread_id, beat
+        FROM scene_threads
+        WHERE scene_id = 'sc-001'
+      `).get();
+      assert.deepEqual({ ...threadRow }, {
+        scene_id: "sc-001",
+        project_id: "test-novel",
+        thread_id: "thread-1",
+        beat: "Opening",
+      });
+
+      db.close();
+    } finally {
+      fs.rmSync(dbPath, { force: true });
+    }
+  });
+
+  test("scene_threads migration avoids cross-project fan-out when scene_id is duplicated", () => {
+    const dbPath = makeTempPath();
+    try {
+      const legacyDb = new DatabaseSync(dbPath);
+      legacyDb.exec(`
+        CREATE TABLE projects (
+          project_id TEXT PRIMARY KEY,
+          universe_id TEXT,
+          name TEXT NOT NULL
+        );
+        CREATE TABLE scenes (
+          scene_id TEXT NOT NULL,
+          project_id TEXT NOT NULL,
+          title TEXT,
+          file_path TEXT NOT NULL,
+          prose_checksum TEXT,
+          metadata_stale INTEGER NOT NULL DEFAULT 0,
+          updated_at TEXT NOT NULL,
+          PRIMARY KEY (scene_id, project_id)
+        );
+        CREATE TABLE threads (
+          thread_id TEXT NOT NULL PRIMARY KEY,
+          project_id TEXT NOT NULL,
+          name TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'active'
+        );
+        CREATE TABLE scene_threads (
+          scene_id TEXT NOT NULL,
+          thread_id TEXT NOT NULL,
+          beat TEXT,
+          PRIMARY KEY (scene_id, thread_id)
+        );
+        CREATE TABLE schema_version (
+          id INTEGER PRIMARY KEY CHECK (id = 1),
+          version INTEGER NOT NULL
+        );
+      `);
+      legacyDb.exec(`INSERT INTO schema_version (id, version) VALUES (1, 6);`);
+      legacyDb.prepare(`INSERT INTO projects (project_id, universe_id, name) VALUES (?, ?, ?)`).run("alpha", null, "alpha");
+      legacyDb.prepare(`INSERT INTO projects (project_id, universe_id, name) VALUES (?, ?, ?)`).run("beta", null, "beta");
+      const sceneSql = `
+        INSERT INTO scenes (scene_id, project_id, title, file_path, prose_checksum, metadata_stale, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `;
+      legacyDb.prepare(sceneSql).run("sc-shared", "alpha", "Alpha Scene", "/tmp/alpha.md", "aaa", 0, new Date().toISOString());
+      legacyDb.prepare(sceneSql).run("sc-shared", "beta", "Beta Scene", "/tmp/beta.md", "bbb", 0, new Date().toISOString());
+      legacyDb.prepare(`
+        INSERT INTO threads (thread_id, project_id, name, status)
+        VALUES (?, ?, ?, ?)
+      `).run("thread-alpha", "alpha", "Alpha Thread", "active");
+      legacyDb.prepare(`INSERT INTO scene_threads (scene_id, thread_id, beat) VALUES (?, ?, ?)`).run("sc-shared", "thread-alpha", "Opening");
+      legacyDb.close();
+
+      const db = openDb(dbPath);
+      const rows = db.prepare(`
+        SELECT scene_id, project_id, thread_id, beat
+        FROM scene_threads
+        ORDER BY project_id
+      `).all();
+
+      assert.equal(rows.length, 1);
+      assert.deepEqual({ ...rows[0] }, {
+        scene_id: "sc-shared",
+        project_id: "alpha",
+        thread_id: "thread-alpha",
+        beat: "Opening",
+      });
+      db.close();
+    } finally {
+      fs.rmSync(dbPath, { force: true });
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------

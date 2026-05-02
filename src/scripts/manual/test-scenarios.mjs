@@ -1,5 +1,6 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
+import { callToolParsed } from "./mcp-result.mjs";
 
 const BASE_URL = "http://localhost:3000";
 
@@ -22,8 +23,8 @@ async function connect() {
 }
 
 async function callTool(client, name, args = {}) {
-  const result = await client.callTool({ name, arguments: args });
-  return result.content?.[0]?.text ?? "";
+  const result = await callToolParsed(client, name, args);
+  return result.text;
 }
 
 const results = [];

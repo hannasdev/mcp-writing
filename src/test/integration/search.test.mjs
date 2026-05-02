@@ -151,11 +151,13 @@ describe("get_scene_prose tool", () => {
     fs.writeFileSync(scenePath, `${before}\n\nParity hint marker for get_scene_prose.\n`, "utf8");
     await callWriteTool("sync");
 
-    const text = await callWriteTool("get_scene_prose", { scene_id: "sc-002" });
-    assert.ok(text.includes("Metadata for this scene may be stale"));
-    assert.ok(text.includes("Suggested next step"));
-    assert.ok(text.includes("enrich_scene"));
-    assert.ok(text.includes("project_id='test-novel'"));
+    const result = await ctx.writeClient.callTool({ name: "get_scene_prose", arguments: { scene_id: "sc-002" } });
+    const text = result.content?.[0]?.text ?? "";
+    assert.ok(!text.includes("Metadata for this scene may be stale"));
+    assert.ok(!text.includes("Suggested next step"));
+    assert.equal(result.structuredContent.warning.includes("stale"), true);
+    assert.ok(result.structuredContent.next_step.includes("enrich_scene"));
+    assert.ok(result.structuredContent.next_step.includes("project_id='test-novel'"));
 
     await callWriteTool("enrich_scene", { scene_id: "sc-002", project_id: "test-novel" });
   });
@@ -187,19 +189,46 @@ describe("get_scene_prose tool", () => {
     assert.ok(text.includes("Beta prose body."));
     assert.ok(!text.includes("Alpha prose body."));
   });
+
+  test("does not leak character-filtered results across projects when scene_id is reused", async () => {
+    const alphaScenePath = path.join(writeSyncDir, "projects", "alpha-find", "scenes", "shared.md");
+    const betaScenePath = path.join(writeSyncDir, "projects", "beta-find", "scenes", "shared.md");
+    fs.mkdirSync(path.dirname(alphaScenePath), { recursive: true });
+    fs.mkdirSync(path.dirname(betaScenePath), { recursive: true });
+    fs.writeFileSync(alphaScenePath, "---\nscene_id: sc-find-shared-001\ntitle: Alpha Shared\ncharacters:\n  - alpha-hero\ntags:\n  - alpha-tag\n---\nAlpha prose body.");
+    fs.writeFileSync(betaScenePath, "---\nscene_id: sc-find-shared-001\ntitle: Beta Shared\ncharacters:\n  - beta-hero\ntags:\n  - beta-tag\n---\nBeta prose body.");
+
+    await callWriteTool("sync");
+
+    const findText = await callWriteTool("find_scenes", { character: "alpha-hero" });
+    const findParsed = JSON.parse(findText);
+    assert.equal(findParsed.total_count, 1);
+    assert.equal(findParsed.results[0].project_id, "alpha-find");
+    assert.equal(findParsed.results[0].scene_id, "sc-find-shared-001");
+
+    const arcText = await callWriteTool("get_arc", { character_id: "beta-hero" });
+    const arcParsed = JSON.parse(arcText);
+    assert.equal(arcParsed.total_count, 1);
+    assert.equal(arcParsed.results[0].project_id, "beta-find");
+    assert.equal(arcParsed.results[0].scene_id, "sc-find-shared-001");
+  });
 });
 
 describe("get_chapter_prose tool", () => {
   test("returns prose for both scenes in part 1 chapter 1", async () => {
-    const text = await callTool("get_chapter_prose", {
+    const result = await ctx.client.callTool({
+      name: "get_chapter_prose",
+      arguments: {
       project_id: "test-novel",
       part: 1,
       chapter: 1,
+      },
     });
+    const text = result.content?.[0]?.text ?? "";
     assert.ok(text.includes("gangway") || text.includes("bait shed"),
       `Expected chapter prose keywords, got: ${text.slice(0, 200)}`);
-    assert.ok(text.includes("Suggested next step"));
-    assert.ok(text.includes("find_scenes + get_scene_prose"));
+    assert.ok(!text.includes("Suggested next step"));
+    assert.ok(result.structuredContent.next_step.includes("find_scenes + get_scene_prose"));
   });
 });
 
@@ -635,6 +664,43 @@ describe("thread arc tool", () => {
     assert.ok(parsed.next_step.includes("enrich_scene"));
 
     await callWriteTool("enrich_scene", { scene_id: "sc-001", project_id: "test-novel" });
+  });
+
+  test("does not leak thread scenes across projects when scene_id is reused", async () => {
+    const alphaScenePath = path.join(writeSyncDir, "projects", "alpha-thread", "scenes", "shared.md");
+    const betaScenePath = path.join(writeSyncDir, "projects", "beta-thread", "scenes", "shared.md");
+    fs.mkdirSync(path.dirname(alphaScenePath), { recursive: true });
+    fs.mkdirSync(path.dirname(betaScenePath), { recursive: true });
+    fs.writeFileSync(alphaScenePath, "---\nscene_id: sc-thread-shared-001\ntitle: Alpha Thread Scene\n---\nAlpha thread prose.");
+    fs.writeFileSync(betaScenePath, "---\nscene_id: sc-thread-shared-001\ntitle: Beta Thread Scene\n---\nBeta thread prose.");
+
+    await callWriteTool("sync");
+    await callWriteTool("upsert_thread_link", {
+      project_id: "alpha-thread",
+      thread_id: "thread-alpha-only",
+      thread_name: "Alpha Only",
+      scene_id: "sc-thread-shared-001",
+      beat: "Alpha beat",
+    });
+    await callWriteTool("upsert_thread_link", {
+      project_id: "beta-thread",
+      thread_id: "thread-beta-only",
+      thread_name: "Beta Only",
+      scene_id: "sc-thread-shared-001",
+      beat: "Beta beat",
+    });
+
+    const alphaText = await callWriteTool("get_thread_arc", { thread_id: "thread-alpha-only" });
+    const alphaParsed = JSON.parse(alphaText);
+    assert.equal(alphaParsed.total_count, 1);
+    assert.equal(alphaParsed.results[0].project_id, "alpha-thread");
+    assert.equal(alphaParsed.results[0].thread_beat, "Alpha beat");
+
+    const betaText = await callWriteTool("get_thread_arc", { thread_id: "thread-beta-only" });
+    const betaParsed = JSON.parse(betaText);
+    assert.equal(betaParsed.total_count, 1);
+    assert.equal(betaParsed.results[0].project_id, "beta-thread");
+    assert.equal(betaParsed.results[0].thread_beat, "Beta beat");
   });
 });
 

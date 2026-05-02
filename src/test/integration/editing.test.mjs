@@ -362,4 +362,24 @@ describe("commit_edit behavior", { concurrency: 1 }, () => {
     assert.equal(typeof discarded.next_step, "string");
     assert.ok(discarded.next_step.includes("propose_edit"));
   });
+
+  test("list_snapshots returns CONFLICT for ambiguous scene_id without project_id", async () => {
+    const text = await callWriteTool("list_snapshots", { scene_id: "sc-edit-shared-001" });
+    const parsed = JSON.parse(text);
+    assert.equal(parsed.ok, false);
+    assert.equal(parsed.error.code, "CONFLICT");
+    assert.ok(parsed.error.details.project_ids.includes("alpha-edit"));
+    assert.ok(parsed.error.details.project_ids.includes("beta-edit"));
+  });
+
+  test("list_snapshots scopes history with explicit project_id", async () => {
+    const text = await callWriteTool("list_snapshots", {
+      scene_id: "sc-edit-shared-001",
+      project_id: "beta-edit",
+    });
+    const parsed = JSON.parse(text);
+    assert.equal(parsed.project_id, "beta-edit");
+    assert.ok(Array.isArray(parsed.snapshots));
+    assert.ok(parsed.snapshots.length >= 1);
+  });
 });

@@ -324,15 +324,32 @@ export function registerEditingTools(s, {
     "List git commit history for a scene, with timestamps and commit messages. Use this to find commit hashes for get_scene_prose historical retrieval.",
     {
       scene_id: z.string().describe("The scene_id to list snapshots for."),
+      project_id: z.string().optional().describe("Optional project ID to disambiguate duplicate scene IDs across projects."),
     },
-    async ({ scene_id }) => {
+    async ({ scene_id, project_id }) => {
       if (!GIT_ENABLED) {
         return errorResponse("GIT_UNAVAILABLE", "Git is not available — snapshots cannot be retrieved.");
       }
 
-      const scene = db.prepare(`SELECT file_path FROM scenes WHERE scene_id = ?`).get(scene_id);
-      if (!scene) {
-        return errorResponse("NOT_FOUND", `Scene '${scene_id}' not found.`);
+      let scene;
+      if (project_id) {
+        scene = db.prepare(`SELECT file_path, project_id FROM scenes WHERE scene_id = ? AND project_id = ?`).get(scene_id, project_id);
+        if (!scene) {
+          return errorResponse("NOT_FOUND", `Scene '${scene_id}' not found in project '${project_id}'.`);
+        }
+      } else {
+        const scenes = db.prepare(`SELECT file_path, project_id FROM scenes WHERE scene_id = ? ORDER BY project_id`).all(scene_id);
+        if (scenes.length === 0) {
+          return errorResponse("NOT_FOUND", `Scene '${scene_id}' not found.`);
+        }
+        if (scenes.length > 1) {
+          return errorResponse(
+            "CONFLICT",
+            `Scene ID '${scene_id}' exists in multiple projects. Provide project_id to disambiguate.`,
+            { scene_id, project_ids: scenes.map((row) => row.project_id) }
+          );
+        }
+        scene = scenes[0];
       }
 
       try {
@@ -343,6 +360,7 @@ export function registerEditingTools(s, {
 
         return jsonResponse({
           scene_id,
+          project_id: scene.project_id ?? null,
           snapshots: snapshots.map(s => ({
             commit_hash: s.commit_hash,
             short_hash: s.commit_hash.substring(0, 7),

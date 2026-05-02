@@ -95,11 +95,11 @@ export function registerSearchTools(s, {
       const params = [];
 
       if (character) {
-        joins.push(`JOIN scene_characters sc ON sc.scene_id = s.scene_id AND sc.character_id = ?`);
+        joins.push(`JOIN scene_characters sc ON sc.scene_id = s.scene_id AND sc.project_id = s.project_id AND sc.character_id = ?`);
         params.push(character);
       }
       if (tag) {
-        joins.push(`JOIN scene_tags st ON st.scene_id = s.scene_id AND st.tag = ?`);
+        joins.push(`JOIN scene_tags st ON st.scene_id = s.scene_id AND st.project_id = s.project_id AND st.tag = ?`);
         params.push(tag);
       }
       if (project_id)  { conditions.push(`s.project_id = ?`);        params.push(project_id); }
@@ -201,13 +201,18 @@ export function registerSearchTools(s, {
 
         const { content: prose } = matter(rawContent);
         const versionNote = commit ? `\n\n(Retrieved from commit: ${commit})` : "";
-        const warning = scene.metadata_stale && !commit
-          ? `\n\n⚠️ Metadata for this scene may be stale — prose has changed since last enrichment.`
-          : "";
-        const nextStep = scene.metadata_stale && !commit
-          ? `\n\nSuggested next step: run enrich_scene(scene_id='${scene_id}', project_id='${scene.project_id}') after this read to recover metadata parity for this scene.`
-          : "";
-        return { content: [{ type: "text", text: prose.trim() + versionNote + warning + nextStep }] };
+        return {
+          content: [{
+            type: "text",
+            text: prose.trim() + versionNote,
+          }],
+          structuredContent: scene.metadata_stale && !commit
+            ? {
+                warning: "Metadata for this scene may be stale — prose has changed since last enrichment.",
+                next_step: `Run enrich_scene(scene_id='${scene_id}', project_id='${scene.project_id}') after this read to recover metadata parity for this scene.`,
+              }
+            : undefined,
+        };
       } catch (err) {
         if (err.code === "ENOENT") {
           return errorResponse(
@@ -255,13 +260,17 @@ export function registerSearchTools(s, {
         }
       }
 
-      const warning = truncated
-        ? `\n\n⚠️ Chapter has ${allScenes.length} scenes — only the first ${MAX_CHAPTER_SCENES} were loaded. Set MAX_CHAPTER_SCENES to increase this limit.`
-        : "";
-      const nextStep = truncated
-        ? "\n\nSuggested next step: narrow with find_scenes and inspect key scenes individually with get_scene_prose before expanding chapter scope."
-        : "\n\nSuggested next step: if you only need a subset, switch to find_scenes + get_scene_prose for tighter context control.";
-      return { content: [{ type: "text", text: parts.join("\n\n---\n\n") + warning + nextStep }] };
+      return {
+        content: [{ type: "text", text: parts.join("\n\n---\n\n") }],
+        structuredContent: {
+          ...(truncated
+            ? { warning: `Chapter has ${allScenes.length} scenes — only the first ${MAX_CHAPTER_SCENES} were loaded. Set MAX_CHAPTER_SCENES to increase this limit.` }
+            : {}),
+          next_step: truncated
+            ? "Narrow with find_scenes and inspect key scenes individually with get_scene_prose before expanding chapter scope."
+            : "If you only need a subset, switch to find_scenes + get_scene_prose for tighter context control.",
+        },
+      };
     }
   );
 
@@ -281,7 +290,7 @@ export function registerSearchTools(s, {
                s.scene_change, s.causality, s.stakes, s.scene_functions,
                s.save_the_cat_beat, s.timeline_position, s.story_time, s.pov, s.metadata_stale
         FROM scenes s
-        JOIN scene_characters sc ON sc.scene_id = s.scene_id
+        JOIN scene_characters sc ON sc.scene_id = s.scene_id AND sc.project_id = s.project_id
         WHERE sc.character_id = ?
       `;
       const params = [character_id];
@@ -794,7 +803,7 @@ export function registerSearchTools(s, {
         SELECT s.scene_id, s.project_id, s.part, s.chapter, s.chapter_title, s.title, s.logline,
                st.beat AS thread_beat, s.timeline_position, s.story_time, s.metadata_stale
         FROM scenes s
-        JOIN scene_threads st ON st.scene_id = s.scene_id AND st.thread_id = ?
+        JOIN scene_threads st ON st.scene_id = s.scene_id AND st.project_id = s.project_id AND st.thread_id = ?
         ORDER BY s.part, s.chapter, s.timeline_position
       `).all(thread_id);
       const staleCount = rows.filter(r => r.metadata_stale).length;
@@ -916,12 +925,12 @@ export function registerSearchTools(s, {
       if (!loadedSceneEntitiesFromMetadata) {
         // Fallback for scenes without readable indexed file paths.
         characterIds = db.prepare(`
-          SELECT character_id FROM scene_characters WHERE scene_id = ?
-        `).all(scene_id).map((row) => row.character_id);
+          SELECT character_id FROM scene_characters WHERE scene_id = ? AND project_id = ?
+        `).all(scene_id, resolvedProjectId).map((row) => row.character_id);
 
         placeIds = db.prepare(`
-          SELECT place_id FROM scene_places WHERE scene_id = ?
-        `).all(scene_id).map((row) => row.place_id);
+          SELECT place_id FROM scene_places WHERE scene_id = ? AND project_id = ?
+        `).all(scene_id, resolvedProjectId).map((row) => row.place_id);
       }
 
       // Get explicit scene → reference links already present
