@@ -680,6 +680,7 @@ List git commit history for a scene, with timestamps and commit messages. Use th
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |
 | `scene_id` | `string` | Yes | The scene_id to list snapshots for. |
+| `project_id` | `string` | No | Optional project ID to disambiguate duplicate scene IDs across projects. |
 
 ---
 
