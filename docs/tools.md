@@ -224,7 +224,7 @@ Load the full prose for every scene in a chapter, concatenated in order. Expensi
 
 ## get_arc
 
-Get every scene a character appears in, ordered by part/chapter/position. Returns scene metadata only — no prose. Use this as the primary structural entry point when the question is about a character's progression through the manuscript. Supports pagination via page/page_size and auto-paginates large result sets with total_count. Use list_characters only when you need help finding a character_id.
+Get every scene a character appears in, ordered by part/chapter/position. Returns scene metadata only — no prose. Use this as the primary structural entry point when the question is about a character's progression through the manuscript. Supports pagination via page/page_size and auto-paginates large result sets with total_count. Use list_characters only when you need help finding a character_id. Response shape note: paginated responses always return an envelope (`results` + pagination fields). Non-paginated responses return a raw array unless stale-scene guidance is present, in which case an envelope is returned (`results`, `total_count`, `warning`, `next_step`).
 
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |

@@ -591,6 +591,31 @@ describe("thread arc tool", () => {
     assert.equal(parsed.ok, false);
     assert.equal(parsed.error.code, "NOT_FOUND");
   });
+
+  test("includes next_step for stale thread arc responses", async () => {
+    await callWriteTool("upsert_thread_link", {
+      project_id: "test-novel",
+      thread_id: "thread-stale-001",
+      thread_name: "Stale Thread",
+      scene_id: "sc-001",
+      beat: "Opening",
+    });
+
+    const scenePath = path.join(writeSyncDir, "projects", "test-novel", "part-1", "chapter-1", "sc-001.md");
+    const before = fs.readFileSync(scenePath, "utf8");
+    fs.writeFileSync(scenePath, `${before}\n\nParity hint marker for get_thread_arc.\n`, "utf8");
+    await callWriteTool("sync");
+
+    const text = await callWriteTool("get_thread_arc", { thread_id: "thread-stale-001" });
+    const parsed = JSON.parse(text);
+    assert.equal(parsed.thread.thread_id, "thread-stale-001");
+    assert.equal(typeof parsed.warning, "string");
+    assert.ok(parsed.warning.toLowerCase().includes("stale metadata"));
+    assert.equal(typeof parsed.next_step, "string");
+    assert.ok(parsed.next_step.includes("enrich_scene"));
+
+    await callWriteTool("enrich_scene", { scene_id: "sc-001", project_id: "test-novel" });
+  });
 });
 
 describe("upsert_thread_link tool", () => {
