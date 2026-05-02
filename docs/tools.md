@@ -628,11 +628,12 @@ Generate skills/prose-styleguide.md from the resolved prose styleguide config an
 
 ## propose_edit
 
-Generate a proposed revision for a scene. Returns a proposal_id and a diff preview. Nothing is written yet — you must call commit_edit to apply the change. This tool requires git to be available.
+Generate a proposed revision for a scene. Returns a proposal_id and a diff preview. Nothing is written yet — you must call commit_edit to apply the change. This tool requires git to be available. If scene IDs are reused across projects, omitting project_id returns CONFLICT with candidate project_ids.
 
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |
 | `scene_id` | `string` | Yes | The scene_id to revise (e.g. 'sc-011-sebastian'). |
+| `project_id` | `string` | No | Optional project ID to disambiguate duplicate scene IDs across projects. |
 | `instruction` | `string` | Yes | A brief instruction for the edit (e.g. 'Tighten the opening paragraph'). Used in the git commit message. |
 | `revised_prose` | `string` | Yes | The complete revised prose text for the scene. |
 
@@ -645,6 +646,7 @@ Apply a proposed edit and commit it to git. First creates a pre-edit snapshot, t
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |
 | `scene_id` | `string` | Yes | The scene_id being revised. |
+| `project_id` | `string` | No | Optional project ID for proposal validation when scene IDs are duplicated across projects. |
 | `proposal_id` | `string` | Yes | The proposal_id returned by propose_edit. |
 
 ---
