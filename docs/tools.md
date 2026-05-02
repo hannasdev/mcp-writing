@@ -200,11 +200,12 @@ Find scenes by filtering on character, Save the Cat beat, tags, part, chapter, o
 
 ## get_scene_prose
 
-Load the full prose text of a single scene. Use this for close reading, continuity checks, or when you need the actual writing. For overview or filtering, use find_scenes instead — it is much cheaper. Optionally retrieve a past version from git history.
+Load the full prose text of a single scene. Use this for close reading, continuity checks, or when you need the actual writing. For overview or filtering, use find_scenes instead — it is much cheaper. Optionally retrieve a past version from git history. If scene IDs are reused across projects, omitting project_id returns CONFLICT with candidate project_ids.
 
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |
 | `scene_id` | `string` | Yes | The scene_id to retrieve (e.g. 'sc-001-prologue'). Get this from find_scenes or get_arc. |
+| `project_id` | `string` | No | Optional project ID to disambiguate duplicate scene IDs across projects. |
 | `commit` | `string` | No | Optional git commit hash to retrieve a past version. Use list_snapshots to find valid hashes. If omitted, returns the current prose. |
 
 ---

@@ -165,6 +165,34 @@ describe("get_scene_prose tool", () => {
 
     await callWriteTool("enrich_scene", { scene_id: "sc-002", project_id: "test-novel" });
   });
+
+  test("returns CONFLICT for ambiguous scene_id without project_id", async () => {
+    const alphaScenePath = path.join(writeSyncDir, "projects", "alpha-prose", "scenes", "dup-scene.md");
+    const betaScenePath = path.join(writeSyncDir, "projects", "beta-prose", "scenes", "dup-scene.md");
+    fs.mkdirSync(path.dirname(alphaScenePath), { recursive: true });
+    fs.mkdirSync(path.dirname(betaScenePath), { recursive: true });
+    fs.writeFileSync(alphaScenePath, "---\nscene_id: sc-prose-shared-001\ntitle: Alpha Prose\n---\nAlpha prose body.");
+    fs.writeFileSync(betaScenePath, "---\nscene_id: sc-prose-shared-001\ntitle: Beta Prose\n---\nBeta prose body.");
+
+    await callWriteTool("sync");
+
+    const text = await callWriteTool("get_scene_prose", { scene_id: "sc-prose-shared-001" });
+    const parsed = JSON.parse(text);
+    assert.equal(parsed.ok, false);
+    assert.equal(parsed.error.code, "CONFLICT");
+    assert.ok(Array.isArray(parsed.error.details.project_ids));
+    assert.ok(parsed.error.details.project_ids.includes("alpha-prose"));
+    assert.ok(parsed.error.details.project_ids.includes("beta-prose"));
+  });
+
+  test("returns disambiguated prose when project_id is provided", async () => {
+    const text = await callWriteTool("get_scene_prose", {
+      scene_id: "sc-prose-shared-001",
+      project_id: "beta-prose",
+    });
+    assert.ok(text.includes("Beta prose body."));
+    assert.ok(!text.includes("Alpha prose body."));
+  });
 });
 
 describe("get_chapter_prose tool", () => {

@@ -158,17 +158,36 @@ export function registerSearchTools(s, {
   // ---- get_scene_prose -----------------------------------------------------
   s.tool(
     "get_scene_prose",
-    "Load the full prose text of a single scene. Use this for close reading, continuity checks, or when you need the actual writing. For overview or filtering, use find_scenes instead — it is much cheaper. Optionally retrieve a past version from git history.",
+    "Load the full prose text of a single scene. Use this for close reading, continuity checks, or when you need the actual writing. For overview or filtering, use find_scenes instead — it is much cheaper. Optionally retrieve a past version from git history. If scene IDs are reused across projects, omitting project_id returns CONFLICT with candidate project_ids.",
     {
       scene_id: z.string().describe("The scene_id to retrieve (e.g. 'sc-001-prologue'). Get this from find_scenes or get_arc."),
+      project_id: z.string().optional().describe("Optional project ID to disambiguate duplicate scene IDs across projects."),
       commit: z.string().optional().describe("Optional git commit hash to retrieve a past version. Use list_snapshots to find valid hashes. If omitted, returns the current prose."),
     },
-    async ({ scene_id, commit }) => {
-      const scene = db.prepare(`SELECT file_path, metadata_stale, project_id FROM scenes WHERE scene_id = ?`).get(scene_id);
-      if (!scene) {
-        return errorResponse("NOT_FOUND", `Scene '${scene_id}' not found. Run sync() if you just added it.`, {
-          next_step: "Run sync() to refresh the index, then call find_scenes to locate the scene by current metadata.",
-        });
+    async ({ scene_id, project_id, commit }) => {
+      let scene;
+      if (project_id) {
+        scene = db.prepare(`SELECT file_path, metadata_stale, project_id FROM scenes WHERE scene_id = ? AND project_id = ?`).get(scene_id, project_id);
+        if (!scene) {
+          return errorResponse("NOT_FOUND", `Scene '${scene_id}' not found in project '${project_id}'. Run sync() if you just added it.`, {
+            next_step: "Run sync() to refresh the index, then call find_scenes with project_id to locate the scene by current metadata.",
+          });
+        }
+      } else {
+        const scenes = db.prepare(`SELECT file_path, metadata_stale, project_id FROM scenes WHERE scene_id = ? ORDER BY project_id`).all(scene_id);
+        if (scenes.length === 0) {
+          return errorResponse("NOT_FOUND", `Scene '${scene_id}' not found. Run sync() if you just added it.`, {
+            next_step: "Run sync() to refresh the index, then call find_scenes to locate the scene by current metadata.",
+          });
+        }
+        if (scenes.length > 1) {
+          return errorResponse(
+            "CONFLICT",
+            `Scene ID '${scene_id}' exists in multiple projects. Provide project_id to disambiguate.`,
+            { scene_id, project_ids: scenes.map(s => s.project_id) }
+          );
+        }
+        scene = scenes[0];
       }
       try {
         let rawContent;
