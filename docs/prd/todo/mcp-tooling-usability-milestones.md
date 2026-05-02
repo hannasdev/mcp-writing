@@ -719,6 +719,26 @@ The validation work suggests a few high-leverage changes that cut across multipl
 
 These changes would reduce the gap between the milestone assumptions and the current product behavior without requiring every milestone to be implemented at once.
 
+## Last Cleanup Stage (Post-Milestones)
+
+After milestone-value work is complete, run a final response-contract cleanup pass focused on consistency for integrators.
+
+Primary cleanup target:
+
+- standardize metadata-oriented read tools to return structured envelopes consistently (instead of mixed raw-array vs envelope shapes), including tools such as `find_scenes`, `get_arc`, and related metadata read paths.
+
+Why this is intentionally last:
+
+- current mixed shapes are now documented and workable;
+- this cleanup improves client ergonomics and long-term maintainability, but does not unlock immediate user outcome value as directly as the milestone behavior work;
+- deferring it avoids slowing delivery of higher-value milestone slices.
+
+Scope guardrails for this cleanup stage:
+
+- preserve semantics and ranking/filter behavior;
+- focus on response-shape consistency and migration clarity only;
+- include explicit migration notes for client parsers if any shape contract changes.
+
 ## Implementation Planning Use
 
 When implementation begins, each milestone should be broken into:
