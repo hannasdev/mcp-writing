@@ -237,7 +237,7 @@ Get every scene a character appears in, ordered by part/chapter/position. Return
 
 ## list_characters
 
-List indexed characters with their character_id, name, role, and arc_summary. Use this mainly as a lookup and disambiguation helper when you need to find a character_id for a broader reasoning task.
+List indexed characters with their character_id, name, role, and arc_summary. Use this mainly as a lookup and disambiguation helper when you need to find a character_id for a broader reasoning task. Response shape note: returns a structured envelope (`results`, `total_count`).
 
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |
@@ -258,7 +258,7 @@ Get full character details: role, arc_summary, traits, the canonical sheet conte
 
 ## list_places
 
-List indexed places with their place_id and name. Use this mainly as a lookup and disambiguation helper when place context becomes relevant to the current reasoning task.
+List indexed places with their place_id and name. Use this mainly as a lookup and disambiguation helper when place context becomes relevant to the current reasoning task. Response shape note: returns a structured envelope (`results`, `total_count`).
 
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |
@@ -291,7 +291,7 @@ Full-text search across scene titles, loglines (synopsis/logline text fields), a
 
 ## search_reference
 
-Full-text search across indexed reference document titles, summaries, and tags. Use this to discover world-building notes, continuity references, research docs, and other reference material without loading full file contents.
+Full-text search across indexed reference document titles, summaries, and tags. Use this to discover world-building notes, continuity references, research docs, and other reference material without loading full file contents. Response shape note: returns a structured envelope (`results`, `total_count`).
 
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |
@@ -646,7 +646,7 @@ Apply a proposed edit and commit it to git. First creates a pre-edit snapshot, t
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |
 | `scene_id` | `string` | Yes | The scene_id being revised. |
-| `project_id` | `string` | No | Optional project ID for proposal validation when scene IDs are duplicated across projects. |
+| `project_id` | `string` | No | Optional project ID. Required when scene IDs are duplicated across projects. |
 | `proposal_id` | `string` | Yes | The proposal_id returned by propose_edit. |
 
 ---

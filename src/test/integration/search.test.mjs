@@ -157,7 +157,7 @@ describe("get_scene_prose tool", () => {
     assert.ok(!text.includes("Suggested next step"));
     assert.equal(result.structuredContent.warning.includes("stale"), true);
     assert.ok(result.structuredContent.next_step.includes("enrich_scene"));
-    assert.ok(result.structuredContent.next_step.includes("project_id='test-novel'"));
+    assert.ok(result.structuredContent.next_step.includes("project_id test-novel"));
 
     await callWriteTool("enrich_scene", { scene_id: "sc-002", project_id: "test-novel" });
   });

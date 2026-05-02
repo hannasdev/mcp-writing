@@ -425,6 +425,13 @@ describe("openDb", () => {
       assert.equal(typeof skippedWarning?.details?.next_step, "string");
       assert.ok(skippedWarning?.details?.next_step.includes("sync()"));
 
+      if (skippedWarning?.details?.skipped_rows_by_table && typeof skippedWarning.details.skipped_rows_by_table === "object") {
+        skippedWarning.details.skipped_rows_by_table.scene_tags = 9999;
+        const warningsAgain = getDbStartupWarnings();
+        const skippedAgain = warningsAgain.find((warning) => warning.code === "LEGACY_JOIN_ROWS_SKIPPED");
+        assert.notEqual(skippedAgain?.details?.skipped_rows_by_table?.scene_tags, 9999);
+      }
+
       db.close();
     } finally {
       fs.rmSync(dbPath, { force: true });

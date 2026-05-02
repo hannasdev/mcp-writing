@@ -209,7 +209,7 @@ export function registerSearchTools(s, {
           structuredContent: scene.metadata_stale && !commit
             ? {
                 warning: "Metadata for this scene may be stale — prose has changed since last enrichment.",
-                next_step: `Run enrich_scene(scene_id='${scene_id}', project_id='${scene.project_id}') after this read to recover metadata parity for this scene.`,
+                next_step: `Run enrich_scene with scene_id ${scene_id} and project_id ${scene.project_id} after this read to recover metadata parity for this scene.`,
               }
             : undefined,
         };
@@ -338,7 +338,7 @@ export function registerSearchTools(s, {
   // ---- list_characters -----------------------------------------------------
   s.tool(
     "list_characters",
-    "List indexed characters with their character_id, name, role, and arc_summary. Use this mainly as a lookup and disambiguation helper when you need to find a character_id for a broader reasoning task.",
+    "List indexed characters with their character_id, name, role, and arc_summary. Use this mainly as a lookup and disambiguation helper when you need to find a character_id for a broader reasoning task. Response shape note: returns a structured envelope (`results`, `total_count`).",
     {
       project_id:  z.string().optional().describe("Limit to a specific project (e.g. 'the-lamb')."),
       universe_id: z.string().optional().describe("Limit to a specific universe (if using cross-project world-building)."),
@@ -411,7 +411,7 @@ export function registerSearchTools(s, {
   // ---- list_places ---------------------------------------------------------
   s.tool(
     "list_places",
-    "List indexed places with their place_id and name. Use this mainly as a lookup and disambiguation helper when place context becomes relevant to the current reasoning task.",
+    "List indexed places with their place_id and name. Use this mainly as a lookup and disambiguation helper when place context becomes relevant to the current reasoning task. Response shape note: returns a structured envelope (`results`, `total_count`).",
     {
       project_id:  z.string().optional().describe("Limit to a specific project (e.g. 'the-lamb')."),
       universe_id: z.string().optional().describe("Limit to a specific universe."),
@@ -566,7 +566,7 @@ export function registerSearchTools(s, {
   // ---- search_reference ----------------------------------------------------
   s.tool(
     "search_reference",
-    "Full-text search across indexed reference document titles, summaries, and tags. Use this to discover world-building notes, continuity references, research docs, and other reference material without loading full file contents.",
+    "Full-text search across indexed reference document titles, summaries, and tags. Use this to discover world-building notes, continuity references, research docs, and other reference material without loading full file contents. Response shape note: returns a structured envelope (`results`, `total_count`).",
     {
       query: z.string().describe("Search terms (e.g. 'vampirism' or 'blood replacement'). FTS5 syntax supported."),
       type: z.string().optional().describe("Optional reference type filter (for example: 'world', 'continuity', 'research', 'style')."),

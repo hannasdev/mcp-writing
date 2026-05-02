@@ -2,10 +2,28 @@ import { DatabaseSync } from "node:sqlite";
 
 const dbStartupWarnings = [];
 
+function cloneWarningDetails(details) {
+  if (!details) return details;
+
+  if (typeof structuredClone === "function") {
+    try {
+      return structuredClone(details);
+    } catch {
+      // Fall through to JSON clone for plain data payloads.
+    }
+  }
+
+  try {
+    return JSON.parse(JSON.stringify(details));
+  } catch {
+    return { ...details };
+  }
+}
+
 export function getDbStartupWarnings() {
   return dbStartupWarnings.map((warning) => ({
     ...warning,
-    details: warning.details ? { ...warning.details } : warning.details,
+    details: cloneWarningDetails(warning.details),
   }));
 }
 
