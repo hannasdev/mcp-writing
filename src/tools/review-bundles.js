@@ -74,7 +74,12 @@ export function registerReviewBundleTools(s, {
           bundle_name,
           format,
         });
-        return jsonResponse(plan);
+        return jsonResponse({
+          ...plan,
+          next_step: plan.strictness_result?.can_proceed
+            ? "Preview complete. Review warnings and planned_outputs, then call create_review_bundle with the same scope and output_dir."
+            : "Preview complete, but strictness blockers are present. Resolve blockers (for example stale metadata) or switch to strictness='warn' before create_review_bundle.",
+        });
       } catch (error) {
         if (error instanceof ReviewBundlePlanError) {
           return errorResponse(error.code, error.message, error.details);
@@ -172,7 +177,11 @@ export function registerReviewBundleTools(s, {
           return errorResponse(
             "STRICTNESS_BLOCKED",
             "Bundle generation blocked by strictness policy.",
-            { strictness_result: plan.strictness_result, warning_summary: plan.warning_summary }
+            {
+              strictness_result: plan.strictness_result,
+              warning_summary: plan.warning_summary,
+              next_step: "Resolve blockers from strictness_result (for example by running enrich_scene on stale scenes), then re-run create_review_bundle.",
+            }
           );
         }
 
@@ -200,6 +209,7 @@ export function registerReviewBundleTools(s, {
             generated_at: artifacts.generated_at,
             project_id: plan.resolved_scope.project_id,
           },
+          next_step: "Bundle created. Share output_paths with reviewers, or run preview_review_bundle again to adjust scope/profile before regenerating.",
         });
       } catch (error) {
         if (error instanceof ReviewBundlePlanError) {
