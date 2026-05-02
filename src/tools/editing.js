@@ -129,7 +129,7 @@ export function registerEditingTools(s, {
     "Apply a proposed edit and commit it to git. First creates a pre-edit snapshot, then writes the revised prose and metadata back to disk. The scene metadata stale flag is cleared.",
     {
       scene_id: z.string().describe("The scene_id being revised."),
-      project_id: z.string().optional().describe("Optional project ID for proposal validation when scene IDs are duplicated across projects."),
+      project_id: z.string().optional().describe("Optional project ID. Required when scene IDs are duplicated across projects."),
       proposal_id: z.string().describe("The proposal_id returned by propose_edit."),
     },
     async ({ scene_id, project_id, proposal_id }) => {
@@ -145,6 +145,24 @@ export function registerEditingTools(s, {
       if (proposal.scene_id !== scene_id) {
         return errorResponse("INVALID_EDIT", `Proposal '${proposal_id}' is for scene '${proposal.scene_id}', not '${scene_id}'.`);
       }
+
+      if (!project_id && proposal.project_id) {
+        const projectMatches = db.prepare(`SELECT project_id FROM scenes WHERE scene_id = ? ORDER BY project_id`).all(scene_id);
+        if (projectMatches.length > 1) {
+          return errorResponse(
+            "CONFLICT",
+            `Scene ID '${scene_id}' exists in multiple projects. Provide project_id to disambiguate commit_edit.`,
+            {
+              scene_id,
+              project_ids: projectMatches.map((row) => row.project_id),
+              proposal_project_id: proposal.project_id,
+              proposal_id,
+              next_step: `Retry commit_edit with project_id '${proposal.project_id}' and the same proposal_id.`,
+            }
+          );
+        }
+      }
+
       if (project_id && proposal.project_id && proposal.project_id !== project_id) {
         return errorResponse("INVALID_EDIT", `Proposal '${proposal_id}' is for project '${proposal.project_id}', not '${project_id}'.`);
       }

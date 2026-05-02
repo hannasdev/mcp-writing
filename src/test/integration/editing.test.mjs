@@ -326,6 +326,29 @@ describe("commit_edit behavior", { concurrency: 1 }, () => {
     assert.ok(alphaAfter.includes("Alpha edit prose."));
   });
 
+  test("commit_edit returns CONFLICT for ambiguous scene_id when project_id is omitted", async () => {
+    const proposalText = await callWriteTool("propose_edit", {
+      scene_id: "sc-edit-shared-001",
+      project_id: "alpha-edit",
+      instruction: "Adjust line",
+      revised_prose: "Alpha rewritten prose line without explicit project on commit.",
+    });
+    const proposal = JSON.parse(proposalText);
+    assert.ok(proposal.proposal_id);
+
+    const commitText = await callWriteTool("commit_edit", {
+      scene_id: "sc-edit-shared-001",
+      proposal_id: proposal.proposal_id,
+    });
+    const commitResult = JSON.parse(commitText);
+    assert.equal(commitResult.ok, false);
+    assert.equal(commitResult.error.code, "CONFLICT");
+    assert.ok(Array.isArray(commitResult.error.details.project_ids));
+    assert.ok(commitResult.error.details.project_ids.includes("alpha-edit"));
+    assert.ok(commitResult.error.details.project_ids.includes("beta-edit"));
+    assert.equal(commitResult.error.details.proposal_project_id, "alpha-edit");
+  });
+
   test("commit_edit rejects mismatched project_id for proposal", async () => {
     const proposalText = await callWriteTool("propose_edit", {
       scene_id: "sc-edit-shared-001",
