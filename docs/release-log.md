@@ -14,7 +14,7 @@ This complements `CHANGELOG.md`:
 - Why it matters: Ambiguous legacy rows are no longer a silent background event; operators get a visible signal that follow-up recovery is required.
 - Who is affected: Maintainers and users upgrading existing databases where duplicate scene IDs across projects created ambiguous legacy join rows.
 - Action needed: After upgrade, run `sync()` immediately; if stale metadata warnings remain, run `enrich_scene(scene_id, project_id)` for scenes you touch.
-- PR: pending
+- PR: [#165](https://github.com/hannasdev/mcp-writing/pull/165)
 
 ### 2026-05-02 — Redesign MCP workflow surface and harden scene ID safety
 
