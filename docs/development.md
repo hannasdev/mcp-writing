@@ -231,7 +231,7 @@ Fix:
 
 ### `find_scenes` / `get_arc` parsing after response-contract cleanup
 
-As of the `3.0.0` cleanup stage, `find_scenes` and `get_arc` always return envelope responses, including non-paginated calls.
+`find_scenes` and `get_arc` return envelope responses, including non-paginated calls.
 
 Current behavior:
 
