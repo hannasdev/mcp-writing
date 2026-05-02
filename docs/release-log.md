@@ -14,7 +14,7 @@ This complements `CHANGELOG.md`:
 - Why it matters: Style consistency checks are now built into the safe edit flow without adding extra setup commands in normal use, and approvals are protected from committing against outdated style rules.
 - Who is affected: Anyone using `propose_edit` and `commit_edit`, especially teams maintaining project style conventions.
 - Action needed: Optional: set `PROSE_STYLEGUIDE_ENFORCEMENT_MODE` to `off`, `warn` (default), or `required` based on your workflow strictness.
-- PR: (pending)
+- PR: [#166](https://github.com/hannasdev/mcp-writing/pull/166)
 
 ### 2026-05-02 — Surface legacy migration skips with explicit operator follow-up
 
