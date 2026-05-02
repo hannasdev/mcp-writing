@@ -133,6 +133,9 @@ export function registerSearchTools(s, {
             results: paged.rows,
             ...paged.meta,
             warning,
+            next_step: staleCount > 0
+              ? "Touch stale scenes as you work and run enrich_scene(scene_id, project_id) to recover metadata parity incrementally."
+              : undefined,
           }
         : rows;
 
@@ -156,7 +159,9 @@ export function registerSearchTools(s, {
     async ({ scene_id, commit }) => {
       const scene = db.prepare(`SELECT file_path, metadata_stale FROM scenes WHERE scene_id = ?`).get(scene_id);
       if (!scene) {
-        return errorResponse("NOT_FOUND", `Scene '${scene_id}' not found. Run sync() if you just added it.`);
+        return errorResponse("NOT_FOUND", `Scene '${scene_id}' not found. Run sync() if you just added it.`, {
+          next_step: "Run sync() to refresh the index, then call find_scenes to locate the scene by current metadata.",
+        });
       }
       try {
         let rawContent;
@@ -173,7 +178,10 @@ export function registerSearchTools(s, {
         const warning = scene.metadata_stale && !commit
           ? `\n\n⚠️ Metadata for this scene may be stale — prose has changed since last enrichment.`
           : "";
-        return { content: [{ type: "text", text: prose.trim() + versionNote + warning }] };
+        const nextStep = scene.metadata_stale && !commit
+          ? `\n\nSuggested next step: run enrich_scene(scene_id='${scene_id}') after this read to recover metadata parity for this scene.`
+          : "";
+        return { content: [{ type: "text", text: prose.trim() + versionNote + warning + nextStep }] };
       } catch (err) {
         if (err.code === "ENOENT") {
           return errorResponse(

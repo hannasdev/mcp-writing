@@ -35,6 +35,19 @@ describe("sync tool", () => {
     const text = await callTool("sync");
     assert.match(text, /3 scenes indexed/);
   });
+
+  test("suggests local enrich_scene follow-up when sync marks stale scenes", async () => {
+    const scenePath = path.join(writeSyncDir, "projects", "test-novel", "part-1", "chapter-1", "sc-001.md");
+    const before = fs.readFileSync(scenePath, "utf8");
+    fs.writeFileSync(scenePath, `${before}\n\nParity hint marker for sync.\n`, "utf8");
+
+    const text = await callWriteTool("sync");
+    assert.match(text, /scenes marked stale/);
+    assert.match(text, /Next step:/);
+    assert.match(text, /enrich_scene/);
+
+    await callWriteTool("enrich_scene", { scene_id: "sc-001", project_id: "test-novel" });
+  });
 });
 
 describe("import_scrivener_sync tool", () => {

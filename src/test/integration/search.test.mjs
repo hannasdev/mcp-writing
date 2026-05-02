@@ -96,6 +96,22 @@ describe("search tools integration suite", { concurrency: 1 }, () => {
     assert.equal(parsed.page, 2);
     assert.equal(parsed.results.length, 1);
   });
+
+  test("suggests local parity recovery when stale scenes are present", async () => {
+    const scenePath = path.join(writeSyncDir, "projects", "test-novel", "part-1", "chapter-1", "sc-001.md");
+    const before = fs.readFileSync(scenePath, "utf8");
+    fs.writeFileSync(scenePath, `${before}\n\nParity hint marker for find_scenes.\n`, "utf8");
+    await callWriteTool("sync");
+
+    const text = await callWriteTool("find_scenes", { character: "elena", page_size: 2, page: 1 });
+    const parsed = JSON.parse(text);
+    assert.equal(typeof parsed.warning, "string");
+    assert.ok(parsed.warning.toLowerCase().includes("stale metadata"));
+    assert.equal(typeof parsed.next_step, "string");
+    assert.ok(parsed.next_step.includes("enrich_scene"));
+
+    await callWriteTool("enrich_scene", { scene_id: "sc-001", project_id: "test-novel" });
+  });
 });
 
 describe("get_scene_prose tool", () => {
@@ -113,7 +129,24 @@ describe("get_scene_prose tool", () => {
 
   test("returns not-found message for unknown scene", async () => {
     const text = await callTool("get_scene_prose", { scene_id: "sc-999" });
-    assert.ok(text.toLowerCase().includes("not found"));
+    const parsed = JSON.parse(text);
+    assert.equal(parsed.ok, false);
+    assert.equal(parsed.error.code, "NOT_FOUND");
+    assert.ok(parsed.error.details.next_step.includes("Run sync()"));
+  });
+
+  test("includes parity recovery suggestion when scene metadata is stale", async () => {
+    const scenePath = path.join(writeSyncDir, "projects", "test-novel", "part-1", "chapter-1", "sc-002.md");
+    const before = fs.readFileSync(scenePath, "utf8");
+    fs.writeFileSync(scenePath, `${before}\n\nParity hint marker for get_scene_prose.\n`, "utf8");
+    await callWriteTool("sync");
+
+    const text = await callWriteTool("get_scene_prose", { scene_id: "sc-002" });
+    assert.ok(text.includes("Metadata for this scene may be stale"));
+    assert.ok(text.includes("Suggested next step"));
+    assert.ok(text.includes("enrich_scene"));
+
+    await callWriteTool("enrich_scene", { scene_id: "sc-002", project_id: "test-novel" });
   });
 });
 

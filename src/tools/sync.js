@@ -28,6 +28,9 @@ export function registerSyncTools(s, {
   s.tool("sync", "Re-scan the sync folder and update the scene/character/place index from disk. Call this after making edits in Scrivener or updating sidecar files outside the MCP.", {}, async () => {
     const result = syncAll(db, SYNC_DIR, { writable: SYNC_DIR_WRITABLE });
     const parts = [`Sync complete. ${result.indexed} scenes indexed. ${result.staleMarked} scenes marked stale.`];
+    if (result.staleMarked > 0) {
+      parts.push(`Next step: when you touch one of those scenes, run enrich_scene(scene_id, project_id) to recover metadata parity incrementally.`);
+    }
     if (result.sidecarsMigrated) parts.push(`${result.sidecarsMigrated} sidecar(s) auto-generated from frontmatter.`);
     if (result.skipped) {
       parts.push(`${result.skipped} file(s) skipped (no scene_id).`);
