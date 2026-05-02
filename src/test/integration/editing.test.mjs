@@ -6,8 +6,13 @@ import matter from "gray-matter";
 import { createTestContext } from "../helpers/server.js";
 
 const ctx = createTestContext(3069, 3068);
+const requiredCtx = createTestContext(3089, 3088, {
+  PROSE_STYLEGUIDE_ENFORCEMENT_MODE: "required",
+});
 let writeSyncDir;
+let requiredWriteSyncDir;
 const callWriteTool = (n, a) => ctx.callWriteTool(n, a);
+const callRequiredWriteTool = (n, a) => requiredCtx.callWriteTool(n, a);
 const toSceneRows = (parsed) => (Array.isArray(parsed) ? parsed : parsed.results);
 
 before(async () => {
@@ -23,6 +28,21 @@ before(async () => {
 
 after(async () => {
   await ctx.teardown();
+});
+
+before(async () => {
+  try {
+    await requiredCtx.setup();
+    requiredWriteSyncDir = requiredCtx.writeSyncDir;
+  } finally {
+    if (!requiredWriteSyncDir) {
+      await requiredCtx.teardown();
+    }
+  }
+});
+
+after(async () => {
+  await requiredCtx.teardown();
 });
 
 describe("commit_edit behavior", { concurrency: 1 }, () => {
@@ -404,5 +424,120 @@ describe("commit_edit behavior", { concurrency: 1 }, () => {
     assert.equal(parsed.project_id, "beta-edit");
     assert.ok(Array.isArray(parsed.snapshots));
     assert.ok(parsed.snapshots.length >= 1);
+  });
+});
+
+describe("styleguide enforcement behavior", { concurrency: 1 }, () => {
+  test("includes styleguide metadata and violations in propose_edit response", async () => {
+    const setupText = await callWriteTool("setup_prose_styleguide_config", {
+      scope: "sync_root",
+      language: "english_uk",
+      overwrite: true,
+      overrides: {
+        quotation_style: "single",
+      },
+    });
+    const setupParsed = JSON.parse(setupText);
+    assert.equal(setupParsed.ok, true);
+
+    const skillText = await callWriteTool("setup_prose_styleguide_skill", { overwrite: true });
+    const skillParsed = JSON.parse(skillText);
+    assert.equal(skillParsed.ok, true);
+
+    const proposalText = await callWriteTool("propose_edit", {
+      scene_id: "sc-001",
+      instruction: "Styleguide metadata coverage",
+      revised_prose: '"I am here now," she says.',
+    });
+    const proposal = JSON.parse(proposalText);
+
+    assert.equal(typeof proposal.styleguide, "object");
+    assert.equal(proposal.styleguide.styleguide_applied, true);
+    assert.equal(proposal.styleguide.enforcement_mode, "warn");
+    assert.equal(typeof proposal.styleguide.fingerprint, "string");
+    assert.ok(Array.isArray(proposal.styleguide.violations));
+    assert.ok(proposal.styleguide.violations.some((entry) => entry.field === "quotation_style"));
+  });
+
+  test("blocks commit_edit when styleguide changes after propose_edit", async () => {
+    const setupText = await callWriteTool("setup_prose_styleguide_config", {
+      scope: "sync_root",
+      language: "english_uk",
+      overwrite: true,
+      overrides: {
+        quotation_style: "single",
+      },
+    });
+    assert.equal(JSON.parse(setupText).ok, true);
+
+    const skillText = await callWriteTool("setup_prose_styleguide_skill", { overwrite: true });
+    assert.equal(JSON.parse(skillText).ok, true);
+
+    const proposalText = await callWriteTool("propose_edit", {
+      scene_id: "sc-002",
+      instruction: "Prepare proposal before styleguide change",
+      revised_prose: "'I was there,' she said.",
+    });
+    const proposal = JSON.parse(proposalText);
+    assert.ok(proposal.proposal_id);
+
+    const updateText = await callWriteTool("update_prose_styleguide_config", {
+      scope: "sync_root",
+      updates: {
+        quotation_style: "double",
+      },
+    });
+    const updateParsed = JSON.parse(updateText);
+    assert.equal(updateParsed.ok, true);
+
+    const commitText = await callWriteTool("commit_edit", {
+      scene_id: "sc-002",
+      proposal_id: proposal.proposal_id,
+    });
+    const commitParsed = JSON.parse(commitText);
+    assert.equal(commitParsed.ok, false);
+    assert.equal(commitParsed.error.code, "STYLEGUIDE_CHANGED_SINCE_PROPOSAL");
+  });
+
+  test("required mode blocks propose_edit when no styleguide config exists", async () => {
+    const configPath = path.join(requiredWriteSyncDir, "prose-styleguide.config.yaml");
+    fs.rmSync(configPath, { force: true });
+
+    const proposalText = await callRequiredWriteTool("propose_edit", {
+      scene_id: "sc-001",
+      instruction: "Required mode should block",
+      revised_prose: "No config should block this.",
+    });
+    const proposal = JSON.parse(proposalText);
+    assert.equal(proposal.ok, false);
+    assert.equal(proposal.error.code, "STYLEGUIDE_CONFIG_REQUIRED");
+  });
+
+  test("required mode allows bypass with explicit reason", async () => {
+    const proposalText = await callRequiredWriteTool("propose_edit", {
+      scene_id: "sc-001",
+      instruction: "Bypass required mode",
+      revised_prose: "Bypass this styleguide check.",
+      bypass_styleguide: true,
+      bypass_reason: "Intentional one-off exception for draft exploration",
+    });
+    const proposal = JSON.parse(proposalText);
+
+    assert.equal(typeof proposal.proposal_id, "string");
+    assert.equal(proposal.styleguide.bypass_used, true);
+    assert.equal(proposal.styleguide.styleguide_applied, false);
+  });
+
+  test("requires bypass_reason when bypass_styleguide is true", async () => {
+    const proposalText = await callRequiredWriteTool("propose_edit", {
+      scene_id: "sc-001",
+      instruction: "Missing bypass reason",
+      revised_prose: "Bypass should fail without reason.",
+      bypass_styleguide: true,
+    });
+    const proposal = JSON.parse(proposalText);
+
+    assert.equal(proposal.ok, false);
+    assert.equal(proposal.error.code, "STYLEGUIDE_BYPASS_REASON_REQUIRED");
   });
 });
