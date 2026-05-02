@@ -1,5 +1,18 @@
 import { DatabaseSync } from "node:sqlite";
 
+const dbStartupWarnings = [];
+
+export function getDbStartupWarnings() {
+  return dbStartupWarnings.map((warning) => ({
+    ...warning,
+    details: warning.details ? { ...warning.details } : warning.details,
+  }));
+}
+
+function resetDbStartupWarnings() {
+  dbStartupWarnings.length = 0;
+}
+
 export const SCHEMA = `
   CREATE TABLE IF NOT EXISTS universes (
     universe_id TEXT PRIMARY KEY,
@@ -167,13 +180,28 @@ export const SCHEMA = `
 function migrateSceneJoinTableToProjectScope(db, tableName, tableSql, insertSql) {
   const columns = db.prepare(`PRAGMA table_info(${tableName})`).all();
   if (columns.some((column) => column.name === "project_id")) {
-    return;
+    return {
+      migrated: false,
+      sourceCount: 0,
+      migratedCount: 0,
+      droppedCount: 0,
+    };
   }
 
+  const sourceCount = db.prepare(`SELECT COUNT(*) AS count FROM ${tableName}`).get()?.count ?? 0;
   db.exec(tableSql);
   db.exec(insertSql);
+  const migratedCount = db.prepare(`SELECT COUNT(*) AS count FROM ${tableName}_migrating`).get()?.count ?? 0;
+  const droppedCount = Math.max(0, sourceCount - migratedCount);
   db.exec(`DROP TABLE ${tableName};`);
   db.exec(`ALTER TABLE ${tableName}_migrating RENAME TO ${tableName};`);
+
+  return {
+    migrated: true,
+    sourceCount,
+    migratedCount,
+    droppedCount,
+  };
 }
 
 const MIGRATIONS = [
@@ -300,7 +328,7 @@ const MIGRATIONS = [
   },
   // 7: scope scene join tables by project_id so duplicate scene IDs across projects are safe
   (db) => {
-    migrateSceneJoinTableToProjectScope(
+    const charactersMigration = migrateSceneJoinTableToProjectScope(
       db,
       "scene_characters",
       `
@@ -324,7 +352,7 @@ const MIGRATIONS = [
       `
     );
 
-    migrateSceneJoinTableToProjectScope(
+    const placesMigration = migrateSceneJoinTableToProjectScope(
       db,
       "scene_places",
       `
@@ -348,7 +376,7 @@ const MIGRATIONS = [
       `
     );
 
-    migrateSceneJoinTableToProjectScope(
+    const tagsMigration = migrateSceneJoinTableToProjectScope(
       db,
       "scene_tags",
       `
@@ -372,7 +400,7 @@ const MIGRATIONS = [
       `
     );
 
-    migrateSceneJoinTableToProjectScope(
+    const threadsMigration = migrateSceneJoinTableToProjectScope(
       db,
       "scene_threads",
       `
@@ -406,6 +434,37 @@ const MIGRATIONS = [
           ) = 1;
       `
     );
+
+    const migrationSummaries = [
+      ["scene_characters", charactersMigration],
+      ["scene_places", placesMigration],
+      ["scene_tags", tagsMigration],
+      ["scene_threads", threadsMigration],
+    ];
+    const droppedByTable = {};
+    let totalDropped = 0;
+
+    for (const [tableName, summary] of migrationSummaries) {
+      if (!summary?.migrated || summary.droppedCount <= 0) continue;
+      droppedByTable[tableName] = {
+        source_rows: summary.sourceCount,
+        migrated_rows: summary.migratedCount,
+        skipped_rows: summary.droppedCount,
+      };
+      totalDropped += summary.droppedCount;
+    }
+
+    if (totalDropped > 0) {
+      dbStartupWarnings.push({
+        code: "LEGACY_JOIN_ROWS_SKIPPED",
+        message: "Legacy scene relationship rows were skipped during migration because scene_id was ambiguous across projects or duplicate links could not be preserved safely.",
+        details: {
+          skipped_rows_total: totalDropped,
+          skipped_rows_by_table: droppedByTable,
+          next_step: "Run sync() immediately after upgrade, then run enrich_scene(scene_id, project_id) for any stale scenes you touch.",
+        },
+      });
+    }
   },
 ];
 
@@ -437,6 +496,7 @@ function applyMigrations(db) {
 }
 
 export function openDb(dbPath) {
+  resetDbStartupWarnings();
   const db = new DatabaseSync(dbPath);
   db.exec(SCHEMA);
   applyMigrations(db);

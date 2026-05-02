@@ -45,6 +45,7 @@ describe("get_runtime_config tool", () => {
     assert.equal(typeof parsed.git_available, "boolean");
     assert.equal(typeof parsed.git_enabled, "boolean");
     assert.equal(parsed.ownership_guard_mode, "warn");
+    assert.ok(Array.isArray(parsed.db_migration_warnings));
     assert.equal(typeof parsed.permission_diagnostics, "object");
     assert.ok(Array.isArray(parsed.runtime_warnings));
     assert.ok(Array.isArray(parsed.setup_recommendations));
@@ -284,6 +285,7 @@ describe("describe_workflows tool", () => {
     assert.ok(typeof parsed.context.styleguide_exists === "object");
     assert.ok(typeof parsed.context.styleguide_exists.sync_root === "boolean");
     assert.ok(typeof parsed.context.styleguide_exists.project_root === "boolean");
+    assert.ok(Array.isArray(parsed.context.db_migration_warnings));
     assert.ok(Array.isArray(parsed.workflows));
     assert.ok(parsed.workflows.length > 0);
     assert.ok(Array.isArray(parsed.notes));

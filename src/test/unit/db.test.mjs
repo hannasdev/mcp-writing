@@ -4,7 +4,16 @@ import os from "node:os";
 import fs from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { openDb, CURRENT_SCHEMA_VERSION, SCHEMA, checkpointJobCreate, checkpointJobFinish, loadStalledJobs, pruneJobCheckpoints } from "../../core/db.js";
+import {
+  openDb,
+  getDbStartupWarnings,
+  CURRENT_SCHEMA_VERSION,
+  SCHEMA,
+  checkpointJobCreate,
+  checkpointJobFinish,
+  loadStalledJobs,
+  pruneJobCheckpoints,
+} from "../../core/db.js";
 
 function makeTempPath() {
   return path.join(os.tmpdir(), `mcp-writing-db-${Date.now()}-${Math.random().toString(36).slice(2)}.sqlite`);
@@ -404,10 +413,17 @@ describe("openDb", () => {
       legacyDb.close();
 
       const db = openDb(dbPath);
+      const warnings = getDbStartupWarnings();
 
       assert.equal(db.prepare(`SELECT COUNT(*) AS count FROM scene_characters`).get().count, 0);
       assert.equal(db.prepare(`SELECT COUNT(*) AS count FROM scene_places`).get().count, 0);
       assert.equal(db.prepare(`SELECT COUNT(*) AS count FROM scene_tags`).get().count, 0);
+      assert.ok(Array.isArray(warnings));
+      assert.ok(warnings.some((warning) => warning.code === "LEGACY_JOIN_ROWS_SKIPPED"));
+      const skippedWarning = warnings.find((warning) => warning.code === "LEGACY_JOIN_ROWS_SKIPPED");
+      assert.ok((skippedWarning?.details?.skipped_rows_total ?? 0) > 0);
+      assert.equal(typeof skippedWarning?.details?.next_step, "string");
+      assert.ok(skippedWarning?.details?.next_step.includes("sync()"));
 
       db.close();
     } finally {

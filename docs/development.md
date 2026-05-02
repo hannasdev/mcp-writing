@@ -242,3 +242,14 @@ Current behavior:
 Fix:
 
 Parse these tools as envelope-only responses and read scenes from `parsed.results`.
+
+### Runtime warning: `LEGACY_JOIN_ROWS_SKIPPED`
+
+If the server prints `LEGACY_JOIN_ROWS_SKIPPED` (and the same warning appears in `get_runtime_config.db_migration_warnings` or `describe_workflows.context.db_migration_warnings`), some legacy join rows were intentionally skipped during upgrade because duplicate `scene_id` values across projects could not be disambiguated safely.
+
+Required post-upgrade step:
+
+1. Run `sync()` immediately after upgrade to rebuild index links from sidecars/prose.
+2. If stale metadata warnings remain while you work, run `enrich_scene(scene_id, project_id)` for the touched scenes.
+
+This warning is operator-visible by design and should be treated as an explicit migration follow-up signal, not a silent background event.

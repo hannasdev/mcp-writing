@@ -8,6 +8,14 @@ This complements `CHANGELOG.md`:
 
 ## Unreleased
 
+### 2026-05-02 — Surface legacy migration skips with explicit operator follow-up
+
+- What changed: Legacy join-table upgrade behavior now emits an explicit `LEGACY_JOIN_ROWS_SKIPPED` warning (startup logs plus runtime surfaces such as `get_runtime_config` and `describe_workflows` context) when ambiguous legacy rows are dropped during project-scoping migration.
+- Why it matters: Ambiguous legacy rows are no longer a silent background event; operators get a visible signal that follow-up recovery is required.
+- Who is affected: Maintainers and users upgrading existing databases where duplicate scene IDs across projects created ambiguous legacy join rows.
+- Action needed: After upgrade, run `sync()` immediately; if stale metadata warnings remain, run `enrich_scene(scene_id, project_id)` for scenes you touch.
+- PR: pending
+
 ### 2026-05-02 — Redesign MCP workflow surface and harden scene ID safety
 
 - What changed: Reworked `describe_workflows` to an outcome-first discovery surface, updated key tool contracts (`find_scenes`, `get_arc`, `get_scene_prose`, `list_snapshots`) for envelope/disambiguation clarity, and hardened project-scoped scene joins to prevent cross-project leakage when scene IDs are reused.

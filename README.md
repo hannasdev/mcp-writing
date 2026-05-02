@@ -140,5 +140,17 @@ Goal: rebuild scene-to-character links in a controlled way after imported prose 
 
 Outcome: character-link maintenance becomes a preview-first batch operation instead of a one-off regex script or manual sidecar cleanup.
 
+### 6) Post-upgrade recovery after legacy migration warnings
+
+Goal: recover index confidence quickly when legacy upgrade warnings indicate ambiguous rows were skipped.
+
+1. Start by checking `get_runtime_config` (or `describe_workflows`) and confirm whether `db_migration_warnings` contains `LEGACY_JOIN_ROWS_SKIPPED`.
+2. If present, run `sync` immediately to rebuild scene relationships from current sidecars and prose metadata.
+3. Continue normal discovery (`find_scenes`, `get_arc`, `get_thread_arc`) and watch for stale-metadata warnings.
+4. When you touch stale scenes, run `enrich_scene(scene_id, project_id)` to recover metadata parity incrementally.
+5. If many scenes remain stale, switch to `enrich_scene_characters_batch` (dry-run first) for broader catch-up.
+
+Outcome: upgrade-related data loss risk becomes an explicit, operator-visible recovery workflow instead of a silent state mismatch.
+
 ## License
 AGPL-3.0-only
