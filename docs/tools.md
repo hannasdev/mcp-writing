@@ -182,7 +182,7 @@ Re-derive lightweight scene metadata from current prose (logline and character m
 
 ## find_scenes
 
-Find scenes by filtering on character, Save the Cat beat, tags, part, chapter, or POV. Returns ordered scene metadata only — no prose. All filters are optional and combinable. Supports pagination via page/page_size and auto-paginates large result sets with total_count. Warns if any matching scenes have stale metadata.
+Find scenes by filtering on character, Save the Cat beat, tags, part, chapter, or POV. Returns ordered scene metadata only — no prose. All filters are optional and combinable. Supports pagination via page/page_size and auto-paginates large result sets with total_count. Warns if any matching scenes have stale metadata. Response shape note: paginated responses always return an envelope (`results` + pagination fields). Non-paginated responses return a raw array unless stale-scene guidance is present, in which case an envelope is returned (`results`, `total_count`, `warning`, `next_step`).
 
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |

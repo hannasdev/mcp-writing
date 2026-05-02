@@ -70,7 +70,7 @@ export function registerSearchTools(s, {
   // ---- find_scenes ---------------------------------------------------------
   s.tool(
     "find_scenes",
-    "Find scenes by filtering on character, Save the Cat beat, tags, part, chapter, or POV. Returns ordered scene metadata only — no prose. All filters are optional and combinable. Supports pagination via page/page_size and auto-paginates large result sets with total_count. Warns if any matching scenes have stale metadata.",
+    "Find scenes by filtering on character, Save the Cat beat, tags, part, chapter, or POV. Returns ordered scene metadata only — no prose. All filters are optional and combinable. Supports pagination via page/page_size and auto-paginates large result sets with total_count. Warns if any matching scenes have stale metadata. Response shape note: paginated responses always return an envelope (`results` + pagination fields). Non-paginated responses return a raw array unless stale-scene guidance is present, in which case an envelope is returned (`results`, `total_count`, `warning`, `next_step`).",
     {
       project_id: z.string().optional().describe("Project ID (e.g. 'the-lamb'). Use to scope results to one project."),
       character:  z.string().optional().describe("A character_id (e.g. 'char-mira-nystrom'). Returns only scenes that character appears in. Use list_characters first to find valid IDs."),
@@ -137,7 +137,14 @@ export function registerSearchTools(s, {
               ? "Touch stale scenes as you work and run enrich_scene(scene_id, project_id) to recover metadata parity incrementally."
               : undefined,
           }
-        : rows;
+        : staleCount > 0
+          ? {
+              results: rows,
+              total_count: rows.length,
+              warning,
+              next_step: "Touch stale scenes as you work and run enrich_scene(scene_id, project_id) to recover metadata parity incrementally.",
+            }
+          : rows;
 
       return {
         content: [{
@@ -157,7 +164,7 @@ export function registerSearchTools(s, {
       commit: z.string().optional().describe("Optional git commit hash to retrieve a past version. Use list_snapshots to find valid hashes. If omitted, returns the current prose."),
     },
     async ({ scene_id, commit }) => {
-      const scene = db.prepare(`SELECT file_path, metadata_stale FROM scenes WHERE scene_id = ?`).get(scene_id);
+      const scene = db.prepare(`SELECT file_path, metadata_stale, project_id FROM scenes WHERE scene_id = ?`).get(scene_id);
       if (!scene) {
         return errorResponse("NOT_FOUND", `Scene '${scene_id}' not found. Run sync() if you just added it.`, {
           next_step: "Run sync() to refresh the index, then call find_scenes to locate the scene by current metadata.",
@@ -179,7 +186,7 @@ export function registerSearchTools(s, {
           ? `\n\n⚠️ Metadata for this scene may be stale — prose has changed since last enrichment.`
           : "";
         const nextStep = scene.metadata_stale && !commit
-          ? `\n\nSuggested next step: run enrich_scene(scene_id='${scene_id}') after this read to recover metadata parity for this scene.`
+          ? `\n\nSuggested next step: run enrich_scene(scene_id='${scene_id}', project_id='${scene.project_id}') after this read to recover metadata parity for this scene.`
           : "";
         return { content: [{ type: "text", text: prose.trim() + versionNote + warning + nextStep }] };
       } catch (err) {

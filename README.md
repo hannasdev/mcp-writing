@@ -62,6 +62,16 @@ New workflow IDs added:
 
 Styleguide workflows are still available, but no longer positioned as part of the primary daily workflow surface.
 
+### `find_scenes` response-shape guidance note
+
+`find_scenes` now may return a structured envelope for non-paginated calls when stale-scene guidance is present.
+
+- Paginated path: always envelope (`results`, `total_count`, page metadata).
+- Non-paginated clean path: raw array of scenes.
+- Non-paginated stale-guidance path: envelope (`results`, `total_count`, `warning`, `next_step`).
+
+If your integration assumed `find_scenes` without pagination arguments always returns an array, update parsing to accept both shapes.
+
 ## Usage scenarios
 
 ### 1) Continuity pass before sending chapters to beta readers

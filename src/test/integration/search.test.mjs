@@ -112,6 +112,22 @@ describe("search tools integration suite", { concurrency: 1 }, () => {
 
     await callWriteTool("enrich_scene", { scene_id: "sc-001", project_id: "test-novel" });
   });
+
+  test("includes next_step for stale unpaginated responses", async () => {
+    const scenePath = path.join(writeSyncDir, "projects", "test-novel", "part-1", "chapter-2", "sc-003.md");
+    const before = fs.readFileSync(scenePath, "utf8");
+    fs.writeFileSync(scenePath, `${before}\n\nParity hint marker for unpaginated find_scenes.\n`, "utf8");
+    await callWriteTool("sync");
+
+    const text = await callWriteTool("find_scenes", { beat: "Catalyst" });
+    const parsed = JSON.parse(text);
+    assert.equal(Array.isArray(parsed), false);
+    assert.equal(parsed.total_count, 1);
+    assert.equal(typeof parsed.next_step, "string");
+    assert.ok(parsed.next_step.includes("enrich_scene"));
+
+    await callWriteTool("enrich_scene", { scene_id: "sc-003", project_id: "test-novel" });
+  });
 });
 
 describe("get_scene_prose tool", () => {
@@ -145,6 +161,7 @@ describe("get_scene_prose tool", () => {
     assert.ok(text.includes("Metadata for this scene may be stale"));
     assert.ok(text.includes("Suggested next step"));
     assert.ok(text.includes("enrich_scene"));
+    assert.ok(text.includes("project_id='test-novel'"));
 
     await callWriteTool("enrich_scene", { scene_id: "sc-002", project_id: "test-novel" });
   });
