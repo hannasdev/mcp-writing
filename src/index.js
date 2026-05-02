@@ -71,6 +71,12 @@ const OWNERSHIP_GUARD_MODE_RAW = (process.env.OWNERSHIP_GUARD_MODE ?? "warn").tr
 const OWNERSHIP_GUARD_MODE = OWNERSHIP_GUARD_MODE_RAW === "fail" || OWNERSHIP_GUARD_MODE_RAW === "warn"
   ? OWNERSHIP_GUARD_MODE_RAW
   : "warn";
+const STYLEGUIDE_ENFORCEMENT_MODE_RAW = (process.env.PROSE_STYLEGUIDE_ENFORCEMENT_MODE ?? "warn").trim().toLowerCase();
+const STYLEGUIDE_ENFORCEMENT_MODE = STYLEGUIDE_ENFORCEMENT_MODE_RAW === "off"
+  || STYLEGUIDE_ENFORCEMENT_MODE_RAW === "warn"
+  || STYLEGUIDE_ENFORCEMENT_MODE_RAW === "required"
+  ? STYLEGUIDE_ENFORCEMENT_MODE_RAW
+  : "warn";
 const OWNERSHIP_GUARD_MODE_RAW_DISPLAY = JSON.stringify(OWNERSHIP_GUARD_MODE_RAW);
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -410,6 +416,7 @@ function createMcpServer() {
     isPathCandidateInsideSyncDir,
     pendingProposals,
     generateProposalId,
+    STYLEGUIDE_ENFORCEMENT_MODE,
   };
   registerSyncTools(s, toolContext);
   registerSearchTools(s, toolContext);
@@ -434,6 +441,7 @@ function createMcpServer() {
         permission_diagnostics: SYNC_OWNERSHIP_DIAGNOSTICS,
         git_available: GIT_AVAILABLE,
         git_enabled: GIT_ENABLED,
+        styleguide_enforcement_mode: STYLEGUIDE_ENFORCEMENT_MODE,
         http_port: HTTP_PORT,
         runtime_warnings: RUNTIME_DIAGNOSTICS.warnings,
         setup_recommendations: RUNTIME_DIAGNOSTICS.recommendations,

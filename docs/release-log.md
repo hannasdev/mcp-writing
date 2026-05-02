@@ -8,6 +8,14 @@ This complements `CHANGELOG.md`:
 
 ## Unreleased
 
+### 2026-05-02 — Enforce prose styleguide automatically in edit proposals
+
+- What changed: `propose_edit` now runs automatic styleguide checks by default, returns structured styleguide diagnostics in the proposal response, supports explicit bypass (`bypass_styleguide` + required `bypass_reason`), and `commit_edit` now rejects stale proposals when styleguide inputs changed after proposal creation.
+- Why it matters: Style consistency checks are now built into the safe edit flow without adding extra setup commands in normal use, and approvals are protected from committing against outdated style rules.
+- Who is affected: Anyone using `propose_edit` and `commit_edit`, especially teams maintaining project style conventions.
+- Action needed: Optional: set `PROSE_STYLEGUIDE_ENFORCEMENT_MODE` to `off`, `warn` (default), or `required` based on your workflow strictness.
+- PR: [#166](https://github.com/hannasdev/mcp-writing/pull/166)
+
 ### 2026-05-02 — Surface legacy migration skips with explicit operator follow-up
 
 - What changed: Legacy join-table upgrade behavior now emits an explicit `LEGACY_JOIN_ROWS_SKIPPED` warning (startup logs plus runtime surfaces such as `get_runtime_config` and `describe_workflows` context) when ambiguous legacy rows are dropped during project-scoping migration.

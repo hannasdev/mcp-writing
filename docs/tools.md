@@ -636,6 +636,8 @@ Generate a proposed revision for a scene. Returns a proposal_id and a diff previ
 | `project_id` | `string` | No | Optional project ID to disambiguate duplicate scene IDs across projects. |
 | `instruction` | `string` | Yes | A brief instruction for the edit (e.g. 'Tighten the opening paragraph'). Used in the git commit message. |
 | `revised_prose` | `string` | Yes | The complete revised prose text for the scene. |
+| `bypass_styleguide` | `boolean` | No | If true, bypasses automatic styleguide checks for this proposal. |
+| `bypass_reason` | `string` | No | Required when bypass_styleguide=true. Explains why this edit should ignore styleguide checks. |
 
 ---
 

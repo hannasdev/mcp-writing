@@ -1,9 +1,17 @@
 import { z } from "zod";
 import fs from "node:fs";
+import path from "node:path";
+import { createHash } from "node:crypto";
 import matter from "gray-matter";
 import yaml from "js-yaml";
 import { createSnapshot, listSnapshots } from "../core/git.js";
 import { getFileWriteDiagnostics, readMeta, indexSceneFile } from "../sync/sync.js";
+import { resolveStyleguideConfig } from "../styleguide/prose-styleguide.js";
+import {
+  PROSE_STYLEGUIDE_SKILL_BASENAME,
+  PROSE_STYLEGUIDE_SKILL_DIRNAME,
+} from "../styleguide/prose-styleguide-skill.js";
+import { analyzeSceneStyleguideDrift } from "../styleguide/prose-styleguide-drift.js";
 
 function renderSceneContent(metadata, revisedProse) {
   const hasFrontmatter = metadata && Object.keys(metadata).length > 0;
@@ -13,10 +21,197 @@ function renderSceneContent(metadata, revisedProse) {
     : `${normalizedProse}\n`;
 }
 
+function digestFor(value) {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+function buildStyleguideFingerprint({
+  resolvedConfig,
+  sources,
+  skillDigest,
+  setupRequired,
+}) {
+  return digestFor(JSON.stringify({
+    resolved_config: resolvedConfig ?? null,
+    sources: sources ?? [],
+    skill_digest: skillDigest ?? null,
+    setup_required: Boolean(setupRequired),
+  }));
+}
+
+function resolveStyleguideSnapshot({ syncDir, projectId, errorResponse }) {
+  const resolved = resolveStyleguideConfig({
+    syncDir,
+    projectId,
+  });
+  if (!resolved.ok) {
+    return {
+      ok: false,
+      response: errorResponse(
+        resolved.error.code,
+        resolved.error.message,
+        resolved.error.details
+      ),
+    };
+  }
+
+  const skillPath = path.join(
+    syncDir,
+    PROSE_STYLEGUIDE_SKILL_DIRNAME,
+    PROSE_STYLEGUIDE_SKILL_BASENAME
+  );
+  let skillExists;
+  let skillDigest = null;
+  try {
+    skillExists = fs.existsSync(skillPath);
+    if (skillExists) {
+      skillDigest = digestFor(fs.readFileSync(skillPath, "utf8"));
+    }
+  } catch (error) {
+    const err = error instanceof Error ? error : new Error(String(error));
+    return {
+      ok: false,
+      response: errorResponse(
+        "STYLEGUIDE_SKILL_IO_ERROR",
+        "Failed to read skills/prose-styleguide.md while resolving styleguide snapshot.",
+        {
+          file_path: skillPath,
+          reason: err.message,
+        }
+      ),
+    };
+  }
+  const fingerprint = buildStyleguideFingerprint({
+    resolvedConfig: resolved.resolved_config,
+    sources: resolved.sources,
+    skillDigest,
+    setupRequired: resolved.setup_required,
+  });
+
+  return {
+    ok: true,
+    snapshot: {
+      project_id: projectId ?? null,
+      config_found: resolved.config_found,
+      setup_required: resolved.setup_required,
+      sources: resolved.sources,
+      resolved_config: resolved.resolved_config,
+      skill_file_path: skillPath,
+      skill_found: Boolean(skillExists),
+      skill_digest: skillDigest,
+      fingerprint,
+    },
+  };
+}
+
+function evaluateStyleguidePolicy({
+  snapshot,
+  revisedProse,
+  bypassStyleguide,
+  bypassReason,
+  enforcementMode,
+  errorResponse,
+}) {
+  if (bypassStyleguide && !bypassReason) {
+    return {
+      ok: false,
+      response: errorResponse(
+        "STYLEGUIDE_BYPASS_REASON_REQUIRED",
+        "bypass_reason is required when bypass_styleguide=true."
+      ),
+    };
+  }
+
+  const warnings = [];
+  if (enforcementMode !== "off") {
+    if (snapshot.setup_required || !snapshot.config_found) {
+      if (enforcementMode === "required" && !bypassStyleguide) {
+        return {
+          ok: false,
+          response: errorResponse(
+            "STYLEGUIDE_CONFIG_REQUIRED",
+            "Cannot propose prose edits before prose-styleguide.config.yaml is configured.",
+            {
+              project_id: snapshot.project_id,
+              next_step: "Run setup_prose_styleguide_config (or bootstrap_prose_styleguide_config), then retry propose_edit.",
+            }
+          ),
+        };
+      }
+      warnings.push("No prose-styleguide.config.yaml is currently resolved for this scene.");
+    }
+
+    if (!snapshot.skill_found) {
+      if (enforcementMode === "required" && !bypassStyleguide) {
+        return {
+          ok: false,
+          response: errorResponse(
+            "STYLEGUIDE_SKILL_REQUIRED",
+            "Cannot propose prose edits before skills/prose-styleguide.md exists.",
+            {
+              next_step: "Run setup_prose_styleguide_skill, then retry propose_edit.",
+            }
+          ),
+        };
+      }
+      warnings.push("skills/prose-styleguide.md was not found at sync root.");
+    }
+  }
+
+  const canApply =
+    enforcementMode !== "off"
+    && !bypassStyleguide
+    && snapshot.config_found
+    && !snapshot.setup_required
+    && Boolean(snapshot.resolved_config);
+
+  const analysis = canApply
+    ? analyzeSceneStyleguideDrift({
+      prose: revisedProse,
+      resolvedConfig: snapshot.resolved_config,
+    })
+    : { observed: {}, drift: [] };
+
+  const violations = analysis.drift.map((entry) => ({
+    field: entry.field,
+    declared: entry.declared,
+    observed: entry.observed,
+    severity: "error",
+  }));
+
+  if (enforcementMode === "required" && violations.length > 0 && !bypassStyleguide) {
+    return {
+      ok: false,
+      response: errorResponse(
+        "STYLEGUIDE_VIOLATIONS",
+        "Revised prose violates required styleguide conventions.",
+        {
+          violations,
+          next_step: "Revise prose to match conventions or retry with bypass_styleguide=true and a bypass_reason.",
+        }
+      ),
+    };
+  }
+
+  return {
+    ok: true,
+    policy: {
+      enforcement_mode: enforcementMode,
+      bypass_used: Boolean(bypassStyleguide),
+      bypass_reason: bypassStyleguide ? bypassReason : null,
+      styleguide_applied: canApply,
+      warnings,
+      observed_signals: analysis.observed,
+      violations,
+    },
+  };
+}
+
 export function registerEditingTools(s, {
   db,
   SYNC_DIR,
   GIT_ENABLED,
+  STYLEGUIDE_ENFORCEMENT_MODE,
   errorResponse,
   jsonResponse,
   pendingProposals,
@@ -31,8 +226,10 @@ export function registerEditingTools(s, {
       project_id: z.string().optional().describe("Optional project ID to disambiguate duplicate scene IDs across projects."),
       instruction: z.string().describe("A brief instruction for the edit (e.g. 'Tighten the opening paragraph'). Used in the git commit message."),
       revised_prose: z.string().describe("The complete revised prose text for the scene."),
+      bypass_styleguide: z.boolean().optional().describe("If true, bypasses automatic styleguide checks for this proposal."),
+      bypass_reason: z.string().optional().describe("Required when bypass_styleguide=true. Explains why this edit should ignore styleguide checks."),
     },
-    async ({ scene_id, project_id, instruction, revised_prose }) => {
+    async ({ scene_id, project_id, instruction, revised_prose, bypass_styleguide = false, bypass_reason }) => {
       if (!GIT_ENABLED) {
         return errorResponse("GIT_UNAVAILABLE", "Git is not available — prose editing is not supported. Ensure git is installed and the sync directory is writable.");
       }
@@ -56,6 +253,27 @@ export function registerEditingTools(s, {
           );
         }
         scene = scenes[0];
+      }
+
+      const styleguideSnapshotResult = resolveStyleguideSnapshot({
+        syncDir: SYNC_DIR,
+        projectId: scene.project_id,
+        errorResponse,
+      });
+      if (!styleguideSnapshotResult.ok) {
+        return styleguideSnapshotResult.response;
+      }
+
+      const styleguidePolicy = evaluateStyleguidePolicy({
+        snapshot: styleguideSnapshotResult.snapshot,
+        revisedProse: revised_prose,
+        bypassStyleguide: bypass_styleguide,
+        bypassReason: bypass_reason,
+        enforcementMode: STYLEGUIDE_ENFORCEMENT_MODE,
+        errorResponse,
+      });
+      if (!styleguidePolicy.ok) {
+        return styleguidePolicy.response;
       }
 
       try {
@@ -90,6 +308,8 @@ export function registerEditingTools(s, {
           rendered_content: renderedContent,
           original_prose: currentProse,
           metadata,
+          styleguide_snapshot: styleguideSnapshotResult.snapshot,
+          styleguide_policy: styleguidePolicy.policy,
           created_at: new Date().toISOString(),
         });
 
@@ -107,6 +327,13 @@ export function registerEditingTools(s, {
           instruction,
           diff_preview: diffPreview,
           noop,
+          styleguide: {
+            ...styleguidePolicy.policy,
+            fingerprint: styleguideSnapshotResult.snapshot.fingerprint,
+            config_found: styleguideSnapshotResult.snapshot.config_found,
+            skill_found: styleguideSnapshotResult.snapshot.skill_found,
+            sources: styleguideSnapshotResult.snapshot.sources,
+          },
           note: noop
             ? "This proposal matches the current scene file. Calling commit_edit will be a no-op."
             : "Review the diff above. Call commit_edit with this proposal_id to apply the change.",
@@ -165,6 +392,35 @@ export function registerEditingTools(s, {
 
       if (project_id && proposal.project_id && proposal.project_id !== project_id) {
         return errorResponse("INVALID_EDIT", `Proposal '${proposal_id}' is for project '${proposal.project_id}', not '${project_id}'.`);
+      }
+
+      if (
+        proposal.styleguide_snapshot
+        && proposal.styleguide_policy
+        && proposal.styleguide_policy.bypass_used !== true
+      ) {
+        const latestStyleguideSnapshot = resolveStyleguideSnapshot({
+          syncDir: SYNC_DIR,
+          projectId: proposal.project_id,
+          errorResponse,
+        });
+        if (!latestStyleguideSnapshot.ok) {
+          return latestStyleguideSnapshot.response;
+        }
+
+        if (latestStyleguideSnapshot.snapshot.fingerprint !== proposal.styleguide_snapshot.fingerprint) {
+          return errorResponse(
+            "STYLEGUIDE_CHANGED_SINCE_PROPOSAL",
+            "Styleguide inputs changed after this proposal was created. Re-run propose_edit against the latest styleguide before commit.",
+            {
+              proposal_id,
+              project_id: proposal.project_id ?? null,
+              previous_fingerprint: proposal.styleguide_snapshot.fingerprint,
+              current_fingerprint: latestStyleguideSnapshot.snapshot.fingerprint,
+              next_step: "Call propose_edit again to regenerate this revision with current styleguide rules.",
+            }
+          );
+        }
       }
 
       try {
