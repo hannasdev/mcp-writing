@@ -356,7 +356,15 @@ export function registerSearchTools(s, {
       if (rows.length === 0) {
         return errorResponse("NO_RESULTS", "No characters found.");
       }
-      return { content: [{ type: "text", text: JSON.stringify(rows, null, 2) }] };
+      return {
+        content: [{
+          type: "text",
+          text: JSON.stringify({
+            results: rows,
+            total_count: rows.length,
+          }, null, 2),
+        }],
+      };
     }
   );
 
@@ -421,7 +429,15 @@ export function registerSearchTools(s, {
       if (rows.length === 0) {
         return errorResponse("NO_RESULTS", "No places found.");
       }
-      return { content: [{ type: "text", text: JSON.stringify(rows, null, 2) }] };
+      return {
+        content: [{
+          type: "text",
+          text: JSON.stringify({
+            results: rows,
+            total_count: rows.length,
+          }, null, 2),
+        }],
+      };
     }
   );
 
@@ -507,7 +523,15 @@ export function registerSearchTools(s, {
           ORDER BY rank
         `).all(query);
 
-        return { content: [{ type: "text", text: JSON.stringify(rows, null, 2) }] };
+        return {
+          content: [{
+            type: "text",
+            text: JSON.stringify({
+              results: rows,
+              total_count: rows.length,
+            }, null, 2),
+          }],
+        };
       }
 
       const safePageSize = Math.max(1, page_size ?? DEFAULT_METADATA_PAGE_SIZE);
@@ -596,7 +620,15 @@ export function registerSearchTools(s, {
         return errorResponse("NO_RESULTS", "No reference documents matched the provided filters.");
       }
 
-      return { content: [{ type: "text", text: JSON.stringify(rows, null, 2) }] };
+      return {
+        content: [{
+          type: "text",
+          text: JSON.stringify({
+            results: rows,
+            total_count: rows.length,
+          }, null, 2),
+        }],
+      };
     }
   );
 

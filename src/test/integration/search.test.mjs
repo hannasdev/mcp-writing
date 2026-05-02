@@ -293,8 +293,12 @@ describe("get_arc tool", () => {
 describe("list_characters tool", () => {
   test("lists elena and marcus", async () => {
     const text = await callTool("list_characters");
-    assert.ok(text.includes("elena"));
-    assert.ok(text.includes("marcus"));
+    const parsed = JSON.parse(text);
+    assert.equal(Array.isArray(parsed.results), true);
+    assert.equal(parsed.total_count >= 2, true);
+    const ids = parsed.results.map((row) => row.character_id);
+    assert.ok(ids.includes("elena"));
+    assert.ok(ids.includes("marcus"));
   });
 });
 
@@ -346,7 +350,11 @@ describe("get_character_sheet tool", () => {
 describe("list_places tool", () => {
   test("lists harbor-district", async () => {
     const text = await callTool("list_places");
-    assert.ok(text.includes("harbor-district"));
+    const parsed = JSON.parse(text);
+    assert.equal(Array.isArray(parsed.results), true);
+    assert.equal(parsed.total_count >= 1, true);
+    const ids = parsed.results.map((row) => row.place_id);
+    assert.ok(ids.includes("harbor-district"));
   });
 });
 
@@ -396,12 +404,17 @@ describe("get_place_sheet tool", () => {
 describe("search_metadata tool", () => {
   test("search envelope returns sc-003 (logline)", async () => {
     const text = await callTool("search_metadata", { query: "envelope" });
-    assert.ok(text.includes("sc-003"));
+    const parsed = JSON.parse(text);
+    assert.equal(Array.isArray(parsed.results), true);
+    assert.equal(parsed.total_count >= 1, true);
+    assert.ok(parsed.results.some((row) => row.scene_id === "sc-003"));
   });
 
   test("search matches metadata keyword phrases from sidecar fields", async () => {
     const text = await callTool("search_metadata", { query: '"Daniel Nystrom"' });
-    assert.ok(text.includes("sc-002"));
+    const parsed = JSON.parse(text);
+    assert.equal(Array.isArray(parsed.results), true);
+    assert.ok(parsed.results.some((row) => row.scene_id === "sc-002"));
   });
 
   test("supports pagination with total_count", async () => {
@@ -432,25 +445,25 @@ describe("search_reference tool", () => {
   test("finds reference docs by title and summary text", async () => {
     const text = await callTool("search_reference", { query: "vampirism" });
     const parsed = JSON.parse(text);
-    assert.equal(parsed.length, 1);
-    assert.equal(parsed[0].type, "world");
-    assert.equal(parsed[0].title, "Vampirism in this universe");
-    assert.ok(parsed[0].tags.includes("vampirism"));
+    assert.equal(parsed.total_count, 1);
+    assert.equal(parsed.results[0].type, "world");
+    assert.equal(parsed.results[0].title, "Vampirism in this universe");
+    assert.ok(parsed.results[0].tags.includes("vampirism"));
   });
 
   test("supports exact tag filtering", async () => {
     const text = await callTool("search_reference", { query: "blood", tag: "continuity" });
     const parsed = JSON.parse(text);
-    assert.equal(parsed.length, 1);
-    assert.equal(parsed[0].type, "continuity");
-    assert.equal(parsed[0].title, "Sebastian's struggle for blood replacement");
+    assert.equal(parsed.total_count, 1);
+    assert.equal(parsed.results[0].type, "continuity");
+    assert.equal(parsed.results[0].title, "Sebastian's struggle for blood replacement");
   });
 
   test("supports type filtering", async () => {
     const text = await callTool("search_reference", { query: "blood", type: "world" });
     const parsed = JSON.parse(text);
-    assert.equal(parsed.length, 1);
-    assert.equal(parsed[0].type, "world");
+    assert.equal(parsed.total_count, 1);
+    assert.equal(parsed.results[0].type, "world");
   });
 
   test("returns INVALID_QUERY on malformed FTS syntax", async () => {

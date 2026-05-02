@@ -442,7 +442,7 @@ export function renderReviewBundlePdf(dbHandle, plan, { generatedAt, syncDir: sy
           doc.moveDown(0.2);
         }
 
-        if (scene.logline) {
+        if (profile === "outline_discussion" && scene.logline) {
           doc.fontSize(10).font("Helvetica-Oblique");
           const textWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
           doc.text(`"${scene.logline}"`, { align: "left", width: textWidth });
