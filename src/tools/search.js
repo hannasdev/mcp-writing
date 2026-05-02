@@ -306,8 +306,18 @@ export function registerSearchTools(s, {
             results: paged.rows,
             ...paged.meta,
             warning,
+            next_step: staleCount > 0
+              ? "Touch stale scenes as you work and run enrich_scene(scene_id, project_id) to recover metadata parity incrementally."
+              : undefined,
           }
-        : rows;
+        : staleCount > 0
+          ? {
+              results: rows,
+              total_count: rows.length,
+              warning,
+              next_step: "Touch stale scenes as you work and run enrich_scene(scene_id, project_id) to recover metadata parity incrementally.",
+            }
+          : rows;
 
       return { content: [{ type: "text", text: JSON.stringify(payload, null, 2) }] };
     }

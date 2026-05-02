@@ -248,6 +248,24 @@ describe("get_arc tool", () => {
     assert.equal(parsed.page, 1);
     assert.equal(parsed.results.length, 2);
   });
+
+  test("includes next_step for stale unpaginated arc responses", async () => {
+    const scenePath = path.join(writeSyncDir, "projects", "test-novel", "part-1", "chapter-1", "sc-002.md");
+    const before = fs.readFileSync(scenePath, "utf8");
+    fs.writeFileSync(scenePath, `${before}\n\nParity hint marker for unpaginated get_arc.\n`, "utf8");
+    await callWriteTool("sync");
+
+    const text = await callWriteTool("get_arc", { character_id: "marcus" });
+    const parsed = JSON.parse(text);
+    assert.equal(Array.isArray(parsed), false);
+    assert.equal(parsed.total_count, 2);
+    assert.equal(typeof parsed.warning, "string");
+    assert.ok(parsed.warning.toLowerCase().includes("stale metadata"));
+    assert.equal(typeof parsed.next_step, "string");
+    assert.ok(parsed.next_step.includes("enrich_scene"));
+
+    await callWriteTool("enrich_scene", { scene_id: "sc-002", project_id: "test-novel" });
+  });
 });
 
 describe("list_characters tool", () => {
