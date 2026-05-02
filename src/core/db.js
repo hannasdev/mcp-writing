@@ -315,7 +315,12 @@ const MIGRATIONS = [
         INSERT OR IGNORE INTO scene_characters_migrating (scene_id, project_id, character_id)
         SELECT sc.scene_id, s.project_id, sc.character_id
         FROM scene_characters sc
-        JOIN scenes s ON s.scene_id = sc.scene_id;
+        JOIN scenes s ON s.scene_id = sc.scene_id
+        WHERE (
+          SELECT COUNT(*)
+          FROM scenes sx
+          WHERE sx.scene_id = sc.scene_id
+        ) = 1;
       `
     );
 
@@ -334,7 +339,12 @@ const MIGRATIONS = [
         INSERT OR IGNORE INTO scene_places_migrating (scene_id, project_id, place_id)
         SELECT sp.scene_id, s.project_id, sp.place_id
         FROM scene_places sp
-        JOIN scenes s ON s.scene_id = sp.scene_id;
+        JOIN scenes s ON s.scene_id = sp.scene_id
+        WHERE (
+          SELECT COUNT(*)
+          FROM scenes sx
+          WHERE sx.scene_id = sp.scene_id
+        ) = 1;
       `
     );
 
@@ -353,7 +363,12 @@ const MIGRATIONS = [
         INSERT OR IGNORE INTO scene_tags_migrating (scene_id, project_id, tag)
         SELECT st.scene_id, s.project_id, st.tag
         FROM scene_tags st
-        JOIN scenes s ON s.scene_id = st.scene_id;
+        JOIN scenes s ON s.scene_id = st.scene_id
+        WHERE (
+          SELECT COUNT(*)
+          FROM scenes sx
+          WHERE sx.scene_id = st.scene_id
+        ) = 1;
       `
     );
 

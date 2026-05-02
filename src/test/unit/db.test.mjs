@@ -340,6 +340,80 @@ describe("openDb", () => {
       fs.rmSync(dbPath, { force: true });
     }
   });
+
+  test("scene_characters/places/tags migration skips ambiguous duplicated scene_id rows", () => {
+    const dbPath = makeTempPath();
+    try {
+      const legacyDb = new DatabaseSync(dbPath);
+      legacyDb.exec(`
+        CREATE TABLE projects (
+          project_id TEXT PRIMARY KEY,
+          universe_id TEXT,
+          name TEXT NOT NULL
+        );
+        CREATE TABLE scenes (
+          scene_id TEXT NOT NULL,
+          project_id TEXT NOT NULL,
+          title TEXT,
+          file_path TEXT NOT NULL,
+          prose_checksum TEXT,
+          metadata_stale INTEGER NOT NULL DEFAULT 0,
+          updated_at TEXT NOT NULL,
+          PRIMARY KEY (scene_id, project_id)
+        );
+        CREATE TABLE scene_characters (
+          scene_id TEXT NOT NULL,
+          character_id TEXT NOT NULL,
+          PRIMARY KEY (scene_id, character_id)
+        );
+        CREATE TABLE scene_places (
+          scene_id TEXT NOT NULL,
+          place_id TEXT NOT NULL,
+          PRIMARY KEY (scene_id, place_id)
+        );
+        CREATE TABLE scene_tags (
+          scene_id TEXT NOT NULL,
+          tag TEXT NOT NULL,
+          PRIMARY KEY (scene_id, tag)
+        );
+        CREATE TABLE scene_threads (
+          scene_id TEXT NOT NULL,
+          thread_id TEXT NOT NULL,
+          beat TEXT,
+          PRIMARY KEY (scene_id, thread_id)
+        );
+        CREATE TABLE schema_version (
+          id INTEGER PRIMARY KEY CHECK (id = 1),
+          version INTEGER NOT NULL
+        );
+      `);
+      legacyDb.exec(`INSERT INTO schema_version (id, version) VALUES (1, 6);`);
+      legacyDb.prepare(`INSERT INTO projects (project_id, universe_id, name) VALUES (?, ?, ?)`).run("alpha", null, "alpha");
+      legacyDb.prepare(`INSERT INTO projects (project_id, universe_id, name) VALUES (?, ?, ?)`).run("beta", null, "beta");
+
+      const sceneSql = `
+        INSERT INTO scenes (scene_id, project_id, title, file_path, prose_checksum, metadata_stale, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `;
+      legacyDb.prepare(sceneSql).run("sc-shared", "alpha", "Alpha Scene", "/tmp/alpha.md", "aaa", 0, new Date().toISOString());
+      legacyDb.prepare(sceneSql).run("sc-shared", "beta", "Beta Scene", "/tmp/beta.md", "bbb", 0, new Date().toISOString());
+
+      legacyDb.prepare(`INSERT INTO scene_characters (scene_id, character_id) VALUES (?, ?)`).run("sc-shared", "char-mira");
+      legacyDb.prepare(`INSERT INTO scene_places (scene_id, place_id) VALUES (?, ?)`).run("sc-shared", "place-harbor");
+      legacyDb.prepare(`INSERT INTO scene_tags (scene_id, tag) VALUES (?, ?)`).run("sc-shared", "opening");
+      legacyDb.close();
+
+      const db = openDb(dbPath);
+
+      assert.equal(db.prepare(`SELECT COUNT(*) AS count FROM scene_characters`).get().count, 0);
+      assert.equal(db.prepare(`SELECT COUNT(*) AS count FROM scene_places`).get().count, 0);
+      assert.equal(db.prepare(`SELECT COUNT(*) AS count FROM scene_tags`).get().count, 0);
+
+      db.close();
+    } finally {
+      fs.rmSync(dbPath, { force: true });
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------
