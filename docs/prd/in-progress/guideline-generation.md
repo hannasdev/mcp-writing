@@ -19,14 +19,7 @@ Current state: **partially delivered**.
 
 ### Confirmed complete
 
-- Config lifecycle tooling is implemented:
-  - `setup_prose_styleguide_config`
-  - `get_prose_styleguide_config`
-  - `summarize_prose_styleguide_config`
-  - `bootstrap_prose_styleguide_config`
-  - `update_prose_styleguide_config`
-  - `preview_prose_styleguide_config_update`
-  - `check_prose_styleguide_drift`
+- Onboarding and config lifecycle implementation details are tracked in `docs/prd/in-progress/onboarding-framework.md`.
 - Skill generation is implemented via `setup_prose_styleguide_skill`, writing to `skills/prose-styleguide/SKILL.md`.
 - Editing enforcement is integrated in `propose_edit`:
   - requires config/skill in required mode
@@ -364,7 +357,7 @@ System:
 
 - Users report improved consistency across writing
 - Reduced need for manual rewriting after AI edits
-- Config accurately reflects the author's conventions after wizard or bootstrap
+- Resolved config and generated skill are applied consistently during prose edit workflows
 - Scenes consistently demonstrate purpose and transformation
 - Fewer "flat" or redundant scenes
 

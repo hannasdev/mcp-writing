@@ -49,7 +49,12 @@ This creates:
 
 ### 1. First-Time Setup Wizard
 
-Interactive setup generates a project config file with:
+Interactive setup generates a styleguide config with selectable scope:
+- sync-root
+- universe-root
+- project-root
+
+Setup output includes:
 - Enumerated convention choices
 - Explicit confirmation/override of inferred defaults
 - Freeform notes field (voice or project-specific nuance)
@@ -91,13 +96,16 @@ The first question is writing language. Language determines sensible default con
 
 `—` means no language-level default; ask explicitly.
 
+`quotation_style_nested` defaults from `quotation_style` when omitted and should be shown as an inferred value the user can override.
+
 Always explicit author choices:
 - tense
 - pov
-- time format
 - number style
 - ellipsis style
 - sentence fragment tolerance
+
+`time_format` should be inferred from language/spelling defaults when possible, with explicit author override available.
 
 ### 3. Corpus-Assisted Bootstrap (Optional)
 
@@ -121,7 +129,7 @@ After setup, users can:
 - Update values conversationally
 - Edit config directly and request validation
 
-The config is a living document, not one-time output.
+The config is a living document, not a one-time output.
 
 ---
 
@@ -146,6 +154,8 @@ System:
 - Collects explicit values not inferable from language
 - Captures freeform notes
 - Writes config after confirmation
+- Generates `skills/prose-styleguide/SKILL.md` from resolved config
+- Publishes AI boot files required for vendor wiring
 
 ### Scenario 2: Bootstrap from Existing Corpus
 
@@ -156,6 +166,8 @@ System:
 - Proposes default candidates
 - Lets user accept/override each value
 - Writes config after confirmation
+- Generates `skills/prose-styleguide/SKILL.md` from resolved config
+- Publishes AI boot files required for vendor wiring
 
 ### Scenario 3: Ongoing Config Changes
 
