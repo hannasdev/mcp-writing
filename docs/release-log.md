@@ -8,6 +8,14 @@ This complements `CHANGELOG.md`:
 
 ## Unreleased
 
+### 2026-05-03 — Surface runtime warning for invalid styleguide enforcement mode
+
+- What changed: Server startup now emits an explicit `STYLEGUIDE_ENFORCEMENT_MODE_INVALID` warning when `PROSE_STYLEGUIDE_ENFORCEMENT_MODE` environment variable is set to an invalid value (falling back to default `warn` mode).
+- Why it matters: Operators are now notified of configuration typos instead of silently accepting fallback behavior, reducing misconfiguration issues in production deployments.
+- Who is affected: Maintainers and operators configuring `PROSE_STYLEGUIDE_ENFORCEMENT_MODE` environment variable.
+- Action needed: If you see this warning, set `PROSE_STYLEGUIDE_ENFORCEMENT_MODE` to one of: `off`, `warn`, or `required`.
+- PR: [#167](https://github.com/hannasdev/mcp-writing/pull/167)
+
 ### 2026-05-02 — Enforce prose styleguide automatically in edit proposals
 
 - What changed: `propose_edit` now runs automatic styleguide checks by default, returns structured styleguide diagnostics in the proposal response, supports explicit bypass (`bypass_styleguide` + required `bypass_reason`), and `commit_edit` now rejects stale proposals when styleguide inputs changed after proposal creation.

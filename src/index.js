@@ -78,6 +78,7 @@ const STYLEGUIDE_ENFORCEMENT_MODE = STYLEGUIDE_ENFORCEMENT_MODE_RAW === "off"
   ? STYLEGUIDE_ENFORCEMENT_MODE_RAW
   : "warn";
 const OWNERSHIP_GUARD_MODE_RAW_DISPLAY = JSON.stringify(OWNERSHIP_GUARD_MODE_RAW);
+const STYLEGUIDE_ENFORCEMENT_MODE_RAW_DISPLAY = JSON.stringify(STYLEGUIDE_ENFORCEMENT_MODE_RAW);
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const ROOT_DIR = path.resolve(__dirname, "..");
@@ -219,6 +220,9 @@ const RUNTIME_DIAGNOSTICS = getRuntimeDiagnostics({
   ownershipGuardModeRaw: OWNERSHIP_GUARD_MODE_RAW,
   ownershipGuardMode: OWNERSHIP_GUARD_MODE,
   ownershipGuardModeRawDisplay: OWNERSHIP_GUARD_MODE_RAW_DISPLAY,
+  styleguideEnforcementModeRaw: STYLEGUIDE_ENFORCEMENT_MODE_RAW,
+  styleguideEnforcementMode: STYLEGUIDE_ENFORCEMENT_MODE,
+  styleguideEnforcementModeRawDisplay: STYLEGUIDE_ENFORCEMENT_MODE_RAW_DISPLAY,
   syncDirWritable: SYNC_DIR_WRITABLE,
   syncDirAbs: SYNC_DIR_ABS,
   syncOwnershipDiagnostics: SYNC_OWNERSHIP_DIAGNOSTICS,

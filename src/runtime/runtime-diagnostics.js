@@ -9,6 +9,9 @@
  * @param {string}  opts.ownershipGuardModeRaw      Raw env value before normalisation
  * @param {string}  opts.ownershipGuardMode          Normalised value ("warn" | "fail")
  * @param {string}  opts.ownershipGuardModeRawDisplay JSON.stringify of the raw value
+ * @param {string}  opts.styleguideEnforcementModeRaw Raw env value before normalisation
+ * @param {string}  opts.styleguideEnforcementMode    Normalised value ("off" | "warn" | "required")
+ * @param {string}  opts.styleguideEnforcementModeRawDisplay JSON.stringify of the raw value
  * @param {boolean} opts.syncDirWritable
  * @param {string}  opts.syncDirAbs                 Resolved absolute path shown in messages
  * @param {object}  opts.syncOwnershipDiagnostics   Result of getSyncOwnershipDiagnostics()
@@ -20,6 +23,9 @@ export function getRuntimeDiagnostics({
   ownershipGuardModeRaw,
   ownershipGuardMode,
   ownershipGuardModeRawDisplay,
+  styleguideEnforcementModeRaw,
+  styleguideEnforcementMode,
+  styleguideEnforcementModeRawDisplay,
   syncDirWritable,
   syncDirAbs,
   syncOwnershipDiagnostics,
@@ -34,6 +40,13 @@ export function getRuntimeDiagnostics({
       `OWNERSHIP_GUARD_MODE_INVALID: Unsupported OWNERSHIP_GUARD_MODE=${ownershipGuardModeRawDisplay}. Falling back to 'warn'.`
     );
     recommendations.push("Set OWNERSHIP_GUARD_MODE to either 'warn' or 'fail'.");
+  }
+
+  if (styleguideEnforcementModeRaw !== styleguideEnforcementMode) {
+    warnings.push(
+      `STYLEGUIDE_ENFORCEMENT_MODE_INVALID: Unsupported PROSE_STYLEGUIDE_ENFORCEMENT_MODE=${styleguideEnforcementModeRawDisplay}. Falling back to 'warn'.`
+    );
+    recommendations.push("Set PROSE_STYLEGUIDE_ENFORCEMENT_MODE to one of 'off', 'warn', or 'required'.");
   }
 
   if (syncOwnershipDiagnostics.runtime_uid_override_ignored) {
