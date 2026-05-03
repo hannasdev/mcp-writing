@@ -4,11 +4,44 @@
 
 Provide a reusable system that helps authors maintain consistent prose quality, narrative structure, and stylistic integrity across a repository.
 
-The system consists of four components:
+This PRD covers the styleguide runtime and editing behavior components:
 - `prose-styleguide.config.yaml` — author-selected conventions (enumerable, config-driven)
 - `skills/prose-styleguide/SKILL.md` — universal craft rules + voice notes injected from config
-- An interactive wizard for onboarding (generates the config)
-- Optional MCP support to bootstrap the config from existing writing and suggest updates
+
+Onboarding and config lifecycle UX (wizard, bootstrap flow, and ongoing updates) are tracked in:
+- `docs/prd/in-progress/onboarding-framework.md`
+
+---
+
+## Implementation Status (2026-05-03)
+
+Current state: **partially delivered**.
+
+### Confirmed complete
+
+- Config lifecycle tooling is implemented:
+  - `setup_prose_styleguide_config`
+  - `get_prose_styleguide_config`
+  - `summarize_prose_styleguide_config`
+  - `bootstrap_prose_styleguide_config`
+  - `update_prose_styleguide_config`
+  - `preview_prose_styleguide_config_update`
+  - `check_prose_styleguide_drift`
+- Skill generation is implemented via `setup_prose_styleguide_skill`, writing to `skills/prose-styleguide/SKILL.md`.
+- Editing enforcement is integrated in `propose_edit`:
+  - requires config/skill in required mode
+  - supports explicit bypass with required `bypass_reason`
+  - blocks on styleguide violations when enforcement mode is `required`
+- Runtime diagnostics are implemented for invalid `PROSE_STYLEGUIDE_ENFORCEMENT_MODE`:
+  - invalid values fall back to `warn`
+  - warning is surfaced in startup diagnostics and `get_runtime_config`
+- Unit/integration tests exist for config resolution, skill generation, editing enforcement, and runtime mode validation.
+
+### Remaining before this PRD is complete
+
+- Formalize and lock the user-facing output contract for Review Mode beyond internal tool behavior.
+- Validate and document completion against success criteria (currently defined but not marked as met).
+- Decide closure path for this PRD (move to `done/` or keep in `in-progress/` with explicit milestone gates).
 
 ---
 
