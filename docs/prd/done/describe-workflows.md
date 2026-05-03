@@ -104,7 +104,7 @@ These are the workflows the tool must document. Each entry maps to a `steps` arr
 2. `bootstrap_prose_styleguide_config` — detect dominant conventions; confirm suggestions with user
 3. `setup_prose_styleguide_config` — create config at `project_root` scope if `context.styleguide_exists.project_root` is false
 4. `update_prose_styleguide_config` — apply accepted fields from bootstrap suggestions
-5. `setup_prose_styleguide_skill` — generate shared `skills/prose-styleguide/SKILL.md`; for sync-root setup this also publishes AI boot files (`CLAUDE.md`, `.github/copilot-instructions.md`), while project-scoped runs skip boot files (but can still overwrite the shared skill used by other projects)
+5. `setup_prose_styleguide_skill` — run only for sync-root setup; it generates shared `skills/prose-styleguide/SKILL.md` and can also publish AI boot files (`CLAUDE.md`, `.github/copilot-instructions.md`)
 
 ---
 

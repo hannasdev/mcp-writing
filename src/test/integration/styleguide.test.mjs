@@ -700,7 +700,7 @@ describe("setup_prose_styleguide_skill tool", () => {
     assert.doesNotMatch(copilotText, /legacy copilot content/);
   });
 
-  test("project-scoped setup defaults to skipping boot-file publication", async () => {
+  test("rejects project-scoped setup to avoid shared SKILL.md collisions", async () => {
     const projectId = "boot-file-project-scope";
     const projectDir = path.join(writeSyncDir, "projects", projectId);
     fs.mkdirSync(projectDir, { recursive: true });
@@ -719,13 +719,11 @@ describe("setup_prose_styleguide_skill tool", () => {
     });
     const parsed = JSON.parse(text);
 
-    assert.equal(parsed.ok, true);
-    assert.equal(parsed.boot_files.length, 0);
-    assert.equal(Array.isArray(parsed.warnings), true);
-    assert.equal(parsed.warnings.length, 0);
+    assert.equal(parsed.ok, false);
+    assert.equal(parsed.error.code, "PROJECT_SCOPED_SKILL_UNSUPPORTED");
   });
 
-  test("project-scoped setup ignores explicit publish_boot_files=true and still succeeds", async () => {
+  test("project-scoped setup with publish_boot_files=true is rejected and leaves boot files unchanged", async () => {
     const projectId = "boot-file-project-scope-explicit";
     const projectDir = path.join(writeSyncDir, "projects", projectId);
     fs.mkdirSync(projectDir, { recursive: true });
@@ -749,9 +747,8 @@ describe("setup_prose_styleguide_skill tool", () => {
     });
     const parsed = JSON.parse(text);
 
-    assert.equal(parsed.ok, true);
-    assert.equal(parsed.boot_files.length, 0);
-    assert.equal(parsed.warnings.some((warning) => /Skipped boot-file publication/.test(warning)), true);
+    assert.equal(parsed.ok, false);
+    assert.equal(parsed.error.code, "PROJECT_SCOPED_SKILL_UNSUPPORTED");
     assert.equal(fs.readFileSync(path.join(writeSyncDir, "CLAUDE.md"), "utf8"), "sentinel claude");
     assert.equal(fs.readFileSync(path.join(writeSyncDir, ".github", "copilot-instructions.md"), "utf8"), "sentinel copilot");
   });

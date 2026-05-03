@@ -754,9 +754,9 @@ export function registerStyleguideTools(s, {
     "setup_prose_styleguide_skill",
     "Generate skills/prose-styleguide/SKILL.md from the resolved prose styleguide config and universal craft rules. Optionally publish AI boot files (CLAUDE.md and .github/copilot-instructions.md) when using sync-root config scope.",
     {
-      project_id: z.string().optional().describe("Optional project ID for scoped config resolution (e.g. 'the-lamb' or 'universe-1/book-1')."),
+      project_id: z.string().optional().describe("Project-scoped skill generation is unsupported because this tool writes a shared sync-root skills/prose-styleguide/SKILL.md file."),
       overwrite: z.boolean().optional().describe("If true, replaces an existing skills/prose-styleguide/SKILL.md file."),
-      publish_boot_files: z.boolean().optional().describe("If true, also upserts CLAUDE.md and .github/copilot-instructions.md at sync root. Defaults to true for sync-root setup and false when project_id is supplied."),
+      publish_boot_files: z.boolean().optional().describe("If true, also upserts CLAUDE.md and .github/copilot-instructions.md at sync root. Defaults to true."),
       boot_files_overwrite: z.boolean().optional().describe("If true, rewrites existing boot files instead of in-place updates."),
     },
     async ({ project_id, overwrite = false, publish_boot_files, boot_files_overwrite = false }) => {
@@ -765,12 +765,18 @@ export function registerStyleguideTools(s, {
         if (!projectIdCheck.ok) {
           return errorResponse("INVALID_PROJECT_ID", projectIdCheck.reason, { project_id });
         }
+
+        return errorResponse(
+          "PROJECT_SCOPED_SKILL_UNSUPPORTED",
+          "setup_prose_styleguide_skill writes a shared sync-root skills/prose-styleguide/SKILL.md file and cannot run with project_id.",
+          {
+            project_id,
+            next_step: "Run setup_prose_styleguide_skill without project_id for workspace-wide skill setup.",
+          }
+        );
       }
 
-      const defaultPublishBootFiles = project_id === undefined;
-      const publishBootFilesRequested = publish_boot_files ?? defaultPublishBootFiles;
-      const skipBootFilesForProjectScope = project_id !== undefined && publishBootFilesRequested;
-      const shouldPublishBootFiles = publishBootFilesRequested && !skipBootFilesForProjectScope;
+      const shouldPublishBootFiles = publish_boot_files ?? true;
 
       if (!SYNC_DIR_WRITABLE) {
         return errorResponse(
@@ -962,13 +968,6 @@ export function registerStyleguideTools(s, {
         );
       }
 
-      const warnings = [];
-      if (skipBootFilesForProjectScope) {
-        warnings.push(
-          "Skipped boot-file publication because project_id was supplied; sync-root boot files are global and can conflict across projects."
-        );
-      }
-
       return jsonResponse({
         ok: true,
         file_path: path.resolve(skillPath),
@@ -976,7 +975,7 @@ export function registerStyleguideTools(s, {
         injected_rules: generated.injected_rules,
         source_count: resolved.sources.length,
         boot_files: bootFiles,
-        warnings,
+        warnings: [],
       });
     }
   );

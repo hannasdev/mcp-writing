@@ -621,9 +621,9 @@ Generate skills/prose-styleguide/SKILL.md from the resolved prose styleguide con
 
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |
-| `project_id` | `string` | No | Optional project ID for scoped config resolution (e.g. 'the-lamb' or 'universe-1/book-1'). |
+| `project_id` | `string` | No | Project-scoped skill generation is unsupported because this tool writes a shared sync-root skills/prose-styleguide/SKILL.md file. |
 | `overwrite` | `boolean` | No | If true, replaces an existing skills/prose-styleguide/SKILL.md file. |
-| `publish_boot_files` | `boolean` | No | If true, also upserts CLAUDE.md and .github/copilot-instructions.md at sync root. Defaults to true for sync-root setup and false when project_id is supplied. |
+| `publish_boot_files` | `boolean` | No | If true, also upserts CLAUDE.md and .github/copilot-instructions.md at sync root. Defaults to true. |
 | `boot_files_overwrite` | `boolean` | No | If true, rewrites existing boot files instead of in-place updates. |
 
 ---

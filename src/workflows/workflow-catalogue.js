@@ -101,7 +101,7 @@ export const WORKFLOW_CATALOGUE = [
       { tool: "bootstrap_prose_styleguide_config", note: "Detect dominant conventions. Confirm suggestions with the user before applying." },
       { tool: "setup_prose_styleguide_config", note: "Only if ALL context.styleguide_exists fields are false — a config at any scope is sufficient. Create at project_root scope (requires project_id and language e.g. 'english_us'), or sync_root if no project_id is known." },
       { tool: "update_prose_styleguide_config", note: "Apply the fields accepted from bootstrap suggestions." },
-      { tool: "setup_prose_styleguide_skill", note: "Generate shared skills/prose-styleguide/SKILL.md. For sync-root setup this also publishes AI boot files (CLAUDE.md and .github/copilot-instructions.md); with project_id it skips boot files, but SKILL.md remains shared so project-scoped runs can still overwrite conventions used by other projects." },
+      { tool: "setup_prose_styleguide_skill", note: "Run only for sync-root setup. This tool writes shared skills/prose-styleguide/SKILL.md (and optional boot files), so do not run it after project_root setup." },
     ],
   },
   {
