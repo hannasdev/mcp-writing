@@ -588,6 +588,43 @@ describe("setup_prose_styleguide_skill tool", () => {
     assert.equal(importLineMatches.length, 1);
   });
 
+  test("adds CLAUDE import when path appears only inside a fenced code block", async () => {
+    fs.writeFileSync(
+      path.join(writeSyncDir, "prose-styleguide.config.yaml"),
+      [
+        "language: english_us",
+        "dialogue_tags: minimal",
+      ].join("\n"),
+      "utf8"
+    );
+
+    fs.writeFileSync(
+      path.join(writeSyncDir, "CLAUDE.md"),
+      [
+        "# Notes",
+        "",
+        "```md",
+        "@skills/prose-styleguide/SKILL.md",
+        "```",
+      ].join("\n"),
+      "utf8"
+    );
+
+    const text = await callWriteTool("setup_prose_styleguide_skill", {
+      overwrite: true,
+      publish_boot_files: true,
+      boot_files_overwrite: false,
+    });
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.boot_files.some((entry) => entry.type === "claude" && entry.status === "updated"), true);
+
+    const claudeText = fs.readFileSync(path.join(writeSyncDir, "CLAUDE.md"), "utf8");
+    assert.match(claudeText, /```md\n@skills\/prose-styleguide\/SKILL\.md\n```/);
+    assert.match(claudeText, /\n@skills\/prose-styleguide\/SKILL\.md\n$/);
+  });
+
   test("appends managed Copilot block when marker is absent and preserves existing content", async () => {
     fs.writeFileSync(
       path.join(writeSyncDir, "prose-styleguide.config.yaml"),

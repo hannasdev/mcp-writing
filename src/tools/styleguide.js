@@ -37,9 +37,40 @@ function buildSafeMarkdownFence(text) {
 }
 
 function hasStandaloneClaudeImportLine(content) {
-  return content
-    .split(/\r?\n/)
-    .some((line) => line.trim() === PROSE_STYLEGUIDE_IMPORT_LINE);
+  const lines = content.split(/\r?\n/);
+  let inFence = false;
+  let fenceChar = "";
+  let fenceLength = 0;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    const fenceMatch = trimmed.match(/^(`{3,}|~{3,})/);
+
+    if (fenceMatch) {
+      const nextFenceChar = fenceMatch[1][0];
+      const nextFenceLength = fenceMatch[1].length;
+
+      if (!inFence) {
+        inFence = true;
+        fenceChar = nextFenceChar;
+        fenceLength = nextFenceLength;
+        continue;
+      }
+
+      if (nextFenceChar === fenceChar && nextFenceLength >= fenceLength) {
+        inFence = false;
+        fenceChar = "";
+        fenceLength = 0;
+      }
+      continue;
+    }
+
+    if (!inFence && trimmed === PROSE_STYLEGUIDE_IMPORT_LINE) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 function upsertClaudeBootFile({ syncDir, overwrite = false }) {
