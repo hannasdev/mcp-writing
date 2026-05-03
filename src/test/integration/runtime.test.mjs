@@ -7,7 +7,7 @@ import { spawnServer, waitForServer, waitForExit, connectClient, createTestConte
 import { writeFileSyncWithDirs } from "../helpers/fixtures.js";
 
 // Ports 3066–3067 are shared with the ctx servers above.
-// Ports 3091–3097 are used by one-off inline servers within individual tests.
+// Ports 3090–3098 are used by one-off inline servers within individual tests.
 // All ports in this file must stay unique across the integration suite because
 // --test-concurrency=1 runs files sequentially but tests within a file overlap.
 // Do not increase --test-concurrency without auditing port assignments.
@@ -99,6 +99,10 @@ describe("get_runtime_config tool", () => {
     const invalidUrl = `http://localhost:${invalidPort}`;
     const invalidProc = spawnServer(invalidPort, readSyncDir, { PROSE_STYLEGUIDE_ENFORCEMENT_MODE: "banana" });
     let invalidClient;
+    let invalidStderr = "";
+    invalidProc.stderr?.on("data", chunk => {
+      invalidStderr += chunk.toString("utf8");
+    });
 
     try {
       await waitForServer(invalidUrl, invalidProc);
@@ -108,6 +112,7 @@ describe("get_runtime_config tool", () => {
 
       assert.equal(parsed.styleguide_enforcement_mode, "warn");
       assert.ok((parsed.runtime_warnings ?? []).some(w => w.includes("STYLEGUIDE_ENFORCEMENT_MODE_INVALID")));
+      assert.ok(invalidStderr.includes("STYLEGUIDE_ENFORCEMENT_MODE_INVALID"));
     } finally {
       try { await invalidClient?.close(); } catch {}
       if (invalidProc) invalidProc.kill();

@@ -6,10 +6,10 @@
  * is straightforward to test.
  *
  * @param {object} opts
- * @param {string}  opts.ownershipGuardModeRaw      Raw env value before normalisation
+ * @param {string}  opts.ownershipGuardModeRaw      Trimmed/lowercased env token before enum validation
  * @param {string}  opts.ownershipGuardMode          Normalised value ("warn" | "fail")
  * @param {string}  opts.ownershipGuardModeRawDisplay JSON.stringify of the raw value
- * @param {string}  opts.styleguideEnforcementModeRaw Raw env value before normalisation
+ * @param {string}  opts.styleguideEnforcementModeRaw Trimmed/lowercased env token before enum validation
  * @param {string}  opts.styleguideEnforcementMode    Normalised value ("off" | "warn" | "required")
  * @param {string}  opts.styleguideEnforcementModeRawDisplay JSON.stringify of the raw value
  * @param {boolean} opts.syncDirWritable
