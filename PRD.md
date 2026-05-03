@@ -246,7 +246,7 @@ Writing MCP is now in continuous development rather than sequential phase delive
 
 - **Core platform complete:** metadata architecture, import/sync, prose editing, search/analysis, review bundles, and Scrivener Direct extraction are all implemented.
 - **Active development:** OpenClaw integration.
-- **Deferred backlog:** embeddings search.
+- **Deferred backlog:** embeddings search and onboarding framework.
 - **Ideas and open questions:** tracked separately so future exploration does not distort the active roadmap.
 
 ---
