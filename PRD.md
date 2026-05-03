@@ -136,16 +136,6 @@ Index and link world-building notes, research, and continuity scratchpads as a r
 
 ---
 
-## Active Development
-
-### 🚀 [OpenClaw Integration](docs/prd/in-progress/openclaw-integration.md) 🚧
-
-Deploy Writing MCP as a service in the OpenClaw runtime with the Writing World agent.
-
-**Status:** In progress. Runtime shape, deployment targets, and agent integration points are defined; remaining work is implementation and rollout.
-
----
-
 ### 🪄 [Guideline Generation](docs/prd/done/guideline-generation.md) ✅
 
 Build a reusable prose styleguide system with config resolution, skill generation, and in-edit behavior that helps authors preserve voice and structural consistency.
@@ -153,6 +143,16 @@ Build a reusable prose styleguide system with config resolution, skill generatio
 **Status:** Delivered. Core styleguide capabilities are live and tracked in done PRDs; follow-up onboarding and long-term UX refinements are tracked separately.
 
 Onboarding and config lifecycle requirements are tracked separately in [Onboarding Framework](docs/prd/todo/onboarding-framework.md).
+
+---
+
+## Active Development
+
+### 🚀 [OpenClaw Integration](docs/prd/in-progress/openclaw-integration.md) 🚧
+
+Deploy Writing MCP as a service in the OpenClaw runtime with the Writing World agent.
+
+**Status:** In progress. Runtime shape, deployment targets, and agent integration points are defined; remaining work is implementation and rollout.
 
 ---
 
@@ -258,6 +258,6 @@ Writing MCP is now in continuous development rather than sequential phase delive
 - [Review Bundles](docs/prd/done/review-bundles.md) — editorial workflows, profiles, known issues
 - [Scrivener Direct Extraction](docs/prd/done/scrivener-direct-extraction-beta.md) — direct .scriv ingestion
 - [OpenClaw Integration](docs/prd/in-progress/openclaw-integration.md) — deployment and runtime integration
-- [Guideline Generation](docs/prd/done/guideline-generation.md) — styleguide generation, onboarding, and authoring UX
+- [Guideline Generation](docs/prd/done/guideline-generation.md) — styleguide generation, skill publishing, and convention enforcement
 - [Open Ideas](docs/prd/inbox/ideas-and-questions.md) — design questions, feature ideas
 - [Workflow Discovery](docs/prd/done/describe-workflows.md) — `describe_workflows` tool, entry-point for AI navigation

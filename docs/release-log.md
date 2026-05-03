@@ -8,7 +8,7 @@ This complements `CHANGELOG.md`:
 
 ## Unreleased
 
-### 2026-05-03 — Prose styleguide skill with formal output contract (PRD complete)
+### 2026-05-03 — Prose styleguide skill with formal output contract
 
 - What changed: Enhanced `skills/prose-styleguide/SKILL.md` generation to include a formal "Review Mode Output Contract" section with structured critique categories (Structural Issues, Convention Drift, Prose Issues) and sample feedback templates. Moved PRD from `in-progress/` to `done/` and annotated success criteria.
 - Why it matters: Authors and AI agents now have an explicit, verifiable specification for how styleguide critique is delivered, reducing ambiguity in feedback quality and making output predictable across sessions.

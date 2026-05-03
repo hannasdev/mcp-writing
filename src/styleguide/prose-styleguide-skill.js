@@ -140,7 +140,7 @@ export function buildProseStyleguideSkill({ resolvedConfig, sources = [], projec
     "```",
     "**Structural:** Scene purpose is \"X shows Y to Z\"; transformation is [character learns/fails/shifts]. ✓",
     "",
-    "**Drift:** Sentence 3 shifts to past tense. Intentional flashback or drift?",
+    "**Drift:** Paragraph 2 shifts to a secondary character's perspective. Intentional multi-POV or head-hop?",
     "",
     "**Prose:** \"She felt sad\" → Suggest concrete action (e.g., \"She turned to the window\"). Specificity: Use verbs and sensory detail to show emotion through action, not explanation. (✓ Shows her looking away.)",
     "```",

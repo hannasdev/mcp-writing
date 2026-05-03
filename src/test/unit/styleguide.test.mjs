@@ -485,7 +485,7 @@ describe("buildProseStyleguideSkill", () => {
 
     // Validate sample feedback structure has complete examples
     assert.match(result.markdown, /\*\*Structural:\*\*.*transformation is/);
-    assert.match(result.markdown, /\*\*Drift:\*\*.*shifts to past tense/);
+    assert.match(result.markdown, /\*\*Drift:\*\*.*secondary character.*perspective/);
     assert.match(result.markdown, /\*\*Prose:\*\*.*Use verbs and sensory detail/);
     assert.match(result.markdown, /Shows her looking away/);
   });
