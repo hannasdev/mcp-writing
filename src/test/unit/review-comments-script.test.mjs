@@ -241,6 +241,20 @@ describe("review-comments helper script", () => {
     assert.match(result.stderr, /Missing value for --id/);
   });
 
+  test("rejects whitespace-only --id values", () => {
+    const { result } = runHelper(["resolve", "--pr", "172", "--id", "   "]);
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /Provide a non-empty thread id with --id <id>/);
+  });
+
+  test("rejects empty --ids payloads", () => {
+    const { result } = runHelper(["resolve", "--pr", "172", "--ids", " , "]);
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /Provide at least one thread id with --ids <id1,id2>/);
+  });
+
   test("returns explicit repository-not-found errors", () => {
     const { result } = runHelper(["list", "--pr", "172", "--repo", "missing/repo"]);
 
@@ -253,5 +267,33 @@ describe("review-comments helper script", () => {
 
     assert.notEqual(result.status, 0);
     assert.match(result.stderr, /Pull request #999999 was not found in repository 'hannasdev\/mcp-writing'\./);
+  });
+
+  test("rejects --id flag with 'list' command", () => {
+    const { result } = runHelper(["list", "--pr", "172", "--id", "thread-1"]);
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /--id and --ids are not valid for 'list'/);
+  });
+
+  test("rejects --all flag with 'resolve' command", () => {
+    const { result } = runHelper(["resolve", "--pr", "172", "--all"]);
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /--all is not valid for 'resolve'/);
+  });
+
+  test("requires --id or --ids for 'resolve' command", () => {
+    const { result } = runHelper(["resolve", "--pr", "172"]);
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /'resolve' requires --id/);
+  });
+
+  test("rejects --id and --all flags with 'status' command", () => {
+    const { result } = runHelper(["status", "--pr", "172", "--id", "thread-1", "--all"]);
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /--id, --ids, and --all are not valid for 'status'/);
   });
 });

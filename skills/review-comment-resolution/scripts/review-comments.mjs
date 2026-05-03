@@ -8,6 +8,8 @@ function parseArgs(argv) {
     pr: null,
     ids: [],
     includeResolved: false,
+    usedIdFlags: false,
+    usedAllFlag: false,
     repo: "hannasdev/mcp-writing",
   };
 
@@ -38,8 +40,12 @@ function parseArgs(argv) {
     }
 
     if (token === "--id") {
-      const value = readFlagValue("--id", argv[i + 1]);
+      const value = readFlagValue("--id", argv[i + 1]).trim();
+      if (value.length === 0) {
+        throw new Error("Provide a non-empty thread id with --id <id>");
+      }
       args.ids.push(value);
+      args.usedIdFlags = true;
       i += 1;
       continue;
     }
@@ -47,13 +53,18 @@ function parseArgs(argv) {
     if (token === "--ids") {
       const value = readFlagValue("--ids", argv[i + 1]);
       const parsed = value.split(",").map((part) => part.trim()).filter(Boolean);
+      if (parsed.length === 0) {
+        throw new Error("Provide at least one thread id with --ids <id1,id2>");
+      }
       args.ids.push(...parsed);
+      args.usedIdFlags = true;
       i += 1;
       continue;
     }
 
     if (token === "--all") {
       args.includeResolved = true;
+      args.usedAllFlag = true;
       continue;
     }
 
@@ -286,16 +297,28 @@ function main() {
   }
 
   if (args.command === "list") {
+    if (args.usedIdFlags) {
+      throw new Error("--id and --ids are not valid for 'list'. Use 'list' to view threads.");
+    }
     printThreads({ pr: args.pr, includeResolved: args.includeResolved, repo: args.repo });
     return;
   }
 
   if (args.command === "resolve") {
+    if (args.usedAllFlag) {
+      throw new Error("--all is not valid for 'resolve'. Use --id or --ids to specify threads to resolve.");
+    }
+    if (args.ids.length === 0) {
+      throw new Error("'resolve' requires --id <id> or --ids <id1,id2>.");
+    }
     resolveThreads({ pr: args.pr, ids: args.ids, repo: args.repo });
     return;
   }
 
   if (args.command === "status") {
+    if (args.usedIdFlags || args.usedAllFlag) {
+      throw new Error("--id, --ids, and --all are not valid for 'status'. Use 'status' to view PR review state.");
+    }
     printStatus(args.pr, args.repo);
     return;
   }
