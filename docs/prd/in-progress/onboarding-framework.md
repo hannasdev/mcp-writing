@@ -2,14 +2,14 @@
 
 ## Overview
 
-Define a reusable onboarding framework for writing-assistant features that need configurable project conventions.
+Define an onboarding framework for writing-assistant features that need configurable project conventions.
 
 This PRD covers:
 - First-time setup (wizard)
 - Optional bootstrap from existing prose corpus
 - Ongoing config review and update
 
-It is intentionally feature-agnostic and can be reused outside prose styleguide work.
+It is intended to keep onboarding concerns separate from feature rule logic; this draft focuses on prose-styleguide onboarding and can be generalized further before reuse by other writing-assistant features.
 
 Related PRD:
 - `docs/prd/in-progress/guideline-generation.md` (style rules and in-edit behavior)
