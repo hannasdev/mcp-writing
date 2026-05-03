@@ -553,6 +553,45 @@ describe("setup_prose_styleguide_skill tool", () => {
     assert.doesNotMatch(copilotText, /old block/);
   });
 
+  test("appends managed Copilot block when marker is absent and preserves existing content", async () => {
+    fs.writeFileSync(
+      path.join(writeSyncDir, "prose-styleguide.config.yaml"),
+      [
+        "language: english_uk",
+        "dialogue_tags: minimal",
+      ].join("\n"),
+      "utf8"
+    );
+
+    fs.mkdirSync(path.join(writeSyncDir, ".github"), { recursive: true });
+    fs.writeFileSync(
+      path.join(writeSyncDir, ".github", "copilot-instructions.md"),
+      [
+        "# Existing Copilot Instructions",
+        "",
+        "Keep this intro.",
+        "",
+        "Keep this footer.",
+      ].join("\n"),
+      "utf8"
+    );
+
+    const text = await callWriteTool("setup_prose_styleguide_skill", {
+      overwrite: true,
+      publish_boot_files: true,
+      boot_files_overwrite: false,
+    });
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.boot_files.some((entry) => entry.type === "copilot" && entry.status === "appended"), true);
+
+    const copilotText = fs.readFileSync(path.join(writeSyncDir, ".github", "copilot-instructions.md"), "utf8");
+    assert.match(copilotText, /Keep this intro\./);
+    assert.match(copilotText, /Keep this footer\./);
+    assert.match(copilotText, /MCP-WRITING:PROSE-STYLEGUIDE START/);
+  });
+
   test("supports boot_files_overwrite=true", async () => {
     fs.writeFileSync(
       path.join(writeSyncDir, "prose-styleguide.config.yaml"),
@@ -611,5 +650,40 @@ describe("setup_prose_styleguide_skill tool", () => {
 
     assert.equal(parsed.ok, false);
     assert.equal(parsed.error.code, "PROJECT_SCOPED_BOOT_FILES_UNSUPPORTED");
+  });
+
+  test("fails cleanly when .github exists as a file and leaves existing SKILL.md unchanged", async () => {
+    fs.writeFileSync(
+      path.join(writeSyncDir, "prose-styleguide.config.yaml"),
+      [
+        "language: english_us",
+        "dialogue_tags: minimal",
+      ].join("\n"),
+      "utf8"
+    );
+
+    const skillPath = path.join(writeSyncDir, "skills", "prose-styleguide", "SKILL.md");
+    fs.mkdirSync(path.dirname(skillPath), { recursive: true });
+    fs.writeFileSync(skillPath, "sentinel skill content", "utf8");
+
+    const githubPath = path.join(writeSyncDir, ".github");
+    fs.rmSync(githubPath, { recursive: true, force: true });
+    fs.writeFileSync(githubPath, "not a directory", "utf8");
+
+    const text = await callWriteTool("setup_prose_styleguide_skill", {
+      overwrite: true,
+      publish_boot_files: true,
+      boot_files_overwrite: false,
+    });
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.ok, false);
+    assert.equal(parsed.error.code, "INVALID_TARGET_PARENT");
+
+    const persistedSkillText = fs.readFileSync(skillPath, "utf8");
+    assert.equal(persistedSkillText, "sentinel skill content");
+
+    fs.rmSync(githubPath, { force: true });
+    fs.mkdirSync(githubPath, { recursive: true });
   });
 });
