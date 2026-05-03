@@ -274,81 +274,19 @@ When editing text:
 
 ---
 
-### 4. Config Wizard (Onboarding)
+### 4. Onboarding and Config Lifecycle
 
-An interactive multiple-choice session that generates `prose-styleguide.config.yaml`. Covers all enumerable options plus a freeform voice notes prompt at the end.
+Onboarding and configuration lifecycle flows are specified in a dedicated, cross-feature PRD:
 
-Intended for:
-- First-time setup
-- New projects within a universe
-- Authors who prefer not to write instructions by hand
+- `docs/prd/in-progress/onboarding-framework.md`
 
-The wizard can be run conversationally (AI asks questions one at a time) or as a structured form.
+This includes:
+- First-time setup wizard behavior
+- Language inference defaults and override behavior
+- MCP-assisted bootstrap from existing corpus
+- Ongoing conversational config review and update flows
 
-#### Language inference
-
-The first question is always the writing language. Language determines sensible defaults for spelling variant and quotation style, so subsequent questions become confirmations rather than open choices — reducing cognitive load for authors following their language's standard conventions.
-
-| Language | Spelling | Quotation style | Em dash spacing | Abbrev. periods | Oxford comma | Date format |
-|---|---|---|---|---|---|---|
-| English (US) | us | double | closed | with | yes | mdy |
-| English (UK) | uk | single | spaced | without | no | dmy |
-| English (AU) | au | double | closed | without | yes | dmy |
-| English (CA) | ca | double | spaced | without | yes | dmy |
-| Swedish | — | dialogue_dash_en | spaced | — | — | dmy |
-| Norwegian | — | dialogue_dash_en | spaced | — | — | dmy |
-| Danish | — | dialogue_dash_en | spaced | — | — | dmy |
-| Finnish | — | guillemets | spaced | — | — | dmy |
-| French | — | guillemets | spaced | — | — | dmy |
-| Italian | — | guillemets | spaced | — | — | dmy |
-| Russian | — | guillemets | spaced | — | — | dmy |
-| Portuguese (PT) | — | guillemets | spaced | — | — | dmy |
-| Portuguese (BR) | — | double | closed | — | — | dmy |
-| German | — | low9 | spaced | — | — | dmy |
-| Dutch | — | low9 | spaced | — | — | dmy |
-| Polish | — | low9 | spaced | — | — | dmy |
-| Czech | — | low9 | spaced | — | — | dmy |
-| Hungarian | — | low9 | spaced | — | — | dmy |
-| Spanish | — | dialogue_dash_em | spaced | — | — | dmy |
-| Irish | — | dialogue_dash_em | spaced | — | — | dmy |
-| Japanese | — | corner_brackets | — | — | — | — |
-| Korean | — | corner_brackets | — | — | — | — |
-| Chinese (Traditional) | — | corner_brackets | — | — | — | — |
-| Chinese (Simplified) | — | double | — | — | — | — |
-
-`—` means no language-level default; the wizard asks the author explicitly.
-
-Tense, POV, time format, number style, ellipsis style, and sentence fragment tolerance have no language-level defaults — those are always explicit author choices.
-
-Any inferred default can be overridden. The wizard presents each as "we've defaulted to X based on [language] — keep it or change it?"
-
-After initial setup, the user can review and update the config at any time:
-- Ask the AI to summarize the current config in plain language
-- Update individual values conversationally ("change quotation style to French guillemets")
-- Edit the YAML directly and ask the AI to validate it
-
-The config is a living document, not a one-time output. Both `prose-styleguide.config.yaml` and `prose-styleguide.SKILL.md` are version-controlled alongside the prose — changes to conventions are tracked in git history like any other project file.
-
----
-
-### 5. MCP Integration (Optional)
-
-The MCP can bootstrap and maintain the config by analyzing a sample of existing prose.
-
-**What the MCP does:**
-
-- Detect mechanical conventions from corpus (spelling variant, quotation style, tense) and propose pre-filled config values — tractable without embedding infrastructure
-- Generate an initial `prose-styleguide.config.yaml` for author review
-- Flag config drift: scenes where prose diverges from declared config values
-- Suggest config updates when drift appears intentional
-
-**What the MCP does NOT do:**
-
-- Replace the SKILL.md or config as source of truth
-- Characterize voice or aesthetic sensibility (too open-ended for this phase; see Future Extensions)
-- Hide rules outside version control
-
-**Dependency note:** Convention detection (spelling, tense, quotation) is achievable with the current tool set. Open-ended style characterization (voice, rhythm, structural sensibility) requires embedding infrastructure and is deferred to Phase 4.
+This PRD remains focused on prose styleguide rules and in-edit behavior.
 
 ---
 
@@ -364,44 +302,7 @@ The config declares intent. Prose may diverge intentionally (flashbacks in a pre
 
 ## User Scenarios
 
-### Scenario 1: First-Time Setup (Wizard)
-
-User has an existing project or is starting fresh.
-
-System runs the config wizard:
-- Asks for writing language first, then confirms or overrides inferred defaults
-- Walks through all config options not covered by language inference
-- Asks for any freeform voice notes at the end
-- Generates `prose-styleguide.config.yaml` at the project root
-
-User reviews and edits the config, then uses it going forward.
-
----
-
-### Scenario 2: MCP Bootstrap
-
-User has existing writing and wants the config pre-filled.
-
-System:
-- Samples scenes from the corpus
-- Detects dominant conventions
-- Proposes a config for author review
-- Author accepts, edits, or overrides each value
-
----
-
-### Scenario 3: Config Review and Update
-
-User wants to review or change their styleguide settings.
-
-System:
-- Reads the current config and explains it in plain language ("You're writing in UK English, present tense, minimal dialogue tags...")
-- Accepts conversational updates ("switch to past tense", "use French guillemets going forward")
-- Writes the updated config for author confirmation before saving
-
----
-
-### Scenario 4: Scene Review
+### Scenario 1: Scene Review
 
 
 User provides a scene.
@@ -414,7 +315,7 @@ System (with resolved config loaded):
 
 ---
 
-### Scenario 5: Editing Assistance
+### Scenario 2: Editing Assistance
 
 User asks to improve a scene.
 
