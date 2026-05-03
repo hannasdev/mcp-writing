@@ -9,7 +9,7 @@ This PRD covers the styleguide runtime and editing behavior components:
 - `skills/prose-styleguide/SKILL.md` — universal craft rules + voice notes injected from config
 
 Onboarding and config lifecycle UX (wizard, bootstrap flow, and ongoing updates) are tracked in:
-- `docs/prd/in-progress/onboarding-framework.md`
+- `docs/prd/todo/onboarding-framework.md`
 
 ---
 
@@ -19,7 +19,7 @@ Current state: **partially delivered**.
 
 ### Confirmed complete
 
-- Onboarding and config lifecycle implementation details are tracked in `docs/prd/in-progress/onboarding-framework.md`.
+- Onboarding and config lifecycle implementation details are tracked in `docs/prd/todo/onboarding-framework.md`.
 - Skill generation is implemented via `setup_prose_styleguide_skill`, writing to `skills/prose-styleguide/SKILL.md`.
 - Editing enforcement is integrated in `propose_edit`:
   - requires config/skill in required mode
@@ -304,7 +304,7 @@ When editing text:
 
 Onboarding and configuration lifecycle flows are specified in a dedicated, cross-feature PRD:
 
-- `docs/prd/in-progress/onboarding-framework.md`
+- `docs/prd/todo/onboarding-framework.md`
 
 This includes:
 - First-time setup wizard behavior
