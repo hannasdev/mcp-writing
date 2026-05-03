@@ -73,7 +73,7 @@ function resolveStyleguideSnapshot({ syncDir, projectId, errorResponse }) {
       ok: false,
       response: errorResponse(
         "STYLEGUIDE_SKILL_IO_ERROR",
-        "Failed to read skills/prose-styleguide.md while resolving styleguide snapshot.",
+        "Failed to read skills/prose-styleguide/SKILL.md while resolving styleguide snapshot.",
         {
           file_path: skillPath,
           reason: err.message,
@@ -147,14 +147,14 @@ function evaluateStyleguidePolicy({
           ok: false,
           response: errorResponse(
             "STYLEGUIDE_SKILL_REQUIRED",
-            "Cannot propose prose edits before skills/prose-styleguide.md exists.",
+            "Cannot propose prose edits before skills/prose-styleguide/SKILL.md exists.",
             {
               next_step: "Run setup_prose_styleguide_skill, then retry propose_edit.",
             }
           ),
         };
       }
-      warnings.push("skills/prose-styleguide.md was not found at sync root.");
+      warnings.push("skills/prose-styleguide/SKILL.md was not found at sync root.");
     }
   }
 

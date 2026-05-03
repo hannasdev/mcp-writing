@@ -6,7 +6,7 @@ Provide a reusable system that helps authors maintain consistent prose quality, 
 
 The system consists of four components:
 - `prose-styleguide.config.yaml` — author-selected conventions (enumerable, config-driven)
-- `prose-styleguide.md` — universal craft rules + voice notes injected from config
+- `skills/prose-styleguide/SKILL.md` — universal craft rules + voice notes injected from config
 - An interactive wizard for onboarding (generates the config)
 - Optional MCP support to bootstrap the config from existing writing and suggest updates
 
@@ -57,7 +57,7 @@ Non-expert users especially struggle to encode their style into reusable instruc
 
 ## Invocation Model
 
-The styleguide is a **standing order**, not an on-demand command. Whenever the AI edits prose — whether via `propose_edit`, `commit_edit`, or direct in-scene editing — it loads `prose-styleguide.md` and the resolved config automatically as part of its working context. The author does not need to invoke it explicitly.
+The styleguide is a **standing order**, not an on-demand command. Whenever the AI edits prose — whether via `propose_edit`, `commit_edit`, or direct in-scene editing — it loads `skills/prose-styleguide/SKILL.md` and the resolved config automatically as part of its working context. The author does not need to invoke it explicitly.
 
 This means:
 - Every prose edit applies the styleguide by default
@@ -75,7 +75,8 @@ There is no vendor-neutral standard for AI instruction files. To avoid duplicati
 ```
 {WRITING_SYNC_DIR}/
   skills/
-    prose-styleguide.md          ← single source of truth
+    prose-styleguide/
+      SKILL.md                   ← single source of truth
   prose-styleguide.config.yaml   ← author conventions (project root)
 ```
 
@@ -85,9 +86,9 @@ There is no vendor-neutral standard for AI instruction files. To avoid duplicati
 
 Each AI tool references the canonical file rather than duplicating its content:
 
-- **Claude Code** — `CLAUDE.md` imports the file via `@skills/prose-styleguide.md`
+- **Claude Code** — `CLAUDE.md` imports the file via `@skills/prose-styleguide/SKILL.md`
 - **GitHub Copilot** — `.github/copilot-instructions.md` references it; since Copilot does not support file imports, the content must be inlined at setup time and kept in sync manually
-- **Other tools** — reference or inline as needed; the canonical file is always `skills/prose-styleguide.md`
+- **Other tools** — reference or inline as needed; the canonical file is always `skills/prose-styleguide/SKILL.md`
 
 If the `.ai/` directory becomes an adopted neutral standard, `skills/` can migrate there without changing the canonical filename.
 

@@ -603,10 +603,10 @@ export function registerStyleguideTools(s, {
 
   s.tool(
     "setup_prose_styleguide_skill",
-    "Generate skills/prose-styleguide.md from the resolved prose styleguide config and universal craft rules.",
+    "Generate skills/prose-styleguide/SKILL.md from the resolved prose styleguide config and universal craft rules.",
     {
       project_id: z.string().optional().describe("Optional project ID for scoped config resolution (e.g. 'the-lamb' or 'universe-1/book-1')."),
-      overwrite: z.boolean().optional().describe("If true, replaces an existing skills/prose-styleguide.md file."),
+      overwrite: z.boolean().optional().describe("If true, replaces an existing skills/prose-styleguide/SKILL.md file."),
     },
     async ({ project_id, overwrite = false }) => {
       if (project_id !== undefined) {
@@ -638,7 +638,7 @@ export function registerStyleguideTools(s, {
       if (resolved.setup_required || !resolved.resolved_config) {
         return errorResponse(
           "STYLEGUIDE_CONFIG_REQUIRED",
-          "Cannot generate prose-styleguide.md before prose-styleguide.config.yaml is set up.",
+          "Cannot generate skills/prose-styleguide/SKILL.md before prose-styleguide.config.yaml is set up.",
           {
             project_id: project_id ?? null,
             next_step: "Run setup_prose_styleguide_config or bootstrap_prose_styleguide_config first.",
@@ -658,7 +658,7 @@ export function registerStyleguideTools(s, {
       if (fs.existsSync(skillPath) && !overwrite) {
         return errorResponse(
           "STYLEGUIDE_SKILL_EXISTS",
-          "skills/prose-styleguide.md already exists. Set overwrite=true to replace it.",
+          "skills/prose-styleguide/SKILL.md already exists. Set overwrite=true to replace it.",
           { target_path: path.resolve(skillPath) }
         );
       }

@@ -8,6 +8,14 @@ This complements `CHANGELOG.md`:
 
 ## Unreleased
 
+### 2026-05-03 — Move generated styleguide skill to skills/prose-styleguide/SKILL.md
+
+- What changed: `setup_prose_styleguide_skill` now writes to `skills/prose-styleguide/SKILL.md` instead of `skills/prose-styleguide.md`, matching the `skills/skillname/SKILL.md` directory convention used by all other skills.
+- Why it matters: Consistent skill layout makes discovery and vendor wiring (e.g. CLAUDE.md imports) predictable.
+- Who is affected: Any user or automation that references the generated skill file by its old path.
+- Action needed: If you have an existing `skills/prose-styleguide.md`, move it to `skills/prose-styleguide/SKILL.md` or regenerate with `setup_prose_styleguide_skill(overwrite=true)`.
+- PR: [#168](https://github.com/hannasdev/mcp-writing/pull/168)
+
 ### 2026-05-03 — Surface runtime warning for invalid styleguide enforcement mode
 
 - What changed: Server startup now emits an explicit `STYLEGUIDE_ENFORCEMENT_MODE_INVALID` warning when `PROSE_STYLEGUIDE_ENFORCEMENT_MODE` environment variable is set to an invalid value (falling back to default `warn` mode).
