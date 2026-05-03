@@ -286,16 +286,28 @@ function main() {
   }
 
   if (args.command === "list") {
+    if (args.ids.length > 0) {
+      throw new Error("--id and --ids are not valid for 'list'. Use 'list' to view threads.");
+    }
     printThreads({ pr: args.pr, includeResolved: args.includeResolved, repo: args.repo });
     return;
   }
 
   if (args.command === "resolve") {
+    if (args.includeResolved) {
+      throw new Error("--all is not valid for 'resolve'. Use --id or --ids to specify threads to resolve.");
+    }
+    if (args.ids.length === 0) {
+      throw new Error("'resolve' requires --id <id> or --ids <id1,id2>.");
+    }
     resolveThreads({ pr: args.pr, ids: args.ids, repo: args.repo });
     return;
   }
 
   if (args.command === "status") {
+    if (args.ids.length > 0 || args.includeResolved) {
+      throw new Error("--id, --ids, and --all are not valid for 'status'. Use 'status' to view PR review state.");
+    }
     printStatus(args.pr, args.repo);
     return;
   }
