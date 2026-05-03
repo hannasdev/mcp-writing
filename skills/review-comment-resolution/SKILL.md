@@ -73,19 +73,37 @@ Use this rubric for each comment:
 - Keep API behavior backwards compatible unless a guard is necessary for safety.
 - If introducing a guard, return a clear error code and next_step guidance.
 
-## Recommended command sequence (GitHub CLI)
+## Helper script
 
-Use these as templates.
+Use the bundled helper to run the thread workflow consistently:
+
+- Script: `./scripts/review-comments.mjs`
+- Commands:
+   - `list` - show unresolved review threads (or all with `--all`)
+   - `resolve` - resolve specific thread IDs
+   - `status` - print unresolved count and run `gh pr checks`
+
+Examples:
 
 ```bash
-# 1) Get threads
-# gh api graphql -f query='...pullRequest(number:N){reviewThreads...}'
+node skills/review-comment-resolution/scripts/review-comments.mjs list --pr 171
+node skills/review-comment-resolution/scripts/review-comments.mjs resolve --pr 171 --ids PRRT_xxx,PRRT_yyy
+node skills/review-comment-resolution/scripts/review-comments.mjs status --pr 171
+```
 
-# 2) Verify unresolved count
-# gh api graphql -f query='...reviewThreads...' | jq '...'
+## Recommended command sequence (GitHub CLI)
 
-# 3) Check PR checks
-# gh pr checks <number>
+Prefer the helper script above. Use raw commands only as fallback.
+
+```bash
+# 1) Get unresolved threads
+# node skills/review-comment-resolution/scripts/review-comments.mjs list --pr <number>
+
+# 2) Resolve addressed thread IDs
+# node skills/review-comment-resolution/scripts/review-comments.mjs resolve --pr <number> --ids <id1,id2>
+
+# 3) Verify unresolved count and check status
+# node skills/review-comment-resolution/scripts/review-comments.mjs status --pr <number>
 ```
 
 ## Output format for user updates
