@@ -8,6 +8,14 @@ This complements `CHANGELOG.md`:
 
 ## Unreleased
 
+### 2026-05-03 — Prose styleguide skill with formal output contract
+
+- What changed: Enhanced `skills/prose-styleguide/SKILL.md` generation to include a formal "Review Mode Output Contract" section with structured critique categories (Structural Issues, Convention Drift, Prose Issues) and sample feedback templates. Updated prose styleguide PRD status from in-progress to completed (tracked at `docs/prd/done/guideline-generation.md`) and annotated success criteria.
+- Why it matters: Authors and AI agents now have an explicit, verifiable specification for how styleguide critique is delivered, reducing ambiguity in feedback quality and making output predictable across sessions.
+- Who is affected: Users invoking prose styleguide review mode, and developers integrating styleguide feedback into editorial workflows.
+- Action needed: Optional. Existing styleguide configs remain compatible. To receive the enhanced review output contract specification, regenerate with `setup_prose_styleguide_skill(overwrite=true)`.
+- PR: [#173](https://github.com/hannasdev/mcp-writing/pull/173)
+
 ### 2026-05-03 — Add review-comment resolution skill with helper script
 
 - What changed: Added `skills/review-comment-resolution/SKILL.md` to standardize PR comment triage and closure, and bundled `skills/review-comment-resolution/scripts/review-comments.mjs` to list unresolved threads, resolve selected thread IDs, and check PR status.

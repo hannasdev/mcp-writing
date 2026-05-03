@@ -136,6 +136,18 @@ Index and link world-building notes, research, and continuity scratchpads as a r
 
 ---
 
+## Recently Delivered
+
+### 🪄 [Guideline Generation](docs/prd/done/guideline-generation.md) ✅
+
+Build a reusable prose styleguide system with config resolution, skill generation, and in-edit behavior that helps authors preserve voice and structural consistency.
+
+**Status:** Delivered. Core styleguide capabilities are live and tracked in done PRDs; follow-up onboarding and long-term UX refinements are tracked separately.
+
+Onboarding and config lifecycle requirements are tracked separately in [Onboarding Framework](docs/prd/todo/onboarding-framework.md).
+
+---
+
 ## Active Development
 
 ### 🚀 [OpenClaw Integration](docs/prd/in-progress/openclaw-integration.md) 🚧
@@ -146,15 +158,7 @@ Deploy Writing MCP as a service in the OpenClaw runtime with the Writing World a
 
 ---
 
-### 🪄 [Guideline Generation](docs/prd/in-progress/guideline-generation.md) 🚧
-
-Build a reusable prose styleguide system with config resolution, skill generation, and in-edit behavior that helps authors preserve voice and structural consistency.
-
-**Status:** In progress. Core styleguide capabilities are live; remaining work is refining generation flow, drift ergonomics, and long-term authoring UX.
-
-Onboarding and config lifecycle requirements are tracked separately in [Onboarding Framework](docs/prd/todo/onboarding-framework.md).
-
----
+## Deferred Backlog (Not Active)
 
 ### 🧭 [Onboarding Framework](docs/prd/todo/onboarding-framework.md) 📋
 
@@ -163,8 +167,6 @@ Define a shared onboarding and configuration lifecycle for writing-assistant fea
 **Status:** Deferred backlog (not active).
 
 ---
-
-## Deferred Backlog (Not Active)
 
 ### 📊 [Embedding-Based Search](docs/prd/todo/embeddings-search.md) 📋
 
@@ -243,8 +245,8 @@ Additional completed structural proposal:
 Writing MCP is now in continuous development rather than sequential phase delivery.
 
 - **Core platform complete:** metadata architecture, import/sync, prose editing, search/analysis, review bundles, and Scrivener Direct extraction are all implemented.
-- **Active development:** OpenClaw integration and guideline generation.
-- **Deferred backlog:** embeddings search.
+- **Active development:** OpenClaw integration.
+- **Deferred backlog:** embeddings search and onboarding framework.
 - **Ideas and open questions:** tracked separately so future exploration does not distort the active roadmap.
 
 ---
@@ -258,6 +260,6 @@ Writing MCP is now in continuous development rather than sequential phase delive
 - [Review Bundles](docs/prd/done/review-bundles.md) — editorial workflows, profiles, known issues
 - [Scrivener Direct Extraction](docs/prd/done/scrivener-direct-extraction-beta.md) — direct .scriv ingestion
 - [OpenClaw Integration](docs/prd/in-progress/openclaw-integration.md) — deployment and runtime integration
-- [Guideline Generation](docs/prd/in-progress/guideline-generation.md) — styleguide generation, onboarding, and authoring UX
+- [Guideline Generation](docs/prd/done/guideline-generation.md) — styleguide generation, skill publishing, and convention enforcement
 - [Open Ideas](docs/prd/inbox/ideas-and-questions.md) — design questions, feature ideas
 - [Workflow Discovery](docs/prd/done/describe-workflows.md) — `describe_workflows` tool, entry-point for AI navigation

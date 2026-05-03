@@ -463,6 +463,33 @@ describe("buildProseStyleguideSkill", () => {
     assert.match(result.markdown, /Default narrative tense: present\./);
     assert.match(result.markdown, /> Keep subtext strong\./);
     assert.match(result.markdown, /> Avoid over-explaining emotions\./);
+    assert.match(result.markdown, /## Review Mode Output Contract/);
+    assert.match(result.markdown, /### Structural Issues/);
+    assert.match(result.markdown, /### Convention Drift/);
+    assert.match(result.markdown, /### Prose Issues/);
+    assert.match(result.markdown, /### Sample Feedback Structure/);
+
+    // Validate actual contract content, not just headings
+    assert.match(result.markdown, /### Structural Issues/);
+    assert.match(result.markdown, /- \*\*Scene Purpose\*\*:/);
+    assert.match(result.markdown, /- \*\*Transformation\*\*:/);
+    assert.match(result.markdown, /- \*\*Non-Functional Sections\*\*:/);
+    assert.match(result.markdown, /### Convention Drift/);
+    assert.match(result.markdown, /- \*\*Tense\*\*:/);
+    assert.match(result.markdown, /- \*\*POV\*\*:/);
+    assert.match(result.markdown, /- \*\*Quotation Style\*\*:/);
+    assert.match(result.markdown, /- \*\*Spelling\/Abbreviations\*\*:/);
+    assert.match(result.markdown, /### Prose Issues/);
+    assert.match(result.markdown, /- \*\*Clarity\*\*:/);
+    assert.match(result.markdown, /- \*\*Cadence\*\*:/);
+    assert.match(result.markdown, /- \*\*Specificity\*\*:/);
+    assert.match(result.markdown, /- \*\*Dialogue\*\*:/);
+
+    // Validate sample feedback structure has complete examples
+    assert.match(result.markdown, /\*\*Structural Issues:\*\*.*transformation is/);
+    assert.match(result.markdown, /\*\*Convention Drift:\*\*.*secondary character.*perspective/);
+    assert.match(result.markdown, /\*\*Prose Issues:\*\*.*Use verbs and sensory detail/);
+    assert.match(result.markdown, /Shows a visible reaction/);
   });
 
   test("fails when resolved config is missing", () => {
