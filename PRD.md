@@ -146,7 +146,7 @@ Deploy Writing MCP as a service in the OpenClaw runtime with the Writing World a
 
 ---
 
-### 🪄 [Guideline Generation](docs/prd/in-progress/guideline-generation.md) 🚧
+### 🪄 [Guideline Generation](docs/prd/done/guideline-generation.md) ✅
 
 Build a reusable prose styleguide system with config resolution, skill generation, and in-edit behavior that helps authors preserve voice and structural consistency.
 
@@ -258,6 +258,6 @@ Writing MCP is now in continuous development rather than sequential phase delive
 - [Review Bundles](docs/prd/done/review-bundles.md) — editorial workflows, profiles, known issues
 - [Scrivener Direct Extraction](docs/prd/done/scrivener-direct-extraction-beta.md) — direct .scriv ingestion
 - [OpenClaw Integration](docs/prd/in-progress/openclaw-integration.md) — deployment and runtime integration
-- [Guideline Generation](docs/prd/in-progress/guideline-generation.md) — styleguide generation, onboarding, and authoring UX
+- [Guideline Generation](docs/prd/done/guideline-generation.md) — styleguide generation, onboarding, and authoring UX
 - [Open Ideas](docs/prd/inbox/ideas-and-questions.md) — design questions, feature ideas
 - [Workflow Discovery](docs/prd/done/describe-workflows.md) — `describe_workflows` tool, entry-point for AI navigation
