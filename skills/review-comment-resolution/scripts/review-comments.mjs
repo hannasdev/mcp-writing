@@ -8,6 +8,7 @@ function parseArgs(argv) {
     pr: null,
     ids: [],
     includeResolved: false,
+    repo: "hannasdev/mcp-writing",
   };
 
   if (argv.length === 0 || argv.includes("-h") || argv.includes("--help")) {
@@ -55,6 +56,16 @@ function parseArgs(argv) {
       continue;
     }
 
+    if (token === "--repo") {
+      const value = argv[i + 1];
+      if (!value) {
+        throw new Error("Missing value for --repo");
+      }
+      args.repo = value;
+      i += 1;
+      continue;
+    }
+
     throw new Error(`Unknown argument: ${token}`);
   }
 
@@ -67,6 +78,15 @@ function ensurePrNumber(pr) {
   }
 }
 
+function parseRepo(repo) {
+  const value = String(repo ?? "").trim();
+  const match = value.match(/^([^/]+)\/([^/]+)$/);
+  if (!match) {
+    throw new Error("Provide repository as --repo <owner/name>");
+  }
+  return { owner: match[1], name: match[2] };
+}
+
 function runGhJson(args) {
   const output = execFileSync("gh", args, {
     encoding: "utf8",
@@ -75,15 +95,70 @@ function runGhJson(args) {
   return JSON.parse(output);
 }
 
-function fetchReviewThreads(pr) {
+function fetchReviewThreads(pr, repo) {
   ensurePrNumber(pr);
+  const { owner, name } = parseRepo(repo);
 
-  const query = `query { repository(owner: \"hannasdev\", name: \"mcp-writing\") { pullRequest(number:${pr}) { reviewThreads(first:100) { nodes { id isResolved comments(first:20) { nodes { author { login } path line body url } } } } } } }`;
-  const payload = runGhJson(["api", "graphql", "-f", `query=${query}`]);
+  const query = `query($owner:String!, $name:String!, $pr:Int!, $after:String) {
+    repository(owner:$owner, name:$name) {
+      pullRequest(number:$pr) {
+        reviewThreads(first:100, after:$after) {
+          nodes {
+            id
+            isResolved
+            comments(first:20) {
+              nodes {
+                author { login }
+                path
+                line
+                body
+                url
+              }
+            }
+          }
+          pageInfo {
+            hasNextPage
+            endCursor
+          }
+        }
+      }
+    }
+  }`;
 
-  const nodes = payload?.data?.repository?.pullRequest?.reviewThreads?.nodes;
-  if (!Array.isArray(nodes)) {
-    throw new Error("Unexpected GraphQL response shape while reading review threads");
+  const nodes = [];
+  let after = null;
+
+  while (true) {
+    const ghArgs = [
+      "api",
+      "graphql",
+      "-f",
+      `query=${query}`,
+      "-f",
+      `owner=${owner}`,
+      "-f",
+      `name=${name}`,
+      "-F",
+      `pr=${pr}`,
+    ];
+    if (after) {
+      ghArgs.push("-f", `after=${after}`);
+    }
+
+    const payload = runGhJson(ghArgs);
+    const threadConnection = payload?.data?.repository?.pullRequest?.reviewThreads;
+    const pageNodes = threadConnection?.nodes;
+    if (!Array.isArray(pageNodes)) {
+      throw new Error("Unexpected GraphQL response shape while reading review threads");
+    }
+
+    nodes.push(...pageNodes);
+
+    const pageInfo = threadConnection?.pageInfo;
+    if (!pageInfo?.hasNextPage) {
+      break;
+    }
+    after = pageInfo.endCursor;
   }
 
   return nodes;
@@ -97,8 +172,8 @@ function summarizeBody(body) {
   return `${singleLine.slice(0, 177)}...`;
 }
 
-function printThreads({ pr, includeResolved }) {
-  const threads = fetchReviewThreads(pr);
+function printThreads({ pr, includeResolved, repo }) {
+  const threads = fetchReviewThreads(pr, repo);
   const filtered = includeResolved ? threads : threads.filter((thread) => !thread.isResolved);
 
   console.log(`PR #${pr}`);
@@ -131,13 +206,13 @@ function resolveThread(threadId) {
   }
 }
 
-function resolveThreads({ pr, ids }) {
+function resolveThreads({ pr, ids, repo }) {
   ensurePrNumber(pr);
   if (ids.length === 0) {
     throw new Error("Provide at least one thread id using --id or --ids");
   }
 
-  const threads = fetchReviewThreads(pr);
+  const threads = fetchReviewThreads(pr, repo);
   const threadById = new Map(threads.map((thread) => [thread.id, thread]));
   const uniqueIds = [...new Set(ids)];
 
@@ -156,16 +231,16 @@ function resolveThreads({ pr, ids }) {
     console.log(`resolved: ${id}`);
   }
 
-  const unresolved = fetchReviewThreads(pr).filter((thread) => !thread.isResolved).length;
+  const unresolved = fetchReviewThreads(pr, repo).filter((thread) => !thread.isResolved).length;
   console.log(`remaining unresolved threads: ${unresolved}`);
 }
 
-function printStatus(pr) {
+function printStatus(pr, repo) {
   ensurePrNumber(pr);
-  const unresolved = fetchReviewThreads(pr).filter((thread) => !thread.isResolved).length;
+  const unresolved = fetchReviewThreads(pr, repo).filter((thread) => !thread.isResolved).length;
   console.log(`unresolved threads: ${unresolved}`);
 
-  const checks = spawnSync("gh", ["pr", "checks", String(pr)], {
+  const checks = spawnSync("gh", ["pr", "checks", String(pr), "-R", repo], {
     stdio: "inherit",
     shell: false,
   });
@@ -183,10 +258,10 @@ function printHelp() {
   console.log("review-comments helper");
   console.log("");
   console.log("Usage:");
-  console.log("  node skills/review-comment-resolution/scripts/review-comments.mjs list --pr <number> [--all]");
-  console.log("  node skills/review-comment-resolution/scripts/review-comments.mjs resolve --pr <number> --ids <id1,id2>");
-  console.log("  node skills/review-comment-resolution/scripts/review-comments.mjs resolve --pr <number> --id <id1> --id <id2>");
-  console.log("  node skills/review-comment-resolution/scripts/review-comments.mjs status --pr <number>");
+  console.log("  node skills/review-comment-resolution/scripts/review-comments.mjs list --pr <number> [--all] [--repo <owner/name>]");
+  console.log("  node skills/review-comment-resolution/scripts/review-comments.mjs resolve --pr <number> --ids <id1,id2> [--repo <owner/name>]");
+  console.log("  node skills/review-comment-resolution/scripts/review-comments.mjs resolve --pr <number> --id <id1> --id <id2> [--repo <owner/name>]");
+  console.log("  node skills/review-comment-resolution/scripts/review-comments.mjs status --pr <number> [--repo <owner/name>]");
 }
 
 function main() {
@@ -198,17 +273,17 @@ function main() {
   }
 
   if (args.command === "list") {
-    printThreads({ pr: args.pr, includeResolved: args.includeResolved });
+    printThreads({ pr: args.pr, includeResolved: args.includeResolved, repo: args.repo });
     return;
   }
 
   if (args.command === "resolve") {
-    resolveThreads({ pr: args.pr, ids: args.ids });
+    resolveThreads({ pr: args.pr, ids: args.ids, repo: args.repo });
     return;
   }
 
   if (args.command === "status") {
-    printStatus(args.pr);
+    printStatus(args.pr, args.repo);
     return;
   }
 

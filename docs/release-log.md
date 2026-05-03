@@ -13,7 +13,7 @@ This complements `CHANGELOG.md`:
 - What changed: Added `skills/review-comment-resolution/SKILL.md` to standardize PR comment triage and closure, and bundled `skills/review-comment-resolution/scripts/review-comments.mjs` to list unresolved threads, resolve selected thread IDs, and check PR status.
 - Why it matters: Review feedback handling is now repeatable and less error-prone across sessions, with fewer manual GraphQL command copy/paste steps.
 - Who is affected: Maintainers and contributors processing PR feedback in this repo.
-- Action needed: Optional: use the helper script commands documented in the skill when handling review threads.
+- Action needed: None.
 - PR: [#172](https://github.com/hannasdev/mcp-writing/pull/172)
 
 ### 2026-05-03 — Publish AI boot files during prose styleguide skill setup

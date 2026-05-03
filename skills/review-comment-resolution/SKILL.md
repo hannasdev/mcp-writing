@@ -77,7 +77,7 @@ Use this rubric for each comment:
 
 Use the bundled helper to run the thread workflow consistently:
 
-- Script: `./scripts/review-comments.mjs`
+- Script: `skills/review-comment-resolution/scripts/review-comments.mjs`
 - Behavior: strict (non-zero exit on invalid thread IDs, already-resolved IDs, and failing/pending PR checks)
 - Commands:
    - `list` - show unresolved review threads (or all with `--all`)
@@ -97,14 +97,28 @@ node skills/review-comment-resolution/scripts/review-comments.mjs status --pr 17
 Prefer the helper script above. Use raw commands only as fallback.
 
 ```bash
-# 1) Get unresolved threads
-# node skills/review-comment-resolution/scripts/review-comments.mjs list --pr <number>
+# 1) Get unresolved threads (raw GraphQL)
+gh api graphql -f query='\
+query($owner:String!, $name:String!, $pr:Int!, $after:String) {\
+   repository(owner:$owner, name:$name) {\
+      pullRequest(number:$pr) {\
+         reviewThreads(first:100, after:$after) {\
+            nodes {\
+               id\
+               isResolved\
+               comments(first:20) { nodes { author { login } path line body url } }\
+            }\
+            pageInfo { hasNextPage endCursor }\
+         }\
+      }\
+   }\
+}' -f owner='hannasdev' -f name='mcp-writing' -F pr=<number>
 
 # 2) Resolve addressed thread IDs
-# node skills/review-comment-resolution/scripts/review-comments.mjs resolve --pr <number> --ids <id1,id2>
+gh api graphql -f query='mutation($id:ID!){resolveReviewThread(input:{threadId:$id}){thread{id isResolved}}}' -f id='<thread_id>'
 
 # 3) Verify unresolved count and check status
-# node skills/review-comment-resolution/scripts/review-comments.mjs status --pr <number>
+gh pr checks <number> -R hannasdev/mcp-writing
 ```
 
 ## Output format for user updates
