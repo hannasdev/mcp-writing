@@ -628,7 +628,7 @@ describe("setup_prose_styleguide_skill tool", () => {
     assert.doesNotMatch(copilotText, /legacy copilot content/);
   });
 
-  test("rejects boot-file publication for project-scoped setup", async () => {
+  test("project-scoped setup defaults to skipping boot-file publication", async () => {
     const projectId = "boot-file-project-scope";
     const projectDir = path.join(writeSyncDir, "projects", projectId);
     fs.mkdirSync(projectDir, { recursive: true });
@@ -644,12 +644,44 @@ describe("setup_prose_styleguide_skill tool", () => {
     const text = await callWriteTool("setup_prose_styleguide_skill", {
       project_id: projectId,
       overwrite: true,
+    });
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.boot_files.length, 0);
+    assert.equal(Array.isArray(parsed.warnings), true);
+    assert.equal(parsed.warnings.length, 0);
+  });
+
+  test("project-scoped setup ignores explicit publish_boot_files=true and still succeeds", async () => {
+    const projectId = "boot-file-project-scope-explicit";
+    const projectDir = path.join(writeSyncDir, "projects", projectId);
+    fs.mkdirSync(projectDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(projectDir, "prose-styleguide.config.yaml"),
+      [
+        "language: english_uk",
+        "dialogue_tags: minimal",
+      ].join("\n"),
+      "utf8"
+    );
+
+    fs.writeFileSync(path.join(writeSyncDir, "CLAUDE.md"), "sentinel claude", "utf8");
+    fs.mkdirSync(path.join(writeSyncDir, ".github"), { recursive: true });
+    fs.writeFileSync(path.join(writeSyncDir, ".github", "copilot-instructions.md"), "sentinel copilot", "utf8");
+
+    const text = await callWriteTool("setup_prose_styleguide_skill", {
+      project_id: projectId,
+      overwrite: true,
       publish_boot_files: true,
     });
     const parsed = JSON.parse(text);
 
-    assert.equal(parsed.ok, false);
-    assert.equal(parsed.error.code, "PROJECT_SCOPED_BOOT_FILES_UNSUPPORTED");
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.boot_files.length, 0);
+    assert.equal(parsed.warnings.some((warning) => /Skipped boot-file publication/.test(warning)), true);
+    assert.equal(fs.readFileSync(path.join(writeSyncDir, "CLAUDE.md"), "utf8"), "sentinel claude");
+    assert.equal(fs.readFileSync(path.join(writeSyncDir, ".github", "copilot-instructions.md"), "utf8"), "sentinel copilot");
   });
 
   test("fails cleanly when .github exists as a file and leaves existing SKILL.md unchanged", async () => {
@@ -685,5 +717,30 @@ describe("setup_prose_styleguide_skill tool", () => {
 
     fs.rmSync(githubPath, { force: true });
     fs.mkdirSync(githubPath, { recursive: true });
+  });
+
+  test("renders copilot snapshot with a safe fence when skill markdown contains triple backticks", async () => {
+    fs.writeFileSync(
+      path.join(writeSyncDir, "prose-styleguide.config.yaml"),
+      [
+        "language: english_us",
+        "dialogue_tags: minimal",
+        "voice_notes: |",
+        "  Preserve fenced examples like ```example``` without corruption.",
+      ].join("\n"),
+      "utf8"
+    );
+
+    const text = await callWriteTool("setup_prose_styleguide_skill", {
+      overwrite: true,
+      publish_boot_files: true,
+      boot_files_overwrite: true,
+    });
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.ok, true);
+    const copilotText = fs.readFileSync(path.join(writeSyncDir, ".github", "copilot-instructions.md"), "utf8");
+    assert.match(copilotText, /````markdown/);
+    assert.match(copilotText, /Preserve fenced examples like ```example``` without corruption\./);
   });
 });

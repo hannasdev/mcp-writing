@@ -30,6 +30,12 @@ const PROSE_STYLEGUIDE_IMPORT_LINE = "@skills/prose-styleguide/SKILL.md";
 const COPILOT_STYLEGUIDE_MARKER_START = "<!-- MCP-WRITING:PROSE-STYLEGUIDE START -->";
 const COPILOT_STYLEGUIDE_MARKER_END = "<!-- MCP-WRITING:PROSE-STYLEGUIDE END -->";
 
+function buildSafeMarkdownFence(text) {
+  const runs = text.match(/`+/g) ?? [];
+  const longest = runs.reduce((max, run) => Math.max(max, run.length), 0);
+  return "`".repeat(Math.max(3, longest + 1));
+}
+
 function upsertClaudeBootFile({ syncDir, overwrite = false }) {
   const targetPath = path.join(syncDir, CLAUDE_BOOT_BASENAME);
   const exists = fs.existsSync(targetPath);
@@ -60,6 +66,9 @@ function upsertClaudeBootFile({ syncDir, overwrite = false }) {
 }
 
 function renderCopilotStyleguideBlock({ skillMarkdown }) {
+  const trimmedSkillMarkdown = skillMarkdown.trim();
+  const fence = buildSafeMarkdownFence(trimmedSkillMarkdown);
+
   return [
     COPILOT_STYLEGUIDE_MARKER_START,
     "## Prose Styleguide",
@@ -68,9 +77,9 @@ function renderCopilotStyleguideBlock({ skillMarkdown }) {
     "",
     "Since Copilot does not support imports, this is an inline snapshot:",
     "",
-    "```markdown",
-    skillMarkdown.trim(),
-    "```",
+    `${fence}markdown`,
+    trimmedSkillMarkdown,
+    fence,
     COPILOT_STYLEGUIDE_MARKER_END,
     "",
   ].join("\n");
@@ -710,10 +719,10 @@ export function registerStyleguideTools(s, {
     {
       project_id: z.string().optional().describe("Optional project ID for scoped config resolution (e.g. 'the-lamb' or 'universe-1/book-1')."),
       overwrite: z.boolean().optional().describe("If true, replaces an existing skills/prose-styleguide/SKILL.md file."),
-      publish_boot_files: z.boolean().optional().describe("If true (default), also upserts CLAUDE.md and .github/copilot-instructions.md at sync root."),
+      publish_boot_files: z.boolean().optional().describe("If true, also upserts CLAUDE.md and .github/copilot-instructions.md at sync root. Defaults to true for sync-root setup and false when project_id is supplied."),
       boot_files_overwrite: z.boolean().optional().describe("If true, rewrites existing boot files instead of in-place updates."),
     },
-    async ({ project_id, overwrite = false, publish_boot_files = true, boot_files_overwrite = false }) => {
+    async ({ project_id, overwrite = false, publish_boot_files, boot_files_overwrite = false }) => {
       if (project_id !== undefined) {
         const projectIdCheck = validateProjectId(project_id);
         if (!projectIdCheck.ok) {
@@ -721,16 +730,10 @@ export function registerStyleguideTools(s, {
         }
       }
 
-      if (project_id !== undefined && publish_boot_files) {
-        return errorResponse(
-          "PROJECT_SCOPED_BOOT_FILES_UNSUPPORTED",
-          "Refusing to publish sync-root AI boot files when project_id is supplied to avoid cross-project styleguide collisions.",
-          {
-            project_id,
-            next_step: "Retry with publish_boot_files=false, or run setup_prose_styleguide_skill without project_id to publish sync-root boot files.",
-          }
-        );
-      }
+      const defaultPublishBootFiles = project_id === undefined;
+      const publishBootFilesRequested = publish_boot_files ?? defaultPublishBootFiles;
+      const skipBootFilesForProjectScope = project_id !== undefined && publishBootFilesRequested;
+      const shouldPublishBootFiles = publishBootFilesRequested && !skipBootFilesForProjectScope;
 
       if (!SYNC_DIR_WRITABLE) {
         return errorResponse(
@@ -798,9 +801,10 @@ export function registerStyleguideTools(s, {
       }
 
       let bootFiles = [];
-      if (publish_boot_files) {
-        const claudePath = path.join(SYNC_DIR, CLAUDE_BOOT_BASENAME);
-        const copilotPath = path.join(SYNC_DIR, COPILOT_BOOT_RELATIVE_PATH);
+      const claudePath = path.join(SYNC_DIR, CLAUDE_BOOT_BASENAME);
+      const copilotPath = path.join(SYNC_DIR, COPILOT_BOOT_RELATIVE_PATH);
+
+      if (shouldPublishBootFiles) {
         if (!isPathCandidateInsideSyncDir(claudePath) || !isPathCandidateInsideSyncDir(copilotPath)) {
           return errorResponse(
             "INVALID_BOOT_FILE_PATH",
@@ -830,11 +834,45 @@ export function registerStyleguideTools(s, {
           );
         }
 
-        try {
+      }
+
+      const mutationTargets = shouldPublishBootFiles
+        ? [skillPath, claudePath, copilotPath]
+        : [skillPath];
+      const backups = mutationTargets.map((targetPath) => {
+        if (!fs.existsSync(targetPath)) {
+          return { targetPath, existed: false, content: null };
+        }
+        return {
+          targetPath,
+          existed: true,
+          content: fs.readFileSync(targetPath, "utf8"),
+        };
+      });
+
+      function rollbackMutations() {
+        for (let i = backups.length - 1; i >= 0; i -= 1) {
+          const backup = backups[i];
+          if (backup.existed) {
+            fs.mkdirSync(path.dirname(backup.targetPath), { recursive: true });
+            fs.writeFileSync(backup.targetPath, backup.content, "utf8");
+            continue;
+          }
+          fs.rmSync(backup.targetPath, { force: true });
+        }
+      }
+
+      let failedStep = "";
+
+      try {
+        if (shouldPublishBootFiles) {
+          failedStep = "claude_boot_file";
           const claudeResult = upsertClaudeBootFile({
             syncDir: SYNC_DIR,
             overwrite: boot_files_overwrite,
           });
+
+          failedStep = "copilot_boot_file";
           const copilotResult = upsertCopilotBootFile({
             syncDir: SYNC_DIR,
             skillMarkdown: generated.markdown,
@@ -844,28 +882,53 @@ export function registerStyleguideTools(s, {
             { type: "claude", ...claudeResult },
             { type: "copilot", ...copilotResult },
           ];
-        } catch (error) {
-          return errorResponse(
-            "BOOT_FILE_WRITE_FAILED",
-            "Failed to publish AI boot files while setting up prose styleguide skill.",
-            {
-              reason: String(error?.message ?? error),
-            }
-          );
         }
-      }
 
-      try {
+        failedStep = "skill_file";
         fs.mkdirSync(path.dirname(skillPath), { recursive: true });
         fs.writeFileSync(skillPath, generated.markdown, "utf8");
       } catch (error) {
+        try {
+          rollbackMutations();
+        } catch (rollbackError) {
+          return errorResponse(
+            "SETUP_WRITE_ROLLBACK_FAILED",
+            "Failed to publish prose styleguide setup files and rollback was not clean.",
+            {
+              failed_step: failedStep,
+              reason: String(error?.message ?? error),
+              rollback_reason: String(rollbackError?.message ?? rollbackError),
+              target_path: path.resolve(skillPath),
+            }
+          );
+        }
+
+        if (failedStep === "skill_file") {
+          return errorResponse(
+            "STYLEGUIDE_SKILL_WRITE_FAILED",
+            "Failed to write skills/prose-styleguide/SKILL.md.",
+            {
+              failed_step: failedStep,
+              reason: String(error?.message ?? error),
+              target_path: path.resolve(skillPath),
+            }
+          );
+        }
+
         return errorResponse(
-          "STYLEGUIDE_SKILL_WRITE_FAILED",
-          "Failed to write skills/prose-styleguide/SKILL.md.",
+          "BOOT_FILE_WRITE_FAILED",
+          "Failed to publish AI boot files while setting up prose styleguide skill.",
           {
+            failed_step: failedStep,
             reason: String(error?.message ?? error),
-            target_path: path.resolve(skillPath),
           }
+        );
+      }
+
+      const warnings = [];
+      if (skipBootFilesForProjectScope) {
+        warnings.push(
+          "Skipped boot-file publication because project_id was supplied; sync-root boot files are global and can conflict across projects."
         );
       }
 
@@ -876,6 +939,7 @@ export function registerStyleguideTools(s, {
         injected_rules: generated.injected_rules,
         source_count: resolved.sources.length,
         boot_files: bootFiles,
+        warnings,
       });
     }
   );
