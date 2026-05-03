@@ -468,6 +468,26 @@ describe("buildProseStyleguideSkill", () => {
     assert.match(result.markdown, /### Convention Drift/);
     assert.match(result.markdown, /### Prose Issues/);
     assert.match(result.markdown, /### Sample Feedback Structure/);
+
+    // Validate actual contract content, not just headings
+    assert.match(result.markdown, /### Structural Issues/);
+    assert.match(result.markdown, /- \*\*Scene Purpose\*\*:/);
+    assert.match(result.markdown, /- \*\*Transformation\*\*:/);
+    assert.match(result.markdown, /### Convention Drift/);
+    assert.match(result.markdown, /- \*\*Tense\*\*:/);
+    assert.match(result.markdown, /- \*\*POV\*\*:/);
+    assert.match(result.markdown, /- \*\*Quotation Style\*\*:/);
+    assert.match(result.markdown, /### Prose Issues/);
+    assert.match(result.markdown, /- \*\*Clarity\*\*:/);
+    assert.match(result.markdown, /- \*\*Cadence\*\*:/);
+    assert.match(result.markdown, /- \*\*Specificity\*\*:/);
+    assert.match(result.markdown, /- \*\*Dialogue\*\*:/);
+
+    // Validate sample feedback structure has complete examples
+    assert.match(result.markdown, /\*\*Structural:\*\*.*transformation is/);
+    assert.match(result.markdown, /\*\*Drift:\*\*.*shifts to past tense/);
+    assert.match(result.markdown, /\*\*Prose:\*\*.*Use verbs and sensory detail/);
+    assert.match(result.markdown, /Shows her looking away/);
   });
 
   test("fails when resolved config is missing", () => {

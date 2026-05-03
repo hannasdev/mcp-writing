@@ -142,7 +142,7 @@ export function buildProseStyleguideSkill({ resolvedConfig, sources = [], projec
     "",
     "**Drift:** Sentence 3 shifts to past tense. Intentional flashback or drift?",
     "",
-    "**Prose:** \"She felt sad\" → Suggest concrete action (e.g., \"She turned to the window\"). Specificity:",
+    "**Prose:** \"She felt sad\" → Suggest concrete action (e.g., \"She turned to the window\"). Specificity: Use verbs and sensory detail to show emotion through action, not explanation. (✓ Shows her looking away.)",
     "```",
     "",
   ].join("\n");

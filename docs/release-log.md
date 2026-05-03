@@ -13,7 +13,7 @@ This complements `CHANGELOG.md`:
 - What changed: Enhanced `skills/prose-styleguide/SKILL.md` generation to include a formal "Review Mode Output Contract" section with structured critique categories (Structural Issues, Convention Drift, Prose Issues) and sample feedback templates. Moved PRD from `in-progress/` to `done/` and annotated success criteria.
 - Why it matters: Authors and AI agents now have an explicit, verifiable specification for how styleguide critique is delivered, reducing ambiguity in feedback quality and making output predictable across sessions.
 - Who is affected: Users invoking prose styleguide review mode, and developers integrating styleguide feedback into editorial workflows.
-- Action needed: None. (Existing styleguide configs remain compatible; regenerate with `setup_prose_styleguide_skill(overwrite=true)` to get the enhanced SKILL.md.)
+- Action needed: Optional. Existing styleguide configs remain compatible. To receive the enhanced review output contract specification, regenerate with `setup_prose_styleguide_skill(overwrite=true)`.
 - PR: [#173](https://github.com/hannasdev/mcp-writing/pull/173)
 
 ### 2026-05-03 — Add review-comment resolution skill with helper script
