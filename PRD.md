@@ -136,6 +136,8 @@ Index and link world-building notes, research, and continuity scratchpads as a r
 
 ---
 
+## Recently Delivered
+
 ### 🪄 [Guideline Generation](docs/prd/done/guideline-generation.md) ✅
 
 Build a reusable prose styleguide system with config resolution, skill generation, and in-edit behavior that helps authors preserve voice and structural consistency.
@@ -156,6 +158,8 @@ Deploy Writing MCP as a service in the OpenClaw runtime with the Writing World a
 
 ---
 
+## Deferred Backlog (Not Active)
+
 ### 🧭 [Onboarding Framework](docs/prd/todo/onboarding-framework.md) 📋
 
 Define a shared onboarding and configuration lifecycle for writing-assistant features, including setup scope, defaults, bootstrap, and boot-file publication behavior.
@@ -163,8 +167,6 @@ Define a shared onboarding and configuration lifecycle for writing-assistant fea
 **Status:** Deferred backlog (not active).
 
 ---
-
-## Deferred Backlog (Not Active)
 
 ### 📊 [Embedding-Based Search](docs/prd/todo/embeddings-search.md) 📋
 
