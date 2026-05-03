@@ -473,10 +473,12 @@ describe("buildProseStyleguideSkill", () => {
     assert.match(result.markdown, /### Structural Issues/);
     assert.match(result.markdown, /- \*\*Scene Purpose\*\*:/);
     assert.match(result.markdown, /- \*\*Transformation\*\*:/);
+    assert.match(result.markdown, /- \*\*Non-Functional Sections\*\*:/);
     assert.match(result.markdown, /### Convention Drift/);
     assert.match(result.markdown, /- \*\*Tense\*\*:/);
     assert.match(result.markdown, /- \*\*POV\*\*:/);
     assert.match(result.markdown, /- \*\*Quotation Style\*\*:/);
+    assert.match(result.markdown, /- \*\*Spelling\/Abbreviations\*\*:/);
     assert.match(result.markdown, /### Prose Issues/);
     assert.match(result.markdown, /- \*\*Clarity\*\*:/);
     assert.match(result.markdown, /- \*\*Cadence\*\*:/);
@@ -487,7 +489,7 @@ describe("buildProseStyleguideSkill", () => {
     assert.match(result.markdown, /\*\*Structural:\*\*.*transformation is/);
     assert.match(result.markdown, /\*\*Drift:\*\*.*secondary character.*perspective/);
     assert.match(result.markdown, /\*\*Prose:\*\*.*Use verbs and sensory detail/);
-    assert.match(result.markdown, /Shows her looking away/);
+    assert.match(result.markdown, /Shows a visible reaction/);
   });
 
   test("fails when resolved config is missing", () => {
