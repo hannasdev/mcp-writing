@@ -148,9 +148,19 @@ Deploy Writing MCP as a service in the OpenClaw runtime with the Writing World a
 
 ### 🪄 [Guideline Generation](docs/prd/in-progress/guideline-generation.md) 🚧
 
-Build a reusable prose styleguide system with config, skill generation, and setup/bootstrap flows that help authors preserve voice and structural consistency.
+Build a reusable prose styleguide system with config resolution, skill generation, and in-edit behavior that helps authors preserve voice and structural consistency.
 
-**Status:** In progress. Core styleguide capabilities are live; remaining work is refining onboarding, generation flow, and long-term authoring UX.
+**Status:** In progress. Core styleguide capabilities are live; remaining work is refining generation flow, drift ergonomics, and long-term authoring UX.
+
+Onboarding and config lifecycle requirements are tracked separately in [Onboarding Framework](docs/prd/todo/onboarding-framework.md).
+
+---
+
+### 🧭 [Onboarding Framework](docs/prd/todo/onboarding-framework.md) 📋
+
+Define a shared onboarding and configuration lifecycle for writing-assistant features, including setup scope, defaults, bootstrap, and boot-file publication behavior.
+
+**Status:** Deferred backlog (not active).
 
 ---
 
