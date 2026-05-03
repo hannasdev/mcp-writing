@@ -17,13 +17,20 @@ function parseArgs(argv) {
 
   args.command = argv[0];
 
+  function readFlagValue(flag, nextToken) {
+    if (!nextToken || nextToken.startsWith("--")) {
+      throw new Error(`Missing value for ${flag}`);
+    }
+    return nextToken;
+  }
+
   for (let i = 1; i < argv.length; i += 1) {
     const token = argv[i];
 
     if (token === "--pr") {
-      const value = argv[i + 1];
-      if (!value) {
-        throw new Error("Missing value for --pr");
+      const value = readFlagValue("--pr", argv[i + 1]);
+      if (!/^\d+$/.test(value)) {
+        throw new Error("Provide a valid pull request number with --pr <number>");
       }
       args.pr = Number.parseInt(value, 10);
       i += 1;
@@ -31,20 +38,14 @@ function parseArgs(argv) {
     }
 
     if (token === "--id") {
-      const value = argv[i + 1];
-      if (!value) {
-        throw new Error("Missing value for --id");
-      }
+      const value = readFlagValue("--id", argv[i + 1]);
       args.ids.push(value);
       i += 1;
       continue;
     }
 
     if (token === "--ids") {
-      const value = argv[i + 1];
-      if (!value) {
-        throw new Error("Missing value for --ids");
-      }
+      const value = readFlagValue("--ids", argv[i + 1]);
       const parsed = value.split(",").map((part) => part.trim()).filter(Boolean);
       args.ids.push(...parsed);
       i += 1;
@@ -57,10 +58,7 @@ function parseArgs(argv) {
     }
 
     if (token === "--repo") {
-      const value = argv[i + 1];
-      if (!value) {
-        throw new Error("Missing value for --repo");
-      }
+      const value = readFlagValue("--repo", argv[i + 1]);
       args.repo = value;
       i += 1;
       continue;
@@ -146,6 +144,21 @@ function fetchReviewThreads(pr, repo) {
     }
 
     const payload = runGhJson(ghArgs);
+    if (Array.isArray(payload?.errors) && payload.errors.length > 0) {
+      const firstError = payload.errors[0];
+      throw new Error(`GitHub GraphQL error: ${firstError?.message ?? "Unknown error"}`);
+    }
+
+    const repository = payload?.data?.repository;
+    if (repository === null) {
+      throw new Error(`Repository '${repo}' was not found or is not accessible.`);
+    }
+
+    const pullRequest = repository?.pullRequest;
+    if (pullRequest === null) {
+      throw new Error(`Pull request #${pr} was not found in repository '${repo}'.`);
+    }
+
     const threadConnection = payload?.data?.repository?.pullRequest?.reviewThreads;
     const pageNodes = threadConnection?.nodes;
     if (!Array.isArray(pageNodes)) {

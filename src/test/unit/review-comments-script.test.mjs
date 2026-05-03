@@ -34,6 +34,10 @@ function getArgValue(flag, flagType = "-f") {
   return undefined;
 }
 
+const owner = getArgValue("owner");
+const name = getArgValue("name");
+const pr = getArgValue("pr", "-F");
+
 if (args[0] === "api" && args[1] === "graphql") {
   const query = getArgValue("query");
 
@@ -42,6 +46,26 @@ if (args[0] === "api" && args[1] === "graphql") {
       data: {
         resolveReviewThread: {
           thread: { id: "thread-1", isResolved: true }
+        }
+      }
+    }));
+    process.exit(0);
+  }
+
+  if (owner === "missing" && name === "repo") {
+    process.stdout.write(JSON.stringify({
+      data: {
+        repository: null
+      }
+    }));
+    process.exit(0);
+  }
+
+  if (pr === "999999") {
+    process.stdout.write(JSON.stringify({
+      data: {
+        repository: {
+          pullRequest: null
         }
       }
     }));
@@ -190,5 +214,44 @@ describe("review-comments helper script", () => {
 
     assert.equal(result.status, 0, result.stderr || result.stdout);
     assert.match(result.stdout, /unresolved threads: 2/);
+  });
+
+  test("resolve calls resolveReviewThread mutation", () => {
+    const { result, log } = runHelper(["resolve", "--pr", "172", "--id", "thread-1"]);
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.match(result.stdout, /resolved: thread-1/);
+
+    const graphqlCalls = log.filter((args) => args[0] === "api" && args[1] === "graphql");
+    const hasResolveMutation = graphqlCalls.some((args) => args.some((arg) => typeof arg === "string" && arg.includes("resolveReviewThread")));
+    assert.equal(hasResolveMutation, true, "expected a resolveReviewThread mutation call");
+  });
+
+  test("rejects malformed --pr values", () => {
+    const { result } = runHelper(["list", "--pr", "172foo"]);
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /Provide a valid pull request number/);
+  });
+
+  test("rejects missing values when next token is another flag", () => {
+    const { result } = runHelper(["resolve", "--pr", "172", "--id", "--repo", "hannasdev/mcp-writing"]);
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /Missing value for --id/);
+  });
+
+  test("returns explicit repository-not-found errors", () => {
+    const { result } = runHelper(["list", "--pr", "172", "--repo", "missing/repo"]);
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /Repository 'missing\/repo' was not found or is not accessible\./);
+  });
+
+  test("returns explicit pull-request-not-found errors", () => {
+    const { result } = runHelper(["list", "--pr", "999999"]);
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /Pull request #999999 was not found in repository 'hannasdev\/mcp-writing'\./);
   });
 });
