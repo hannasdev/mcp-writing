@@ -40,7 +40,10 @@ function parseArgs(argv) {
     }
 
     if (token === "--id") {
-      const value = readFlagValue("--id", argv[i + 1]);
+      const value = readFlagValue("--id", argv[i + 1]).trim();
+      if (value.length === 0) {
+        throw new Error("Provide a non-empty thread id with --id <id>");
+      }
       args.ids.push(value);
       args.usedIdFlags = true;
       i += 1;
