@@ -150,7 +150,7 @@ Deploy Writing MCP as a service in the OpenClaw runtime with the Writing World a
 
 Build a reusable prose styleguide system with config resolution, skill generation, and in-edit behavior that helps authors preserve voice and structural consistency.
 
-**Status:** In progress. Core styleguide capabilities are live; remaining work is refining generation flow, drift ergonomics, and long-term authoring UX.
+**Status:** Delivered. Core styleguide capabilities are live and tracked in done PRDs; follow-up onboarding and long-term UX refinements are tracked separately.
 
 Onboarding and config lifecycle requirements are tracked separately in [Onboarding Framework](docs/prd/todo/onboarding-framework.md).
 
@@ -243,7 +243,7 @@ Additional completed structural proposal:
 Writing MCP is now in continuous development rather than sequential phase delivery.
 
 - **Core platform complete:** metadata architecture, import/sync, prose editing, search/analysis, review bundles, and Scrivener Direct extraction are all implemented.
-- **Active development:** OpenClaw integration and guideline generation.
+- **Active development:** OpenClaw integration.
 - **Deferred backlog:** embeddings search.
 - **Ideas and open questions:** tracked separately so future exploration does not distort the active roadmap.
 

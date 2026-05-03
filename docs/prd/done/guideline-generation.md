@@ -139,7 +139,7 @@ spelling: uk                      # uk              — British English (colour,
 quotation_style: single           # double          — US/Australian ("like this")
                                   # single          — UK/inverted commas ('like this')
                                   # guillemets      — French/Italian/Russian/Portuguese (« like this »)
-                                  # low9            — German/Dutch/Polish/Czech/Hungarian („like this”)
+                                  # low9            — German/Dutch/Polish/Czech/Hungarian („like this“)
                                   # dialogue_dash_en — Scandinavian en dash (– like this)
                                   # dialogue_dash_em — Spanish/Irish em dash (— like this)
                                   # corner_brackets — Japanese/Korean/Chinese (「like this」)
@@ -148,7 +148,7 @@ quotation_style_nested: double    # The style used for a quote within dialogue.
                                   # double          — inner double quotes ("she said 'hello'")
                                   # single          — inner single quotes ('she said "hello"')
                                   # guillemets_single — inner single guillemets (‹like this›)
-                                  # low9_single     — inner single low9 (‚like this’)
+                                  # low9_single     — inner single low9 (‚like this‘)
                                   # corner_brackets_double — inner double brackets (『like this』)
                                   # Inferred from quotation_style if not set.
 
