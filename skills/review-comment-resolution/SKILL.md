@@ -97,12 +97,12 @@ node skills/review-comment-resolution/scripts/review-comments.mjs status --pr 17
 Prefer the helper script above. Use raw commands only as fallback.
 
 ```bash
-# 1) Get unresolved threads (raw GraphQL)
-gh api graphql -f query='\
-query($owner:String!, $name:String!, $pr:Int!, $after:String) {\
+# 1) Get unresolved threads (raw GraphQL, paginated)
+gh api graphql --paginate -f query='\
+query($owner:String!, $name:String!, $pr:Int!, $endCursor:String) {\
    repository(owner:$owner, name:$name) {\
       pullRequest(number:$pr) {\
-         reviewThreads(first:100, after:$after) {\
+         reviewThreads(first:100, after:$endCursor) {\
             nodes {\
                id\
                isResolved\
