@@ -36,13 +36,19 @@ function buildSafeMarkdownFence(text) {
   return "`".repeat(Math.max(3, longest + 1));
 }
 
+function hasStandaloneClaudeImportLine(content) {
+  return content
+    .split(/\r?\n/)
+    .some((line) => line.trim() === PROSE_STYLEGUIDE_IMPORT_LINE);
+}
+
 function upsertClaudeBootFile({ syncDir, overwrite = false }) {
   const targetPath = path.join(syncDir, CLAUDE_BOOT_BASENAME);
   const exists = fs.existsSync(targetPath);
 
   if (exists && !overwrite) {
     const existing = fs.readFileSync(targetPath, "utf8");
-    if (existing.includes(PROSE_STYLEGUIDE_IMPORT_LINE)) {
+    if (hasStandaloneClaudeImportLine(existing)) {
       return { path: path.resolve(targetPath), status: "unchanged" };
     }
 
