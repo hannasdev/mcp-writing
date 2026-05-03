@@ -78,6 +78,7 @@ Use this rubric for each comment:
 Use the bundled helper to run the thread workflow consistently:
 
 - Script: `./scripts/review-comments.mjs`
+- Behavior: strict (non-zero exit on invalid thread IDs, already-resolved IDs, and failing/pending PR checks)
 - Commands:
    - `list` - show unresolved review threads (or all with `--all`)
    - `resolve` - resolve specific thread IDs

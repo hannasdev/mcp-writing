@@ -137,7 +137,21 @@ function resolveThreads({ pr, ids }) {
     throw new Error("Provide at least one thread id using --id or --ids");
   }
 
-  for (const id of ids) {
+  const threads = fetchReviewThreads(pr);
+  const threadById = new Map(threads.map((thread) => [thread.id, thread]));
+  const uniqueIds = [...new Set(ids)];
+
+  const unknownIds = uniqueIds.filter((id) => !threadById.has(id));
+  if (unknownIds.length > 0) {
+    throw new Error(`Thread id(s) are not part of PR #${pr}: ${unknownIds.join(", ")}`);
+  }
+
+  const alreadyResolved = uniqueIds.filter((id) => threadById.get(id)?.isResolved);
+  if (alreadyResolved.length > 0) {
+    throw new Error(`Thread id(s) are already resolved on PR #${pr}: ${alreadyResolved.join(", ")}`);
+  }
+
+  for (const id of uniqueIds) {
     resolveThread(id);
     console.log(`resolved: ${id}`);
   }
@@ -158,6 +172,10 @@ function printStatus(pr) {
 
   if (checks.error) {
     throw checks.error;
+  }
+
+  if (checks.status !== 0) {
+    throw new Error(`gh pr checks exited with status ${checks.status}`);
   }
 }
 
