@@ -62,6 +62,7 @@ All changes MUST follow this sequence:
 ### 6. Review handling
 
 - MUST use `skills/code-review/SKILL.md`
+- For PR feedback triage and resolution loops, use `skills/review-comment-resolution/SKILL.md`
 - Do not blindly apply all feedback
 - Group feedback into:
   - correctness issues
@@ -93,6 +94,7 @@ Use these specialized skills:
 - `skills/pr-description/SKILL.md` (used during Pull Request step)
 - `skills/release-log/SKILL.md` (used during Pull Request step for human-readable value notes)
 - `skills/code-review/SKILL.md` (used during Review handling step)
+- `skills/review-comment-resolution/SKILL.md` (used when processing review comments end-to-end)
 
 These define execution details. This file defines workflow and constraints.
 
