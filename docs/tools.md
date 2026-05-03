@@ -617,12 +617,14 @@ Detect styleguide drift by comparing declared config conventions against observe
 
 ## setup_prose_styleguide_skill
 
-Generate skills/prose-styleguide/SKILL.md from the resolved prose styleguide config and universal craft rules.
+Generate skills/prose-styleguide/SKILL.md from the resolved prose styleguide config and universal craft rules. Optionally publish AI boot files (CLAUDE.md and .github/copilot-instructions.md).
 
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |
 | `project_id` | `string` | No | Optional project ID for scoped config resolution (e.g. 'the-lamb' or 'universe-1/book-1'). |
 | `overwrite` | `boolean` | No | If true, replaces an existing skills/prose-styleguide/SKILL.md file. |
+| `publish_boot_files` | `boolean` | No | If true (default), also upserts CLAUDE.md and .github/copilot-instructions.md at sync root. |
+| `boot_files_overwrite` | `boolean` | No | If true, rewrites existing boot files instead of in-place updates. |
 
 ---
 

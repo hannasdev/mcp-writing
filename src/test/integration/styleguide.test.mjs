@@ -453,6 +453,8 @@ describe("setup_prose_styleguide_skill tool", () => {
     assert.equal(parsed.file_path.length > 0, true);
     assert.ok(Array.isArray(parsed.injected_rules));
     assert.equal(parsed.injected_rules.length > 0, true);
+    assert.ok(Array.isArray(parsed.boot_files));
+    assert.equal(parsed.boot_files.length, 2);
 
     const skillPath = path.join(writeSyncDir, "skills", "prose-styleguide", "SKILL.md");
     assert.equal(fs.existsSync(skillPath), true);
@@ -461,5 +463,16 @@ describe("setup_prose_styleguide_skill tool", () => {
     assert.match(skillText, /Primary writing language: English \(UK\)\./);
     assert.match(skillText, /Dialogue tag policy: minimal\./);
     assert.match(skillText, /> Keep the tone restrained\./);
+
+    const claudePath = path.join(writeSyncDir, "CLAUDE.md");
+    assert.equal(fs.existsSync(claudePath), true);
+    const claudeText = fs.readFileSync(claudePath, "utf8");
+    assert.match(claudeText, /@skills\/prose-styleguide\/SKILL\.md/);
+
+    const copilotPath = path.join(writeSyncDir, ".github", "copilot-instructions.md");
+    assert.equal(fs.existsSync(copilotPath), true);
+    const copilotText = fs.readFileSync(copilotPath, "utf8");
+    assert.match(copilotText, /MCP-WRITING:PROSE-STYLEGUIDE START/);
+    assert.match(copilotText, /Since Copilot does not support imports/);
   });
 });
