@@ -8,6 +8,14 @@ This complements `CHANGELOG.md`:
 
 ## Unreleased
 
+### 2026-05-03 — Publish AI boot files during prose styleguide skill setup
+
+- What changed: `setup_prose_styleguide_skill` now publishes AI boot files at sync root by default in addition to generating `skills/prose-styleguide/SKILL.md`. It upserts `CLAUDE.md` (ensuring `@skills/prose-styleguide/SKILL.md`) and `.github/copilot-instructions.md` (managed inline styleguide snapshot block).
+- Why it matters: First-time styleguide setup is now complete without manual vendor wiring, reducing setup friction and mismatched agent behavior.
+- Who is affected: Users running styleguide setup in writing sync directories, and maintainers automating setup workflows.
+- Action needed: Optional: use `publish_boot_files=false` to skip boot-file publishing, or `boot_files_overwrite=true` to force full rewrites of existing boot files.
+- PR: [#171](https://github.com/hannasdev/mcp-writing/pull/171)
+
 ### 2026-05-03 — Move generated styleguide skill to skills/prose-styleguide/SKILL.md
 
 - What changed: `setup_prose_styleguide_skill` now writes to `skills/prose-styleguide/SKILL.md` instead of `skills/prose-styleguide.md`, matching the `skills/skillname/SKILL.md` directory convention used by all other skills.

@@ -475,4 +475,141 @@ describe("setup_prose_styleguide_skill tool", () => {
     assert.match(copilotText, /MCP-WRITING:PROSE-STYLEGUIDE START/);
     assert.match(copilotText, /Since Copilot does not support imports/);
   });
+
+  test("supports publish_boot_files=false", async () => {
+    fs.writeFileSync(
+      path.join(writeSyncDir, "prose-styleguide.config.yaml"),
+      [
+        "language: english_us",
+        "dialogue_tags: minimal",
+      ].join("\n"),
+      "utf8"
+    );
+
+    fs.rmSync(path.join(writeSyncDir, "CLAUDE.md"), { force: true });
+    fs.rmSync(path.join(writeSyncDir, ".github", "copilot-instructions.md"), { force: true });
+
+    const text = await callWriteTool("setup_prose_styleguide_skill", {
+      overwrite: true,
+      publish_boot_files: false,
+    });
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.ok, true);
+    assert.deepEqual(parsed.boot_files, []);
+    assert.equal(fs.existsSync(path.join(writeSyncDir, "CLAUDE.md")), false);
+    assert.equal(fs.existsSync(path.join(writeSyncDir, ".github", "copilot-instructions.md")), false);
+  });
+
+  test("updates existing boot files non-destructively", async () => {
+    fs.writeFileSync(
+      path.join(writeSyncDir, "prose-styleguide.config.yaml"),
+      [
+        "language: english_uk",
+        "dialogue_tags: expressive",
+      ].join("\n"),
+      "utf8"
+    );
+
+    fs.writeFileSync(
+      path.join(writeSyncDir, "CLAUDE.md"),
+      "# Existing Claude Notes\n\n@skills/code-review/SKILL.md\n",
+      "utf8"
+    );
+    fs.mkdirSync(path.join(writeSyncDir, ".github"), { recursive: true });
+    fs.writeFileSync(
+      path.join(writeSyncDir, ".github", "copilot-instructions.md"),
+      [
+        "# Existing Copilot Instructions",
+        "",
+        "Keep this intro.",
+        "",
+        "<!-- MCP-WRITING:PROSE-STYLEGUIDE START -->",
+        "old block",
+        "<!-- MCP-WRITING:PROSE-STYLEGUIDE END -->",
+      ].join("\n"),
+      "utf8"
+    );
+
+    const text = await callWriteTool("setup_prose_styleguide_skill", {
+      overwrite: true,
+      publish_boot_files: true,
+      boot_files_overwrite: false,
+    });
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.boot_files.length, 2);
+    assert.equal(parsed.boot_files.some((entry) => entry.type === "claude" && entry.status === "updated"), true);
+    assert.equal(parsed.boot_files.some((entry) => entry.type === "copilot" && entry.status === "updated"), true);
+
+    const claudeText = fs.readFileSync(path.join(writeSyncDir, "CLAUDE.md"), "utf8");
+    assert.match(claudeText, /@skills\/code-review\/SKILL\.md/);
+    assert.match(claudeText, /@skills\/prose-styleguide\/SKILL\.md/);
+
+    const copilotText = fs.readFileSync(path.join(writeSyncDir, ".github", "copilot-instructions.md"), "utf8");
+    assert.match(copilotText, /# Existing Copilot Instructions/);
+    assert.match(copilotText, /MCP-WRITING:PROSE-STYLEGUIDE START/);
+    assert.doesNotMatch(copilotText, /old block/);
+  });
+
+  test("supports boot_files_overwrite=true", async () => {
+    fs.writeFileSync(
+      path.join(writeSyncDir, "prose-styleguide.config.yaml"),
+      [
+        "language: english_us",
+        "dialogue_tags: minimal",
+      ].join("\n"),
+      "utf8"
+    );
+
+    fs.writeFileSync(path.join(writeSyncDir, "CLAUDE.md"), "legacy claude content", "utf8");
+    fs.mkdirSync(path.join(writeSyncDir, ".github"), { recursive: true });
+    fs.writeFileSync(path.join(writeSyncDir, ".github", "copilot-instructions.md"), "legacy copilot content", "utf8");
+
+    const text = await callWriteTool("setup_prose_styleguide_skill", {
+      overwrite: true,
+      publish_boot_files: true,
+      boot_files_overwrite: true,
+    });
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.boot_files.some((entry) => entry.type === "claude" && entry.status === "overwritten"), true);
+    assert.equal(parsed.boot_files.some((entry) => entry.type === "copilot" && entry.status === "overwritten"), true);
+
+    const claudeText = fs.readFileSync(path.join(writeSyncDir, "CLAUDE.md"), "utf8");
+    assert.match(claudeText, /# Writing Assistant Boot File/);
+    assert.match(claudeText, /@skills\/prose-styleguide\/SKILL\.md/);
+    assert.doesNotMatch(claudeText, /legacy claude content/);
+
+    const copilotText = fs.readFileSync(path.join(writeSyncDir, ".github", "copilot-instructions.md"), "utf8");
+    assert.match(copilotText, /# Copilot Instructions/);
+    assert.match(copilotText, /MCP-WRITING:PROSE-STYLEGUIDE START/);
+    assert.doesNotMatch(copilotText, /legacy copilot content/);
+  });
+
+  test("rejects boot-file publication for project-scoped setup", async () => {
+    const projectId = "boot-file-project-scope";
+    const projectDir = path.join(writeSyncDir, "projects", projectId);
+    fs.mkdirSync(projectDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(projectDir, "prose-styleguide.config.yaml"),
+      [
+        "language: english_us",
+        "dialogue_tags: minimal",
+      ].join("\n"),
+      "utf8"
+    );
+
+    const text = await callWriteTool("setup_prose_styleguide_skill", {
+      project_id: projectId,
+      overwrite: true,
+      publish_boot_files: true,
+    });
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.ok, false);
+    assert.equal(parsed.error.code, "PROJECT_SCOPED_BOOT_FILES_UNSUPPORTED");
+  });
 });

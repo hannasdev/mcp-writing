@@ -106,6 +106,27 @@ function upsertCopilotBootFile({ syncDir, skillMarkdown, overwrite = false }) {
   return { path: path.resolve(targetPath), status: markerRegex.test(existing) ? "updated" : "appended" };
 }
 
+function validateParentDirectory(targetPath, label) {
+  const parent = path.dirname(targetPath);
+  if (fs.existsSync(parent)) {
+    const parentStat = fs.statSync(parent);
+    if (!parentStat.isDirectory()) {
+      return {
+        ok: false,
+        error: {
+          code: "INVALID_TARGET_PARENT",
+          message: `${label} parent path must be a directory: ${path.resolve(parent)}`,
+          details: {
+            target_path: path.resolve(targetPath),
+            parent_path: path.resolve(parent),
+          },
+        },
+      };
+    }
+  }
+  return { ok: true };
+}
+
 export function registerStyleguideTools(s, {
   db,
   SYNC_DIR,
@@ -685,7 +706,7 @@ export function registerStyleguideTools(s, {
 
   s.tool(
     "setup_prose_styleguide_skill",
-    "Generate skills/prose-styleguide/SKILL.md from the resolved prose styleguide config and universal craft rules. Optionally publish AI boot files (CLAUDE.md and .github/copilot-instructions.md).",
+    "Generate skills/prose-styleguide/SKILL.md from the resolved prose styleguide config and universal craft rules. Optionally publish AI boot files (CLAUDE.md and .github/copilot-instructions.md) when using sync-root config scope.",
     {
       project_id: z.string().optional().describe("Optional project ID for scoped config resolution (e.g. 'the-lamb' or 'universe-1/book-1')."),
       overwrite: z.boolean().optional().describe("If true, replaces an existing skills/prose-styleguide/SKILL.md file."),
@@ -698,6 +719,17 @@ export function registerStyleguideTools(s, {
         if (!projectIdCheck.ok) {
           return errorResponse("INVALID_PROJECT_ID", projectIdCheck.reason, { project_id });
         }
+      }
+
+      if (project_id !== undefined && publish_boot_files) {
+        return errorResponse(
+          "PROJECT_SCOPED_BOOT_FILES_UNSUPPORTED",
+          "Refusing to publish sync-root AI boot files when project_id is supplied to avoid cross-project styleguide collisions.",
+          {
+            project_id,
+            next_step: "Retry with publish_boot_files=false, or run setup_prose_styleguide_skill without project_id to publish sync-root boot files.",
+          }
+        );
       }
 
       if (!SYNC_DIR_WRITABLE) {
@@ -756,8 +788,14 @@ export function registerStyleguideTools(s, {
         return errorResponse(generated.error.code, generated.error.message);
       }
 
-      fs.mkdirSync(path.dirname(skillPath), { recursive: true });
-      fs.writeFileSync(skillPath, generated.markdown, "utf8");
+      const skillPathCheck = validateParentDirectory(skillPath, "Skill file");
+      if (!skillPathCheck.ok) {
+        return errorResponse(
+          skillPathCheck.error.code,
+          skillPathCheck.error.message,
+          skillPathCheck.error.details
+        );
+      }
 
       let bootFiles = [];
       if (publish_boot_files) {
@@ -775,19 +813,60 @@ export function registerStyleguideTools(s, {
           );
         }
 
-        const claudeResult = upsertClaudeBootFile({
-          syncDir: SYNC_DIR,
-          overwrite: boot_files_overwrite,
-        });
-        const copilotResult = upsertCopilotBootFile({
-          syncDir: SYNC_DIR,
-          skillMarkdown: generated.markdown,
-          overwrite: boot_files_overwrite,
-        });
-        bootFiles = [
-          { type: "claude", ...claudeResult },
-          { type: "copilot", ...copilotResult },
-        ];
+        const claudePathCheck = validateParentDirectory(claudePath, "CLAUDE boot file");
+        if (!claudePathCheck.ok) {
+          return errorResponse(
+            claudePathCheck.error.code,
+            claudePathCheck.error.message,
+            claudePathCheck.error.details
+          );
+        }
+        const copilotPathCheck = validateParentDirectory(copilotPath, "Copilot boot file");
+        if (!copilotPathCheck.ok) {
+          return errorResponse(
+            copilotPathCheck.error.code,
+            copilotPathCheck.error.message,
+            copilotPathCheck.error.details
+          );
+        }
+
+        try {
+          const claudeResult = upsertClaudeBootFile({
+            syncDir: SYNC_DIR,
+            overwrite: boot_files_overwrite,
+          });
+          const copilotResult = upsertCopilotBootFile({
+            syncDir: SYNC_DIR,
+            skillMarkdown: generated.markdown,
+            overwrite: boot_files_overwrite,
+          });
+          bootFiles = [
+            { type: "claude", ...claudeResult },
+            { type: "copilot", ...copilotResult },
+          ];
+        } catch (error) {
+          return errorResponse(
+            "BOOT_FILE_WRITE_FAILED",
+            "Failed to publish AI boot files while setting up prose styleguide skill.",
+            {
+              reason: String(error?.message ?? error),
+            }
+          );
+        }
+      }
+
+      try {
+        fs.mkdirSync(path.dirname(skillPath), { recursive: true });
+        fs.writeFileSync(skillPath, generated.markdown, "utf8");
+      } catch (error) {
+        return errorResponse(
+          "STYLEGUIDE_SKILL_WRITE_FAILED",
+          "Failed to write skills/prose-styleguide/SKILL.md.",
+          {
+            reason: String(error?.message ?? error),
+            target_path: path.resolve(skillPath),
+          }
+        );
       }
 
       return jsonResponse({
