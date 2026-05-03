@@ -433,7 +433,7 @@ describe("setup_prose_styleguide_skill tool", () => {
     assert.match(parsed.error.details.next_step, /bootstrap_prose_styleguide_config/);
   });
 
-  test("writes skills/prose-styleguide.md from resolved config", async () => {
+  test("writes skills/prose-styleguide/SKILL.md from resolved config", async () => {
     fs.writeFileSync(
       path.join(writeSyncDir, "prose-styleguide.config.yaml"),
       [
@@ -454,7 +454,7 @@ describe("setup_prose_styleguide_skill tool", () => {
     assert.ok(Array.isArray(parsed.injected_rules));
     assert.equal(parsed.injected_rules.length > 0, true);
 
-    const skillPath = path.join(writeSyncDir, "skills", "prose-styleguide.md");
+    const skillPath = path.join(writeSyncDir, "skills", "prose-styleguide", "SKILL.md");
     assert.equal(fs.existsSync(skillPath), true);
     const skillText = fs.readFileSync(skillPath, "utf8");
     assert.match(skillText, /# Prose Styleguide/);

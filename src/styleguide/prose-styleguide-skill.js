@@ -1,5 +1,5 @@
-export const PROSE_STYLEGUIDE_SKILL_DIRNAME = "skills";
-export const PROSE_STYLEGUIDE_SKILL_BASENAME = "prose-styleguide.md";
+export const PROSE_STYLEGUIDE_SKILL_DIRNAME = "skills/prose-styleguide";
+export const PROSE_STYLEGUIDE_SKILL_BASENAME = "SKILL.md";
 
 const LANGUAGE_LABELS = {
   english_us: "English (US)",
@@ -63,7 +63,7 @@ export function buildProseStyleguideSkill({ resolvedConfig, sources = [], projec
       ok: false,
       error: {
         code: "INVALID_STYLEGUIDE_CONFIG",
-        message: "Cannot generate prose-styleguide.md without a resolved config object.",
+        message: "Cannot generate skills/prose-styleguide/SKILL.md without a resolved config object.",
       },
     };
   }

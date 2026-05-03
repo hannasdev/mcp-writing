@@ -617,12 +617,12 @@ Detect styleguide drift by comparing declared config conventions against observe
 
 ## setup_prose_styleguide_skill
 
-Generate skills/prose-styleguide.md from the resolved prose styleguide config and universal craft rules.
+Generate skills/prose-styleguide/SKILL.md from the resolved prose styleguide config and universal craft rules.
 
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |
 | `project_id` | `string` | No | Optional project ID for scoped config resolution (e.g. 'the-lamb' or 'universe-1/book-1'). |
-| `overwrite` | `boolean` | No | If true, replaces an existing skills/prose-styleguide.md file. |
+| `overwrite` | `boolean` | No | If true, replaces an existing skills/prose-styleguide/SKILL.md file. |
 
 ---
 
