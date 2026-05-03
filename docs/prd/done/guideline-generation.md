@@ -15,12 +15,11 @@ Onboarding and config lifecycle UX (wizard, bootstrap flow, and ongoing updates)
 
 ## Implementation Status (2026-05-03)
 
-Current state: **partially delivered**.
+Current state: **fully delivered**.
 
-### Confirmed complete
+### Completed
 
-- Onboarding and config lifecycle implementation details are tracked in `docs/prd/todo/onboarding-framework.md`.
-- Skill generation is implemented via `setup_prose_styleguide_skill`, writing to `skills/prose-styleguide/SKILL.md`.
+- Skill generation is implemented via `setup_prose_styleguide_skill`, writing to `skills/prose-styleguide/SKILL.md` with formal output contract (Review Mode Output Contract section)
 - Editing enforcement is integrated in `propose_edit`:
   - requires config/skill in required mode
   - supports explicit bypass with required `bypass_reason`
@@ -28,13 +27,12 @@ Current state: **partially delivered**.
 - Runtime diagnostics are implemented for invalid `PROSE_STYLEGUIDE_ENFORCEMENT_MODE`:
   - invalid values fall back to `warn`
   - warning is surfaced in startup diagnostics and `get_runtime_config`
-- Unit/integration tests exist for config resolution, skill generation, editing enforcement, and runtime mode validation.
-
-### Remaining before this PRD is complete
-
-- Formalize and lock the user-facing output contract for Review Mode beyond internal tool behavior.
-- Validate and document completion against success criteria (currently defined but not marked as met).
-- Decide closure path for this PRD (move to `done/` or keep in `in-progress/` with explicit milestone gates).
+- Unit/integration tests exist for config resolution, skill generation, editing enforcement, and runtime mode validation
+- Success criteria formally annotated:
+  - ✅ Implementation verified: config + skill applied consistently in workflows
+  - ✅ Implementation verified: SKILL.md includes structured output contract with examples
+  - 🔍 Post-deployment metrics defined for user consistency, rewrite reduction, and scene quality
+- Onboarding and config lifecycle implementation details tracked in `docs/prd/todo/onboarding-framework.md`
 
 ---
 
@@ -141,7 +139,7 @@ spelling: uk                      # uk              — British English (colour,
 quotation_style: single           # double          — US/Australian ("like this")
                                   # single          — UK/inverted commas ('like this')
                                   # guillemets      — French/Italian/Russian/Portuguese (« like this »)
-                                  # low9            — German/Dutch/Polish/Czech/Hungarian („like this“)
+                                  # low9            — German/Dutch/Polish/Czech/Hungarian („like this")
                                   # dialogue_dash_en — Scandinavian en dash (– like this)
                                   # dialogue_dash_em — Spanish/Irish em dash (— like this)
                                   # corner_brackets — Japanese/Korean/Chinese (「like this」)
@@ -150,7 +148,7 @@ quotation_style_nested: double    # The style used for a quote within dialogue.
                                   # double          — inner double quotes ("she said 'hello'")
                                   # single          — inner single quotes ('she said "hello"')
                                   # guillemets_single — inner single guillemets (‹like this›)
-                                  # low9_single     — inner single low9 (‚like this‘)
+                                  # low9_single     — inner single low9 (‚like this')
                                   # corner_brackets_double — inner double brackets (『like this』)
                                   # Inferred from quotation_style if not set.
 
@@ -330,7 +328,6 @@ The config declares intent. Prose may diverge intentionally (flashbacks in a pre
 
 ### Scenario 1: Scene Review
 
-
 User provides a scene.
 
 System (with resolved config loaded):
@@ -355,11 +352,12 @@ System:
 
 ## Success Criteria
 
-- Users report improved consistency across writing
-- Reduced need for manual rewriting after AI edits
-- Resolved config and generated skill are applied consistently during prose edit workflows
-- Scenes consistently demonstrate purpose and transformation
-- Fewer "flat" or redundant scenes
+- **✅ Implementation verified** — Resolved config and generated skill are applied consistently during prose edit workflows (tested in styleguide integration tests)
+- **✅ Implementation verified** — `setup_prose_styleguide_skill` generates SKILL.md with output contract section defining critique structure (see "Review Mode Output Contract" in generated file)
+- **🔍 Post-deployment metric** — Users report improved consistency across writing (requires user feedback post-release)
+- **🔍 Post-deployment metric** — Reduced need for manual rewriting after AI edits (requires measurement after deployment)
+- **🔍 Post-deployment metric** — Scenes consistently demonstrate purpose and transformation (measured through editorial workflow observations)
+- **🔍 Post-deployment metric** — Fewer "flat" or redundant scenes (tracked through scene-level analytics if implemented)
 
 ---
 

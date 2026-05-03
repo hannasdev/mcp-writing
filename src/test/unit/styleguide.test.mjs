@@ -463,6 +463,11 @@ describe("buildProseStyleguideSkill", () => {
     assert.match(result.markdown, /Default narrative tense: present\./);
     assert.match(result.markdown, /> Keep subtext strong\./);
     assert.match(result.markdown, /> Avoid over-explaining emotions\./);
+    assert.match(result.markdown, /## Review Mode Output Contract/);
+    assert.match(result.markdown, /### Structural Issues/);
+    assert.match(result.markdown, /### Convention Drift/);
+    assert.match(result.markdown, /### Prose Issues/);
+    assert.match(result.markdown, /### Sample Feedback Structure/);
   });
 
   test("fails when resolved config is missing", () => {
