@@ -12,7 +12,7 @@ This PRD covers:
 It is intended to keep onboarding concerns separate from feature rule logic; this draft focuses on prose-styleguide onboarding and can be generalized further before reuse by other writing-assistant features.
 
 Related PRD:
-- `docs/prd/in-progress/guideline-generation.md` (style rules and in-edit behavior)
+- `docs/prd/done/guideline-generation.md` (style rules and in-edit behavior)
 
 ---
 
