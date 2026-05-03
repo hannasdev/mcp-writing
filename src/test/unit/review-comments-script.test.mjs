@@ -277,7 +277,7 @@ describe("review-comments helper script", () => {
   });
 
   test("rejects --id and --all flags with 'status' command", () => {
-    const { result } = runHelper(["status", "--pr", "172", "--id", "thread-1"]);
+    const { result } = runHelper(["status", "--pr", "172", "--id", "thread-1", "--all"]);
 
     assert.notEqual(result.status, 0);
     assert.match(result.stderr, /--id, --ids, and --all are not valid for 'status'/);
