@@ -83,6 +83,18 @@ List any known follow-up work, or write `None`.
 - Mention any migration, release, or compatibility impact if relevant.
 - Update the PR description if the implementation scope changes after review.
 
+## Pre-merge checklist
+
+Before marking a PR ready, verify these common failure points:
+
+1. Contract text and sample output match exactly. If a section is named one way in docs or generated output, examples should use the same label verbatim.
+2. Tests cover behavior, not only headings or presence checks. Assert representative bullets, examples, and failure paths where relevant.
+3. Validation is based on explicit user intent, not just parsed values. If flags or inputs can be malformed, fail fast with a clear error.
+4. Detailed roadmap state lives in `PRD.md`; keep `README.md` high-level unless a top-level status snapshot truly needs updating.
+5. Keep the PR scoped to one concern. If review uncovers a second feature or workflow, split it into a separate PR.
+
+Use this checklist to tighten the implementation before review and to keep the PR description honest about scope, validation, and follow-up.
+
 ## Good summary examples
 
 Good:
@@ -123,6 +135,68 @@ If validation was manual:
 ## Testing
 
 - Manually reviewed generated PR description against the branch diff.
+```
+
+## Reusable PR body examples
+
+For docs-heavy changes:
+
+```markdown
+## Summary
+
+- Clarifies contributor-facing documentation for the targeted workflow.
+- Keeps the change scoped to docs and alignment updates only.
+
+## Motivation
+
+The current docs leave room for inconsistent reviewer expectations and repeated follow-up comments.
+
+## Implementation
+
+- Updated the relevant skill and supporting docs.
+- Kept behavior changes out of scope.
+
+## Testing
+
+- Not run: documentation-only change.
+
+## Risks and tradeoffs
+
+- Low risk: the main risk is wording drift if related docs are updated separately later.
+
+## Follow-up
+
+- None.
+```
+
+For code-heavy changes:
+
+```markdown
+## Summary
+
+- Tightens validation for the targeted workflow.
+- Adds or updates tests for the affected edge cases.
+
+## Motivation
+
+The previous behavior accepted ambiguous or malformed input, which made failures harder to diagnose during review.
+
+## Implementation
+
+- Added explicit validation for the affected input path.
+- Updated tests to cover both successful and failing cases.
+
+## Testing
+
+- `node --test src/test/unit/example.test.mjs`
+
+## Risks and tradeoffs
+
+- Validation is stricter than before, so previously tolerated malformed input now fails fast.
+
+## Follow-up
+
+- None.
 ```
 
 ## Final response after opening PR
