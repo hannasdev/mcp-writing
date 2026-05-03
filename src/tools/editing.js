@@ -147,7 +147,7 @@ function evaluateStyleguidePolicy({
           ok: false,
           response: errorResponse(
             "STYLEGUIDE_SKILL_REQUIRED",
-            "Cannot propose prose edits before skills/prose-styleguide/SKILL/SKILL.md exists.",
+            "Cannot propose prose edits before skills/prose-styleguide/SKILL.md exists.",
             {
               next_step: "Run setup_prose_styleguide_skill, then retry propose_edit.",
             }
