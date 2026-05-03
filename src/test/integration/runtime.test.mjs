@@ -7,7 +7,7 @@ import { spawnServer, waitForServer, waitForExit, connectClient, createTestConte
 import { writeFileSyncWithDirs } from "../helpers/fixtures.js";
 
 // Ports 3066–3067 are shared with the ctx servers above.
-// Ports 3091–3097 are used by one-off inline servers within individual tests.
+// Ports 3090–3098 are used by one-off inline servers within individual tests.
 // All ports in this file must stay unique across the integration suite because
 // --test-concurrency=1 runs files sequentially but tests within a file overlap.
 // Do not increase --test-concurrency without auditing port assignments.
@@ -45,6 +45,7 @@ describe("get_runtime_config tool", () => {
     assert.equal(typeof parsed.git_available, "boolean");
     assert.equal(typeof parsed.git_enabled, "boolean");
     assert.equal(parsed.ownership_guard_mode, "warn");
+    assert.equal(parsed.styleguide_enforcement_mode, "warn");
     assert.ok(Array.isArray(parsed.db_migration_warnings));
     assert.equal(typeof parsed.permission_diagnostics, "object");
     assert.ok(Array.isArray(parsed.runtime_warnings));
@@ -87,6 +88,53 @@ describe("get_runtime_config tool", () => {
 
       assert.equal(parsed.ownership_guard_mode, "fail");
       assert.equal((parsed.runtime_warnings ?? []).some(w => w.includes("OWNERSHIP_GUARD_MODE_INVALID")), false);
+    } finally {
+      try { await normalizedClient?.close(); } catch {}
+      if (normalizedProc) normalizedProc.kill();
+    }
+  });
+
+  test("falls back to warn and returns warning for invalid PROSE_STYLEGUIDE_ENFORCEMENT_MODE", async () => {
+    const invalidPort = 3090;
+    const invalidUrl = `http://localhost:${invalidPort}`;
+    const invalidProc = spawnServer(invalidPort, readSyncDir, { PROSE_STYLEGUIDE_ENFORCEMENT_MODE: "banana" });
+    let invalidClient;
+    let invalidStderr = "";
+    invalidProc.stderr?.on("data", chunk => {
+      invalidStderr += chunk.toString("utf8");
+    });
+
+    try {
+      await waitForServer(invalidUrl, invalidProc);
+      invalidClient = await connectClient(invalidUrl);
+      const result = await invalidClient.callTool({ name: "get_runtime_config", arguments: {} });
+      const parsed = JSON.parse(result.content?.[0]?.text ?? "{}");
+
+      assert.equal(parsed.styleguide_enforcement_mode, "warn");
+      assert.ok((parsed.runtime_warnings ?? []).some(w => w.includes("STYLEGUIDE_ENFORCEMENT_MODE_INVALID")));
+      assert.ok(invalidStderr.includes("STYLEGUIDE_ENFORCEMENT_MODE_INVALID"));
+    } finally {
+      try { await invalidClient?.close(); } catch {}
+      if (invalidProc) invalidProc.kill();
+    }
+  });
+
+  test("normalizes trimmed/uppercased PROSE_STYLEGUIDE_ENFORCEMENT_MODE values", async () => {
+    const normalizedPort = 3098;
+    const normalizedUrl = `http://localhost:${normalizedPort}`;
+    const normalizedProc = spawnServer(normalizedPort, readSyncDir, {
+      PROSE_STYLEGUIDE_ENFORCEMENT_MODE: "  REQUIRED\n",
+    });
+    let normalizedClient;
+
+    try {
+      await waitForServer(normalizedUrl, normalizedProc);
+      normalizedClient = await connectClient(normalizedUrl);
+      const result = await normalizedClient.callTool({ name: "get_runtime_config", arguments: {} });
+      const parsed = JSON.parse(result.content?.[0]?.text ?? "{}");
+
+      assert.equal(parsed.styleguide_enforcement_mode, "required");
+      assert.equal((parsed.runtime_warnings ?? []).some(w => w.includes("STYLEGUIDE_ENFORCEMENT_MODE_INVALID")), false);
     } finally {
       try { await normalizedClient?.close(); } catch {}
       if (normalizedProc) normalizedProc.kill();
