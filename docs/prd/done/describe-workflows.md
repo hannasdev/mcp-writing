@@ -102,7 +102,7 @@ These are the workflows the tool must document. Each entry maps to a `steps` arr
 
 1. `describe_workflows` — check `context.scene_count`; use that value as `max_scenes`
 2. `bootstrap_prose_styleguide_config` — detect dominant conventions; confirm suggestions with user
-3. `setup_prose_styleguide_config` — ask the Tier A path-convention question first (`standalone_project` vs `universe_book`), then create config at `project_root` scope if `context.styleguide_exists.project_root` is false
+3. `setup_prose_styleguide_config` — ask the Tier A path-convention question first (`standalone_project` vs `universe_book`), preview summary/config first (default), then call again with `confirm_write=true` to create config at `project_root` scope if `context.styleguide_exists.project_root` is false
 4. `update_prose_styleguide_config` — apply accepted fields from bootstrap suggestions
 5. `setup_prose_styleguide_skill` — run only for sync-root setup; it generates shared `skills/prose-styleguide/SKILL.md` and can also publish AI boot files (`CLAUDE.md`, `.github/copilot-instructions.md`)
 

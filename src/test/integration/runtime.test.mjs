@@ -349,6 +349,7 @@ describe("describe_workflows tool", () => {
       path_convention: "standalone_project",
       language: "english_us",
       overwrite: true,
+      confirm_write: true,
     });
     const setupParsed = JSON.parse(setupText);
     assert.equal(setupParsed.ok, true);

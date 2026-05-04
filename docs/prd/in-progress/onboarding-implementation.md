@@ -33,6 +33,10 @@ Update this block whenever milestone statuses are re-verified.
   - `styleguide_setup_new` workflow notes now require asking the path-convention Tier A question before setup.
   - `describe_workflows` now exposes session-scoped `context.onboarding_state.path_convention`.
   - Integration tests cover accepted/rejected `path_convention` values and session persistence.
+- `1a.3` implementation is in progress:
+  - `setup_prose_styleguide_config` now defaults to preview mode and requires `confirm_write=true` for persistence.
+  - Setup responses now include plain-language summary fields (`summary_text`, `summary_lines`) before write confirmation.
+  - Integration tests cover default-accept, override, and preview-then-confirm flows.
 - Supporting docs were updated to point onboarding references to `docs/prd/in-progress/onboarding-framework.md`.
 
 ### Phase 1a
@@ -41,7 +45,7 @@ Update this block whenever milestone statuses are re-verified.
 |---|---|---|
 | 1a.1 Tier-based question framework + docs | Exists | Tier framework spec and decision record are documented in `docs/onboarding/tier-framework.md`; runtime enforcement remains part of 1a.3. |
 | 1a.2 Project path convention selection | Exists | `setup_prose_styleguide_config` accepts/validates `path_convention`, workflow guidance asks the Tier A question, and `describe_workflows` exposes session-scoped path convention context. |
-| 1a.3 Styleguide setup workflow integration | Partial | Core styleguide tools and workflow exist; tier-driven confirmation orchestration is still missing. |
+| 1a.3 Styleguide setup workflow integration | Partial | Explicit preview-and-confirm writes plus summary output are implemented; full tier-driven orchestration across all style fields is still pending. |
 | 1a.4 Lightweight setup state tracking | Partial | `describe_workflows` exposes signals (`scene_count`, `styleguide_exists`) but not explicit setup-state fields or recommendation payload. |
 | 1a.5 Scrivener import + styleguide combined workflow | Partial | Import tools and styleguide tools exist independently; combined guided flow is not fully encoded. |
 | 1a.6 Boot file generation + assistant wiring | Exists | `setup_prose_styleguide_skill` already generates/updates skill and boot files with integration test coverage. |
@@ -173,12 +177,12 @@ Mark all items complete before implementation begins.
   - [ ] Language (Tier B): ask explicitly, require confirmation
   - [ ] Spelling, quotation_style, etc. (Tier B/C): propose defaults, confirm before write
   - [ ] Less-critical fields (Tier C): propose with keep/change prompt
-- [ ] Ensure confirmation flow before any file writes
-- [ ] Add plain-language summary of proposed config before commit
+- [x] Ensure confirmation flow before any file writes
+- [x] Add plain-language summary of proposed config before commit
 - [ ] Test edge cases:
-  - [ ] User overrides language-derived defaults
-  - [ ] User accepts all defaults
-  - [ ] User rejects defaults and provides alternatives
+  - [x] User overrides language-derived defaults
+  - [x] User accepts all defaults
+  - [x] User rejects defaults and provides alternatives
 
 **Deliverables:**
 - [ ] Refactored styleguide setup workflow with tier patterns applied
@@ -188,8 +192,8 @@ Mark all items complete before implementation begins.
 **Success Criteria:**
 - [ ] All Tier A questions are always asked explicitly
 - [ ] All Tier B/C questions show proposed value and require/allow confirmation
-- [ ] Users can review full config summary before persistence
-- [ ] No silent writes; all changes require explicit approval
+- [x] Users can review full config summary before persistence
+- [x] No silent writes; all changes require explicit approval
 
 ---
 

@@ -536,6 +536,7 @@ Create prose-styleguide.config.yaml at sync root or project root using language 
 | `overrides` | `object` | No | Optional overrides layered on top of language defaults. |
 | `voice_notes` | `string` | No | Optional freeform voice notes to include in config. |
 | `overwrite` | `boolean` | No | If true, replaces an existing config file at the target location. |
+| `confirm_write` | `boolean` | No | Explicit confirmation gate for writes. Defaults to `false` (preview only). Set `true` to persist changes. |
 
 ---
 

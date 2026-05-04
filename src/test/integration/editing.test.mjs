@@ -433,6 +433,7 @@ describe("styleguide enforcement behavior", { concurrency: 1 }, () => {
       scope: "sync_root",
       language: "english_uk",
       overwrite: true,
+      confirm_write: true,
       overrides: {
         quotation_style: "single",
       },
@@ -464,6 +465,7 @@ describe("styleguide enforcement behavior", { concurrency: 1 }, () => {
       scope: "sync_root",
       language: "english_uk",
       overwrite: true,
+      confirm_write: true,
       overrides: {
         quotation_style: "single",
       },

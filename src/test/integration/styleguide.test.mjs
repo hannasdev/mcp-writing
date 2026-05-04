@@ -29,6 +29,7 @@ describe("setup_prose_styleguide_config tool", () => {
       language: "english_us",
       voice_notes: "Fast-paced thriller voice.",
       overwrite: true,
+      confirm_write: true,
     });
     const parsed = JSON.parse(text);
 
@@ -61,6 +62,7 @@ describe("setup_prose_styleguide_config tool", () => {
       project_id: projectId,
       language: "english_uk",
       overrides: { tense: "past", pov: "first" },
+      confirm_write: true,
     });
     const parsed = JSON.parse(text);
 
@@ -80,6 +82,7 @@ describe("setup_prose_styleguide_config tool", () => {
       path_convention: "universe_book",
       language: "english_uk",
       overwrite: true,
+      confirm_write: true,
     });
     const parsed = JSON.parse(text);
 
@@ -98,6 +101,35 @@ describe("setup_prose_styleguide_config tool", () => {
 
     assert.equal(parsed.ok, false);
     assert.equal(parsed.error.code, "PATH_CONVENTION_MISMATCH");
+  });
+
+  test("returns preview and does not write unless confirm_write=true", async () => {
+    const targetPath = path.join(writeSyncDir, "projects", "preview-only-proj", "prose-styleguide.config.yaml");
+    fs.rmSync(targetPath, { force: true });
+
+    const previewText = await callWriteTool("setup_prose_styleguide_config", {
+      scope: "project_root",
+      project_id: "preview-only-proj",
+      language: "english_us",
+    });
+    const preview = JSON.parse(previewText);
+
+    assert.equal(preview.ok, true);
+    assert.equal(preview.preview_only, true);
+    assert.equal(typeof preview.summary_text, "string");
+    assert.equal(fs.existsSync(targetPath), false);
+
+    const writeText = await callWriteTool("setup_prose_styleguide_config", {
+      scope: "project_root",
+      project_id: "preview-only-proj",
+      language: "english_us",
+      confirm_write: true,
+    });
+    const writeResult = JSON.parse(writeText);
+
+    assert.equal(writeResult.ok, true);
+    assert.equal(writeResult.preview_only, false);
+    assert.equal(fs.existsSync(targetPath), true);
   });
 });
 

@@ -99,7 +99,7 @@ export const WORKFLOW_CATALOGUE = [
     steps: [
       { tool: "describe_workflows", note: "Check context.scene_count; use that value as max_scenes in the next call." },
       { tool: "bootstrap_prose_styleguide_config", note: "Detect dominant conventions. Confirm suggestions with the user before applying." },
-      { tool: "setup_prose_styleguide_config", note: "Only if ALL context.styleguide_exists fields are false — a config at any scope is sufficient. Before calling, ask the Tier A path-convention question: standalone project (projects/<project>) or universe+book (universes/<series>/<project>). Create at project_root scope (requires project_id and language e.g. 'english_us'), or sync_root if no project_id is known, and include path_convention in the call." },
+      { tool: "setup_prose_styleguide_config", note: "Only if ALL context.styleguide_exists fields are false — a config at any scope is sufficient. Before calling, ask the Tier A path-convention question: standalone project (projects/<project>) or universe+book (universes/<series>/<project>). First call setup_prose_styleguide_config in preview mode (default confirm_write=false) to review summary, then call again with confirm_write=true to persist. Create at project_root scope (requires project_id and language e.g. 'english_us'), or sync_root if no project_id is known, and include path_convention in the call." },
       { tool: "update_prose_styleguide_config", note: "Apply the fields accepted from bootstrap suggestions." },
       { tool: "setup_prose_styleguide_skill", note: "Run only for sync-root setup. This tool writes shared skills/prose-styleguide/SKILL.md (and optional boot files), so do not run it after project_root setup." },
     ],

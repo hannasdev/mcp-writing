@@ -218,8 +218,9 @@ export function registerStyleguideTools(s, {
       }).optional().describe("Optional overrides layered on top of language defaults."),
       voice_notes: z.string().optional().describe("Optional freeform voice notes to include in config."),
       overwrite: z.boolean().optional().describe("If true, replaces an existing config file at the target location."),
+      confirm_write: z.boolean().optional().describe("Explicit confirmation gate for writes. Defaults to false (preview mode). Set true to persist file changes."),
     },
-    async ({ scope, project_id, path_convention, language, overrides = {}, voice_notes, overwrite = false }) => {
+    async ({ scope, project_id, path_convention, language, overrides = {}, voice_notes, overwrite = false, confirm_write = false }) => {
       const resolvedScope = scope ?? (project_id ? "project_root" : "sync_root");
       const inferredPathConvention = inferPathConventionFromProjectId(project_id);
 
@@ -263,6 +264,7 @@ export function registerStyleguideTools(s, {
       const targetPath = resolvedScope === "sync_root"
         ? path.join(SYNC_DIR, STYLEGUIDE_CONFIG_BASENAME)
         : path.join(resolveProjectRoot(project_id), STYLEGUIDE_CONFIG_BASENAME);
+      const targetExists = fs.existsSync(targetPath);
 
       if (!isPathCandidateInsideSyncDir(targetPath)) {
         return errorResponse(
@@ -272,7 +274,7 @@ export function registerStyleguideTools(s, {
         );
       }
 
-      if (fs.existsSync(targetPath) && !overwrite) {
+      if (confirm_write && targetExists && !overwrite) {
         return errorResponse(
           "STYLEGUIDE_CONFIG_EXISTS",
           "Styleguide config already exists at target path. Set overwrite=true to replace it.",
@@ -293,21 +295,50 @@ export function registerStyleguideTools(s, {
         );
       }
 
-      fs.mkdirSync(path.dirname(targetPath), { recursive: true });
-      fs.writeFileSync(targetPath, yaml.dump(draft.config, { lineWidth: 120 }), "utf8");
+      const summary = summarizeStyleguideConfig({
+        resolvedConfig: draft.config,
+        inferredDefaults: draft.inferred_defaults,
+      });
+      if (!summary.ok) {
+        return errorResponse(summary.error.code, summary.error.message);
+      }
 
       const resolvedPathConvention = path_convention ?? inferredPathConvention ?? null;
       if (resolvedPathConvention && typeof setOnboardingPathConvention === "function") {
         setOnboardingPathConvention(resolvedPathConvention);
       }
 
+      if (!confirm_write) {
+        return jsonResponse({
+          ok: true,
+          preview_only: true,
+          scope: resolvedScope,
+          path_convention: resolvedPathConvention,
+          file_path: path.resolve(targetPath),
+          target_exists: targetExists,
+          would_overwrite: targetExists,
+          config: draft.config,
+          inferred_defaults: draft.inferred_defaults,
+          summary_text: summary.summary_text,
+          summary_lines: summary.summary_lines,
+          warnings: draft.warnings,
+          next_step: "Review summary/config, then re-run setup_prose_styleguide_config with confirm_write=true to persist.",
+        });
+      }
+
+      fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+      fs.writeFileSync(targetPath, yaml.dump(draft.config, { lineWidth: 120 }), "utf8");
+
       return jsonResponse({
         ok: true,
+        preview_only: false,
         scope: resolvedScope,
         path_convention: resolvedPathConvention,
         file_path: path.resolve(targetPath),
         config: draft.config,
         inferred_defaults: draft.inferred_defaults,
+        summary_text: summary.summary_text,
+        summary_lines: summary.summary_lines,
         warnings: draft.warnings,
         next_step: "Config created. Call update_prose_styleguide_config to apply field updates.",
       });
