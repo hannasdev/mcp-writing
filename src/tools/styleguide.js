@@ -29,6 +29,12 @@ const COPILOT_BOOT_RELATIVE_PATH = ".github/copilot-instructions.md";
 const PROSE_STYLEGUIDE_IMPORT_LINE = "@skills/prose-styleguide/SKILL.md";
 const COPILOT_STYLEGUIDE_MARKER_START = "<!-- MCP-WRITING:PROSE-STYLEGUIDE START -->";
 const COPILOT_STYLEGUIDE_MARKER_END = "<!-- MCP-WRITING:PROSE-STYLEGUIDE END -->";
+const PATH_CONVENTIONS = ["standalone_project", "universe_book"];
+
+function inferPathConventionFromProjectId(projectId) {
+  if (typeof projectId !== "string" || projectId.length === 0) return null;
+  return projectId.includes("/") ? "universe_book" : "standalone_project";
+}
 
 function buildSafeMarkdownFence(text) {
   const runs = text.match(/`+/g) ?? [];
@@ -191,6 +197,7 @@ export function registerStyleguideTools(s, {
     {
       scope: z.enum(["sync_root", "project_root"]).optional().describe("Config write target scope. Defaults to project_root when project_id is supplied, otherwise sync_root."),
       project_id: z.string().optional().describe("Project ID when writing project_root config (e.g. 'the-lamb' or 'universe-1/book-1')."),
+      path_convention: z.enum(PATH_CONVENTIONS).optional().describe("Optional onboarding hint for project path shape: standalone_project -> projects/<project>, universe_book -> universes/<series>/<book>. Used for validation and echoed in the response."),
       language: z.enum(STYLEGUIDE_ENUMS.language).describe("Primary writing language. Seeds language-specific defaults."),
       overrides: z.object({
         spelling: z.enum(STYLEGUIDE_ENUMS.spelling).optional(),
@@ -211,14 +218,30 @@ export function registerStyleguideTools(s, {
       voice_notes: z.string().optional().describe("Optional freeform voice notes to include in config."),
       overwrite: z.boolean().optional().describe("If true, replaces an existing config file at the target location."),
     },
-    async ({ scope, project_id, language, overrides = {}, voice_notes, overwrite = false }) => {
+    async ({ scope, project_id, path_convention, language, overrides = {}, voice_notes, overwrite = false }) => {
       const resolvedScope = scope ?? (project_id ? "project_root" : "sync_root");
+      const inferredPathConvention = inferPathConventionFromProjectId(project_id);
 
       if (project_id !== undefined) {
         const projectIdCheck = validateProjectId(project_id);
         if (!projectIdCheck.ok) {
           return errorResponse("INVALID_PROJECT_ID", projectIdCheck.reason, { project_id });
         }
+      }
+
+      if (path_convention && inferredPathConvention && path_convention !== inferredPathConvention) {
+        const expectedShape = path_convention === "standalone_project"
+          ? "<project>"
+          : "<universe>/<project>";
+        return errorResponse(
+          "PATH_CONVENTION_MISMATCH",
+          `path_convention=${path_convention} conflicts with project_id='${project_id}'. Expected project_id shape ${expectedShape}.`,
+          {
+            path_convention,
+            project_id,
+            inferred_path_convention: inferredPathConvention,
+          }
+        );
       }
 
       if (resolvedScope === "project_root" && !project_id) {
@@ -275,6 +298,7 @@ export function registerStyleguideTools(s, {
       return jsonResponse({
         ok: true,
         scope: resolvedScope,
+        path_convention: path_convention ?? inferredPathConvention ?? null,
         file_path: path.resolve(targetPath),
         config: draft.config,
         inferred_defaults: draft.inferred_defaults,

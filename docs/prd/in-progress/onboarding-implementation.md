@@ -1,6 +1,6 @@
 # Onboarding Framework — Implementation Plans by Milestone
 
-This document breaks down the phased implementation of the onboarding framework (defined in `docs/prd/todo/onboarding-framework.md`) into actionable tasks, dependencies, and success criteria.
+This document breaks down the phased implementation of the onboarding framework (defined in `docs/prd/in-progress/onboarding-framework.md`) into actionable tasks, dependencies, and success criteria.
 
 ---
 
@@ -27,8 +27,8 @@ Update this block whenever milestone statuses are re-verified.
 
 | Milestone | Status | Notes |
 |---|---|---|
-| 1a.1 Tier-based question framework + docs | Partial | Tier model exists in PRD, but dedicated onboarding tier spec/docs are not yet implemented. |
-| 1a.2 Project path convention selection | Partial | Project ID path shapes are supported, but no explicit `path_convention` onboarding question/field yet. |
+| 1a.1 Tier-based question framework + docs | Partial | Dedicated spec now lives in `docs/onboarding/tier-framework.md`; workflow enforcement and test coverage are still pending. |
+| 1a.2 Project path convention selection | Partial | `setup_prose_styleguide_config` now accepts/validates `path_convention`; workflow prompts and session-context persistence are still pending. |
 | 1a.3 Styleguide setup workflow integration | Partial | Core styleguide tools and workflow exist; tier-driven confirmation orchestration is still missing. |
 | 1a.4 Lightweight setup state tracking | Partial | `describe_workflows` exposes signals (`scene_count`, `styleguide_exists`) but not explicit setup-state fields or recommendation payload. |
 | 1a.5 Scrivener import + styleguide combined workflow | Partial | Import tools and styleguide tools exist independently; combined guided flow is not fully encoded. |
@@ -112,8 +112,8 @@ Mark all items complete before implementation begins.
 - [ ] Map existing styleguide setup questions to tiers (language, spelling, quotation_style, etc.)
 
 **Deliverables:**
-- [ ] `docs/onboarding/tier-framework.md` — detailed UX spec per tier
-- [ ] Decision record: which questions are mandatory vs. optional in Phase 1a styleguide setup
+- [x] `docs/onboarding/tier-framework.md` — detailed UX spec per tier
+- [x] Decision record: which questions are mandatory vs. optional in Phase 1a styleguide setup
 
 **Success Criteria:**
 - [ ] All styleguide questions assigned to tiers
@@ -130,14 +130,14 @@ Mark all items complete before implementation begins.
 - [ ] Add project path convention selection to styleguide setup workflow
   - [ ] UI/workflow asks: "Standalone project or universe+book structure?"
   - [ ] Options: `projects/<project>` vs. `universes/<series>/<project>`
-  - [ ] Validate user choice against existing project structure
+  - [x] Validate user choice against existing project structure
   - [ ] Store choice in context for session (no persistence yet)
-- [ ] Update `setup_prose_styleguide_config` tool to accept `path_convention` hint
-- [ ] Update workflow catalogue to include this question in styleguide_setup_new
+- [x] Update `setup_prose_styleguide_config` tool to accept `path_convention` hint
+- [x] Update workflow catalogue to include this question in styleguide_setup_new
 
 **Deliverables:**
-- [ ] Updated `setup_prose_styleguide_config` tool signature
-- [ ] Updated workflow catalogue step with path convention question
+- [x] Updated `setup_prose_styleguide_config` tool signature
+- [x] Updated workflow catalogue step with path convention question
 - [ ] Integration test showing end-to-end styleguide setup + path convention selection
 
 **Success Criteria:**

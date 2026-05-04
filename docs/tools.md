@@ -531,6 +531,7 @@ Create prose-styleguide.config.yaml at sync root or project root using language 
 | --- | --- | :---: | --- |
 | `scope` | `enum("sync_root","project_root")` | No | Config write target scope. Defaults to project_root when project_id is supplied, otherwise sync_root. |
 | `project_id` | `string` | No | Project ID when writing project_root config (e.g. 'the-lamb' or 'universe-1/book-1'). |
+| `path_convention` | `enum("standalone_project","universe_book")` | No | Optional onboarding hint for project path shape. `standalone_project` expects project_id like `<project>`, `universe_book` expects `<universe>/<project>`. |
 | `language` | `enum` | Yes | Primary writing language. Seeds language-specific defaults. |
 | `overrides` | `object` | No | Optional overrides layered on top of language defaults. |
 | `voice_notes` | `string` | No | Optional freeform voice notes to include in config. |

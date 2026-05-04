@@ -144,7 +144,7 @@ Build a reusable prose styleguide system with config resolution, skill generatio
 
 **Status:** Delivered. Core styleguide capabilities are live and tracked in done PRDs; follow-up onboarding and long-term UX refinements are tracked separately.
 
-Onboarding and config lifecycle requirements are tracked separately in [Onboarding Framework](docs/prd/todo/onboarding-framework.md).
+Onboarding and config lifecycle requirements are tracked separately in [Onboarding Framework](docs/prd/in-progress/onboarding-framework.md).
 
 ---
 
@@ -156,15 +156,15 @@ Deploy Writing MCP as a service in the OpenClaw runtime with the Writing World a
 
 **Status:** In progress. Runtime shape, deployment targets, and agent integration points are defined; remaining work is implementation and rollout.
 
----
-
-## Deferred Backlog (Not Active)
-
-### 🧭 [Onboarding Framework](docs/prd/todo/onboarding-framework.md) 📋
+### 🧭 [Onboarding Framework](docs/prd/in-progress/onboarding-framework.md) 🚧
 
 Define a shared onboarding and configuration lifecycle for writing-assistant features, including setup scope, defaults, bootstrap, and boot-file publication behavior.
 
-**Status:** Deferred backlog (not active).
+**Status:** In progress. Phase 1a planning is active and the tier framework specification is now being applied to the styleguide setup flow.
+
+---
+
+## Deferred Backlog (Not Active)
 
 ---
 

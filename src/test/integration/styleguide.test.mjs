@@ -70,6 +70,34 @@ describe("setup_prose_styleguide_config tool", () => {
     assert.equal(parsed.config.tense, "past");
     assert.equal(parsed.config.pov, "first");
     assert.equal(parsed.config.spelling, "uk");
+    assert.equal(parsed.path_convention, "standalone_project");
+  });
+
+  test("accepts path_convention when it matches a universe/book project ID", async () => {
+    const text = await callWriteTool("setup_prose_styleguide_config", {
+      scope: "project_root",
+      project_id: "aether/book-one",
+      path_convention: "universe_book",
+      language: "english_uk",
+      overwrite: true,
+    });
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.path_convention, "universe_book");
+  });
+
+  test("rejects path_convention when it conflicts with project_id shape", async () => {
+    const text = await callWriteTool("setup_prose_styleguide_config", {
+      scope: "project_root",
+      project_id: "styleguide-test-proj",
+      path_convention: "universe_book",
+      language: "english_uk",
+    });
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.ok, false);
+    assert.equal(parsed.error.code, "PATH_CONVENTION_MISMATCH");
   });
 });
 
