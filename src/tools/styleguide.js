@@ -190,6 +190,7 @@ export function registerStyleguideTools(s, {
   resolveBatchTargetScenes,
   maxScenesNextStep,
   isPathCandidateInsideSyncDir,
+  setOnboardingPathConvention,
 }) {
   s.tool(
     "setup_prose_styleguide_config",
@@ -295,10 +296,15 @@ export function registerStyleguideTools(s, {
       fs.mkdirSync(path.dirname(targetPath), { recursive: true });
       fs.writeFileSync(targetPath, yaml.dump(draft.config, { lineWidth: 120 }), "utf8");
 
+      const resolvedPathConvention = path_convention ?? inferredPathConvention ?? null;
+      if (resolvedPathConvention && typeof setOnboardingPathConvention === "function") {
+        setOnboardingPathConvention(resolvedPathConvention);
+      }
+
       return jsonResponse({
         ok: true,
         scope: resolvedScope,
-        path_convention: path_convention ?? inferredPathConvention ?? null,
+        path_convention: resolvedPathConvention,
         file_path: path.resolve(targetPath),
         config: draft.config,
         inferred_defaults: draft.inferred_defaults,

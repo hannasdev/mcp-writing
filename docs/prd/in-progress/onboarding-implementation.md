@@ -28,10 +28,11 @@ Update this block whenever milestone statuses are re-verified.
 - `1a.1` documentation deliverables are complete:
   - `docs/onboarding/tier-framework.md` added with Tier A/B/C UX rules, question inventory, and confirmation flow.
   - Phase 1a mandatory/optional question decision record is documented.
-- `1a.2` implementation is in progress:
+- `1a.2` implementation is complete:
   - `setup_prose_styleguide_config` now accepts `path_convention` and validates it against `project_id` shape.
   - `styleguide_setup_new` workflow notes now require asking the path-convention Tier A question before setup.
-  - Integration tests cover accepted/rejected `path_convention` values.
+  - `describe_workflows` now exposes session-scoped `context.onboarding_state.path_convention`.
+  - Integration tests cover accepted/rejected `path_convention` values and session persistence.
 - Supporting docs were updated to point onboarding references to `docs/prd/in-progress/onboarding-framework.md`.
 
 ### Phase 1a
@@ -39,7 +40,7 @@ Update this block whenever milestone statuses are re-verified.
 | Milestone | Status | Notes |
 |---|---|---|
 | 1a.1 Tier-based question framework + docs | Exists | Tier framework spec and decision record are documented in `docs/onboarding/tier-framework.md`; runtime enforcement remains part of 1a.3. |
-| 1a.2 Project path convention selection | Partial | `setup_prose_styleguide_config` now accepts/validates `path_convention`; workflow prompts and session-context persistence are still pending. |
+| 1a.2 Project path convention selection | Exists | `setup_prose_styleguide_config` accepts/validates `path_convention`, workflow guidance asks the Tier A question, and `describe_workflows` exposes session-scoped path convention context. |
 | 1a.3 Styleguide setup workflow integration | Partial | Core styleguide tools and workflow exist; tier-driven confirmation orchestration is still missing. |
 | 1a.4 Lightweight setup state tracking | Partial | `describe_workflows` exposes signals (`scene_count`, `styleguide_exists`) but not explicit setup-state fields or recommendation payload. |
 | 1a.5 Scrivener import + styleguide combined workflow | Partial | Import tools and styleguide tools exist independently; combined guided flow is not fully encoded. |
@@ -61,10 +62,9 @@ Update this block whenever milestone statuses are re-verified.
 
 ### Immediate Prioritization Guidance
 
-1. **Finish current in-flight milestone work:** close remaining 1a.2 gaps (session-context persistence and end-to-end workflow test).
-2. **MVP completion blockers:** 1a.3, 1a.4, 1a.7
-3. **Fastest wins (mostly orchestration):** 1a.4, 1a.5
-4. **Largest net-new area:** 1b.1, 1b.2, 1b.4, 1b.5
+1. **MVP completion blockers:** 1a.3, 1a.4, 1a.7
+2. **Fastest wins (mostly orchestration):** 1a.4, 1a.5
+3. **Largest net-new area:** 1b.1, 1b.2, 1b.4, 1b.5
 
 ---
 
@@ -139,27 +139,27 @@ Mark all items complete before implementation begins.
 **Dependencies:** Tier framework (1a.1)
 
 **Tasks:**
-- [ ] Add project path convention selection to styleguide setup workflow
+- [x] Add project path convention selection to styleguide setup workflow
   - [x] UI/workflow asks: "Standalone project or universe+book structure?" (workflow guidance + tool parameter)
   - [x] Options: `projects/<project>` vs. `universes/<series>/<project>`
   - [x] Validate user choice against existing project structure
-  - [ ] Store choice in context for session (no persistence yet)
+  - [x] Store choice in context for session
 - [x] Update `setup_prose_styleguide_config` tool to accept `path_convention` hint
 - [x] Update workflow catalogue to include this question in styleguide_setup_new
 
 **Deliverables:**
 - [x] Updated `setup_prose_styleguide_config` tool signature
 - [x] Updated workflow catalogue step with path convention question
-- [ ] Integration test showing end-to-end styleguide setup + path convention selection
+- [x] Integration test showing end-to-end styleguide setup + path convention selection
 
 **Success Criteria:**
 - [x] Users can select path convention before styleguide setup
-- [ ] Choice affects `project_id` interpretation during session
+- [x] Choice affects `project_id` interpretation during session
 - [x] Test passes for both standalone and universe+book conventions
 
 **Known Issues:**
 - Application has no persistent "current project" setting; path convention is session-scoped
-- Coordinate with product team on how choice is presented to user
+- Coordinate with product team on how choice is presented to user across clients
 
 ---
 

@@ -327,6 +327,8 @@ describe("describe_workflows tool", () => {
     assert.equal(parsed.ok, true);
     assert.ok(typeof parsed.context === "object");
     assert.ok(typeof parsed.context.scene_count === "number");
+    assert.ok(typeof parsed.context.onboarding_state === "object");
+    assert.ok(Object.hasOwn(parsed.context.onboarding_state, "path_convention"));
     assert.ok(typeof parsed.context.sync_dir === "string");
     assert.ok(typeof parsed.context.git_available === "boolean");
     assert.ok(typeof parsed.context.pending_proposals === "number");
@@ -338,6 +340,22 @@ describe("describe_workflows tool", () => {
     assert.ok(parsed.workflows.length > 0);
     assert.ok(Array.isArray(parsed.notes));
     assert.ok(parsed.notes.length > 0);
+  });
+
+  test("persists path_convention in session context after styleguide setup", async () => {
+    const setupText = await callWriteTool("setup_prose_styleguide_config", {
+      scope: "project_root",
+      project_id: "session-path-test",
+      path_convention: "standalone_project",
+      language: "english_us",
+      overwrite: true,
+    });
+    const setupParsed = JSON.parse(setupText);
+    assert.equal(setupParsed.ok, true);
+
+    const workflowsText = await callWriteTool("describe_workflows");
+    const workflowsParsed = JSON.parse(workflowsText);
+    assert.equal(workflowsParsed.context.onboarding_state.path_convention, "standalone_project");
   });
 
   test("includes all expected workflow ids", async () => {

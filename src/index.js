@@ -320,6 +320,17 @@ function maxScenesNextStep(matchedCount) {
 // ---------------------------------------------------------------------------
 function createMcpServer() {
   const s = new McpServer({ name: "mcp-writing", version: MCP_SERVER_VERSION });
+  const onboardingState = {
+    path_convention: null,
+  };
+
+  function setOnboardingPathConvention(pathConvention) {
+    onboardingState.path_convention = pathConvention;
+  }
+
+  function getOnboardingPathConvention() {
+    return onboardingState.path_convention;
+  }
 
   // ---- describe_workflows --------------------------------------------------
   s.tool(
@@ -361,6 +372,9 @@ function createMcpServer() {
         context: {
           project_id,
           scene_count,
+          onboarding_state: {
+            path_convention: getOnboardingPathConvention(),
+          },
           sync_dir: SYNC_DIR_ABS,
           styleguide_exists: {
             sync_root: syncRootExists,
@@ -418,6 +432,8 @@ function createMcpServer() {
     createCanonicalWorldEntity,
     resolveOutputDirWithinSync,
     isPathCandidateInsideSyncDir,
+    setOnboardingPathConvention,
+    getOnboardingPathConvention,
     pendingProposals,
     generateProposalId,
     STYLEGUIDE_ENFORCEMENT_MODE,
