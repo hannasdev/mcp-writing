@@ -89,7 +89,7 @@ const STYLEGUIDE_FIELD_ORDER = [
 // Fields that are valid in a config but are not enum-constrained.
 const SPECIAL_FIELDS = new Set(["voice_notes"]);
 
-const LANGUAGE_DEFAULTS = {
+export const LANGUAGE_DEFAULTS = {
   english_us: {
     spelling: "us",
     quotation_style: "double",
@@ -215,6 +215,118 @@ const LANGUAGE_DEFAULTS = {
     quotation_style: "double",
   },
 };
+
+// Tier assignments for Phase 1a onboarding (from tier-framework.md).
+// Tiers define confirmation behavior before writing config:
+// - Tier A (Tier A): Always ask explicitly; never silent default
+// - Tier B: Propose value; require confirmation
+// - Tier C: Propose value; allow quick default acceptance
+export const STYLEGUIDE_TIER_ASSIGNMENTS = {
+  // Tier B: High-impact conventions requiring explicit confirmation
+  language: "B",
+  spelling: "B",
+  quotation_style: "B",
+  quotation_style_nested: "B",
+  tense: "B",
+  pov: "B",
+  numbers: "B",
+  ellipsis_style: "B",
+  sentence_fragments: "B",
+
+  // Tier C: Low-risk conventions with quick review
+  em_dash_spacing: "C",
+  abbreviation_periods: "C",
+  oxford_comma: "C",
+  date_format: "C",
+  dialogue_tags: "C",
+  time_format: "C",
+
+  // Special fields (not tier-assigned)
+  voice_notes: null,
+};
+
+/**
+ * Generate a tier-appropriate conversational prompt for a styleguide field.
+ * @param {string} field - Field name (e.g., 'language', 'spelling')
+ * @param {string} tier - Tier assignment ('B' or 'C', or null for special fields)
+ * @param {string} proposedValue - The proposed default value
+ * @param {string} language - The writing language (for context)
+ * @param {object} languageDefaults - Language-derived defaults (for reason)
+ * @returns {string} Conversational prompt
+ */
+export function generateTierPrompt(field, tier, proposedValue, language, languageDefaults = {}) {
+  if (!tier) return null; // Special fields like voice_notes don't have prompts
+
+  if (tier === "B") {
+    // Tier B: "Proposed X because Y. Keep or change?"
+    const reason = languageDefaults[field] ? `from ${language} conventions` : "as your selection";
+    return `Proposed ${field}: ${proposedValue} (${reason}). Keep or change?`;
+  }
+
+  if (tier === "C") {
+    // Tier C: "Defaulting to X for Y language. Keep or change?"
+    return `Defaulting ${field} to ${proposedValue} for ${language}. Keep or change?`;
+  }
+
+  return null;
+}
+
+/**
+ * Build tier groups from styleguide config: group fields by tier and add prompts.
+ * Used in preview response to allow clients to orchestrate tier-aware flows.
+ * @param {object} config - Resolved styleguide config
+ * @param {object} inferred - Inferred defaults object
+ * @param {string} language - Writing language
+ * @param {object} languageDefaults - Language-derived defaults
+ * @returns {object} Tier groups: { tier_a: [], tier_b: [...], tier_c: [...] }
+ */
+export function buildTierGroups(config, inferred = {}, language, languageDefaults = {}) {
+  const groups = {
+    tier_a: [],
+    tier_b: [],
+    tier_c: [],
+  };
+
+  const FIELD_ORDER = [
+    "language",
+    "spelling",
+    "quotation_style",
+    "quotation_style_nested",
+    "em_dash_spacing",
+    "ellipsis_style",
+    "abbreviation_periods",
+    "oxford_comma",
+    "numbers",
+    "date_format",
+    "time_format",
+    "tense",
+    "pov",
+    "dialogue_tags",
+    "sentence_fragments",
+  ];
+
+  for (const field of FIELD_ORDER) {
+    const tier = STYLEGUIDE_TIER_ASSIGNMENTS[field];
+    if (!tier) continue; // Skip special fields like voice_notes
+
+    const value = config[field];
+    if (!value) continue; // Skip unset fields
+
+    const isInferred = inferred[field] === true;
+    const prompt = generateTierPrompt(field, tier, value, language, languageDefaults);
+
+    const groupName = `tier_${tier.toLowerCase()}`;
+    groups[groupName].push({
+      field,
+      value,
+      is_inferred: isInferred,
+      prompt,
+      tier,
+    });
+  }
+
+  return groups;
+}
 
 function projectRootFromId(syncDir, projectId) {
   if (!projectId.includes("/")) {
