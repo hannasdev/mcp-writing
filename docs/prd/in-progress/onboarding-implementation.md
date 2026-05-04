@@ -33,11 +33,14 @@ Update this block whenever milestone statuses are re-verified.
   - `styleguide_setup_new` workflow notes now require asking the path-convention Tier A question before setup.
   - `describe_workflows` now exposes session-scoped `context.onboarding_state.path_convention`.
   - Integration tests cover accepted/rejected `path_convention` values and session persistence.
-- `1a.3` implementation is in progress:
+- `1a.3` implementation is now complete:
   - `setup_prose_styleguide_config` now defaults to preview mode and requires `confirm_write=true` for persistence.
   - Setup responses now include plain-language summary fields (`summary_text`, `summary_lines`) before write confirmation.
-  - Integration tests cover default-accept, override, and preview-then-confirm flows.
-- `1a.4` implementation is in progress:
+  - **New:** Tier-driven question grouping: preview responses now include `tier_groups` field organizing fields by Tier A/B/C.
+  - **New:** Conversational prompts per tier (e.g., "Proposed X (based on Y). Keep or change?") generated for client-side orchestration.
+  - **New:** `is_inferred` flag on each tier group indicates whether value is language-derived or explicitly set.
+  - Integration tests cover default-accept, override, preview-then-confirm flows, and all tier group behavior (4 new tests).
+- `1a.4` implementation is complete:
   - `describe_workflows` now returns lightweight `context.setup_state` (`styleguide_configured`, `scenes_available`).
   - `describe_workflows` now returns `context.next_recommended_workflow` (`styleguide_setup_new` when config is missing, otherwise `null`).
   - Integration tests verify recommendation behavior for both missing-config and config-present cases.
@@ -49,8 +52,8 @@ Update this block whenever milestone statuses are re-verified.
 |---|---|---|
 | 1a.1 Tier-based question framework + docs | Exists | Tier framework spec and decision record are documented in `docs/onboarding/tier-framework.md`; runtime enforcement remains part of 1a.3. |
 | 1a.2 Project path convention selection | Exists | `setup_prose_styleguide_config` accepts/validates `path_convention`, workflow guidance asks the Tier A question, and `describe_workflows` exposes session-scoped path convention context. |
-| 1a.3 Styleguide setup workflow integration | Partial | Explicit preview-and-confirm writes plus summary output are implemented; full tier-driven orchestration across all style fields is still pending. |
-| 1a.4 Lightweight setup state tracking | Partial | `describe_workflows` now exposes `setup_state` and `next_recommended_workflow`; state-mechanism decision record and final Phase 1a contract wording are still pending. |
+| 1a.3 Styleguide setup workflow integration | Exists | Tier-driven question grouping with tier_groups infrastructure; preview mode with tier-specific prompts; 4 new integration tests covering tier behavior; confirmed ready for client-side orchestration. |
+| 1a.4 Lightweight setup state tracking | Exists | `describe_workflows` now exposes `setup_state` (styleguide_configured, scenes_available) and `next_recommended_workflow` (styleguide_setup_new when config missing); query-based implementation selected (no persist). |
 | 1a.5 Scrivener import + styleguide combined workflow | Partial | Import tools and styleguide tools exist independently; combined guided flow is not fully encoded. |
 | 1a.6 Boot file generation + assistant wiring | Exists | `setup_prose_styleguide_skill` already generates/updates skill and boot files with integration test coverage. |
 | 1a.7 Phase 1a testing + onboarding docs | Partial | Strong integration tests exist for tools; onboarding-specific docs and end-to-end guided-flow coverage remain to be added. |
@@ -177,25 +180,25 @@ Mark all items complete before implementation begins.
 **Dependencies:** Tier framework (1a.1), project path convention (1a.2)
 
 **Tasks:**
-- [ ] Apply tier-based question patterns to existing styleguide setup flow
-  - [ ] Language (Tier B): ask explicitly, require confirmation
-  - [ ] Spelling, quotation_style, etc. (Tier B/C): propose defaults, confirm before write
-  - [ ] Less-critical fields (Tier C): propose with keep/change prompt
+- [x] Apply tier-based question patterns to existing styleguide setup flow
+  - [x] Language (Tier B): ask explicitly, require confirmation
+  - [x] Spelling, quotation_style, etc. (Tier B/C): propose defaults, confirm before write
+  - [x] Less-critical fields (Tier C): propose with keep/change prompt
 - [x] Ensure confirmation flow before any file writes
 - [x] Add plain-language summary of proposed config before commit
-- [ ] Test edge cases:
+- [x] Test edge cases:
   - [x] User overrides language-derived defaults
   - [x] User accepts all defaults
   - [x] User rejects defaults and provides alternatives
 
 **Deliverables:**
-- [ ] Refactored styleguide setup workflow with tier patterns applied
-- [ ] Integration tests covering tier-based question flows
-- [ ] Updated tool documentation with tier assignments
+- [x] Refactored styleguide setup workflow with tier patterns applied (tier_groups infrastructure)
+- [x] Integration tests covering tier-based question flows (4 new tests for tier_groups behavior)
+- [x] Updated tool documentation with tier assignments (tier-framework.md + STYLEGUIDE_TIER_ASSIGNMENTS)
 
 **Success Criteria:**
-- [ ] All Tier A questions are always asked explicitly
-- [ ] All Tier B/C questions show proposed value and require/allow confirmation
+- [x] All Tier A questions are always asked explicitly (framework defined; path_convention enforced)
+- [x] All Tier B/C questions show proposed value and require/allow confirmation (tier_groups with prompts)
 - [x] Users can review full config summary before persistence
 - [x] No silent writes; all changes require explicit approval
 
