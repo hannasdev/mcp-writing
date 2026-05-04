@@ -11,6 +11,8 @@ import {
   resolveStyleguideConfig,
   summarizeStyleguideConfig,
   updateStyleguideConfig,
+  buildTierGroups,
+  LANGUAGE_DEFAULTS,
 } from "../styleguide/prose-styleguide.js";
 import {
   detectStyleguideSignals,
@@ -308,6 +310,13 @@ export function registerStyleguideTools(s, {
         setOnboardingPathConvention(resolvedPathConvention);
       }
 
+      const tierGroups = buildTierGroups(
+        draft.config,
+        draft.inferred_defaults,
+        language,
+        LANGUAGE_DEFAULTS[language] ?? {}
+      );
+
       if (!confirm_write) {
         return jsonResponse({
           ok: true,
@@ -321,6 +330,7 @@ export function registerStyleguideTools(s, {
           inferred_defaults: draft.inferred_defaults,
           summary_text: summary.summary_text,
           summary_lines: summary.summary_lines,
+          tier_groups: tierGroups,
           warnings: draft.warnings,
           next_step: "Review summary/config, then re-run setup_prose_styleguide_config with confirm_write=true to persist.",
         });
@@ -339,6 +349,7 @@ export function registerStyleguideTools(s, {
         inferred_defaults: draft.inferred_defaults,
         summary_text: summary.summary_text,
         summary_lines: summary.summary_lines,
+        tier_groups: tierGroups,
         warnings: draft.warnings,
         next_step: "Config created. Call update_prose_styleguide_config to apply field updates.",
       });
