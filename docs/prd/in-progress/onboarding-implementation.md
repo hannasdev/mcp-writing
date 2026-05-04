@@ -23,11 +23,22 @@ Use this matrix to distinguish what already exists versus what still requires im
 
 Update this block whenever milestone statuses are re-verified.
 
+### Progress Snapshot (2026-05-04)
+
+- `1a.1` documentation deliverables are complete:
+  - `docs/onboarding/tier-framework.md` added with Tier A/B/C UX rules, question inventory, and confirmation flow.
+  - Phase 1a mandatory/optional question decision record is documented.
+- `1a.2` implementation is in progress:
+  - `setup_prose_styleguide_config` now accepts `path_convention` and validates it against `project_id` shape.
+  - `styleguide_setup_new` workflow notes now require asking the path-convention Tier A question before setup.
+  - Integration tests cover accepted/rejected `path_convention` values.
+- Supporting docs were updated to point onboarding references to `docs/prd/in-progress/onboarding-framework.md`.
+
 ### Phase 1a
 
 | Milestone | Status | Notes |
 |---|---|---|
-| 1a.1 Tier-based question framework + docs | Partial | Dedicated spec now lives in `docs/onboarding/tier-framework.md`; workflow enforcement and test coverage are still pending. |
+| 1a.1 Tier-based question framework + docs | Exists | Tier framework spec and decision record are documented in `docs/onboarding/tier-framework.md`; runtime enforcement remains part of 1a.3. |
 | 1a.2 Project path convention selection | Partial | `setup_prose_styleguide_config` now accepts/validates `path_convention`; workflow prompts and session-context persistence are still pending. |
 | 1a.3 Styleguide setup workflow integration | Partial | Core styleguide tools and workflow exist; tier-driven confirmation orchestration is still missing. |
 | 1a.4 Lightweight setup state tracking | Partial | `describe_workflows` exposes signals (`scene_count`, `styleguide_exists`) but not explicit setup-state fields or recommendation payload. |
@@ -50,9 +61,10 @@ Update this block whenever milestone statuses are re-verified.
 
 ### Immediate Prioritization Guidance
 
-1. **Fastest wins (mostly orchestration):** 1a.4, 1a.5
-2. **MVP completion blockers:** 1a.2, 1a.3, 1a.7
-3. **Largest net-new area:** 1b.1, 1b.2, 1b.4, 1b.5
+1. **Finish current in-flight milestone work:** close remaining 1a.2 gaps (session-context persistence and end-to-end workflow test).
+2. **MVP completion blockers:** 1a.3, 1a.4, 1a.7
+3. **Fastest wins (mostly orchestration):** 1a.4, 1a.5
+4. **Largest net-new area:** 1b.1, 1b.2, 1b.4, 1b.5
 
 ---
 
@@ -103,21 +115,21 @@ Mark all items complete before implementation begins.
 **Dependencies:** None
 
 **Tasks:**
-- [ ] Review provisional tier assignments in PRD (Tier A/B/C question patterns)
-- [ ] Create UX specification for each tier pattern:
+- [x] Review provisional tier assignments in PRD (Tier A/B/C question patterns)
+- [x] Create UX specification for each tier pattern:
   - Tier A: always ask explicitly, no default acceptance
   - Tier B: propose value, require confirmation
   - Tier C: propose value, allow default acceptance
-- [ ] Document confirmation flow UI/UX expectations (text prompts, form fields, etc.)
-- [ ] Map existing styleguide setup questions to tiers (language, spelling, quotation_style, etc.)
+- [x] Document confirmation flow UI/UX expectations (text prompts, form fields, etc.)
+- [x] Map existing styleguide setup questions to tiers (language, spelling, quotation_style, etc.)
 
 **Deliverables:**
 - [x] `docs/onboarding/tier-framework.md` — detailed UX spec per tier
 - [x] Decision record: which questions are mandatory vs. optional in Phase 1a styleguide setup
 
 **Success Criteria:**
-- [ ] All styleguide questions assigned to tiers
-- [ ] Confirmation flow is unambiguous and reviewable before writing config
+- [x] All styleguide questions assigned to tiers
+- [x] Confirmation flow is unambiguous and reviewable before writing config
 
 ---
 
@@ -128,8 +140,8 @@ Mark all items complete before implementation begins.
 
 **Tasks:**
 - [ ] Add project path convention selection to styleguide setup workflow
-  - [ ] UI/workflow asks: "Standalone project or universe+book structure?"
-  - [ ] Options: `projects/<project>` vs. `universes/<series>/<project>`
+  - [x] UI/workflow asks: "Standalone project or universe+book structure?" (workflow guidance + tool parameter)
+  - [x] Options: `projects/<project>` vs. `universes/<series>/<project>`
   - [x] Validate user choice against existing project structure
   - [ ] Store choice in context for session (no persistence yet)
 - [x] Update `setup_prose_styleguide_config` tool to accept `path_convention` hint
@@ -141,9 +153,9 @@ Mark all items complete before implementation begins.
 - [ ] Integration test showing end-to-end styleguide setup + path convention selection
 
 **Success Criteria:**
-- [ ] Users can select path convention before styleguide setup
+- [x] Users can select path convention before styleguide setup
 - [ ] Choice affects `project_id` interpretation during session
-- [ ] Test passes for both standalone and universe+book conventions
+- [x] Test passes for both standalone and universe+book conventions
 
 **Known Issues:**
 - Application has no persistent "current project" setting; path convention is session-scoped
