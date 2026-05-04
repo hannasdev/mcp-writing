@@ -131,6 +131,97 @@ describe("setup_prose_styleguide_config tool", () => {
     assert.equal(writeResult.preview_only, false);
     assert.equal(fs.existsSync(targetPath), true);
   });
+
+  test("preview response includes tier_groups with conversational prompts", async () => {
+    const previewText = await callWriteTool("setup_prose_styleguide_config", {
+      scope: "sync_root",
+      language: "english_us",
+      overrides: {
+        tense: "present",
+        pov: "third_omniscient",
+      },
+    });
+    const preview = JSON.parse(previewText);
+
+    assert.equal(preview.ok, true);
+    assert.equal(preview.preview_only, true);
+    assert(preview.tier_groups, "tier_groups should exist in preview");
+    assert.equal(Array.isArray(preview.tier_groups.tier_b), true);
+    assert.equal(Array.isArray(preview.tier_groups.tier_c), true);
+
+    // Tier B fields should have prompts
+    const tierBFields = preview.tier_groups.tier_b.map(g => g.field);
+    assert(tierBFields.includes("language"), "language should be in tier_b");
+    assert(tierBFields.includes("tense"), "tense should be in tier_b");
+    assert(tierBFields.includes("pov"), "pov should be in tier_b");
+
+    // Verify Tier B prompts mention "Keep or change?"
+    for (const group of preview.tier_groups.tier_b) {
+      if (group.prompt) {
+        assert(group.prompt.includes("Keep or change?"), `Tier B prompt for ${group.field} should mention 'Keep or change?'`);
+      }
+    }
+
+    // Tier C fields should have prompts too
+    const tierCFields = preview.tier_groups.tier_c.map(g => g.field);
+    assert(tierCFields.includes("em_dash_spacing"), "em_dash_spacing should be in tier_c");
+    assert(tierCFields.includes("oxford_comma"), "oxford_comma should be in tier_c");
+
+    // Verify Tier C prompts mention "Defaulting to" or "Keep or change?"
+    for (const group of preview.tier_groups.tier_c) {
+      if (group.prompt) {
+        assert(
+          group.prompt.includes("Defaulting") || group.prompt.includes("Keep or change?"),
+          `Tier C prompt for ${group.field} should mention default behavior`
+        );
+      }
+    }
+  });
+
+  test("tier_groups indicates which fields are inferred vs explicit", async () => {
+    const previewText = await callWriteTool("setup_prose_styleguide_config", {
+      scope: "sync_root",
+      language: "english_us",
+      overrides: {
+        spelling: "uk", // explicit override
+      },
+    });
+    const preview = JSON.parse(previewText);
+
+    assert(preview.tier_groups.tier_b, "tier_b should exist");
+
+    // Find the spelling field
+    const spellingGroup = preview.tier_groups.tier_b.find(g => g.field === "spelling");
+    assert(spellingGroup, "spelling should be in tier_b");
+    assert.equal(spellingGroup.is_inferred, false, "explicitly set spelling should not be marked as inferred");
+
+    // Find a field that is inferred (e.g., quotation_style should be inferred for english_us)
+    const quotationGroup = preview.tier_groups.tier_b.find(g => g.field === "quotation_style");
+    assert(quotationGroup, "quotation_style should be in tier_b");
+    assert.equal(quotationGroup.is_inferred, true, "language-derived quotation_style should be marked as inferred");
+  });
+
+  test("tier_groups preserved in confirm_write response", async () => {
+    const targetPath = path.join(writeSyncDir, "projects", "tier-groups-proj", "prose-styleguide.config.yaml");
+    fs.rmSync(targetPath, { force: true });
+
+    const confirmText = await callWriteTool("setup_prose_styleguide_config", {
+      scope: "project_root",
+      project_id: "tier-groups-proj",
+      language: "english_uk",
+      overrides: {
+        tense: "past",
+      },
+      confirm_write: true,
+    });
+    const confirmed = JSON.parse(confirmText);
+
+    assert.equal(confirmed.ok, true);
+    assert.equal(confirmed.preview_only, false);
+    assert(confirmed.tier_groups, "tier_groups should be included in confirm_write response");
+    assert(Array.isArray(confirmed.tier_groups.tier_b), "tier_b should exist in confirmed response");
+    assert(Array.isArray(confirmed.tier_groups.tier_c), "tier_c should exist in confirmed response");
+  });
 });
 
 describe("get_prose_styleguide_config tool", () => {

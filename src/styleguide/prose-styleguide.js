@@ -312,7 +312,7 @@ export function buildTierGroups(config, inferred = {}, language, languageDefault
     const value = config[field];
     if (!value) continue; // Skip unset fields
 
-    const isInferred = inferred[field] === true;
+    const isInferred = field in inferred;
     const prompt = generateTierPrompt(field, tier, value, language, languageDefaults);
 
     const groupName = `tier_${tier.toLowerCase()}`;
