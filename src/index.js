@@ -366,12 +366,20 @@ function createMcpServer() {
       const syncRootExists = fs.existsSync(syncRootConfigPath);
       const universeRootExists = universeRootConfigPath !== null && fs.existsSync(universeRootConfigPath);
       const projectRootExists = projectRootConfigPath !== null && fs.existsSync(projectRootConfigPath);
+      const styleguideConfigured = syncRootExists || universeRootExists || projectRootExists;
+      const scenesAvailable = scene_count > 0;
+      const nextRecommendedWorkflow = styleguideConfigured ? null : "styleguide_setup_new";
 
       return jsonResponse({
         ok: true,
         context: {
           project_id,
           scene_count,
+          setup_state: {
+            styleguide_configured: styleguideConfigured,
+            scenes_available: scenesAvailable,
+          },
+          next_recommended_workflow: nextRecommendedWorkflow,
           onboarding_state: {
             path_convention: getOnboardingPathConvention(),
           },

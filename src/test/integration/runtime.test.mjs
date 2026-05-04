@@ -327,6 +327,10 @@ describe("describe_workflows tool", () => {
     assert.equal(parsed.ok, true);
     assert.ok(typeof parsed.context === "object");
     assert.ok(typeof parsed.context.scene_count === "number");
+    assert.ok(typeof parsed.context.setup_state === "object");
+    assert.ok(typeof parsed.context.setup_state.styleguide_configured === "boolean");
+    assert.ok(typeof parsed.context.setup_state.scenes_available === "boolean");
+    assert.ok(Object.hasOwn(parsed.context, "next_recommended_workflow"));
     assert.ok(typeof parsed.context.onboarding_state === "object");
     assert.ok(Object.hasOwn(parsed.context.onboarding_state, "path_convention"));
     assert.ok(typeof parsed.context.sync_dir === "string");
@@ -340,6 +344,30 @@ describe("describe_workflows tool", () => {
     assert.ok(parsed.workflows.length > 0);
     assert.ok(Array.isArray(parsed.notes));
     assert.ok(parsed.notes.length > 0);
+  });
+
+  test("recommends styleguide setup when no styleguide config exists", async () => {
+    fs.rmSync(path.join(writeSyncDir, "prose-styleguide.config.yaml"), { force: true });
+
+    const text = await callWriteTool("describe_workflows");
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.context.setup_state.styleguide_configured, false);
+    assert.equal(parsed.context.next_recommended_workflow, "styleguide_setup_new");
+  });
+
+  test("clears styleguide recommendation when a config exists", async () => {
+    fs.writeFileSync(
+      path.join(writeSyncDir, "prose-styleguide.config.yaml"),
+      "language: english_us\n",
+      "utf8"
+    );
+
+    const text = await callWriteTool("describe_workflows");
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.context.setup_state.styleguide_configured, true);
+    assert.equal(parsed.context.next_recommended_workflow, null);
   });
 
   test("persists path_convention in session context after styleguide setup", async () => {

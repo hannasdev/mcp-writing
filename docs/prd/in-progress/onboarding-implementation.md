@@ -37,6 +37,10 @@ Update this block whenever milestone statuses are re-verified.
   - `setup_prose_styleguide_config` now defaults to preview mode and requires `confirm_write=true` for persistence.
   - Setup responses now include plain-language summary fields (`summary_text`, `summary_lines`) before write confirmation.
   - Integration tests cover default-accept, override, and preview-then-confirm flows.
+- `1a.4` implementation is in progress:
+  - `describe_workflows` now returns lightweight `context.setup_state` (`styleguide_configured`, `scenes_available`).
+  - `describe_workflows` now returns `context.next_recommended_workflow` (`styleguide_setup_new` when config is missing, otherwise `null`).
+  - Integration tests verify recommendation behavior for both missing-config and config-present cases.
 - Supporting docs were updated to point onboarding references to `docs/prd/in-progress/onboarding-framework.md`.
 
 ### Phase 1a
@@ -46,7 +50,7 @@ Update this block whenever milestone statuses are re-verified.
 | 1a.1 Tier-based question framework + docs | Exists | Tier framework spec and decision record are documented in `docs/onboarding/tier-framework.md`; runtime enforcement remains part of 1a.3. |
 | 1a.2 Project path convention selection | Exists | `setup_prose_styleguide_config` accepts/validates `path_convention`, workflow guidance asks the Tier A question, and `describe_workflows` exposes session-scoped path convention context. |
 | 1a.3 Styleguide setup workflow integration | Partial | Explicit preview-and-confirm writes plus summary output are implemented; full tier-driven orchestration across all style fields is still pending. |
-| 1a.4 Lightweight setup state tracking | Partial | `describe_workflows` exposes signals (`scene_count`, `styleguide_exists`) but not explicit setup-state fields or recommendation payload. |
+| 1a.4 Lightweight setup state tracking | Partial | `describe_workflows` now exposes `setup_state` and `next_recommended_workflow`; state-mechanism decision record and final Phase 1a contract wording are still pending. |
 | 1a.5 Scrivener import + styleguide combined workflow | Partial | Import tools and styleguide tools exist independently; combined guided flow is not fully encoded. |
 | 1a.6 Boot file generation + assistant wiring | Exists | `setup_prose_styleguide_skill` already generates/updates skill and boot files with integration test coverage. |
 | 1a.7 Phase 1a testing + onboarding docs | Partial | Strong integration tests exist for tools; onboarding-specific docs and end-to-end guided-flow coverage remain to be added. |
@@ -204,26 +208,26 @@ Mark all items complete before implementation begins.
 
 **Tasks:**
 - [ ] Decide on lightweight state mechanism for Phase 1a
-  - [ ] Option A: Query-based (check if config file exists; do not persist state)
+  - [x] Option A: Query-based (check if config file exists; do not persist state)
   - [ ] Option B: Simple JSON file (not full schema; just { "has_styleguide": bool, "has_scenes": bool })
   - [ ] Option C: Lean `.mcp-writing/` structure with minimal fields
-- [ ] Update `describe_workflows` to detect setup incompleteness
-  - [ ] Check: does styleguide config exist?
-  - [ ] Check: does project have scenes?
-  - [ ] Return `styleguide_setup_new` workflow if config is missing
-- [ ] Add lightweight context fields to `describe_workflows` response:
-  - [ ] `setup_state: { styleguide_configured: bool, scenes_available: bool }`
-  - [ ] `next_recommended_workflow: "styleguide_setup_new" | null`
+- [x] Update `describe_workflows` to detect setup incompleteness
+  - [x] Check: does styleguide config exist?
+  - [x] Check: does project have scenes?
+  - [x] Return `styleguide_setup_new` workflow if config is missing
+- [x] Add lightweight context fields to `describe_workflows` response:
+  - [x] `setup_state: { styleguide_configured: bool, scenes_available: bool }`
+  - [x] `next_recommended_workflow: "styleguide_setup_new" | null`
 - [ ] Do NOT implement full `.mcp-writing/onboarding-state.json` schema (deferred to Phase 1b)
 
 **Deliverables:**
-- [ ] Updated `describe_workflows` tool with setup detection
+- [x] Updated `describe_workflows` tool with setup detection
 - [ ] Decision record: lightweight state mechanism chosen
-- [ ] Integration tests verifying setup state detection
+- [x] Integration tests verifying setup state detection
 
 **Success Criteria:**
-- [ ] `describe_workflows` correctly identifies missing styleguide config
-- [ ] Recommends `styleguide_setup_new` workflow when config is missing
+- [x] `describe_workflows` correctly identifies missing styleguide config
+- [x] Recommends `styleguide_setup_new` workflow when config is missing
 - [ ] Lightweight state check is fast (sub-100ms)
 
 **Open Questions:**
