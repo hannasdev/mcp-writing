@@ -16,6 +16,12 @@ WRITING_SYNC_DIR=/path/to/sync-dir DB_PATH=./writing.db npx -y @hanna84/mcp-writ
 
 The CLI wrapper defaults to stdio transport and adds the Node 22 SQLite flag automatically when needed.
 
+## VS Code extension
+
+For VS Code-native setup flows (including prose styleguide setup), use:
+
+- [hannasdev/mcp-writing-vscode](https://github.com/hannasdev/mcp-writing-vscode)
+
 ## What it does
 
 Instead of feeding an entire manuscript to an AI and hoping it fits in the context window, `mcp-writing` builds a structured index from your scene files. The AI queries that index first — finding relevant characters, beats, and loglines — then loads only the specific prose it needs.
@@ -37,6 +43,7 @@ Instead of feeding an entire manuscript to an AI and hoping it fits in the conte
 | Guide | Description |
 |---|---|
 | [docs/setup.md](docs/setup.md) | Prerequisites, first-time setup, Scrivener import, native sync format |
+| [mcp-writing-vscode](https://github.com/hannasdev/mcp-writing-vscode) | VS Code extension for client-native setup flows |
 | [docs/docker.md](docs/docker.md) | Docker Compose, OpenClaw integration, SSH hardening |
 | [docs/data-ownership.md](docs/data-ownership.md) | Which tools write which files, import safety rules |
 | [docs/tools.md](docs/tools.md) | Full tool reference — auto-generated from source |
