@@ -75,39 +75,7 @@ Additional completed structural proposal:
 
 ## Tool Reference
 
-### Fast Metadata Tools (no prose loaded)
-
-- `find_scenes(character?, beat?, tag?, ...)` — filter by metadata
-- `get_arc(character_id)` — character's scene journey
-- `get_character_sheet(character_id)` — full character metadata
-- `list_characters()`, `list_places()`, `list_threads()`
-- `search_metadata(query)` — FTS5 search
-- `get_runtime_config()` — system status and diagnostics
-
-### Prose Tools (loads file content)
-
-- `get_scene_prose(scene_id)` — current prose
-- `get_chapter_prose(project_id, part, chapter)` — all scenes in a chapter
-- `list_snapshots(scene_id)` — git commit history
-
-### Editing Tools (two-step confirm)
-
-- `propose_edit(scene_id, instruction, revised_prose)` — stage a change
-- `commit_edit(scene_id, proposal_id)` — apply it (git-backed)
-- `discard_edit(proposal_id)` — reject it
-- `snapshot_scene(scene_id, project_id, reason)` — manual restore point
-
-### Metadata Update Tools (write to sidecars)
-
-- `update_scene_metadata(scene_id, fields)` — update beat, tags, logline, status, etc.
-- `update_character_sheet(character_id, fields)` — update character metadata
-- `update_place_sheet(place_id, fields)` — update place metadata
-- `flag_scene(scene_id, note)` — mark for AI follow-up
-
-### Sync Tools
-
-- `sync()` — re-read sync folder and update index
-- `enrich_scene(scene_id)` — refresh metadata from current prose
+The canonical tool list and contracts are maintained in [docs/tools.md](docs/tools.md), which is auto-generated from the server source.
 
 ---
 
