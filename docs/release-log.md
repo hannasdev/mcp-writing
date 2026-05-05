@@ -14,7 +14,7 @@ This complements `CHANGELOG.md`:
 - Why it matters: Maintainers and contributors can navigate roadmap status faster, while setup direction now favors reusable MCP capabilities plus client-native onboarding UX instead of growing the tool list for first-run-only workflows.
 - Who is affected: Maintainers and contributors updating PRDs, setup UX direction, or roadmap documentation.
 - Action needed: Optional. Use `docs/prd/completed-features.md` for shipped capability summaries and keep `PRD.md` focused on active direction and navigation.
-- PR: (this PR)
+- PR: [#175](https://github.com/hannasdev/mcp-writing/pull/175)
 
 ### 2026-05-03 — Prose styleguide skill with formal output contract
 

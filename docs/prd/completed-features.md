@@ -1,6 +1,6 @@
 # Completed Features
 
-This document indexes completed product areas that were previously summarized inline in [PRD.md](/Users/hanna/Code/mcp-writing/PRD.md).
+This document indexes completed product areas that were previously summarized inline in [PRD.md](../../PRD.md).
 
 Use this page when you want shipped capability summaries and links to the underlying done PRDs. Use `PRD.md` for the high-level product overview, active development, backlog, and navigation.
 
