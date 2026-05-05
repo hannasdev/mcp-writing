@@ -17,7 +17,7 @@ Use this matrix to distinguish what already exists versus what still requires im
 
 | Field | Value |
 |---|---|
-| Last validated on | 2026-05-04 |
+| Last validated on | 2026-05-05 |
 | Validated by (initials) | HH |
 | Status owner (initials) | TBD |
 
@@ -73,8 +73,8 @@ Update this block whenever milestone statuses are re-verified.
 
 ### Immediate Prioritization Guidance
 
-1. **MVP completion blockers:** 1a.3, 1a.4, 1a.7
-2. **Fastest wins (mostly orchestration):** 1a.4, 1a.5
+1. **MVP completion blockers:** 1a.5, 1a.7
+2. **Fastest wins (mostly orchestration):** 1a.5
 3. **Largest net-new area:** 1b.1, 1b.2, 1b.4, 1b.5
 
 ---
@@ -210,7 +210,7 @@ Mark all items complete before implementation begins.
 **Dependencies:** Styleguide setup integration (1a.3)
 
 **Tasks:**
-- [ ] Decide on lightweight state mechanism for Phase 1a
+- [x] Decide on lightweight state mechanism for Phase 1a
   - [x] Option A: Query-based (check if config file exists; do not persist state)
   - [ ] Option B: Simple JSON file (not full schema; just { "has_styleguide": bool, "has_scenes": bool })
   - [ ] Option C: Lean `.mcp-writing/` structure with minimal fields
@@ -225,7 +225,7 @@ Mark all items complete before implementation begins.
 
 **Deliverables:**
 - [x] Updated `describe_workflows` tool with setup detection
-- [ ] Decision record: lightweight state mechanism chosen
+- [x] Decision record: lightweight state mechanism chosen (query-based for Phase 1a)
 - [x] Integration tests verifying setup state detection
 
 **Success Criteria:**
@@ -234,7 +234,7 @@ Mark all items complete before implementation begins.
 - [ ] Lightweight state check is fast (sub-100ms)
 
 **Open Questions:**
-- [ ] Should lightweight state be query-based or persisted? (Decision needed before implementation)
+- [x] Should lightweight state be query-based or persisted? (Resolved: query-based in Phase 1a; persisted schema deferred to Phase 1b)
 
 ---
 
@@ -334,14 +334,14 @@ Mark all items complete before implementation begins.
 
 ### 1a Definition of Done Checklist
 
-- [ ] Tier-based question framework is documented and applied (1a.1)
-- [ ] Project path convention selection works as Tier A question (1a.2)
-- [ ] Styleguide setup workflow applies tier patterns end-to-end (1a.3)
-- [ ] Lightweight setup state tracking allows workflow discovery to detect missing config (1a.4)
+- [x] Tier-based question framework is documented and applied (1a.1)
+- [x] Project path convention selection works as Tier A question (1a.2)
+- [x] Styleguide setup workflow applies tier patterns end-to-end (1a.3)
+- [x] Lightweight setup state tracking allows workflow discovery to detect missing config (1a.4)
 - [ ] Scrivener import integrates with styleguide setup in single workflow (1a.5)
-- [ ] Boot files are generated correctly during setup (1a.6)
+- [x] Boot files are generated correctly during setup (1a.6)
 - [ ] All Phase 1a test scenarios pass; documentation is complete (1a.7)
-- [ ] `describe_workflows` returns `styleguide_setup_new` when config is missing
+- [x] `describe_workflows` returns `styleguide_setup_new` when config is missing
 - [ ] Users can complete styleguide setup + Scrivener import without editing YAML/JSON
 
 ---
