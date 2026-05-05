@@ -8,6 +8,14 @@ This complements `CHANGELOG.md`:
 
 ## Unreleased
 
+### 2026-05-05 — Add client-agnostic setup contract runtime and VS Code handoff docs
+
+- What changed: Added a versioned styleguide setup contract (`src/setup/contracts/styleguide_setup_v1.json`), shared setup runtime helpers (`src/setup/setup-contract.js`), `describe_workflows` setup contract status/plan preview metadata, contract parity tests, and documentation links to the new VS Code extension repository.
+- Why it matters: Setup logic is now contract-driven and reusable across clients while keeping MCP focused on durable capabilities instead of onboarding-only tool expansion.
+- Who is affected: Maintainers evolving setup flows, and client implementers (starting with VS Code) that consume setup status and action planning metadata.
+- Action needed: Optional. If you build client adapters, consume `describe_workflows.context.setup_contract` and follow the plan preview/action semantics documented in development docs.
+- PR: [#176](https://github.com/hannasdev/mcp-writing/pull/176)
+
 ### 2026-05-05 — Split PRD overview from completed-feature archive
 
 - What changed: Restructured `PRD.md` into a lighter project overview, moved completed-feature summaries into a dedicated `docs/prd/completed-features.md` index, replaced the inlined tool summary with a pointer to auto-generated `docs/tools.md`, and added a new in-progress PRD (`docs/prd/in-progress/client-agnostic-setup.md`) that defines a client-agnostic setup contract with client-hosted UI flows.

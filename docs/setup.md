@@ -58,6 +58,10 @@ If this is your first time, follow these steps in order:
 4. Run `import_scrivener_sync` with `dry_run: true` first to preview what will happen.
 5. Run it again with `dry_run: false` to write files. Keep `auto_sync: true` (default) so your scenes are indexed immediately.
 
+If you use VS Code, client-native setup flows are available via:
+
+- [hannasdev/mcp-writing-vscode](https://github.com/hannasdev/mcp-writing-vscode)
+
 Once this is working, you can come back to:
 
 - **Advanced: Native sync format** below for custom project layouts

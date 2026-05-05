@@ -333,6 +333,14 @@ describe("describe_workflows tool", () => {
     assert.ok(typeof parsed.context.styleguide_exists === "object");
     assert.ok(typeof parsed.context.styleguide_exists.sync_root === "boolean");
     assert.ok(typeof parsed.context.styleguide_exists.project_root === "boolean");
+    assert.ok(typeof parsed.context.setup_contract === "object");
+    assert.equal(parsed.context.setup_contract.contract_id, "styleguide_setup_v1");
+    assert.ok(typeof parsed.context.setup_contract.schema_version === "string");
+    assert.ok(typeof parsed.context.setup_contract.styleguide_setup_status === "string");
+    assert.ok(typeof parsed.context.setup_contract.setup_recommended === "boolean");
+    assert.ok(typeof parsed.context.setup_contract.plan_preview === "object");
+    assert.equal(parsed.context.setup_contract.plan_preview.flow_id, "styleguide_setup_v1");
+    assert.ok(Array.isArray(parsed.context.setup_contract.plan_preview.actions));
     assert.ok(Array.isArray(parsed.context.db_migration_warnings));
     assert.ok(Array.isArray(parsed.workflows));
     assert.ok(parsed.workflows.length > 0);
@@ -410,6 +418,10 @@ describe("describe_workflows tool", () => {
       const result = await flatClient.callTool({ name: "describe_workflows", arguments: {} });
       const parsed = JSON.parse(result.content?.[0]?.text ?? "{}");
       assert.equal(parsed.context.project_id, null, "structural dir name must not leak as project_id");
+      assert.equal(parsed.context.setup_contract?.plan_preview?.flow_id, "styleguide_setup_v1");
+      assert.equal(parsed.context.setup_contract?.plan_preview?.default_scope, "sync_root");
+      assert.equal(Array.isArray(parsed.context.setup_contract?.plan_preview?.actions), true);
+      assert.equal(parsed.context.setup_contract?.plan_preview?.actions[0]?.tool, "setup_prose_styleguide_config");
     } finally {
       try { await flatClient?.close(); } catch {}
       if (flatProc) flatProc.kill();

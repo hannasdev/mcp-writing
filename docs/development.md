@@ -65,6 +65,39 @@ For manual Scrivener import and merge verification with real project data, keep 
 
 Maintainers: see `MAINTAINERS.md` for release and operational setup notes, and `AGENTS.md` for persistent workflow conventions and release/recovery guidance.
 
+### Client-agnostic setup contract (styleguide v1)
+
+The server ships a versioned setup contract at:
+
+- `src/setup/contracts/styleguide_setup_v1.json`
+
+Runtime helpers live at:
+
+- `src/setup/setup-contract.js`
+
+Current behavior:
+
+1. The contract is loaded and schema-validated at server startup.
+2. `describe_workflows` surfaces contract metadata under `context.setup_contract`, including:
+   - `contract_id`
+   - `schema_version`
+   - `styleguide_setup_status` (`missing_advisory`, `missing_blocking`, `invalid_advisory`, `invalid_blocking`, `complete`)
+   - `setup_recommended`
+   - `plan_preview` (default action sequence)
+3. Setup completion is derived from real config/file validity, not wizard session state.
+
+Contract update policy:
+
+1. Keep `schema_version` explicit and update intentionally for contract-shape changes.
+2. Preserve canonical artifact ownership (`prose-styleguide.config.yaml` and `skills/prose-styleguide/SKILL.md` when sync-root scope applies).
+3. Add or update unit + integration tests with each contract change.
+4. Do not add onboarding-only MCP tools for client UI ceremony.
+
+Roadmap boundary:
+
+- VS Code adapter implementation is intentionally tracked outside this repository as a separate client application.
+- OpenClaw adapter work remains a separate follow-on phase.
+
 ---
 
 ## Environment variables
