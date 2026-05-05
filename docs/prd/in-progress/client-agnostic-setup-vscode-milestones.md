@@ -127,3 +127,12 @@ This implementation is complete when:
 3. `describe_workflows` setup recommendation is accurate and bounded.
 4. Test coverage demonstrates contract correctness and regression safety.
 5. OpenClaw remains explicitly deferred, not partially implemented.
+
+## Current Checkpoint (this repository)
+
+For `mcp-writing`, the completion target is:
+
+1. M1–M3 complete.
+2. M5 complete for server-side contract/runtime/parity coverage.
+3. M6 contract lifecycle documentation complete.
+4. VS Code adapter implementation is explicitly deferred to the separate extension repository (`mcp-writing-vscode`) as the next phase.

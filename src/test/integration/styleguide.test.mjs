@@ -3,11 +3,20 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import { fileURLToPath } from "node:url";
 import yaml from "js-yaml";
 import { createTestContext } from "../helpers/server.js";
+import {
+  loadSetupContract,
+  resolveStyleguideSetupAnswers,
+  buildStyleguideSetupArtifactPlan,
+} from "../../setup/setup-contract.js";
 
 const ctx = createTestContext(3077, 3076);
 let writeSyncDir, readSyncDir;
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const ROOT_DIR = path.resolve(__dirname, "../../..");
 
 before(async () => {
   await ctx.setup();
@@ -22,6 +31,107 @@ after(async () => {
 const callTool = (n, a) => ctx.callTool(n, a);
 const callWriteTool = (n, a) => ctx.callWriteTool(n, a);
 const waitForAsyncJob = (id, t) => ctx.waitForAsyncJob(id, t);
+
+describe("client-agnostic styleguide setup contract flow", () => {
+  test("executes planned actions and writes canonical sync-root artifacts", async () => {
+    fs.rmSync(path.join(writeSyncDir, "prose-styleguide.config.yaml"), { force: true });
+    fs.rmSync(path.join(writeSyncDir, "skills", "prose-styleguide"), { recursive: true, force: true });
+
+    const loaded = loadSetupContract({ rootDir: ROOT_DIR, contractId: "styleguide_setup_v1" });
+    assert.equal(loaded.ok, true);
+
+    const resolved = resolveStyleguideSetupAnswers({
+      contract: loaded.contract,
+      answers: {
+        scope: "sync_root",
+        language: "english_us",
+        bootstrap_from_scenes: false,
+        voice_notes: "Contract-driven setup flow.",
+      },
+      inferred: {},
+    });
+    assert.equal(resolved.ok, true);
+
+    const plan = buildStyleguideSetupArtifactPlan({
+      resolvedAnswers: resolved.resolved_answers,
+      sceneCount: 10,
+    });
+    assert.equal(plan.ok, true);
+
+    for (const action of plan.actions) {
+      const text = await callWriteTool(action.tool, action.arguments);
+      const parsed = JSON.parse(text);
+      assert.equal(parsed.ok, true, `${action.tool} should succeed`);
+    }
+
+    const configPath = path.join(writeSyncDir, "prose-styleguide.config.yaml");
+    const skillPath = path.join(writeSyncDir, "skills", "prose-styleguide", "SKILL.md");
+    assert.equal(fs.existsSync(configPath), true);
+    assert.equal(fs.existsSync(skillPath), true);
+
+    const config = yaml.load(fs.readFileSync(configPath, "utf8"));
+    assert.equal(config.language, "english_us");
+    assert.equal(config.voice_notes, "Contract-driven setup flow.");
+  });
+
+  test("produces equivalent config output to direct setup tool call for same answers", async () => {
+    const directProject = "equivalence-direct";
+    const contractProject = "equivalence-contract";
+    const overrides = {
+      quotation_style: "single",
+      tense: "past",
+      dialogue_tags: "expressive",
+    };
+
+    const directText = await callWriteTool("setup_prose_styleguide_config", {
+      scope: "project_root",
+      project_id: directProject,
+      language: "english_uk",
+      overrides,
+      voice_notes: "Equivalent output check.",
+      overwrite: true,
+    });
+    const directParsed = JSON.parse(directText);
+    assert.equal(directParsed.ok, true);
+
+    const loaded = loadSetupContract({ rootDir: ROOT_DIR, contractId: "styleguide_setup_v1" });
+    assert.equal(loaded.ok, true);
+    const resolved = resolveStyleguideSetupAnswers({
+      contract: loaded.contract,
+      answers: {
+        scope: "project_root",
+        project_id: contractProject,
+        language: "english_uk",
+        bootstrap_from_scenes: false,
+        high_impact_overrides: overrides,
+        voice_notes: "Equivalent output check.",
+      },
+      inferred: {},
+    });
+    assert.equal(resolved.ok, true);
+    const plan = buildStyleguideSetupArtifactPlan({
+      resolvedAnswers: resolved.resolved_answers,
+      sceneCount: 5,
+    });
+    assert.equal(plan.ok, true);
+    assert.equal(plan.actions.length, 1);
+    assert.equal(plan.actions[0].tool, "setup_prose_styleguide_config");
+
+    const contractText = await callWriteTool(plan.actions[0].tool, {
+      ...plan.actions[0].arguments,
+      overwrite: true,
+    });
+    const contractParsed = JSON.parse(contractText);
+    assert.equal(contractParsed.ok, true);
+
+    const directConfigPath = path.join(writeSyncDir, "projects", directProject, "prose-styleguide.config.yaml");
+    const contractConfigPath = path.join(writeSyncDir, "projects", contractProject, "prose-styleguide.config.yaml");
+    const directConfig = yaml.load(fs.readFileSync(directConfigPath, "utf8"));
+    const contractConfig = yaml.load(fs.readFileSync(contractConfigPath, "utf8"));
+    assert.deepEqual(contractConfig, directConfig);
+  });
+});
+
 describe("setup_prose_styleguide_config tool", () => {
   test("writes a sync-root styleguide config from language defaults", async () => {
     const text = await callWriteTool("setup_prose_styleguide_config", {
