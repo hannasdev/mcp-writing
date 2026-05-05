@@ -16,11 +16,13 @@ describe("validateSetupContractContext", () => {
           {
             tool: "setup_prose_styleguide_config",
             arguments: { scope: "sync_root", language: "english_us", overwrite: false },
+            mode: "write",
           },
         ],
       },
     });
     assert.equal(result.ok, true);
+    assert.equal(result.value.plan_preview.actions[0].mode, "write");
   });
 
   test("accepts unavailable payload shape", () => {

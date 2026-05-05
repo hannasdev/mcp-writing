@@ -452,7 +452,7 @@ function createMcpServer() {
           "Use find_scenes without filters to discover what project_ids are indexed.",
           "When calling bootstrap_prose_styleguide_config or check_prose_styleguide_drift, set max_scenes to context.scene_count to avoid the default limit.",
           "Use context.setup_contract.styleguide_setup_status to decide whether styleguide setup is missing/invalid and advisory/blocking.",
-          "Styleguide tools resolve config in priority order: project_root > universe_root > sync_root. If any styleguide_exists field is true, a config exists and styleguide tools will work — do not run setup_prose_styleguide_config unless ALL styleguide_exists fields are false.",
+          "Styleguide tools resolve config in priority order: project_root > universe_root > sync_root. If any styleguide_exists field is true, a config exists and styleguide tools will work. For invalid setup states, use setup_contract plan preview actions (which may set overwrite=true for repair).",
           ...(DB_STARTUP_WARNINGS.length > 0
             ? ["Database migration warnings are present in context.db_migration_warnings. Run sync() now, then run enrich_scene(scene_id, project_id) for stale scenes you touch."]
             : []),

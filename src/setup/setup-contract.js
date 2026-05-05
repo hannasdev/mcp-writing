@@ -147,6 +147,19 @@ export function resolveStyleguideSetupAnswers({
   const overrides = answers.high_impact_overrides ?? {};
   const voiceNotes = answers.voice_notes;
 
+  if (typeof bootstrapFromScenes !== "boolean") {
+    return {
+      ok: false,
+      error: {
+        code: "INVALID_SETUP_BOOTSTRAP_FLAG",
+        message: "bootstrap_from_scenes must be a boolean.",
+        details: {
+          bootstrap_from_scenes: bootstrapFromScenes,
+        },
+      },
+    };
+  }
+
   const scopeQuestion = contract.questions.scope;
   if (!scopeQuestion.allowed_values?.includes(scope)) {
     return {
@@ -195,7 +208,7 @@ export function resolveStyleguideSetupAnswers({
       scope,
       project_id: projectId,
       language,
-      bootstrap_from_scenes: Boolean(bootstrapFromScenes),
+      bootstrap_from_scenes: bootstrapFromScenes,
       high_impact_overrides: overrides,
       voice_notes: typeof voiceNotes === "string" && voiceNotes.trim().length > 0
         ? voiceNotes
@@ -222,6 +235,7 @@ export function buildStyleguideSetupArtifactPlan({
       ...(resolvedAnswers.voice_notes ? { voice_notes: resolvedAnswers.voice_notes } : {}),
       overwrite: replaceExistingArtifacts,
     },
+    mode: "write",
   };
 
   const actions = [];
@@ -233,6 +247,7 @@ export function buildStyleguideSetupArtifactPlan({
         max_scenes: Math.max(1, sceneCount || 1),
       },
       mode: "preview_or_confirm",
+      note: "Use bootstrap suggested_config to populate setup_prose_styleguide_config.overrides before executing write actions.",
     });
   }
 
@@ -242,6 +257,7 @@ export function buildStyleguideSetupArtifactPlan({
     actions.push({
       tool: "setup_prose_styleguide_skill",
       arguments: { overwrite: true },
+      mode: "write",
     });
   }
 

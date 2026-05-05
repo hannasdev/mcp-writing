@@ -108,6 +108,18 @@ describe("resolveStyleguideSetupAnswers", () => {
     assert.equal(result.error.code, "INVALID_SETUP_SCOPE");
   });
 
+  test("rejects non-boolean bootstrap_from_scenes", () => {
+    const loaded = loadSetupContract({ rootDir: ROOT_DIR, contractId: "styleguide_setup_v1" });
+    assert.equal(loaded.ok, true);
+    const result = resolveStyleguideSetupAnswers({
+      contract: loaded.contract,
+      answers: { language: "english_us", bootstrap_from_scenes: "false" },
+      inferred: {},
+    });
+    assert.equal(result.ok, false);
+    assert.equal(result.error.code, "INVALID_SETUP_BOOTSTRAP_FLAG");
+  });
+
   test("requires project_id when resolved scope is project_root", () => {
     const loaded = loadSetupContract({ rootDir: ROOT_DIR, contractId: "styleguide_setup_v1" });
     assert.equal(loaded.ok, true);
@@ -164,6 +176,8 @@ describe("buildStyleguideSetupArtifactPlan", () => {
     assert.equal(plan.ok, true);
     assert.equal(plan.actions[0].tool, "setup_prose_styleguide_config");
     assert.equal(plan.actions[1].tool, "setup_prose_styleguide_skill");
+    assert.equal(plan.actions[0].mode, "write");
+    assert.equal(plan.actions[1].mode, "write");
     assert.equal(plan.actions[0].arguments.overwrite, false);
     assert.equal(plan.actions[1].arguments.overwrite, true);
   });
@@ -183,6 +197,8 @@ describe("buildStyleguideSetupArtifactPlan", () => {
     assert.equal(plan.actions[0].tool, "bootstrap_prose_styleguide_config");
     assert.equal(plan.actions[0].arguments.project_id, "test-novel");
     assert.equal(plan.actions[0].arguments.max_scenes, 42);
+    assert.equal(plan.actions[0].mode, "preview_or_confirm");
+    assert.equal(typeof plan.actions[0].note, "string");
   });
 
   test("omits skill setup for project-root scope", () => {

@@ -3,6 +3,8 @@ import { z } from "zod";
 const actionSchema = z.object({
   tool: z.string().min(1),
   arguments: z.record(z.string(), z.unknown()),
+  mode: z.enum(["preview_or_confirm", "write"]).optional(),
+  note: z.string().min(1).optional(),
 });
 
 const planPreviewSchema = z.object({
