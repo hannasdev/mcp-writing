@@ -29,6 +29,7 @@ import {
   resolveStyleguideSetupAnswers,
   buildStyleguideSetupArtifactPlan,
 } from "./setup/setup-contract.js";
+import { validateSetupContractContext } from "./setup/setup-contract-response-schema.js";
 import { registerSyncTools } from "./tools/sync.js";
 import { registerSearchTools } from "./tools/search.js";
 import { registerMetadataTools } from "./tools/metadata.js";
@@ -409,6 +410,28 @@ function createMcpServer() {
         };
       })();
 
+      const setupContractContext = styleguideSetupContract.ok
+        ? {
+          contract_id: styleguideSetupContract.contract_id,
+          schema_version: styleguideSetupContract.contract.schema_version,
+          styleguide_setup_status: styleguideSetupStatus.status,
+          setup_recommended: styleguideSetupStatus.setup_recommended,
+          ...(setupPlanPreview ? { plan_preview: setupPlanPreview } : {}),
+        }
+        : {
+          contract_id: "styleguide_setup_v1",
+          status: "unavailable",
+          error_code: styleguideSetupContract.error.code,
+        };
+      const setupContractContextCheck = validateSetupContractContext(setupContractContext);
+      if (!setupContractContextCheck.ok) {
+        return errorResponse(
+          setupContractContextCheck.error.code,
+          setupContractContextCheck.error.message,
+          setupContractContextCheck.error.details
+        );
+      }
+
       return jsonResponse({
         ok: true,
         context: {
@@ -416,19 +439,7 @@ function createMcpServer() {
           scene_count,
           sync_dir: SYNC_DIR_ABS,
           styleguide_exists: styleguideExists,
-          setup_contract: styleguideSetupContract.ok
-            ? {
-              contract_id: styleguideSetupContract.contract_id,
-              schema_version: styleguideSetupContract.contract.schema_version,
-              styleguide_setup_status: styleguideSetupStatus.status,
-              setup_recommended: styleguideSetupStatus.setup_recommended,
-              ...(setupPlanPreview ? { plan_preview: setupPlanPreview } : {}),
-            }
-            : {
-              contract_id: "styleguide_setup_v1",
-              status: "unavailable",
-              error_code: styleguideSetupContract.error.code,
-            },
+          setup_contract: setupContractContextCheck.value,
           git_available: GIT_AVAILABLE,
           pending_proposals: pendingProposals.size,
           db_migration_warnings: DB_STARTUP_WARNINGS,
