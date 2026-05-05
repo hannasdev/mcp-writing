@@ -43,6 +43,7 @@ describe("deriveStyleguideSetupStatus", () => {
     const status = deriveStyleguideSetupStatus({
       styleguideExists: { sync_root: false, universe_root: false, project_root: false },
       styleguideValid: true,
+      styleguideSkillExists: false,
       styleguideEnforcementMode: "warn",
     });
     assert.equal(status.status, "missing_advisory");
@@ -53,6 +54,7 @@ describe("deriveStyleguideSetupStatus", () => {
     const status = deriveStyleguideSetupStatus({
       styleguideExists: { sync_root: false, universe_root: false, project_root: false },
       styleguideValid: true,
+      styleguideSkillExists: false,
       styleguideEnforcementMode: "required",
     });
     assert.equal(status.status, "missing_blocking");
@@ -63,6 +65,7 @@ describe("deriveStyleguideSetupStatus", () => {
     const status = deriveStyleguideSetupStatus({
       styleguideExists: { sync_root: true, universe_root: false, project_root: false },
       styleguideValid: false,
+      styleguideSkillExists: true,
       styleguideEnforcementMode: "warn",
     });
     assert.equal(status.status, "invalid_advisory");
@@ -73,10 +76,22 @@ describe("deriveStyleguideSetupStatus", () => {
     const status = deriveStyleguideSetupStatus({
       styleguideExists: { sync_root: false, universe_root: false, project_root: true },
       styleguideValid: true,
+      styleguideSkillExists: true,
       styleguideEnforcementMode: "required",
     });
     assert.equal(status.status, "complete");
     assert.equal(status.setup_recommended, false);
+  });
+
+  test("returns invalid when sync-root skill is missing for sync-root-only setup", () => {
+    const status = deriveStyleguideSetupStatus({
+      styleguideExists: { sync_root: true, universe_root: false, project_root: false },
+      styleguideValid: true,
+      styleguideSkillExists: false,
+      styleguideEnforcementMode: "warn",
+    });
+    assert.equal(status.status, "invalid_advisory");
+    assert.equal(status.setup_recommended, true);
   });
 });
 
@@ -119,6 +134,19 @@ describe("resolveStyleguideSetupAnswers", () => {
     assert.equal(result.resolved_answers.language, "english_uk");
     assert.equal(result.resolved_answers.bootstrap_from_scenes, true);
   });
+
+  test("defaults to sync_root when project_id cannot be inferred", () => {
+    const loaded = loadSetupContract({ rootDir: ROOT_DIR, contractId: "styleguide_setup_v1" });
+    assert.equal(loaded.ok, true);
+    const result = resolveStyleguideSetupAnswers({
+      contract: loaded.contract,
+      answers: { language: "english_uk" },
+      inferred: {},
+    });
+    assert.equal(result.ok, true);
+    assert.equal(result.resolved_answers.scope, "sync_root");
+    assert.equal(result.resolved_answers.project_id, null);
+  });
 });
 
 describe("buildStyleguideSetupArtifactPlan", () => {
@@ -134,10 +162,27 @@ describe("buildStyleguideSetupArtifactPlan", () => {
       sceneCount: 42,
     });
     assert.equal(plan.ok, true);
+    assert.equal(plan.actions[0].tool, "setup_prose_styleguide_config");
+    assert.equal(plan.actions[1].tool, "setup_prose_styleguide_skill");
+    assert.equal(plan.actions[0].arguments.overwrite, false);
+    assert.equal(plan.actions[1].arguments.overwrite, true);
+  });
+
+  test("includes bootstrap only when project_id exists", () => {
+    const plan = buildStyleguideSetupArtifactPlan({
+      resolvedAnswers: {
+        scope: "sync_root",
+        project_id: "test-novel",
+        language: "english_us",
+        bootstrap_from_scenes: true,
+        high_impact_overrides: {},
+      },
+      sceneCount: 42,
+    });
+    assert.equal(plan.ok, true);
     assert.equal(plan.actions[0].tool, "bootstrap_prose_styleguide_config");
+    assert.equal(plan.actions[0].arguments.project_id, "test-novel");
     assert.equal(plan.actions[0].arguments.max_scenes, 42);
-    assert.equal(plan.actions[1].tool, "setup_prose_styleguide_config");
-    assert.equal(plan.actions[2].tool, "setup_prose_styleguide_skill");
   });
 
   test("omits skill setup for project-root scope", () => {
@@ -155,5 +200,22 @@ describe("buildStyleguideSetupArtifactPlan", () => {
     assert.equal(plan.actions[0].tool, "setup_prose_styleguide_config");
     assert.equal(plan.actions.length, 1);
     assert.equal(plan.actions[0].arguments.project_id, "test-novel");
+    assert.equal(plan.actions[0].arguments.overwrite, false);
+  });
+
+  test("sets overwrite=true for invalid setup status to support repair", () => {
+    const plan = buildStyleguideSetupArtifactPlan({
+      resolvedAnswers: {
+        scope: "project_root",
+        project_id: "test-novel",
+        language: "english_us",
+        bootstrap_from_scenes: false,
+        high_impact_overrides: {},
+      },
+      sceneCount: 10,
+      setupStatus: "invalid_advisory",
+    });
+    assert.equal(plan.ok, true);
+    assert.equal(plan.actions[0].arguments.overwrite, true);
   });
 });

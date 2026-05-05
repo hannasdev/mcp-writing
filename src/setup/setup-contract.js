@@ -137,7 +137,10 @@ export function resolveStyleguideSetupAnswers({
     };
   }
 
-  const scope = answers.scope ?? contract.defaults.scope ?? "project_root";
+  const defaultScope = inferred.project_id
+    ? (contract.defaults.scope ?? "project_root")
+    : "sync_root";
+  const scope = answers.scope ?? defaultScope;
   const language = answers.language ?? contract.defaults.language;
   const bootstrapFromScenes = answers.bootstrap_from_scenes ?? contract.defaults.bootstrap_from_scenes;
   const projectId = answers.project_id ?? inferred.project_id ?? null;
@@ -201,7 +204,12 @@ export function resolveStyleguideSetupAnswers({
   };
 }
 
-export function buildStyleguideSetupArtifactPlan({ resolvedAnswers, sceneCount = 0 }) {
+export function buildStyleguideSetupArtifactPlan({
+  resolvedAnswers,
+  sceneCount = 0,
+  setupStatus = "missing_advisory",
+}) {
+  const replaceExistingArtifacts = typeof setupStatus === "string" && setupStatus.startsWith("invalid_");
   const configAction = {
     tool: "setup_prose_styleguide_config",
     arguments: {
@@ -212,15 +220,16 @@ export function buildStyleguideSetupArtifactPlan({ resolvedAnswers, sceneCount =
         ? { overrides: resolvedAnswers.high_impact_overrides }
         : {}),
       ...(resolvedAnswers.voice_notes ? { voice_notes: resolvedAnswers.voice_notes } : {}),
+      overwrite: replaceExistingArtifacts,
     },
   };
 
   const actions = [];
-  if (resolvedAnswers.bootstrap_from_scenes) {
+  if (resolvedAnswers.bootstrap_from_scenes && resolvedAnswers.project_id) {
     actions.push({
       tool: "bootstrap_prose_styleguide_config",
       arguments: {
-        ...(resolvedAnswers.project_id ? { project_id: resolvedAnswers.project_id } : {}),
+        project_id: resolvedAnswers.project_id,
         max_scenes: Math.max(1, sceneCount || 1),
       },
       mode: "preview_or_confirm",
@@ -232,7 +241,7 @@ export function buildStyleguideSetupArtifactPlan({ resolvedAnswers, sceneCount =
   if (resolvedAnswers.scope === "sync_root") {
     actions.push({
       tool: "setup_prose_styleguide_skill",
-      arguments: { overwrite: false },
+      arguments: { overwrite: true },
     });
   }
 
@@ -249,6 +258,7 @@ export function buildStyleguideSetupArtifactPlan({ resolvedAnswers, sceneCount =
 export function deriveStyleguideSetupStatus({
   styleguideExists,
   styleguideValid,
+  styleguideSkillExists,
   styleguideEnforcementMode,
 }) {
   const anyStyleguideExists = Boolean(
@@ -266,6 +276,16 @@ export function deriveStyleguideSetupStatus({
   }
 
   if (!styleguideValid) {
+    return {
+      status: isBlockingMode ? "invalid_blocking" : "invalid_advisory",
+      setup_recommended: true,
+    };
+  }
+
+  const requiresSyncRootSkill = Boolean(styleguideExists?.sync_root)
+    && !styleguideExists?.universe_root
+    && !styleguideExists?.project_root;
+  if (requiresSyncRootSkill && !styleguideSkillExists) {
     return {
       status: isBlockingMode ? "invalid_blocking" : "invalid_advisory",
       setup_recommended: true,

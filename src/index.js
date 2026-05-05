@@ -20,6 +20,10 @@ import {
 } from "./core/helpers.js";
 import { STYLEGUIDE_CONFIG_BASENAME, resolveStyleguideConfig } from "./styleguide/prose-styleguide.js";
 import {
+  PROSE_STYLEGUIDE_SKILL_BASENAME,
+  PROSE_STYLEGUIDE_SKILL_DIRNAME,
+} from "./styleguide/prose-styleguide-skill.js";
+import {
   loadSetupContract,
   deriveStyleguideSetupStatus,
   resolveStyleguideSetupAnswers,
@@ -367,6 +371,12 @@ function createMcpServer() {
         universe_root: universeRootExists,
         project_root: projectRootExists,
       };
+      const syncRootSkillPath = path.join(
+        SYNC_DIR,
+        PROSE_STYLEGUIDE_SKILL_DIRNAME,
+        PROSE_STYLEGUIDE_SKILL_BASENAME
+      );
+      const styleguideSkillExists = fs.existsSync(syncRootSkillPath);
 
       const styleguideResolution = resolveStyleguideConfig({
         syncDir: SYNC_DIR,
@@ -376,6 +386,7 @@ function createMcpServer() {
       const styleguideSetupStatus = deriveStyleguideSetupStatus({
         styleguideExists,
         styleguideValid,
+        styleguideSkillExists,
         styleguideEnforcementMode: STYLEGUIDE_ENFORCEMENT_MODE,
       });
       const setupPlanPreview = (() => {
@@ -389,6 +400,7 @@ function createMcpServer() {
         const plan = buildStyleguideSetupArtifactPlan({
           resolvedAnswers: resolved.resolved_answers,
           sceneCount: scene_count,
+          setupStatus: styleguideSetupStatus.status,
         });
         return {
           flow_id: "styleguide_setup_v1",
