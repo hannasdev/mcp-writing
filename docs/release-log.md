@@ -8,6 +8,14 @@ This complements `CHANGELOG.md`:
 
 ## Unreleased
 
+### 2026-05-05 — Split PRD overview from completed-feature archive
+
+- What changed: Restructured `PRD.md` into a lighter project overview, moved completed-feature summaries into a dedicated `docs/prd/completed-features.md` index, and added a new in-progress PRD (`docs/prd/in-progress/client-agnostic-setup.md`) that defines a client-agnostic setup contract with client-hosted UI flows.
+- Why it matters: Maintainers and contributors can navigate roadmap status faster, while setup direction now favors reusable MCP capabilities plus client-native onboarding UX instead of growing the tool list for first-run-only workflows.
+- Who is affected: Maintainers and contributors updating PRDs, setup UX direction, or roadmap documentation.
+- Action needed: Optional. Use `docs/prd/completed-features.md` for shipped capability summaries and keep `PRD.md` focused on active direction and navigation.
+- PR: (this PR)
+
 ### 2026-05-03 — Prose styleguide skill with formal output contract
 
 - What changed: Enhanced `skills/prose-styleguide/SKILL.md` generation to include a formal "Review Mode Output Contract" section with structured critique categories (Structural Issues, Convention Drift, Prose Issues) and sample feedback templates. Updated prose styleguide PRD status from in-progress to completed (tracked at `docs/prd/done/guideline-generation.md`) and annotated success criteria.
