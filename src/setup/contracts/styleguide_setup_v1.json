@@ -1,0 +1,126 @@
+{
+  "schema_version": "1.0.0",
+  "flows": [
+    {
+      "id": "styleguide_setup_v1",
+      "label": "Set up prose styleguide",
+      "questions": [
+        "scope",
+        "project_id",
+        "language",
+        "bootstrap_from_scenes",
+        "high_impact_overrides",
+        "voice_notes"
+      ],
+      "artifact_targets": [
+        "prose_styleguide_config",
+        "prose_styleguide_skill"
+      ],
+      "completion_rules": [
+        "styleguide_config_exists",
+        "styleguide_config_valid",
+        "skill_present_when_sync_scope"
+      ]
+    }
+  ],
+  "questions": {
+    "scope": {
+      "label": "Config scope",
+      "help_text": "Choose where the prose styleguide config should be written.",
+      "blocking": true,
+      "ask_mode": "always",
+      "input_type": "enum",
+      "allowed_values": [
+        "project_root",
+        "sync_root"
+      ],
+      "write_target": "setup.scope"
+    },
+    "project_id": {
+      "label": "Project ID",
+      "help_text": "Required when scope is project_root.",
+      "blocking": true,
+      "ask_mode": "inferred_with_confirmation",
+      "input_type": "string",
+      "write_target": "setup.project_id"
+    },
+    "language": {
+      "label": "Primary language",
+      "help_text": "Seeds styleguide defaults.",
+      "blocking": true,
+      "ask_mode": "always",
+      "input_type": "enum",
+      "allowed_values": [
+        "english_us",
+        "english_uk",
+        "english_au",
+        "english_ca"
+      ],
+      "write_target": "styleguide.language"
+    },
+    "bootstrap_from_scenes": {
+      "label": "Bootstrap from existing scenes",
+      "help_text": "Optionally infer likely conventions from manuscript prose before final confirmation.",
+      "blocking": false,
+      "ask_mode": "low_risk_keep_change",
+      "input_type": "boolean",
+      "write_target": "setup.bootstrap_from_scenes"
+    },
+    "high_impact_overrides": {
+      "label": "High-impact convention overrides",
+      "help_text": "Confirm or override punctuation, numbers, and formatting conventions.",
+      "blocking": false,
+      "ask_mode": "inferred_with_confirmation",
+      "input_type": "object",
+      "write_target": "styleguide.overrides"
+    },
+    "voice_notes": {
+      "label": "Voice notes",
+      "help_text": "Optional freeform guidance for tone and craft preferences.",
+      "blocking": false,
+      "ask_mode": "low_risk_keep_change",
+      "input_type": "string",
+      "write_target": "styleguide.voice_notes"
+    }
+  },
+  "defaults": {
+    "scope": "project_root",
+    "language": "english_us",
+    "bootstrap_from_scenes": true
+  },
+  "validation_rules": [
+    {
+      "id": "project_id_required_for_project_root",
+      "when": {
+        "scope": "project_root"
+      },
+      "rule": "project_id is required"
+    },
+    {
+      "id": "language_must_be_supported",
+      "rule": "language must be one of allowed_values"
+    }
+  ],
+  "artifact_targets": {
+    "prose_styleguide_config": {
+      "path": "prose-styleguide.config.yaml",
+      "owner": "mcp_writing_runtime"
+    },
+    "prose_styleguide_skill": {
+      "path": "skills/prose-styleguide/SKILL.md",
+      "owner": "mcp_writing_runtime",
+      "condition": "scope == sync_root"
+    }
+  },
+  "completion_rules": {
+    "styleguide_config_exists": {
+      "derived_from": "filesystem"
+    },
+    "styleguide_config_valid": {
+      "derived_from": "config_validation"
+    },
+    "skill_present_when_sync_scope": {
+      "derived_from": "filesystem_conditional"
+    }
+  }
+}

@@ -333,6 +333,14 @@ describe("describe_workflows tool", () => {
     assert.ok(typeof parsed.context.styleguide_exists === "object");
     assert.ok(typeof parsed.context.styleguide_exists.sync_root === "boolean");
     assert.ok(typeof parsed.context.styleguide_exists.project_root === "boolean");
+    assert.ok(typeof parsed.context.setup_contract === "object");
+    assert.equal(parsed.context.setup_contract.contract_id, "styleguide_setup_v1");
+    assert.ok(typeof parsed.context.setup_contract.schema_version === "string");
+    assert.ok(typeof parsed.context.setup_contract.styleguide_setup_status === "string");
+    assert.ok(typeof parsed.context.setup_contract.setup_recommended === "boolean");
+    assert.ok(typeof parsed.context.setup_contract.plan_preview === "object");
+    assert.equal(parsed.context.setup_contract.plan_preview.flow_id, "styleguide_setup_v1");
+    assert.ok(Array.isArray(parsed.context.setup_contract.plan_preview.actions));
     assert.ok(Array.isArray(parsed.context.db_migration_warnings));
     assert.ok(Array.isArray(parsed.workflows));
     assert.ok(parsed.workflows.length > 0);

@@ -18,7 +18,13 @@ import {
   readEntityMetadata,
   resolveBatchTargetScenes,
 } from "./core/helpers.js";
-import { STYLEGUIDE_CONFIG_BASENAME } from "./styleguide/prose-styleguide.js";
+import { STYLEGUIDE_CONFIG_BASENAME, resolveStyleguideConfig } from "./styleguide/prose-styleguide.js";
+import {
+  loadSetupContract,
+  deriveStyleguideSetupStatus,
+  resolveStyleguideSetupAnswers,
+  buildStyleguideSetupArtifactPlan,
+} from "./setup/setup-contract.js";
 import { registerSyncTools } from "./tools/sync.js";
 import { registerSearchTools } from "./tools/search.js";
 import { registerMetadataTools } from "./tools/metadata.js";
@@ -87,6 +93,7 @@ const MCP_SERVER_VERSION = typeof pkg.version === "string" && pkg.version.trim()
   ? pkg.version
   : "0.0.0";
 const asyncJobs = new Map();
+const styleguideSetupContract = loadSetupContract({ rootDir: ROOT_DIR, contractId: "styleguide_setup_v1" });
 
 function paginateRows(rows, { page, pageSize, forcePagination = false }) {
   const totalCount = rows.length;
@@ -355,6 +362,40 @@ function createMcpServer() {
       const syncRootExists = fs.existsSync(syncRootConfigPath);
       const universeRootExists = universeRootConfigPath !== null && fs.existsSync(universeRootConfigPath);
       const projectRootExists = projectRootConfigPath !== null && fs.existsSync(projectRootConfigPath);
+      const styleguideExists = {
+        sync_root: syncRootExists,
+        universe_root: universeRootExists,
+        project_root: projectRootExists,
+      };
+
+      const styleguideResolution = resolveStyleguideConfig({
+        syncDir: SYNC_DIR,
+        projectId: project_id ?? undefined,
+      });
+      const styleguideValid = styleguideResolution.ok;
+      const styleguideSetupStatus = deriveStyleguideSetupStatus({
+        styleguideExists,
+        styleguideValid,
+        styleguideEnforcementMode: STYLEGUIDE_ENFORCEMENT_MODE,
+      });
+      const setupPlanPreview = (() => {
+        if (!styleguideSetupContract.ok) return null;
+        const resolved = resolveStyleguideSetupAnswers({
+          contract: styleguideSetupContract.contract,
+          answers: {},
+          inferred: { project_id },
+        });
+        if (!resolved.ok) return null;
+        const plan = buildStyleguideSetupArtifactPlan({
+          resolvedAnswers: resolved.resolved_answers,
+          sceneCount: scene_count,
+        });
+        return {
+          flow_id: "styleguide_setup_v1",
+          default_scope: resolved.resolved_answers.scope,
+          actions: plan.actions,
+        };
+      })();
 
       return jsonResponse({
         ok: true,
@@ -362,11 +403,20 @@ function createMcpServer() {
           project_id,
           scene_count,
           sync_dir: SYNC_DIR_ABS,
-          styleguide_exists: {
-            sync_root: syncRootExists,
-            universe_root: universeRootExists,
-            project_root: projectRootExists,
-          },
+          styleguide_exists: styleguideExists,
+          setup_contract: styleguideSetupContract.ok
+            ? {
+              contract_id: styleguideSetupContract.contract_id,
+              schema_version: styleguideSetupContract.contract.schema_version,
+              styleguide_setup_status: styleguideSetupStatus.status,
+              setup_recommended: styleguideSetupStatus.setup_recommended,
+              ...(setupPlanPreview ? { plan_preview: setupPlanPreview } : {}),
+            }
+            : {
+              contract_id: "styleguide_setup_v1",
+              status: "unavailable",
+              error_code: styleguideSetupContract.error.code,
+            },
           git_available: GIT_AVAILABLE,
           pending_proposals: pendingProposals.size,
           db_migration_warnings: DB_STARTUP_WARNINGS,
@@ -378,6 +428,7 @@ function createMcpServer() {
           "If a tool returns a next_step field (in a success or error response), follow it before trying anything else.",
           "Use find_scenes without filters to discover what project_ids are indexed.",
           "When calling bootstrap_prose_styleguide_config or check_prose_styleguide_drift, set max_scenes to context.scene_count to avoid the default limit.",
+          "Use context.setup_contract.styleguide_setup_status to decide whether styleguide setup is missing/invalid and advisory/blocking.",
           "Styleguide tools resolve config in priority order: project_root > universe_root > sync_root. If any styleguide_exists field is true, a config exists and styleguide tools will work — do not run setup_prose_styleguide_config unless ALL styleguide_exists fields are false.",
           ...(DB_STARTUP_WARNINGS.length > 0
             ? ["Database migration warnings are present in context.db_migration_warnings. Run sync() now, then run enrich_scene(scene_id, project_id) for stale scenes you touch."]
