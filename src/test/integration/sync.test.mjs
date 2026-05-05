@@ -145,6 +145,65 @@ describe("import_scrivener_sync tool", () => {
     const sidecars = fs.readdirSync(expectedScenesDir).filter(n => n.endsWith(".meta.yaml"));
     assert.equal(sidecars.length, 2);
   });
+
+  test("supports end-to-end Scrivener import through bootstrap and styleguide setup", async () => {
+    const projectId = "scrivener-styleguide-flow";
+
+    const importText = await callWriteTool("import_scrivener_sync", {
+      source_dir: scrivenerImportDir,
+      project_id: projectId,
+      dry_run: false,
+      auto_sync: true,
+    });
+    const imported = JSON.parse(importText);
+
+    assert.equal(imported.ok, true);
+    assert.equal(imported.import.project_id, projectId);
+    assert.ok(imported.sync, "auto_sync should include a sync summary");
+    assert.ok(imported.sync.indexed >= 2);
+
+    const bootstrapText = await callWriteTool("bootstrap_prose_styleguide_config", {
+      project_id: projectId,
+      max_scenes: 10,
+      min_evidence: 1,
+    });
+    const bootstrapped = JSON.parse(bootstrapText);
+
+    assert.equal(bootstrapped.ok, true);
+    assert.equal(bootstrapped.project_id, projectId);
+    assert.equal(bootstrapped.checked_scenes, 2);
+
+    const previewText = await callWriteTool("setup_prose_styleguide_config", {
+      scope: "project_root",
+      project_id: projectId,
+      language: "english_us",
+    });
+    const preview = JSON.parse(previewText);
+
+    assert.equal(preview.ok, true);
+    assert.equal(preview.preview_only, true);
+    assert.ok(preview.tier_groups);
+
+    const confirmText = await callWriteTool("setup_prose_styleguide_config", {
+      scope: "project_root",
+      project_id: projectId,
+      language: "english_us",
+      confirm_write: true,
+    });
+    const confirmed = JSON.parse(confirmText);
+
+    assert.equal(confirmed.ok, true);
+    assert.equal(confirmed.preview_only, false);
+
+    const configText = await callWriteTool("get_prose_styleguide_config", {
+      project_id: projectId,
+    });
+    const config = JSON.parse(configText);
+
+    assert.equal(config.ok, true);
+    assert.equal(config.styleguide.setup_required, false);
+    assert.equal(config.styleguide.resolved_config.language, "english_us");
+  });
 });
 
 describe("merge_scrivener_project_beta tool", () => {

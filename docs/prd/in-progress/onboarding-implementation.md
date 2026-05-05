@@ -44,6 +44,11 @@ Update this block whenever milestone statuses are re-verified.
   - `describe_workflows` now returns lightweight `context.setup_state` (`styleguide_configured`, `scenes_available`).
   - `describe_workflows` now returns `context.next_recommended_workflow` (`styleguide_setup_new` when config is missing, otherwise `null`).
   - Integration tests verify recommendation behavior for both missing-config and config-present cases.
+- `1a.5` implementation is partially complete:
+  - `styleguide_setup_new` workflow now advertises the Scrivener-first path via `import_scrivener_sync` and `import_scrivener_sync_async`.
+  - Workflow guidance now explicitly routes import completion into `bootstrap_prose_styleguide_config` using the latest `context.scene_count`.
+  - Runtime integration tests verify that `describe_workflows` exposes the integrated import + bootstrap path.
+  - A new integration test now covers the synchronous end-to-end slice: `import_scrivener_sync` → `bootstrap_prose_styleguide_config` → `setup_prose_styleguide_config`.
 - Supporting docs were updated to point onboarding references to `docs/prd/in-progress/onboarding-framework.md`.
 
 ### Phase 1a
@@ -54,7 +59,7 @@ Update this block whenever milestone statuses are re-verified.
 | 1a.2 Project path convention selection | Exists | `setup_prose_styleguide_config` accepts/validates `path_convention`, workflow guidance asks the Tier A question, and `describe_workflows` exposes session-scoped path convention context. |
 | 1a.3 Styleguide setup workflow integration | Exists | Tier-driven question grouping with tier_groups infrastructure; preview mode with tier-specific prompts; 4 new integration tests covering tier behavior; confirmed ready for client-side orchestration. |
 | 1a.4 Lightweight setup state tracking | Exists | `describe_workflows` now exposes `setup_state` (styleguide_configured, scenes_available) and `next_recommended_workflow` (styleguide_setup_new when config missing); query-based implementation selected (no persist). |
-| 1a.5 Scrivener import + styleguide combined workflow | Partial | Import tools and styleguide tools exist independently; combined guided flow is not fully encoded. |
+| 1a.5 Scrivener import + styleguide combined workflow | Partial | `styleguide_setup_new` now encodes the Scrivener import path and bootstrap handoff, and one synchronous end-to-end integration test exists; async continuation and full guided-flow coverage are still pending. |
 | 1a.6 Boot file generation + assistant wiring | Exists | `setup_prose_styleguide_skill` already generates/updates skill and boot files with integration test coverage. |
 | 1a.7 Phase 1a testing + onboarding docs | Partial | Strong integration tests exist for tools; onboarding-specific docs and end-to-end guided-flow coverage remain to be added. |
 
@@ -245,27 +250,28 @@ Mark all items complete before implementation begins.
 
 **Tasks:**
 - [ ] Integrate `import_scrivener_sync` into styleguide setup workflow
-  - [ ] After Scrivener import completes, offer optional styleguide setup
-  - [ ] Pass `scene_count` to bootstrap suggestion (pre-populate candidates)
-- [ ] Update workflow catalogue to show styleguide_setup_new with Scrivener import as one path
-- [ ] Add workflow step notes for integration:
-  - [ ] Run `import_scrivener_sync` (or `import_scrivener_sync_async` for large datasets)
-  - [ ] Run `bootstrap_prose_styleguide_config` with detected scene count
+  - [x] After Scrivener import completes, offer optional styleguide setup (workflow guidance)
+  - [x] Pass `scene_count` to bootstrap suggestion (pre-populate candidates) (workflow guidance)
+- [x] Update workflow catalogue to show styleguide_setup_new with Scrivener import as one path
+- [x] Add workflow step notes for integration:
+  - [x] Run `import_scrivener_sync` (or `import_scrivener_sync_async` for large datasets)
+  - [x] Run `bootstrap_prose_styleguide_config` with detected scene count
   - [ ] Run `setup_prose_styleguide_config` with language choice
   - [ ] Run `setup_prose_styleguide_skill` to generate skill + boot files
 - [ ] Test end-to-end:
-  - [ ] Empty project → Scrivener import → styleguide setup
+  - [x] Empty project → Scrivener import → styleguide setup
   - [ ] Async import (large dataset) with polling
   - [ ] Bootstrap suggestions from imported scenes
 
 **Deliverables:**
 - [ ] Updated `styleguide_setup_new` workflow in catalogue
+- [x] Integration test: Scrivener import → styleguide setup
 - [ ] Integration test: Scrivener import → styleguide setup
 - [ ] Integration test: async import + styleguide setup
 - [ ] Updated tool documentation with workflow notes
 
 **Success Criteria:**
-- [ ] Users can import Scrivener folder + setup styleguide in one workflow
+- [x] Users can import Scrivener folder + setup styleguide in one workflow (synchronous path validated)
 - [ ] Bootstrap suggestions use actual scene count from import
 - [ ] Async import workflow completes and triggers styleguide setup
 - [ ] No manual tool invocation needed; workflow is fully orchestrated

@@ -427,6 +427,25 @@ describe("describe_workflows tool", () => {
     assert.ok(ids.indexOf("styleguide_setup_new") > ids.indexOf("first_time_setup"));
   });
 
+  test("styleguide_setup_new advertises Scrivener import and bootstrap follow-up", async () => {
+    const text = await callWriteTool("describe_workflows");
+    const parsed = JSON.parse(text);
+    const workflow = parsed.workflows.find(w => w.id === "styleguide_setup_new");
+
+    assert.ok(workflow, "styleguide_setup_new workflow should exist");
+
+    const tools = workflow.steps.map(step => step.tool);
+    assert.ok(tools.includes("import_scrivener_sync"));
+    assert.ok(tools.includes("import_scrivener_sync_async"));
+    assert.ok(tools.includes("bootstrap_prose_styleguide_config"));
+
+    const describeStep = workflow.steps.find(step => step.tool === "describe_workflows");
+    const bootstrapStep = workflow.steps.find(step => step.tool === "bootstrap_prose_styleguide_config");
+    assert.ok(describeStep.note.includes("scene_count is 0"));
+    assert.ok(bootstrapStep.note.includes("After import"));
+    assert.ok(bootstrapStep.note.includes("context.scene_count"));
+  });
+
   test("context.scene_count matches indexed scenes", async () => {
     const syncText = await callWriteTool("sync");
     assert.match(syncText, /scenes indexed/);

@@ -95,10 +95,12 @@ export const WORKFLOW_CATALOGUE = [
   {
     id: "styleguide_setup_new",
     label: "Set up a prose styleguide",
-    use_when: "Use only when styleguide configuration is intentionally part of the task and no suitable config exists yet.",
+    use_when: "Use when styleguide configuration is intentionally part of the task and no suitable config exists yet, including first-run flows that begin with a Scrivener import.",
     steps: [
-      { tool: "describe_workflows", note: "Check context.scene_count; use that value as max_scenes in the next call." },
-      { tool: "bootstrap_prose_styleguide_config", note: "Detect dominant conventions. Confirm suggestions with the user before applying." },
+      { tool: "describe_workflows", note: "Check context.scene_count and whether scenes already exist. If scene_count is 0 and the user is starting from Scrivener, begin with import before bootstrap/setup." },
+      { tool: "import_scrivener_sync", note: "Use for the guided Scrivener first-run path when the dataset is small enough to complete synchronously. After import completes, continue with bootstrap/styleguide setup." },
+      { tool: "import_scrivener_sync_async", note: "Use instead of the sync import when the Scrivener dataset is large. Poll via async_job_tracking, then continue with bootstrap/styleguide setup after completion." },
+      { tool: "bootstrap_prose_styleguide_config", note: "After import (or when scenes already exist), detect dominant conventions. Set max_scenes from the latest context.scene_count and confirm suggestions with the user before applying." },
       { tool: "setup_prose_styleguide_config", note: "Only if ALL context.styleguide_exists fields are false — a config at any scope is sufficient. Before calling, ask the Tier A path-convention question: standalone project (projects/<project>) or universe+book (universes/<series>/<project>). First call setup_prose_styleguide_config in preview mode (default confirm_write=false) to review summary, then call again with confirm_write=true to persist. Create at project_root scope (requires project_id and language e.g. 'english_us'), or sync_root if no project_id is known, and include path_convention in the call." },
       { tool: "update_prose_styleguide_config", note: "Apply the fields accepted from bootstrap suggestions." },
       { tool: "setup_prose_styleguide_skill", note: "Run only for sync-root setup. This tool writes shared skills/prose-styleguide/SKILL.md (and optional boot files), so do not run it after project_root setup." },
