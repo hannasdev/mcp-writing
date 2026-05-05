@@ -8,6 +8,7 @@ import {
   loadSetupContract,
   resolveStyleguideSetupAnswers,
 } from "../../setup/setup-contract.js";
+import { STYLEGUIDE_ENUMS } from "../../styleguide/prose-styleguide.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -27,6 +28,13 @@ describe("loadSetupContract", () => {
     const result = loadSetupContract({ rootDir: ROOT_DIR, contractId: "unknown_contract" });
     assert.equal(result.ok, false);
     assert.equal(result.error.code, "SETUP_CONTRACT_NOT_FOUND");
+  });
+
+  test("keeps language allowed_values in parity with STYLEGUIDE_ENUMS.language", () => {
+    const result = loadSetupContract({ rootDir: ROOT_DIR, contractId: "styleguide_setup_v1" });
+    assert.equal(result.ok, true);
+    const contractLanguages = result.contract.questions.language.allowed_values;
+    assert.deepEqual(contractLanguages, STYLEGUIDE_ENUMS.language);
   });
 });
 
@@ -73,6 +81,18 @@ describe("deriveStyleguideSetupStatus", () => {
 });
 
 describe("resolveStyleguideSetupAnswers", () => {
+  test("rejects invalid scope values", () => {
+    const loaded = loadSetupContract({ rootDir: ROOT_DIR, contractId: "styleguide_setup_v1" });
+    assert.equal(loaded.ok, true);
+    const result = resolveStyleguideSetupAnswers({
+      contract: loaded.contract,
+      answers: { scope: "workspace_root", language: "english_us" },
+      inferred: { project_id: "test-novel" },
+    });
+    assert.equal(result.ok, false);
+    assert.equal(result.error.code, "INVALID_SETUP_SCOPE");
+  });
+
   test("requires project_id when resolved scope is project_root", () => {
     const loaded = loadSetupContract({ rootDir: ROOT_DIR, contractId: "styleguide_setup_v1" });
     assert.equal(loaded.ok, true);

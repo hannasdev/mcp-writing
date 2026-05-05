@@ -144,6 +144,21 @@ export function resolveStyleguideSetupAnswers({
   const overrides = answers.high_impact_overrides ?? {};
   const voiceNotes = answers.voice_notes;
 
+  const scopeQuestion = contract.questions.scope;
+  if (!scopeQuestion.allowed_values?.includes(scope)) {
+    return {
+      ok: false,
+      error: {
+        code: "INVALID_SETUP_SCOPE",
+        message: "scope must be one of the setup contract allowed_values.",
+        details: {
+          scope,
+          allowed_values: scopeQuestion.allowed_values ?? [],
+        },
+      },
+    };
+  }
+
   const languageQuestion = contract.questions.language;
   if (!languageQuestion.allowed_values?.includes(language)) {
     return {
