@@ -136,3 +136,25 @@ For `mcp-writing`, the completion target is:
 2. M5 complete for server-side contract/runtime/parity coverage.
 3. M6 contract lifecycle documentation complete.
 4. VS Code adapter implementation is explicitly deferred to the separate extension repository (`mcp-writing-vscode`) as the next phase.
+
+## VS Code Existing-Config UX Acceptance Criteria
+
+When setup encounters an existing prose styleguide config, the extension must treat it as a first-class UX branch rather than a generic failure.
+
+Acceptance criteria:
+
+1. When setup returns `STYLEGUIDE_CONFIG_EXISTS`, the extension shows a dedicated state instead of generic failure.
+2. Dedicated state copy:
+   - Title: `Styleguide already set up`
+   - Body: `A prose styleguide config already exists for this project.`
+3. Dedicated state actions:
+   - Primary: `Edit existing styleguide`
+   - Secondary: `Cancel`
+4. Primary action opens the existing styleguide update/edit flow directly.
+5. UI does not display MCP implementation details (`overwrite=true`, raw paths, or raw payload blobs).
+6. If the update flow cannot be opened, show fallback guidance:
+   - `Couldn't open styleguide editor. Try the styleguide update command from Command Palette.`
+7. Tests:
+   - Unit test for error-to-UI-state mapping (`STYLEGUIDE_CONFIG_EXISTS`).
+   - Integration test for setup with pre-existing config landing on dedicated state.
+   - Integration test verifying primary action routes to edit/update flow (not create flow).
