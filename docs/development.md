@@ -121,7 +121,7 @@ Your Node.js version is too old, or SQLite support was not started with the requ
 
 Fix:
 
-1. Run `node --version` and confirm v22.6.0 or newer.
+1. Run `node --version` and confirm v22.13.0 or newer.
 2. Upgrade Node.js if needed.
 3. Restart with `npm start` (the script already includes `--experimental-sqlite`).
 
