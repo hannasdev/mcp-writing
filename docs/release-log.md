@@ -8,6 +8,14 @@ This complements `CHANGELOG.md`:
 
 ## Unreleased
 
+### 2026-05-07 — Align existing-styleguide setup message with cross-scope UX contract
+
+- What changed: Updated `STYLEGUIDE_CONFIG_EXISTS` copy to a scope-neutral message and documented matching VS Code existing-config acceptance criteria so both `project_root` and `sync_root` setup flows use the same user-facing contract.
+- Why it matters: Prevents scope-specific wording confusion and keeps server/extension behavior consistent when setup encounters an existing styleguide config.
+- Who is affected: Users running prose styleguide setup and maintainers/client implementers relying on dedicated existing-config UX handling.
+- Action needed: Optional. If client-side UX hard-codes prior copy, update it to `A prose styleguide config already exists at the target location.`.
+- PR: [#178](https://github.com/hannasdev/mcp-writing/pull/178)
+
 ### 2026-05-05 — Add client-agnostic setup contract runtime and VS Code handoff docs
 
 - What changed: Added a versioned styleguide setup contract (`src/setup/contracts/styleguide_setup_v1.json`), shared setup runtime helpers (`src/setup/setup-contract.js`), `describe_workflows` setup contract status/plan preview metadata, contract parity tests, and documentation links to the new VS Code extension repository.

@@ -251,7 +251,7 @@ export function registerStyleguideTools(s, {
       if (fs.existsSync(targetPath) && !overwrite) {
         return errorResponse(
           "STYLEGUIDE_CONFIG_EXISTS",
-          "A prose styleguide config already exists for this project.",
+          "A prose styleguide config already exists at the target location.",
           { target_path: path.resolve(targetPath) }
         );
       }

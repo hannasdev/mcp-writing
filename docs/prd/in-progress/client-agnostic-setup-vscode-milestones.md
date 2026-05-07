@@ -146,7 +146,7 @@ Acceptance criteria:
 1. When setup returns `STYLEGUIDE_CONFIG_EXISTS`, the extension shows a dedicated state instead of generic failure.
 2. Dedicated state copy:
    - Title: `Styleguide already set up`
-   - Body: `A prose styleguide config already exists for this project.`
+   - Body: `A prose styleguide config already exists at the target location.`
 3. Dedicated state actions:
    - Primary: `Edit existing styleguide`
    - Secondary: `Cancel`
