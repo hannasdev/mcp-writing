@@ -8,6 +8,14 @@ This complements `CHANGELOG.md`:
 
 ## Unreleased
 
+### 2026-05-07 — Raise minimum supported Node runtime to 22.13.0
+
+- What changed: Raised the declared Node runtime minimum to `>=22.13.0`, aligned setup/development docs and workflow runners to that floor, and updated dependencies (including `pdfkit` major bump plus security overrides for vulnerable transitives).
+- Why it matters: Keeps dependency maintenance current and security posture improved while preventing contributors from using older Node 22 minors that can fail install or tooling resolution.
+- Who is affected: Maintainers, contributors, and self-hosted users running local setup/CI with Node 22.
+- Action needed: If your environment is below Node 22.13.0, upgrade Node before installing/running `mcp-writing`.
+- PR: [#179](https://github.com/hannasdev/mcp-writing/pull/179)
+
 ### 2026-05-07 — Align existing-styleguide setup message with cross-scope UX contract
 
 - What changed: Updated `STYLEGUIDE_CONFIG_EXISTS` copy to a scope-neutral message and documented matching VS Code existing-config acceptance criteria so both `project_root` and `sync_root` setup flows use the same user-facing contract.

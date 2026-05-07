@@ -14,14 +14,14 @@
 
 ## Prerequisites
 
-- **Node.js 22.6.0 or later** (required for SQLite support via `--experimental-sqlite` flag)
+- **Node.js 22.13.0 or later** (required for SQLite support via `--experimental-sqlite` flag)
 - **npm 8.0.0 or later**
 - **Git** (for edit snapshots and version history)
 
 Verify your setup:
 
 ```sh
-node --version    # should be v22.6.0 or later
+node --version    # should be v22.13.0 or later
 npm --version     # should be 8.0.0 or later
 git --version     # should be installed
 ```
@@ -223,7 +223,7 @@ Use `scenes_dir` instead of `project_id` when your sidecars live in a non-standa
 
 Current posture:
 
-- Runtime requirement: Node.js 22.6.0 or newer
+- Runtime requirement: Node.js 22.13.0 or newer
 - Stable fallback remains: Scrivener External Folder Sync plus `import_scrivener_sync`
 - Validated fixture coverage:
   - Baseline `.scriv` project (`.scrivx` sync-number mapping, Scrivener keywords, synopsis files, selected custom metadata fields, `scenes_dir` override)
