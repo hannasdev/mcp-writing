@@ -96,14 +96,19 @@
     "@xmldom/xmldom": "^0.9.10",
     "gray-matter": "^4.0.3",
     "js-yaml": "^4.1.1",
-    "pdfkit": "^0.14.0",
-    "zod": "^4.3.6"
+    "pdfkit": "^0.18.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "auto-changelog": "^2.5.0",
-    "eslint": "^10.2.0",
-    "globals": "^17.5.0",
-    "release-it": "^20.0.0"
+    "auto-changelog": "^2.5.1",
+    "eslint": "^10.3.0",
+    "globals": "^17.6.0",
+    "release-it": "^20.0.1"
+  },
+  "overrides": {
+    "hono": "4.12.18",
+    "express-rate-limit": "8.5.1",
+    "ip-address": "10.2.0"
   }
 }
