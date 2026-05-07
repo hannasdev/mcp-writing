@@ -193,4 +193,4 @@ Progress update (verified 2026-05-07):
 2. Steps 2 and 3 complete in `mcp-writing-vscode` (branch `chore/client-agnostic-followup`):
    - Dedicated existing-config UI state, copy, actions, primary-action routing, and fallback guidance are implemented in `src/extension.js`.
    - Tests for mapping, dedicated state handling, routing, and fallback are implemented in `test/extension.test.cjs`.
-   - Verified with `npm --prefix /Users/hanna/Code/mcp-writing-vscode test` (pass).
+   - Verified with `npm --prefix <path-to-mcp-writing-vscode> test` (pass).

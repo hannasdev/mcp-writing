@@ -183,11 +183,14 @@ describe("setup_prose_styleguide_config tool", () => {
   });
 
   test("returns STYLEGUIDE_CONFIG_EXISTS when config already exists and overwrite=false", async () => {
-    const configPath = path.join(writeSyncDir, "prose-styleguide.config.yaml");
+    const projectId = `styleguide-exists-${Date.now()}`;
+    const configPath = path.join(writeSyncDir, "projects", projectId, "prose-styleguide.config.yaml");
+    fs.mkdirSync(path.dirname(configPath), { recursive: true });
     fs.writeFileSync(configPath, "language: english_us\n", "utf8");
 
     const text = await callWriteTool("setup_prose_styleguide_config", {
-      scope: "sync_root",
+      scope: "project_root",
+      project_id: projectId,
       language: "english_uk",
       overwrite: false,
     });
