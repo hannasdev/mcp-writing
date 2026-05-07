@@ -158,3 +158,39 @@ Acceptance criteria:
    - Unit test for error-to-UI-state mapping (`STYLEGUIDE_CONFIG_EXISTS`).
    - Integration test for setup with pre-existing config landing on dedicated state.
    - Integration test verifying primary action routes to edit/update flow (not create flow).
+
+## Implementation Plan — 2026-05-07
+
+Status: In progress (server-side guardrail complete; VS Code existing-config slice verified complete)
+
+Execution order:
+1. Lock MCP error contract with regression coverage in `mcp-writing`:
+   - Add integration test asserting `setup_prose_styleguide_config` returns `STYLEGUIDE_CONFIG_EXISTS` for existing target config without `overwrite=true`.
+2. Implement VS Code existing-config setup branch in `mcp-writing-vscode`:
+   - Map `STYLEGUIDE_CONFIG_EXISTS` to dedicated `styleguideAlreadySetup` UI state.
+   - Render dedicated copy and actions (`Edit existing styleguide`, `Cancel`).
+   - Route primary action to styleguide update/edit flow.
+   - Add fallback guidance if update flow cannot be opened.
+3. Add VS Code tests in `mcp-writing-vscode`:
+   - Unit test for error-to-UI-state mapping.
+   - Integration test for pre-existing config entering dedicated state.
+   - Integration test for primary-action routing to update flow.
+
+Test strategy:
+1. `mcp-writing`:
+   - Run `src/test/integration/styleguide.test.mjs` after adding the error-contract test.
+2. `mcp-writing-vscode`:
+   - Run setup-flow unit/integration suite covering the existing-config branch and action routing.
+
+Notes:
+1. Server-side contract/runtime milestones (M1-M3 and server-side M5/M6 checkpoint) remain complete.
+2. This plan tracks the next execution slice and preserves the client-agnostic boundary: setup UX in client, durable behavior in MCP.
+
+Progress update (verified 2026-05-07):
+1. Step 1 complete in `mcp-writing`:
+   - Added integration test coverage for `STYLEGUIDE_CONFIG_EXISTS` in `src/test/integration/styleguide.test.mjs`.
+   - Verified with `node --experimental-sqlite --test src/test/integration/styleguide.test.mjs` (pass).
+2. Steps 2 and 3 complete in `mcp-writing-vscode` (branch `chore/client-agnostic-followup`):
+   - Dedicated existing-config UI state, copy, actions, primary-action routing, and fallback guidance are implemented in `src/extension.js`.
+   - Tests for mapping, dedicated state handling, routing, and fallback are implemented in `test/extension.test.cjs`.
+   - Verified with `npm --prefix /Users/hanna/Code/mcp-writing-vscode test` (pass).

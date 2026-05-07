@@ -181,6 +181,21 @@ describe("setup_prose_styleguide_config tool", () => {
     assert.equal(parsed.config.pov, "first");
     assert.equal(parsed.config.spelling, "uk");
   });
+
+  test("returns STYLEGUIDE_CONFIG_EXISTS when config already exists and overwrite=false", async () => {
+    const configPath = path.join(writeSyncDir, "prose-styleguide.config.yaml");
+    fs.writeFileSync(configPath, "language: english_us\n", "utf8");
+
+    const text = await callWriteTool("setup_prose_styleguide_config", {
+      scope: "sync_root",
+      language: "english_uk",
+      overwrite: false,
+    });
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.ok, false);
+    assert.equal(parsed.error.code, "STYLEGUIDE_CONFIG_EXISTS");
+  });
 });
 
 describe("get_prose_styleguide_config tool", () => {
