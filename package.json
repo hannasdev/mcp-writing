@@ -87,6 +87,9 @@
     "scrivener"
   ],
   "license": "AGPL-3.0-only",
+  "engines": {
+    "node": ">=22.13.0"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/hannasdev/mcp-writing"
