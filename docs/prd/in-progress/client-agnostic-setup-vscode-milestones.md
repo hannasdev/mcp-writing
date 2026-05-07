@@ -161,7 +161,7 @@ Acceptance criteria:
 
 ## Implementation Plan — 2026-05-07
 
-Status: In progress (server-side guardrail complete; VS Code existing-config slice verified complete)
+Status: Complete for this execution slice (server-side guardrail complete; VS Code existing-config slice verified complete)
 
 Execution order:
 1. Lock MCP error contract with regression coverage in `mcp-writing`:

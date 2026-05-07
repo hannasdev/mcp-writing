@@ -198,6 +198,8 @@ describe("setup_prose_styleguide_config tool", () => {
 
     assert.equal(parsed.ok, false);
     assert.equal(parsed.error.code, "STYLEGUIDE_CONFIG_EXISTS");
+    const persisted = yaml.load(fs.readFileSync(configPath, "utf8"));
+    assert.equal(persisted.language, "english_us");
   });
 });
 
