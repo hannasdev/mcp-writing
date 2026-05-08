@@ -435,7 +435,9 @@ export function renderReviewBundlePdfWithMetadata(dbHandle, plan, { generatedAt,
   const proseFontSize = isBetaProfile ? 8 : 10;
   const proseLineGap = isBetaProfile ? 3.2 : 3;
   const bodyFont = profile === "beta_reader_personalized" ? "Times-Roman" : "Helvetica";
-  const headingFont = profile === "beta_reader_personalized" ? "Times-Bold" : "Helvetica-Bold";
+  const coverHeadingFont = profile === "beta_reader_personalized" ? "Times-Bold" : "Helvetica-Bold";
+  // Beta scene headings intentionally use body font (non-bold) per product direction.
+  const sceneHeadingFont = isBetaProfile ? bodyFont : coverHeadingFont;
   const metaFont = profile === "beta_reader_personalized" ? "Times-Italic" : "Helvetica-Oblique";
 
   const sceneIds = plan.ordering.map(row => row.scene_id);
@@ -528,7 +530,7 @@ export function renderReviewBundlePdfWithMetadata(dbHandle, plan, { generatedAt,
 
     try {
       doc.addPage();
-      doc.fontSize(24).font(headingFont).text(`Review Bundle: ${plan.resolved_scope.project_id}`, { align: "left" });
+      doc.fontSize(24).font(coverHeadingFont).text(`Review Bundle: ${plan.resolved_scope.project_id}`, { align: "left" });
       doc.moveDown(0.5);
       doc.fontSize(11).font(bodyFont);
       if (profile !== "beta_reader_personalized") {
@@ -560,7 +562,7 @@ export function renderReviewBundlePdfWithMetadata(dbHandle, plan, { generatedAt,
           // print-like opening feel before prose begins.
           doc.moveDown(2.0);
         }
-        doc.fontSize(isBetaProfile ? 13 : 14).font(isBetaProfile ? bodyFont : headingFont);
+        doc.fontSize(isBetaProfile ? 13 : 14).font(sceneHeadingFont);
         let heading = scene.title || scene.scene_id;
         if (includeSceneIds) {
           heading += ` [${scene.scene_id}]`;
