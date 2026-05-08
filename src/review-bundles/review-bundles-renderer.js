@@ -86,7 +86,6 @@ function loadBundleSceneRowsWithTags(dbHandle, projectId, sceneIds) {
     rows.push(...chunkRows);
   }
 
-  const rowMap = new Map(rows.map(row => [row.scene_id, row]));
   const orderedRows = [];
   const missingSceneIds = [];
 
