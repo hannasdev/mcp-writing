@@ -89,11 +89,28 @@ function loadBundleSceneRowsWithTags(dbHandle, projectId, sceneIds) {
   const orderedRows = [];
   const missingSceneIds = [];
 
-  // Load tags for all scenes
-  const tagStmt = dbHandle.prepare(`SELECT tag FROM scene_tags WHERE scene_id = ? AND project_id = ?`);
+  // Load tags in batches to avoid N+1 queries for large bundles.
+  const tagsBySceneId = new Map(rows.map(row => [row.scene_id, []]));
+  const tagChunkSize = 900;
+  for (let offset = 0; offset < rows.length; offset += tagChunkSize) {
+    const chunk = rows.slice(offset, offset + tagChunkSize);
+    const chunkSceneIds = chunk.map(row => row.scene_id);
+    if (chunkSceneIds.length === 0) continue;
+    const placeholders = chunkSceneIds.map(() => "?").join(",");
+    const tagRows = dbHandle.prepare(`
+      SELECT scene_id, tag
+      FROM scene_tags
+      WHERE project_id = ? AND scene_id IN (${placeholders})
+    `).all(projectId, ...chunkSceneIds);
+    for (const tagRow of tagRows) {
+      const tags = tagsBySceneId.get(tagRow.scene_id);
+      if (tags) tags.push(tagRow.tag);
+    }
+  }
+
   const rowsWithTags = rows.map(row => ({
     ...row,
-    tags: tagStmt.all(row.scene_id, projectId).map(t => t.tag),
+    tags: tagsBySceneId.get(row.scene_id) ?? [],
   }));
   const rowMapWithTags = new Map(rowsWithTags.map(row => [row.scene_id, row]));
 
@@ -363,6 +380,7 @@ function renderSceneBlock(scene, options) {
     includeSceneIds,
     includeMetadataSidebar,
     includeParagraphAnchors,
+    showChapterHeading,
   } = options;
 
   const isBetaProfile = profile === "beta_reader_personalized";
@@ -370,12 +388,8 @@ function renderSceneBlock(scene, options) {
 
   const parts = [];
 
-  // Add chapter heading for beta profile on first scene of a new chapter
-  if (isBetaProfile && scene.chapter_title) {
-    // Note: Since renderSceneBlock is called per scene in a loop, we can't easily detect
-    // "first scene in chapter" here. This would be better handled at the caller level.
-    // For now, we'll add the chapter title but it may appear on every scene in the chapter.
-    // TODO: Pass chapter change detection from renderReviewBundleMarkdown.
+  // Render chapter heading only when the caller detects a chapter transition.
+  if (isBetaProfile && scene.chapter_title && showChapterHeading) {
     parts.push(`# ${escapeMarkdown(scene.chapter_title)}`);
   }
 
@@ -531,7 +545,8 @@ export function renderReviewBundleMarkdown(dbHandle, plan, { generatedAt, syncDi
     );
   }
 
-  for (const scene of rows) {
+  for (let sceneIndex = 0; sceneIndex < rows.length; sceneIndex += 1) {
+    const scene = rows[sceneIndex];
     let prose = "";
     if (profile === "editor_detailed" || profile === "beta_reader_personalized") {
       const resolved = readProse(scene.file_path, { syncDir });
@@ -549,11 +564,16 @@ export function renderReviewBundleMarkdown(dbHandle, plan, { generatedAt, syncDi
       prose = resolved;
     }
     const withProse = { ...scene, prose };
+    const prevScene = sceneIndex > 0 ? rows[sceneIndex - 1] : null;
+    const showChapterHeading = isBetaProfile
+      && Boolean(scene.chapter_title)
+      && (!prevScene || prevScene.chapter !== scene.chapter);
     sections.push(renderSceneBlock(withProse, {
       profile,
       includeSceneIds,
       includeMetadataSidebar,
       includeParagraphAnchors,
+      showChapterHeading,
     }));
   }
 
@@ -698,31 +718,18 @@ export function renderReviewBundlePdfWithMetadata(dbHandle, plan, { generatedAt,
         doc.moveDown();
       }
 
-      for (const scene of rows) {
+      for (let sceneIndex = 0; sceneIndex < rows.length; sceneIndex += 1) {
+        const scene = rows[sceneIndex];
+        const prevScene = sceneIndex > 0 ? rows[sceneIndex - 1] : null;
         if (isBetaProfile) {
           // Give chapter titles generous vertical breathing room for a
           // print-like opening feel before prose begins.
           doc.moveDown(2.0);
         }
-        // Render chapter header if this is the first scene in a new chapter (and chapter_title exists)
-        if (isBetaProfile && scene.chapter_title && (scene !== rows[0] || scene.chapter !== rows[0]?.chapter)) {
-          const prevScene = rows[rows.indexOf(scene) - 1];
-          if (!prevScene || prevScene.chapter !== scene.chapter) {
-            doc.fontSize(16).font(coverHeadingFont);
-            doc.text(scene.chapter_title, { align: "center" });
-            doc.moveDown(1.0);
-          }
-        }
-
-        // Render chapter header if this is the first scene in a new chapter (and chapter_title exists in beta profile)
-        if (isBetaProfile && scene.chapter_title) {
-          const sceneIndex = rows.indexOf(scene);
-          const prevScene = sceneIndex > 0 ? rows[sceneIndex - 1] : null;
-          if (!prevScene || prevScene.chapter !== scene.chapter) {
-            doc.fontSize(16).font(coverHeadingFont);
-            doc.text(scene.chapter_title, { align: "center" });
-            doc.moveDown(1.0);
-          }
+        if (isBetaProfile && scene.chapter_title && (!prevScene || prevScene.chapter !== scene.chapter)) {
+          doc.fontSize(16).font(coverHeadingFont);
+          doc.text(scene.chapter_title, { align: "center" });
+          doc.moveDown(1.0);
         }
 
         // Skip title rendering for epigraphs in beta profile
@@ -807,7 +814,7 @@ export function renderReviewBundlePdfWithMetadata(dbHandle, plan, { generatedAt,
         // Add page break between scenes only for prose-including profiles where
         // clear scene separation matters. For outline_discussion, let content flow.
         const includesProse = profile === "editor_detailed" || profile === "beta_reader_personalized";
-        if (includesProse && scene !== rows[rows.length - 1]) {
+        if (includesProse && sceneIndex < rows.length - 1) {
           doc.addPage();
         }
       }
