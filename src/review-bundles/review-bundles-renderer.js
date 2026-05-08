@@ -346,11 +346,16 @@ function buildPageFingerprintToken({ seedHash, pageNumber }) {
   return `BR-${digest}-P${String(pageNumber).padStart(3, "0")}`;
 }
 
+function sanitizeFooterRecipientDisplayName(recipientDisplayName) {
+  return String(recipientDisplayName ?? "").replaceAll("|", "/");
+}
+
 export function renderReviewBundleMarkdown(dbHandle, plan, { generatedAt, syncDir: syncDirOpt } = {}) {
   const profile = plan.profile;
-  const includeSceneIds = Boolean(plan.resolved_scope?.options?.include_scene_ids);
-  const includeMetadataSidebar = Boolean(plan.resolved_scope?.options?.include_metadata_sidebar);
-  const includeParagraphAnchors = Boolean(plan.resolved_scope?.options?.include_paragraph_anchors);
+  const isBetaProfile = profile === "beta_reader_personalized";
+  const includeSceneIds = isBetaProfile ? false : Boolean(plan.resolved_scope?.options?.include_scene_ids);
+  const includeMetadataSidebar = isBetaProfile ? false : Boolean(plan.resolved_scope?.options?.include_metadata_sidebar);
+  const includeParagraphAnchors = isBetaProfile ? false : Boolean(plan.resolved_scope?.options?.include_paragraph_anchors);
   // Prefer explicitly threaded syncDir; fall back to env.
   // No further fallback: if syncDir is null, resolveSceneFilePath returns null
   // and SCENE_PROSE_READ_FAILED is thrown, making misconfiguration explicit.
@@ -365,12 +370,13 @@ export function renderReviewBundleMarkdown(dbHandle, plan, { generatedAt, syncDi
   const headerLines = [
     `# Review Bundle: ${escapeMarkdown(plan.resolved_scope.project_id)}`,
     "",
-    `- Profile: ${profile}`,
+    ...(profile !== "beta_reader_personalized" ? [`- Profile: ${profile}`] : []),
     ...(profile === "beta_reader_personalized"
       ? [`- Recipient: ${escapeMarkdown(recipientDisplayName)}`]
       : []),
-    `- Generated at: ${generatedAt ?? new Date().toISOString()}`,
-    `- Scene count: ${plan.summary.scene_count}`,
+    ...(profile !== "beta_reader_personalized"
+      ? [`- Generated at: ${generatedAt ?? new Date().toISOString()}`, `- Scene count: ${plan.summary.scene_count}`]
+      : []),
   ];
   sections.push(headerLines.join("\n"));
 
@@ -421,13 +427,24 @@ export function renderReviewBundlePdf(dbHandle, plan, { generatedAt, syncDir: sy
 
 export function renderReviewBundlePdfWithMetadata(dbHandle, plan, { generatedAt, syncDir: syncDirOpt } = {}) {
   const profile = plan.profile;
-  const includeSceneIds = Boolean(plan.resolved_scope?.options?.include_scene_ids);
+  const includeSceneIds = profile === "beta_reader_personalized"
+    ? false
+    : Boolean(plan.resolved_scope?.options?.include_scene_ids);
   const syncDir = syncDirOpt ?? process.env.WRITING_SYNC_DIR ?? null;
+  const isBetaProfile = profile === "beta_reader_personalized";
+  const proseFontSize = isBetaProfile ? 8 : 10;
+  const proseLineGap = isBetaProfile ? 3.2 : 3;
+  const bodyFont = profile === "beta_reader_personalized" ? "Times-Roman" : "Helvetica";
+  const coverHeadingFont = profile === "beta_reader_personalized" ? "Times-Bold" : "Helvetica-Bold";
+  // Beta scene headings intentionally use body font (non-bold) per product direction.
+  const sceneHeadingFont = isBetaProfile ? bodyFont : coverHeadingFont;
+  const metaFont = profile === "beta_reader_personalized" ? "Times-Italic" : "Helvetica-Oblique";
 
   const sceneIds = plan.ordering.map(row => row.scene_id);
   const rows = loadBundleSceneRows(dbHandle, plan.resolved_scope.project_id, sceneIds);
   const recipientName = plan.resolved_scope?.options?.recipient_name;
   const recipientDisplayName = normalizeRecipientDisplayName(recipientName);
+  const footerRecipientDisplayName = sanitizeFooterRecipientDisplayName(recipientDisplayName);
   const betaAccountabilityEnabled = profile === "beta_reader_personalized"
     && Boolean(plan.resolved_scope?.options?.beta_accountability);
   const effectiveGeneratedAt = generatedAt ?? new Date().toISOString();
@@ -441,7 +458,8 @@ export function renderReviewBundlePdfWithMetadata(dbHandle, plan, { generatedAt,
   const pdfOptions = profile === "beta_reader_personalized"
     ? {
         size: [432, 648], // 6x9in in PDF points
-        margins: { top: 64, right: 58, bottom: 72, left: 58 },
+        // Extra bottom margin reserves clear space above the accountability footer.
+        margins: { top: 64, right: 58, bottom: 96, left: 58 },
         autoFirstPage: false,
       }
     : {
@@ -455,23 +473,30 @@ export function renderReviewBundlePdfWithMetadata(dbHandle, plan, { generatedAt,
 
   const drawAccountabilityFooter = () => {
     if (!betaAccountabilityEnabled || !fingerprintSeedHash) return;
+    const previousX = doc.x;
+    const previousY = doc.y;
     pageNumber += 1;
     const token = buildPageFingerprintToken({
       seedHash: fingerprintSeedHash,
       pageNumber,
     });
     pageTokens.push({ page: pageNumber, token });
-    const footerY = doc.page.height - doc.page.margins.bottom - 12;
-    const footerWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
-    const footerText = `For: ${recipientDisplayName} | Fingerprint: ${token} | Page ${pageNumber}`;
+    const footerY = doc.page.height - 42;
+    const footerText = `For: ${footerRecipientDisplayName} | Fingerprint: ${token}`;
+    const pageNumberText = String(pageNumber);
     doc.save();
-    doc.font("Helvetica").fontSize(8).fillColor("#555555");
-    doc.text(footerText, doc.page.margins.left, footerY, {
-      width: footerWidth,
-      align: "left",
-      lineBreak: false,
-    });
+    doc.font("Times-Roman").fontSize(8).fillColor("#555555");
+    // Draw footer in no-wrap mode to avoid layout flow side effects.
+    doc.text(footerText, doc.page.margins.left, footerY, { lineBreak: false });
+    const pageNumberWidth = doc.widthOfString(pageNumberText);
+    const pageNumberX = (doc.page.width - pageNumberWidth) / 2;
+    doc.text(pageNumberText, pageNumberX, doc.page.height - 24, { lineBreak: false });
     doc.restore();
+    // Restore prose style so auto-flowed text keeps consistent typography
+    // on pages added during long text rendering.
+    doc.font(bodyFont).fontSize(proseFontSize);
+    doc.x = previousX;
+    doc.y = previousY;
   };
   doc.on("pageAdded", drawAccountabilityFooter);
 
@@ -505,22 +530,25 @@ export function renderReviewBundlePdfWithMetadata(dbHandle, plan, { generatedAt,
 
     try {
       doc.addPage();
-      doc.fontSize(24).font("Helvetica-Bold").text(`Review Bundle: ${plan.resolved_scope.project_id}`, { align: "left" });
+      doc.fontSize(24).font(coverHeadingFont).text(`Review Bundle: ${plan.resolved_scope.project_id}`, { align: "left" });
       doc.moveDown(0.5);
-      doc.fontSize(11).font("Helvetica");
-      doc.text(`Profile: ${profile}`, { align: "left" });
+      doc.fontSize(11).font(bodyFont);
+      if (profile !== "beta_reader_personalized") {
+        doc.text(`Profile: ${profile}`, { align: "left" });
+      }
       if (profile === "beta_reader_personalized") {
         doc.text(`Recipient: ${recipientDisplayName}`, { align: "left" });
+      } else {
+        doc.text(`Generated: ${effectiveGeneratedAt}`, { align: "left" });
+        doc.text(`Scenes: ${plan.summary.scene_count}`, { align: "left" });
       }
-      doc.text(`Generated: ${effectiveGeneratedAt}`, { align: "left" });
-      doc.text(`Scenes: ${plan.summary.scene_count}`, { align: "left" });
       doc.moveDown();
 
       if (profile === "beta_reader_personalized") {
-        doc.fontSize(12).font("Helvetica-Bold").text("Usage Notice", { align: "left" });
+        doc.fontSize(12).font("Times-Bold").text("Usage Notice", { align: "left" });
         doc.moveDown(0.3);
         const noticeWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
-        doc.fontSize(10).font("Helvetica");
+        doc.fontSize(10).font("Times-Roman");
         doc.text("This beta-reader draft is intended for private review and feedback. Please do not redistribute without explicit author permission.", {
           align: "left",
           width: noticeWidth,
@@ -529,22 +557,29 @@ export function renderReviewBundlePdfWithMetadata(dbHandle, plan, { generatedAt,
       }
 
       for (const scene of rows) {
-        doc.fontSize(14).font("Helvetica-Bold");
+        if (isBetaProfile) {
+          // Give chapter titles generous vertical breathing room for a
+          // print-like opening feel before prose begins.
+          doc.moveDown(2.0);
+        }
+        doc.fontSize(isBetaProfile ? 13 : 14).font(sceneHeadingFont);
         let heading = scene.title || scene.scene_id;
         if (includeSceneIds) {
           heading += ` [${scene.scene_id}]`;
         }
-        doc.text(heading, { align: "left" });
-        doc.moveDown(0.2);
+        doc.text(heading, { align: isBetaProfile ? "center" : "left" });
+        doc.moveDown(isBetaProfile ? 1.6 : 0.2);
 
         const metaParts = [];
-        if (scene.pov) metaParts.push(`POV: ${scene.pov}`);
-        if (scene.save_the_cat_beat) metaParts.push(`Beat: ${scene.save_the_cat_beat}`);
+        if (profile !== "beta_reader_personalized") {
+          if (scene.pov) metaParts.push(`POV: ${scene.pov}`);
+          if (scene.save_the_cat_beat) metaParts.push(`Beat: ${scene.save_the_cat_beat}`);
+        }
         if (metaParts.length > 0) {
           const metaWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
-          doc.fontSize(9).font("Helvetica-Oblique");
+          doc.fontSize(9).font(metaFont);
           doc.text(metaParts.join(" • "), { align: "left", width: metaWidth });
-          doc.font("Helvetica");
+          doc.font(bodyFont);
           doc.moveDown(0.2);
         }
 
@@ -572,11 +607,11 @@ export function renderReviewBundlePdfWithMetadata(dbHandle, plan, { generatedAt,
           prose = resolved;
 
           const textWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
-          doc.fontSize(10).font("Helvetica");
+          doc.fontSize(proseFontSize).font(bodyFont);
           doc.text(prose, {
             align: "left",
             width: textWidth,
-            lineGap: profile === "beta_reader_personalized" ? 4.5 : 3,
+            lineGap: proseLineGap,
           });
         }
 

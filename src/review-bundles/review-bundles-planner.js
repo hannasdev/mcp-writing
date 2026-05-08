@@ -335,16 +335,23 @@ export function buildReviewBundlePlan(dbHandle, {
     : undefined;
 
   const safeBundleName = slugifyBundleName(bundle_name || `${project_id}-${profile}`);
+  const normalizedSceneIds = Array.isArray(scene_ids)
+    ? Array.from(new Set(scene_ids.map(sceneId => String(sceneId)))).sort()
+    : undefined;
   const appliedFilters = {
     ...(part !== undefined ? { part } : {}),
     ...(chapter !== undefined ? { chapter } : {}),
     ...(Array.isArray(normalizedChapters) ? { chapters: normalizedChapters } : {}),
     ...(tag ? { tag } : {}),
-    ...(Array.isArray(scene_ids) ? { scene_ids } : {}),
+    ...(Array.isArray(normalizedSceneIds) ? { scene_ids: normalizedSceneIds } : {}),
   };
   const resolvedBetaAccountability = profile === "beta_reader_personalized"
     ? Boolean(beta_accountability ?? true)
     : false;
+  const isBetaProfile = profile === "beta_reader_personalized";
+  const resolvedIncludeSceneIds = isBetaProfile ? false : Boolean(include_scene_ids);
+  const resolvedIncludeMetadataSidebar = isBetaProfile ? false : Boolean(include_metadata_sidebar);
+  const resolvedIncludeParagraphAnchors = isBetaProfile ? false : Boolean(include_paragraph_anchors);
 
   return {
     ok: true,
@@ -353,9 +360,9 @@ export function buildReviewBundlePlan(dbHandle, {
       project_id,
       filters: appliedFilters,
       options: {
-        include_scene_ids: Boolean(include_scene_ids),
-        include_metadata_sidebar: Boolean(include_metadata_sidebar),
-        include_paragraph_anchors: Boolean(include_paragraph_anchors),
+        include_scene_ids: resolvedIncludeSceneIds,
+        include_metadata_sidebar: resolvedIncludeMetadataSidebar,
+        include_paragraph_anchors: resolvedIncludeParagraphAnchors,
         beta_accountability: resolvedBetaAccountability,
         ...(resolvedRecipientName ? { recipient_name: resolvedRecipientName } : {}),
       },

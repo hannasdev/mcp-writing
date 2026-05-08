@@ -337,6 +337,58 @@ describe("buildReviewBundlePlan", () => {
     }
   });
 
+  test("beta profile allows accountability option to be disabled", () => {
+    const db = setupReviewBundleTestDb();
+    try {
+      insertTestScene(db, {
+        sceneId: "sc-013",
+        part: 1,
+        chapter: 1,
+        timelinePosition: 1,
+        wordCount: 250,
+      });
+
+      const plan = buildReviewBundlePlan(db, {
+        project_id: "test-novel",
+        profile: "beta_reader_personalized",
+        recipient_name: "Jordan Example",
+        beta_accountability: false,
+      });
+
+      assert.equal(plan.resolved_scope.options.beta_accountability, false);
+    } finally {
+      db.close();
+    }
+  });
+
+  test("beta profile resolved options force metadata toggles off", () => {
+    const db = setupReviewBundleTestDb();
+    try {
+      insertTestScene(db, {
+        sceneId: "sc-014",
+        part: 1,
+        chapter: 1,
+        timelinePosition: 1,
+        wordCount: 250,
+      });
+
+      const plan = buildReviewBundlePlan(db, {
+        project_id: "test-novel",
+        profile: "beta_reader_personalized",
+        recipient_name: "Jordan Example",
+        include_scene_ids: true,
+        include_metadata_sidebar: true,
+        include_paragraph_anchors: true,
+      });
+
+      assert.equal(plan.resolved_scope.options.include_scene_ids, false);
+      assert.equal(plan.resolved_scope.options.include_metadata_sidebar, false);
+      assert.equal(plan.resolved_scope.options.include_paragraph_anchors, false);
+    } finally {
+      db.close();
+    }
+  });
+
   test("renderReviewBundleMarkdown escapes outline loglines with markdown metacharacters", () => {
     const db = setupReviewBundleTestDb();
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "bundle-outline-"));
