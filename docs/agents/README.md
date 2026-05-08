@@ -5,6 +5,7 @@ This section collects documentation primarily intended for AI agents and agent m
 ## Core Agent Guidance
 
 - [AGENTS.md](../../AGENTS.md) - Project workflow rules, constraints, and required skills.
+- [MAINTAINERS.md](../../MAINTAINERS.md) - Release operations, versioning rules, and maintainer workflows agents should follow.
 - [.github/copilot-instructions.md](../../.github/copilot-instructions.md) - Copilot-specific operational guidance for this repository.
 - [CLAUDE.md](../../CLAUDE.md) - Skill references used by Claude-oriented workflows.
 
