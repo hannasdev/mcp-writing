@@ -42,8 +42,8 @@ Branch names should use semantic prefixes aligned with [conventional commits](ht
 
 4. **Merge strategy**:
    - Default: **squash merge** (linear history)
-   - Exception: rebase merge if the branch contains multiple meaningful commits
-   - Avoid merge commits unless explicitly needed
+   - Use **rebase merge** only when preserving multiple meaningful commits is important for future debugging or auditability
+   - Avoid **merge commits** unless required to resolve conflicts that cannot be handled cleanly with squash or rebase
 
 ## Examples
 

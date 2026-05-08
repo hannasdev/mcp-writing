@@ -6,12 +6,12 @@ applyTo: ".github/workflows/**"
 
 ## Operator checklist before debugging release failures
 
-1. Confirm `release.yml` on `main` is the expected version.
-2. Confirm required secrets exist (names only, never print values).
-3. Confirm deploy key has write access enabled.
-4. Confirm ruleset includes Deploy Key bypass actor.
-5. Confirm latest tag and `package.json` version alignment.
-6. Avoid rerunning old release jobs after partial tag/publish success.
+1. File check: confirm `release.yml` on `main` is the expected version.
+2. Access check: confirm required secrets exist by checking their presence in repository or environment secrets configuration (do not print or expose values).
+3. Access check: confirm deploy key has write access enabled.
+4. Access check: confirm ruleset includes Deploy Key bypass actor.
+5. Version check: confirm latest tag and `package.json` version alignment.
+6. Run strategy check: avoid rerunning old release jobs after partial tag/publish success.
 
 ## Known failure modes and fixes
 
