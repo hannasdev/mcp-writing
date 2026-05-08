@@ -487,6 +487,7 @@ Dry-run planning tool for review bundles. Resolves scene scope, deterministic or
 | `profile` | `enum` | Yes | Bundle profile: outline_discussion, editor_detailed, or beta_reader_personalized. |
 | `part` | `integer` | No | Optional part filter. |
 | `chapter` | `integer` | No | Optional chapter filter. |
+| `chapters` | `number[]` | No | Optional chapter-set filter. Use this for one/few specific chapters. Do not combine with chapter. |
 | `tag` | `string` | No | Optional tag filter (exact match). |
 | `scene_ids` | `string[]` | No | Optional explicit scene_id allowlist. Intersects with other filters. |
 | `strictness` | `enum` | No | Strictness mode: warn (default) or fail. |
@@ -494,6 +495,7 @@ Dry-run planning tool for review bundles. Resolves scene scope, deterministic or
 | `include_metadata_sidebar` | `boolean` | No | Rendering option (default false). Echoed in resolved_scope.options for downstream rendering; does not change planning results. |
 | `include_paragraph_anchors` | `boolean` | No | Rendering option (default false). Echoed in resolved_scope.options for downstream rendering; does not change planning results. |
 | `recipient_name` | `string` | No | Optional recipient display name for beta_reader_personalized profile. |
+| `beta_accountability` | `boolean` | No | Enable accountability footer + fingerprint metadata for beta_reader_personalized output (default true for beta profile). |
 | `bundle_name` | `string` | No | Optional output bundle base name override (slugified in planned outputs). |
 | `format` | `enum("pdf","markdown","both")` | No | Planned output format: pdf (default), markdown, or both. Affects planned_outputs filenames only; preview_review_bundle does not render artifacts. |
 
@@ -510,6 +512,7 @@ Generate review bundle artifacts (PDF/markdown) from planned scene scope. Writes
 | `output_dir` | `string` | Yes | Directory path to write bundle artifacts into. |
 | `part` | `integer` | No | Optional part filter. |
 | `chapter` | `integer` | No | Optional chapter filter. |
+| `chapters` | `number[]` | No | Optional chapter-set filter. Use this for one/few specific chapters. Do not combine with chapter. |
 | `tag` | `string` | No | Optional tag filter (exact match). |
 | `scene_ids` | `string[]` | No | Optional explicit scene_id allowlist. Intersects with other filters. |
 | `strictness` | `enum` | No | Strictness mode: warn (default) or fail. |
@@ -517,6 +520,7 @@ Generate review bundle artifacts (PDF/markdown) from planned scene scope. Writes
 | `include_metadata_sidebar` | `boolean` | No | Include metadata sidebar in markdown output (default false). Markdown only — no effect on PDF. |
 | `include_paragraph_anchors` | `boolean` | No | Include paragraph anchors in markdown output (default false). Markdown only — no effect on PDF. |
 | `recipient_name` | `string` | No | Optional recipient display name for beta_reader_personalized profile. |
+| `beta_accountability` | `boolean` | No | Enable accountability footer + fingerprint metadata for beta_reader_personalized output (default true for beta profile). |
 | `bundle_name` | `string` | No | Optional output bundle base name override (slugified in filenames). |
 | `source_commit` | `string` | No | Optional explicit source commit for provenance. Defaults to current HEAD when available. |
 | `format` | `enum("pdf","markdown","both")` | No | Output format: pdf (default), markdown, or both. |
