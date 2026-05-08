@@ -40,6 +40,22 @@ function parseArgs(argv) {
       args.deleteRemote = true;
       continue;
     }
+
+    if (token === "--repo") {
+      const value = argv[i + 1];
+      if (!value || value.startsWith("--") || !value.includes("/")) {
+        throw new Error("Provide --repo <owner/repo>.");
+      }
+      args.repo = value;
+      i += 1;
+      continue;
+    }
+
+    if (token.startsWith("--")) {
+      throw new Error(`Unknown flag: ${token}`);
+    }
+
+    throw new Error(`Unexpected argument: ${token}`);
   }
 
   if (!args.pr || !args.branch) {
@@ -53,12 +69,24 @@ function run(cmd, cmdArgs) {
   return execFileSync(cmd, cmdArgs, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
 }
 
+function formatExecError(error) {
+  if (!error || typeof error !== "object") {
+    return String(error);
+  }
+
+  const parts = [];
+  if (error.message) parts.push(String(error.message));
+  if (error.stderr) parts.push(String(error.stderr).trim());
+  if (error.stdout) parts.push(String(error.stdout).trim());
+  return parts.filter(Boolean).join("\n");
+}
+
 function runSoft(cmd, cmdArgs) {
   try {
     const output = run(cmd, cmdArgs);
     return { ok: true, output };
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = formatExecError(error);
     return { ok: false, output: message };
   }
 }
@@ -68,16 +96,27 @@ function printHelp() {
     "post-merge-cleanup.mjs",
     "",
     "Usage:",
-    "  node skills/post-merge-cleanup/scripts/post-merge-cleanup.mjs --pr <number> --branch <name> [--delete-remote]",
+    "  node skills/post-merge-cleanup/scripts/post-merge-cleanup.mjs --pr <number> --branch <name> [--repo <owner/repo>] [--delete-remote]",
     "",
     "Examples:",
     "  node skills/post-merge-cleanup/scripts/post-merge-cleanup.mjs --pr 185 --branch fix/beta-epigraph-export-format",
+    "  node skills/post-merge-cleanup/scripts/post-merge-cleanup.mjs --pr 185 --branch fix/beta-epigraph-export-format --repo hannasdev/mcp-writing",
     "  node skills/post-merge-cleanup/scripts/post-merge-cleanup.mjs --pr 185 --branch fix/beta-epigraph-export-format --delete-remote",
   ].join("\n"));
 }
 
-function assertPrMerged(pr) {
-  const raw = run("gh", ["pr", "view", String(pr), "--json", "state,mergedAt", "--jq", "{state: .state, mergedAt: .mergedAt}"]);
+function assertPrMerged(pr, repo) {
+  const raw = run("gh", [
+    "pr",
+    "view",
+    String(pr),
+    "--repo",
+    repo,
+    "--json",
+    "state,mergedAt",
+    "--jq",
+    "{state: .state, mergedAt: .mergedAt}",
+  ]);
   const parsed = JSON.parse(raw);
   if (parsed.state !== "MERGED" || !parsed.mergedAt) {
     throw new Error(`PR #${pr} is not merged. state=${parsed.state}, mergedAt=${parsed.mergedAt}`);
@@ -87,7 +126,8 @@ function assertPrMerged(pr) {
 
 function ensureMainSynced() {
   run("git", ["switch", "main"]);
-  run("git", ["pull", "--ff-only"]);
+  run("git", ["fetch", "origin", "main"]);
+  run("git", ["merge", "--ff-only", "origin/main"]);
 }
 
 function deleteLocalBranch(branch) {
@@ -112,12 +152,14 @@ function deleteRemoteBranch(branch) {
   return "deleted";
 }
 
-function getThreadStatus(pr) {
+function getThreadStatus(pr, repo) {
   const text = run("node", [
     "skills/review-comment-resolution/scripts/review-comments.mjs",
     "list",
     "--pr",
     String(pr),
+    "--repo",
+    repo,
   ]);
   const match = text.match(/Threads shown:\s+(\d+)\s+\(unresolved\)/);
   return match ? Number.parseInt(match[1], 10) : null;
@@ -130,16 +172,17 @@ function main() {
     process.exit(0);
   }
 
-  const prStatus = assertPrMerged(args.pr);
+  const prStatus = assertPrMerged(args.pr, args.repo);
   ensureMainSynced();
   const localDelete = deleteLocalBranch(args.branch);
   const remoteDelete = args.deleteRemote ? deleteRemoteBranch(args.branch) : "skipped";
-  const unresolved = getThreadStatus(args.pr);
+  const unresolved = getThreadStatus(args.pr, args.repo);
   const currentBranch = run("git", ["branch", "--show-current"]);
 
   console.log([
     "Post-merge cleanup complete.",
     `PR #${args.pr}: ${prStatus.state} at ${prStatus.mergedAt}`,
+    `Repository: ${args.repo}`,
     `Current branch: ${currentBranch}`,
     `Local branch cleanup (${args.branch}): ${localDelete}`,
     `Remote branch cleanup (${args.branch}): ${remoteDelete}`,

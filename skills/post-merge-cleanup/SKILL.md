@@ -40,6 +40,12 @@ Usage:
 node skills/post-merge-cleanup/scripts/post-merge-cleanup.mjs --pr 185 --branch fix/example
 ```
 
+Optional repository selection (for non-default checkout context):
+
+```bash
+node skills/post-merge-cleanup/scripts/post-merge-cleanup.mjs --pr 185 --branch fix/example --repo owner/repo
+```
+
 Optional remote branch deletion:
 
 ```bash
@@ -49,7 +55,7 @@ node skills/post-merge-cleanup/scripts/post-merge-cleanup.mjs --pr 185 --branch 
 What it does:
 
 1. Validates PR merged state with `gh pr view`.
-2. Switches to `main` and fast-forwards from `origin/main`.
+2. Switches to `main`, fetches `origin/main`, then fast-forwards from `origin/main`.
 3. Deletes local branch with `git branch -d`.
 4. Optionally deletes remote branch.
 5. Runs the review thread status helper for the PR.
