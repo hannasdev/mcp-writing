@@ -14,7 +14,7 @@ This complements `CHANGELOG.md`:
 - Why it matters: Makes limited beta sharing safer and more traceable while improving reviewer targeting when authors only want to share one or a few chapters.
 - Who is affected: Authors generating beta-reader review bundles and maintainers supporting editorial review workflows.
 - Action needed: Optional: switch to `chapters` when sharing selective chapter packets; keep `beta_accountability` enabled (default) for traceable beta PDFs.
-- PR: (pending)
+- PR: [#182](https://github.com/hannasdev/mcp-writing/pull/182)
 
 ### 2026-05-07 — Raise minimum supported Node runtime to 22.13.0
 
