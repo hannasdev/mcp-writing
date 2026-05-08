@@ -4,3 +4,4 @@
 @skills/review-comment-resolution/SKILL.md
 @skills/commit-writing/SKILL.md
 @skills/pr-description/SKILL.md
+@skills/post-merge-cleanup/SKILL.md
