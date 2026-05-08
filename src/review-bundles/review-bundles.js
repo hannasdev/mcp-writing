@@ -13,6 +13,7 @@ export {
   buildPageFingerprintToken,
   buildFingerprintSeed,
   buildFingerprintSeedHash,
+  extractSceneDateline,
 } from "./review-bundles-renderer.js";
 
 export { createReviewBundleArtifacts } from "./review-bundles-writer.js";
