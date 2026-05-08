@@ -461,7 +461,7 @@ export function renderReviewBundlePdfWithMetadata(dbHandle, plan, { generatedAt,
       pageNumber,
     });
     pageTokens.push({ page: pageNumber, token });
-    const footerY = doc.page.height - doc.page.margins.bottom - 12;
+    const footerY = doc.page.height - doc.page.margins.bottom + 12;
     const footerWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
     const footerText = `For: ${recipientDisplayName} | Fingerprint: ${token} | Page ${pageNumber}`;
     doc.save();
