@@ -47,6 +47,7 @@ Instead of feeding an entire manuscript to an AI and hoping it fits in the conte
 | [docs/docker.md](docs/docker.md) | Docker Compose, OpenClaw integration, SSH hardening |
 | [docs/data-ownership.md](docs/data-ownership.md) | Which tools write which files, import safety rules |
 | [docs/tools.md](docs/tools.md) | Full tool reference — auto-generated from source |
+| [docs/agents/README.md](docs/agents/README.md) | Index of agent-focused guidance, examples, and boot files |
 | [docs/agents/use-cases.md](docs/agents/use-cases.md) | Agent-oriented transcripts and prompt/tooling examples |
 | [docs/development.md](docs/development.md) | Running locally, tests, environment variables, troubleshooting |
 
