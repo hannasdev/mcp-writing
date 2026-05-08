@@ -370,6 +370,10 @@ export function importScrivenerSync({
     const destFile = path.join(targetDir, `${seq.toString().padStart(3, "0")} ${rawTitle} [${binderId}].${ext}`);
     const sidecar = destFile.replace(/\.(txt|md)$/, ".meta.yaml");
 
+    const existingTags = Array.isArray(existingScene?.meta?.tags)
+      ? existingScene.meta.tags
+      : [];
+
     const meta = {
       ...(existingScene?.meta ?? {}),
       scene_id: sceneId,
@@ -378,7 +382,7 @@ export function importScrivenerSync({
       title,
       timeline_position: seq,
       ...(beatCarry ? { save_the_cat_beat: beatCarry } : {}),
-      ...(isEpigraphScene ? { tags: [...(existingScene?.meta?.tags ?? []), "epigraph"].filter((v, i, a) => a.indexOf(v) === i) } : {}),
+      ...(isEpigraphScene ? { tags: [...existingTags, "epigraph"].filter((v, i, a) => a.indexOf(v) === i) } : {}),
     };
 
     if (!beatCarry && existingScene?.meta && Object.hasOwn(existingScene.meta, "save_the_cat_beat")) {

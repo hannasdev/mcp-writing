@@ -390,7 +390,7 @@ function renderSceneBlock(scene, options) {
 
   // Render chapter heading only when the caller detects a chapter transition.
   if (isBetaProfile && scene.chapter_title && showChapterHeading) {
-    parts.push(`# ${escapeMarkdown(scene.chapter_title)}`);
+    parts.push(`## ${escapeMarkdown(scene.chapter_title)}`);
   }
 
   // Only render heading if not an epigraph
