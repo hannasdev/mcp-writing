@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { ReviewBundlePlanError } from "./review-bundles-planner.js";
-import { renderReviewBundleMarkdown, renderReviewBundlePdf, renderBetaNoticeMarkdown, renderBetaFeedbackFormMarkdown } from "./review-bundles-renderer.js";
+import { renderReviewBundleMarkdown, renderReviewBundlePdfWithMetadata, renderBetaNoticeMarkdown, renderBetaFeedbackFormMarkdown } from "./review-bundles-renderer.js";
 
 function resolveOutputFilePath(outputDir, fileName) {
   const normalizedOutputDir = path.resolve(outputDir);
@@ -82,8 +82,11 @@ export async function createReviewBundleArtifacts(dbHandle, {
   const markdown = markdownPath ? renderReviewBundleMarkdown(dbHandle, plan, { generatedAt, syncDir }) : null;
 
   let pdfBuffer = null;
+  let fingerprintMetadata = null;
   if (pdfPath) {
-    pdfBuffer = await renderReviewBundlePdf(dbHandle, plan, { generatedAt, syncDir });
+    const pdfResult = await renderReviewBundlePdfWithMetadata(dbHandle, plan, { generatedAt, syncDir });
+    pdfBuffer = pdfResult.pdf_buffer;
+    fingerprintMetadata = pdfResult.fingerprint;
   }
 
   const recipientName = plan.resolved_scope?.options?.recipient_name;
@@ -108,6 +111,7 @@ export async function createReviewBundleArtifacts(dbHandle, {
     warnings: plan.warnings,
     resolved_scope: plan.resolved_scope,
     scene_ids: plan.ordering.map(row => row.scene_id),
+    ...(fingerprintMetadata ? { fingerprint: fingerprintMetadata } : {}),
   };
 
   for (const outputPath of [markdownPath, pdfPath, manifestPath, noticePath, feedbackPath].filter(Boolean)) {

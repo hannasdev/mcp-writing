@@ -9,6 +9,10 @@ export {
 export {
   renderReviewBundleMarkdown,
   renderReviewBundlePdf,
+  renderReviewBundlePdfWithMetadata,
+  buildPageFingerprintToken,
+  buildFingerprintSeed,
+  buildFingerprintSeedHash,
 } from "./review-bundles-renderer.js";
 
 export { createReviewBundleArtifacts } from "./review-bundles-writer.js";

@@ -8,6 +8,14 @@ This complements `CHANGELOG.md`:
 
 ## Unreleased
 
+### 2026-05-08 — Add accountable beta bundle fingerprinting with chapter-set support
+
+- What changed: `beta_reader_personalized` review bundles now support chapter-set selection (`chapters`) and include per-page accountability footers in PDF output with recipient name, page number, and a unique page fingerprint token; manifests now include fingerprint metadata.
+- Why it matters: Makes limited beta sharing safer and more traceable while improving reviewer targeting when authors only want to share one or a few chapters.
+- Who is affected: Authors generating beta-reader review bundles and maintainers supporting editorial review workflows.
+- Action needed: Optional: switch to `chapters` when sharing selective chapter packets; keep `beta_accountability` enabled (default) for traceable beta PDFs.
+- PR: [#182](https://github.com/hannasdev/mcp-writing/pull/182)
+
 ### 2026-05-07 — Raise minimum supported Node runtime to 22.13.0
 
 - What changed: Raised the declared Node runtime minimum to `>=22.13.0`, aligned setup/development docs and workflow runners to that floor, and updated dependencies (including `pdfkit` major bump plus security overrides for vulnerable transitives).

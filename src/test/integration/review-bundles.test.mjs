@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import zlib from "node:zlib";
 import { createTestContext } from "../helpers/server.js";
 
 const ctx = createTestContext(3071, 3070);
@@ -21,6 +22,40 @@ after(async () => {
 const callTool = (n, a) => ctx.callTool(n, a);
 const callWriteTool = (n, a) => ctx.callWriteTool(n, a);
 const waitForAsyncJob = (id, t) => ctx.waitForAsyncJob(id, t);
+
+function extractPdfFlateText(pdfBytes) {
+  const markerStart = Buffer.from("stream\n", "latin1");
+  const markerEnd = Buffer.from("\nendstream", "latin1");
+  const chunks = [];
+  let offset = 0;
+
+  while (offset < pdfBytes.length) {
+    const start = pdfBytes.indexOf(markerStart, offset);
+    if (start === -1) break;
+    const dataStart = start + markerStart.length;
+    const end = pdfBytes.indexOf(markerEnd, dataStart);
+    if (end === -1) break;
+    const compressed = pdfBytes.subarray(dataStart, end);
+    try {
+      chunks.push(zlib.inflateSync(compressed).toString("latin1"));
+    } catch {
+      // Non-flate or non-text stream; ignore.
+    }
+    offset = end + markerEnd.length;
+  }
+  return chunks.join("\n");
+}
+
+function decodePdfHexText(inflatedPdfText) {
+  const parts = [];
+  const re = /<([0-9A-Fa-f]+)>/g;
+  let match;
+  while ((match = re.exec(inflatedPdfText)) !== null) {
+    const hex = match[1].length % 2 === 0 ? match[1] : `0${match[1]}`;
+    parts.push(Buffer.from(hex, "hex").toString("latin1"));
+  }
+  return parts.join("");
+}
 describe("preview_review_bundle tool", () => {
   test("returns dry-run plan for outline profile", async () => {
     const text = await callTool("preview_review_bundle", {
@@ -122,6 +157,46 @@ describe("preview_review_bundle tool", () => {
     );
     assert.ok(parsed.planned_outputs.some(name => name.endsWith(".manifest.json")));
   });
+
+  test("supports chapters array filter in preview", async () => {
+    const text = await callTool("preview_review_bundle", {
+      project_id: "test-novel",
+      profile: "outline_discussion",
+      chapters: [1],
+    });
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.ok, true);
+    assert.deepEqual(parsed.resolved_scope.filters.chapters, [1]);
+    assert.ok(parsed.ordering.every(row => row.chapter === 1));
+  });
+
+  test("rejects chapter + chapters together in preview", async () => {
+    const text = await callTool("preview_review_bundle", {
+      project_id: "test-novel",
+      profile: "outline_discussion",
+      chapter: 1,
+      chapters: [1],
+    });
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.ok, false);
+    assert.equal(parsed.error.code, "INVALID_CHAPTER_FILTER");
+  });
+
+  test("rejects empty chapters array in preview schema", async () => {
+    try {
+      const text = await callTool("preview_review_bundle", {
+        project_id: "test-novel",
+        profile: "outline_discussion",
+        chapters: [],
+      });
+      const parsed = JSON.parse(text);
+      assert.equal(parsed.ok, false);
+    } catch (error) {
+      assert.match(String(error?.message ?? error), /MCP error/);
+    }
+  });
 });
 
 describe("create_review_bundle tool", () => {
@@ -137,7 +212,6 @@ describe("create_review_bundle tool", () => {
         format: "markdown",
       });
       const parsed = JSON.parse(text);
-
       assert.equal(parsed.ok, true);
       assert.equal(typeof parsed.next_step, "string");
       assert.ok(parsed.next_step.includes("Share output_paths"));
@@ -192,7 +266,6 @@ describe("create_review_bundle tool", () => {
         format: "markdown",
       });
       const parsed = JSON.parse(text);
-
       assert.equal(parsed.ok, true);
       assert.ok(parsed.output_paths?.bundle_markdown);
       assert.ok(parsed.output_paths?.manifest_json);
@@ -264,6 +337,40 @@ describe("create_review_bundle tool", () => {
 
       const pdfBytes = fs.readFileSync(parsed.output_paths.bundle_pdf);
       assert.ok(pdfBytes.slice(0, 4).toString() === "%PDF");
+    } finally {
+      fs.rmSync(outDir, { recursive: true, force: true });
+    }
+  });
+
+  test("beta PDF manifest includes per-page fingerprint metadata", async () => {
+    const outDir = fs.mkdtempSync(path.join(writeSyncDir, "review-bundles-beta-pdf-"));
+    try {
+      const text = await callWriteTool("create_review_bundle", {
+        project_id: "test-novel",
+        profile: "beta_reader_personalized",
+        recipient_name: "Jordan Example",
+        output_dir: outDir,
+        format: "pdf",
+      });
+      const parsed = JSON.parse(text);
+
+      assert.ok(parsed.ok, JSON.stringify(parsed));
+      assert.ok(parsed.output_paths?.bundle_pdf);
+      assert.ok(parsed.output_paths?.manifest_json);
+
+      const manifest = JSON.parse(fs.readFileSync(parsed.output_paths.manifest_json, "utf8"));
+      assert.equal(manifest.fingerprint.mode, "visible_footer");
+      assert.equal(manifest.fingerprint.recipient_display_name, "Jordan Example");
+      assert.ok(Array.isArray(manifest.fingerprint.page_tokens));
+      assert.ok(manifest.fingerprint.page_tokens.length >= 1);
+
+      const uniqueTokenCount = new Set(manifest.fingerprint.page_tokens.map(entry => entry.token)).size;
+      assert.equal(uniqueTokenCount, manifest.fingerprint.page_tokens.length);
+
+      const pdfBytes = fs.readFileSync(parsed.output_paths.bundle_pdf);
+      const inflatedStreamsText = extractPdfFlateText(pdfBytes);
+      const decodedPdfText = decodePdfHexText(inflatedStreamsText);
+      assert.match(decodedPdfText, /For: Jordan Example \| Fingerprint: BR-[A-Z0-9-]+-P\d{3} \| Page \d+/);
     } finally {
       fs.rmSync(outDir, { recursive: true, force: true });
     }

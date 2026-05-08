@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import os from "node:os";
 import fs from "node:fs";
 import path from "node:path";
-import { buildReviewBundlePlan, renderReviewBundleMarkdown, ReviewBundlePlanError } from "../../review-bundles/review-bundles.js";
+import { buildReviewBundlePlan, renderReviewBundleMarkdown, ReviewBundlePlanError, buildPageFingerprintToken, buildFingerprintSeed, buildFingerprintSeedHash } from "../../review-bundles/review-bundles.js";
 import { insertTestScene, setupReviewBundleTestDb } from "../helpers/db.js";
 
 describe("buildReviewBundlePlan", () => {
@@ -82,6 +82,96 @@ describe("buildReviewBundlePlan", () => {
     }
   });
 
+  test("supports multi-chapter filtering via chapters array", () => {
+    const db = setupReviewBundleTestDb();
+    try {
+      insertTestScene(db, {
+        sceneId: "sc-101",
+        part: 1,
+        chapter: 1,
+        timelinePosition: 1,
+        wordCount: 220,
+      });
+      insertTestScene(db, {
+        sceneId: "sc-102",
+        part: 1,
+        chapter: 2,
+        timelinePosition: 1,
+        wordCount: 240,
+      });
+      insertTestScene(db, {
+        sceneId: "sc-103",
+        part: 1,
+        chapter: 3,
+        timelinePosition: 1,
+        wordCount: 260,
+      });
+
+      const plan = buildReviewBundlePlan(db, {
+        project_id: "test-novel",
+        profile: "outline_discussion",
+        chapters: [1, 3],
+      });
+
+      assert.deepEqual(plan.ordering.map(row => row.scene_id), ["sc-101", "sc-103"]);
+      assert.deepEqual(plan.resolved_scope.filters.chapters, [1, 3]);
+    } finally {
+      db.close();
+    }
+  });
+
+  test("normalizes chapters filter into sorted unique values", () => {
+    const db = setupReviewBundleTestDb();
+    try {
+      insertTestScene(db, {
+        sceneId: "sc-201",
+        part: 1,
+        chapter: 1,
+        timelinePosition: 1,
+      });
+      insertTestScene(db, {
+        sceneId: "sc-202",
+        part: 1,
+        chapter: 3,
+        timelinePosition: 1,
+      });
+
+      const plan = buildReviewBundlePlan(db, {
+        project_id: "test-novel",
+        profile: "outline_discussion",
+        chapters: [3, 1, 3],
+      });
+
+      assert.deepEqual(plan.resolved_scope.filters.chapters, [1, 3]);
+      assert.deepEqual(plan.ordering.map(row => row.scene_id), ["sc-201", "sc-202"]);
+    } finally {
+      db.close();
+    }
+  });
+
+  test("rejects using chapter and chapters together", () => {
+    const db = setupReviewBundleTestDb();
+    try {
+      insertTestScene(db, {
+        sceneId: "sc-104",
+        part: 1,
+        chapter: 1,
+        timelinePosition: 1,
+      });
+      assert.throws(
+        () => buildReviewBundlePlan(db, {
+          project_id: "test-novel",
+          profile: "outline_discussion",
+          chapter: 1,
+          chapters: [1, 2],
+        }),
+        error => error instanceof ReviewBundlePlanError && error.code === "INVALID_CHAPTER_FILTER"
+      );
+    } finally {
+      db.close();
+    }
+  });
+
   test("rejects scene_ids lists larger than the SQLite-safe planner limit", () => {
     const db = setupReviewBundleTestDb();
     try {
@@ -106,6 +196,33 @@ describe("buildReviewBundlePlan", () => {
           error instanceof ReviewBundlePlanError &&
           error.code === "SCENE_IDS_TOO_LARGE" &&
           error.details?.max_scene_ids === 900
+      );
+    } finally {
+      db.close();
+    }
+  });
+
+  test("rejects chapters lists larger than the SQLite-safe planner limit", () => {
+    const db = setupReviewBundleTestDb();
+    try {
+      insertTestScene(db, {
+        sceneId: "sc-001",
+        part: 1,
+        chapter: 1,
+        timelinePosition: 1,
+      });
+      const chapters = Array.from({ length: 901 }, (_, index) => index + 1);
+      assert.throws(
+        () =>
+          buildReviewBundlePlan(db, {
+            project_id: "test-novel",
+            profile: "outline_discussion",
+            chapters,
+          }),
+        error =>
+          error instanceof ReviewBundlePlanError &&
+          error.code === "CHAPTERS_FILTER_TOO_LARGE" &&
+          error.details?.max_chapters === 900
       );
     } finally {
       db.close();
@@ -192,6 +309,29 @@ describe("buildReviewBundlePlan", () => {
       });
 
       assert.equal(plan.resolved_scope.options.recipient_name, "Jordan Example");
+    } finally {
+      db.close();
+    }
+  });
+
+  test("beta profile enables accountability option by default", () => {
+    const db = setupReviewBundleTestDb();
+    try {
+      insertTestScene(db, {
+        sceneId: "sc-012",
+        part: 1,
+        chapter: 1,
+        timelinePosition: 1,
+        wordCount: 250,
+      });
+
+      const plan = buildReviewBundlePlan(db, {
+        project_id: "test-novel",
+        profile: "beta_reader_personalized",
+        recipient_name: "Jordan Example",
+      });
+
+      assert.equal(plan.resolved_scope.options.beta_accountability, true);
     } finally {
       db.close();
     }
@@ -358,6 +498,27 @@ describe("buildReviewBundlePlan", () => {
       fs.rmSync(tempDir, { recursive: true, force: true });
       db.close();
     }
+  });
+});
+
+describe("review-bundle fingerprint helpers", () => {
+  test("buildPageFingerprintToken is deterministic per page and unique across pages", () => {
+    const seed = buildFingerprintSeed(
+      {
+        profile: "beta_reader_personalized",
+        resolved_scope: { project_id: "test-novel", filters: {} },
+        ordering: [{ scene_id: "sc-001" }],
+      },
+      "2026-01-01T00:00:00.000Z",
+      "Jordan Example"
+    );
+    const seedHash = buildFingerprintSeedHash(seed);
+    const token1a = buildPageFingerprintToken({ seedHash, pageNumber: 1 });
+    const token1b = buildPageFingerprintToken({ seedHash, pageNumber: 1 });
+    const token2 = buildPageFingerprintToken({ seedHash, pageNumber: 2 });
+
+    assert.equal(token1a, token1b);
+    assert.notEqual(token1a, token2);
   });
 });
 

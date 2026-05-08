@@ -1,5 +1,6 @@
 const MAX_SORT_VALUE = Number.MAX_SAFE_INTEGER;
 const MAX_SCENE_ID_FILTER_PARAMS = 900;
+const MAX_CHAPTER_FILTER_PARAMS = 900;
 
 export const REVIEW_BUNDLE_PROFILES = ["outline_discussion", "editor_detailed", "beta_reader_personalized"];
 export const REVIEW_BUNDLE_STRICTNESS = ["warn", "fail"];
@@ -124,12 +125,14 @@ export function buildReviewBundlePlan(dbHandle, {
   profile,
   part,
   chapter,
+  chapters,
   tag,
   scene_ids,
   strictness = "warn",
   include_scene_ids = true,
   include_metadata_sidebar = false,
   include_paragraph_anchors = false,
+  beta_accountability,
   bundle_name,
   recipient_name,
   format = "pdf",
@@ -148,10 +151,46 @@ export function buildReviewBundlePlan(dbHandle, {
       }
     );
   }
+  if (Array.isArray(chapters) && chapters.length > MAX_CHAPTER_FILTER_PARAMS) {
+    throw new ReviewBundlePlanError(
+      "CHAPTERS_FILTER_TOO_LARGE",
+      `chapters supports at most ${MAX_CHAPTER_FILTER_PARAMS} entries per request.`,
+      {
+        max_chapters: MAX_CHAPTER_FILTER_PARAMS,
+        received_chapters: chapters.length,
+      }
+    );
+  }
 
   assertProfile(profile);
   assertStrictness(strictness);
   assertFormat(format);
+  if (chapter !== undefined && chapters !== undefined) {
+    throw new ReviewBundlePlanError(
+      "INVALID_CHAPTER_FILTER",
+      "Use either chapter or chapters, not both.",
+      { chapter, chapters }
+    );
+  }
+  let normalizedChapters;
+  if (chapters !== undefined) {
+    if (!Array.isArray(chapters) || chapters.length === 0) {
+      throw new ReviewBundlePlanError(
+        "INVALID_CHAPTER_FILTER",
+        "chapters must be a non-empty array of integers when provided.",
+        { chapters }
+      );
+    }
+    if (!chapters.every(value => Number.isInteger(value))) {
+      throw new ReviewBundlePlanError(
+        "INVALID_CHAPTER_FILTER",
+        "chapters must contain only integer chapter numbers.",
+        { chapters }
+      );
+    }
+    // Normalize to a stable set to avoid plan drift from duplicated or reordered values.
+    normalizedChapters = Array.from(new Set(chapters)).sort((a, b) => a - b);
+  }
 
   const projectRow = dbHandle.prepare(`SELECT project_id FROM projects WHERE project_id = ?`).get(project_id);
   if (!projectRow) {
@@ -180,6 +219,11 @@ export function buildReviewBundlePlan(dbHandle, {
   if (chapter !== undefined) {
     conditions.push("s.chapter = ?");
     conditionParams.push(chapter);
+  }
+  if (Array.isArray(normalizedChapters) && normalizedChapters.length > 0) {
+    const placeholders = normalizedChapters.map(() => "?").join(",");
+    conditions.push(`s.chapter IN (${placeholders})`);
+    conditionParams.push(...normalizedChapters);
   }
 
   let query = `
@@ -213,6 +257,7 @@ export function buildReviewBundlePlan(dbHandle, {
         filters: {
           ...(part !== undefined ? { part } : {}),
           ...(chapter !== undefined ? { chapter } : {}),
+          ...(Array.isArray(normalizedChapters) ? { chapters: normalizedChapters } : {}),
           ...(tag ? { tag } : {}),
           ...(Array.isArray(scene_ids) ? { scene_ids } : {}),
         },
@@ -293,9 +338,13 @@ export function buildReviewBundlePlan(dbHandle, {
   const appliedFilters = {
     ...(part !== undefined ? { part } : {}),
     ...(chapter !== undefined ? { chapter } : {}),
+    ...(Array.isArray(normalizedChapters) ? { chapters: normalizedChapters } : {}),
     ...(tag ? { tag } : {}),
     ...(Array.isArray(scene_ids) ? { scene_ids } : {}),
   };
+  const resolvedBetaAccountability = profile === "beta_reader_personalized"
+    ? Boolean(beta_accountability ?? true)
+    : false;
 
   return {
     ok: true,
@@ -307,6 +356,7 @@ export function buildReviewBundlePlan(dbHandle, {
         include_scene_ids: Boolean(include_scene_ids),
         include_metadata_sidebar: Boolean(include_metadata_sidebar),
         include_paragraph_anchors: Boolean(include_paragraph_anchors),
+        beta_accountability: resolvedBetaAccountability,
         ...(resolvedRecipientName ? { recipient_name: resolvedRecipientName } : {}),
       },
     },
