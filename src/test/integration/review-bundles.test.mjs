@@ -122,6 +122,32 @@ describe("preview_review_bundle tool", () => {
     );
     assert.ok(parsed.planned_outputs.some(name => name.endsWith(".manifest.json")));
   });
+
+  test("supports chapters array filter in preview", async () => {
+    const text = await callTool("preview_review_bundle", {
+      project_id: "test-novel",
+      profile: "outline_discussion",
+      chapters: [1],
+    });
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.ok, true);
+    assert.deepEqual(parsed.resolved_scope.filters.chapters, [1]);
+    assert.ok(parsed.ordering.every(row => row.chapter === 1));
+  });
+
+  test("rejects chapter + chapters together in preview", async () => {
+    const text = await callTool("preview_review_bundle", {
+      project_id: "test-novel",
+      profile: "outline_discussion",
+      chapter: 1,
+      chapters: [1],
+    });
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.ok, false);
+    assert.equal(parsed.error.code, "INVALID_CHAPTER_FILTER");
+  });
 });
 
 describe("create_review_bundle tool", () => {
@@ -137,7 +163,6 @@ describe("create_review_bundle tool", () => {
         format: "markdown",
       });
       const parsed = JSON.parse(text);
-
       assert.equal(parsed.ok, true);
       assert.equal(typeof parsed.next_step, "string");
       assert.ok(parsed.next_step.includes("Share output_paths"));
@@ -192,7 +217,6 @@ describe("create_review_bundle tool", () => {
         format: "markdown",
       });
       const parsed = JSON.parse(text);
-
       assert.equal(parsed.ok, true);
       assert.ok(parsed.output_paths?.bundle_markdown);
       assert.ok(parsed.output_paths?.manifest_json);
@@ -264,6 +288,35 @@ describe("create_review_bundle tool", () => {
 
       const pdfBytes = fs.readFileSync(parsed.output_paths.bundle_pdf);
       assert.ok(pdfBytes.slice(0, 4).toString() === "%PDF");
+    } finally {
+      fs.rmSync(outDir, { recursive: true, force: true });
+    }
+  });
+
+  test("beta PDF manifest includes per-page fingerprint metadata", async () => {
+    const outDir = fs.mkdtempSync(path.join(writeSyncDir, "review-bundles-beta-pdf-"));
+    try {
+      const text = await callWriteTool("create_review_bundle", {
+        project_id: "test-novel",
+        profile: "beta_reader_personalized",
+        recipient_name: "Jordan Example",
+        output_dir: outDir,
+        format: "pdf",
+      });
+      const parsed = JSON.parse(text);
+
+      assert.ok(parsed.ok, JSON.stringify(parsed));
+      assert.ok(parsed.output_paths?.bundle_pdf);
+      assert.ok(parsed.output_paths?.manifest_json);
+
+      const manifest = JSON.parse(fs.readFileSync(parsed.output_paths.manifest_json, "utf8"));
+      assert.equal(manifest.fingerprint.mode, "visible_footer");
+      assert.equal(manifest.fingerprint.recipient_display_name, "Jordan Example");
+      assert.ok(Array.isArray(manifest.fingerprint.page_tokens));
+      assert.ok(manifest.fingerprint.page_tokens.length >= 1);
+
+      const uniqueTokenCount = new Set(manifest.fingerprint.page_tokens.map(entry => entry.token)).size;
+      assert.equal(uniqueTokenCount, manifest.fingerprint.page_tokens.length);
     } finally {
       fs.rmSync(outDir, { recursive: true, force: true });
     }

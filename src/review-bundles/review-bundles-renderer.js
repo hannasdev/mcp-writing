@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import crypto from "node:crypto";
 import matter from "gray-matter";
 import PDFDocument from "pdfkit";
 import { ReviewBundlePlanError, normalizeRecipientDisplayName } from "./review-bundles-planner.js";
@@ -296,6 +297,28 @@ function renderSceneBlock(scene, options) {
   return parts.join("\n\n");
 }
 
+function buildFingerprintSeed(plan, generatedAt, recipientDisplayName) {
+  const base = {
+    project_id: plan.resolved_scope?.project_id ?? "",
+    profile: plan.profile ?? "",
+    recipient_name: recipientDisplayName ?? "",
+    filters: plan.resolved_scope?.filters ?? {},
+    scene_ids: (plan.ordering ?? []).map(row => row.scene_id),
+    generated_at: generatedAt ?? "",
+  };
+  return JSON.stringify(base);
+}
+
+function buildPageFingerprintToken({ seed, pageNumber, recipientDisplayName }) {
+  const digest = crypto
+    .createHash("sha256")
+    .update(`${seed}|page:${pageNumber}|recipient:${recipientDisplayName}`)
+    .digest("hex")
+    .slice(0, 12)
+    .toUpperCase();
+  return `BR-${digest}-P${String(pageNumber).padStart(3, "0")}`;
+}
+
 export function renderReviewBundleMarkdown(dbHandle, plan, { generatedAt, syncDir: syncDirOpt } = {}) {
   const profile = plan.profile;
   const includeSceneIds = Boolean(plan.resolved_scope?.options?.include_scene_ids);
@@ -365,6 +388,11 @@ export function renderReviewBundleMarkdown(dbHandle, plan, { generatedAt, syncDi
 }
 
 export function renderReviewBundlePdf(dbHandle, plan, { generatedAt, syncDir: syncDirOpt } = {}) {
+  return renderReviewBundlePdfWithMetadata(dbHandle, plan, { generatedAt, syncDir: syncDirOpt })
+    .then(result => result.pdf_buffer);
+}
+
+export function renderReviewBundlePdfWithMetadata(dbHandle, plan, { generatedAt, syncDir: syncDirOpt } = {}) {
   const profile = plan.profile;
   const includeSceneIds = Boolean(plan.resolved_scope?.options?.include_scene_ids);
   const syncDir = syncDirOpt ?? process.env.WRITING_SYNC_DIR ?? null;
@@ -373,16 +401,57 @@ export function renderReviewBundlePdf(dbHandle, plan, { generatedAt, syncDir: sy
   const rows = loadBundleSceneRows(dbHandle, plan.resolved_scope.project_id, sceneIds);
   const recipientName = plan.resolved_scope?.options?.recipient_name;
   const recipientDisplayName = normalizeRecipientDisplayName(recipientName);
+  const betaAccountabilityEnabled = profile === "beta_reader_personalized"
+    && Boolean(plan.resolved_scope?.options?.beta_accountability);
+  const effectiveGeneratedAt = generatedAt ?? new Date().toISOString();
+  const fingerprintSeed = betaAccountabilityEnabled
+    ? buildFingerprintSeed(plan, effectiveGeneratedAt, recipientDisplayName)
+    : null;
+  const pageTokens = [];
+  let pageNumber = 0;
 
+  const pdfOptions = profile === "beta_reader_personalized"
+    ? {
+        size: [432, 648], // 6x9in in PDF points
+        margins: { top: 64, right: 58, bottom: 72, left: 58 },
+        autoFirstPage: false,
+      }
+    : {
+        size: "Letter",
+        margin: 50,
+        autoFirstPage: false,
+      };
   const doc = new PDFDocument({
-    size: "Letter",
-    margin: 50,
+    ...pdfOptions,
   });
+
+  const drawAccountabilityFooter = () => {
+    if (!betaAccountabilityEnabled || !fingerprintSeed) return;
+    pageNumber += 1;
+    const token = buildPageFingerprintToken({
+      seed: fingerprintSeed,
+      pageNumber,
+      recipientDisplayName,
+    });
+    pageTokens.push({ page: pageNumber, token });
+    const footerY = doc.page.height - doc.page.margins.bottom - 12;
+    const footerWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+    const footerText = `For: ${recipientDisplayName} | Fingerprint: ${token} | Page ${pageNumber}`;
+    doc.save();
+    doc.font("Helvetica").fontSize(8).fillColor("#555555");
+    doc.text(footerText, doc.page.margins.left, footerY, {
+      width: footerWidth,
+      align: "left",
+      lineBreak: false,
+    });
+    doc.restore();
+  };
+  doc.on("pageAdded", drawAccountabilityFooter);
 
   // Register listeners before any content is written so render-time errors
   // always reject the returned Promise.
-  const chunks = [];
   return new Promise((resolve, reject) => {
+    const chunks = [];
     let settled = false;
     const fail = (err) => {
       if (settled) return;
@@ -395,10 +464,20 @@ export function renderReviewBundlePdf(dbHandle, plan, { generatedAt, syncDir: sy
     doc.on("end", () => {
       if (settled) return;
       settled = true;
-      resolve(Buffer.concat(chunks));
+      resolve({
+        pdf_buffer: Buffer.concat(chunks),
+        fingerprint: betaAccountabilityEnabled
+          ? {
+              mode: "visible_footer",
+              recipient_display_name: recipientDisplayName,
+              page_tokens: pageTokens,
+            }
+          : null,
+      });
     });
 
     try {
+      doc.addPage();
       doc.fontSize(24).font("Helvetica-Bold").text(`Review Bundle: ${plan.resolved_scope.project_id}`, { align: "left" });
       doc.moveDown(0.5);
       doc.fontSize(11).font("Helvetica");
@@ -406,7 +485,7 @@ export function renderReviewBundlePdf(dbHandle, plan, { generatedAt, syncDir: sy
       if (profile === "beta_reader_personalized") {
         doc.text(`Recipient: ${recipientDisplayName}`, { align: "left" });
       }
-      doc.text(`Generated: ${generatedAt ?? new Date().toISOString()}`, { align: "left" });
+      doc.text(`Generated: ${effectiveGeneratedAt}`, { align: "left" });
       doc.text(`Scenes: ${plan.summary.scene_count}`, { align: "left" });
       doc.moveDown();
 
@@ -470,7 +549,7 @@ export function renderReviewBundlePdf(dbHandle, plan, { generatedAt, syncDir: sy
           doc.text(prose, {
             align: "left",
             width: textWidth,
-            lineGap: 3,
+            lineGap: profile === "beta_reader_personalized" ? 4.5 : 3,
           });
         }
 
@@ -495,4 +574,9 @@ export function renderReviewBundlePdf(dbHandle, plan, { generatedAt, syncDir: sy
   });
 }
 
-export { renderBetaNoticeMarkdown, renderBetaFeedbackFormMarkdown };
+export {
+  renderBetaNoticeMarkdown,
+  renderBetaFeedbackFormMarkdown,
+  buildPageFingerprintToken,
+  buildFingerprintSeed,
+};

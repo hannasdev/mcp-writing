@@ -124,12 +124,14 @@ export function buildReviewBundlePlan(dbHandle, {
   profile,
   part,
   chapter,
+  chapters,
   tag,
   scene_ids,
   strictness = "warn",
   include_scene_ids = true,
   include_metadata_sidebar = false,
   include_paragraph_anchors = false,
+  beta_accountability,
   bundle_name,
   recipient_name,
   format = "pdf",
@@ -152,6 +154,29 @@ export function buildReviewBundlePlan(dbHandle, {
   assertProfile(profile);
   assertStrictness(strictness);
   assertFormat(format);
+  if (chapter !== undefined && chapters !== undefined) {
+    throw new ReviewBundlePlanError(
+      "INVALID_CHAPTER_FILTER",
+      "Use either chapter or chapters, not both.",
+      { chapter, chapters }
+    );
+  }
+  if (chapters !== undefined) {
+    if (!Array.isArray(chapters) || chapters.length === 0) {
+      throw new ReviewBundlePlanError(
+        "INVALID_CHAPTER_FILTER",
+        "chapters must be a non-empty array of integers when provided.",
+        { chapters }
+      );
+    }
+    if (!chapters.every(value => Number.isInteger(value))) {
+      throw new ReviewBundlePlanError(
+        "INVALID_CHAPTER_FILTER",
+        "chapters must contain only integer chapter numbers.",
+        { chapters }
+      );
+    }
+  }
 
   const projectRow = dbHandle.prepare(`SELECT project_id FROM projects WHERE project_id = ?`).get(project_id);
   if (!projectRow) {
@@ -180,6 +205,11 @@ export function buildReviewBundlePlan(dbHandle, {
   if (chapter !== undefined) {
     conditions.push("s.chapter = ?");
     conditionParams.push(chapter);
+  }
+  if (Array.isArray(chapters) && chapters.length > 0) {
+    const placeholders = chapters.map(() => "?").join(",");
+    conditions.push(`s.chapter IN (${placeholders})`);
+    conditionParams.push(...chapters);
   }
 
   let query = `
@@ -213,6 +243,7 @@ export function buildReviewBundlePlan(dbHandle, {
         filters: {
           ...(part !== undefined ? { part } : {}),
           ...(chapter !== undefined ? { chapter } : {}),
+          ...(Array.isArray(chapters) ? { chapters } : {}),
           ...(tag ? { tag } : {}),
           ...(Array.isArray(scene_ids) ? { scene_ids } : {}),
         },
@@ -293,9 +324,13 @@ export function buildReviewBundlePlan(dbHandle, {
   const appliedFilters = {
     ...(part !== undefined ? { part } : {}),
     ...(chapter !== undefined ? { chapter } : {}),
+    ...(Array.isArray(chapters) ? { chapters } : {}),
     ...(tag ? { tag } : {}),
     ...(Array.isArray(scene_ids) ? { scene_ids } : {}),
   };
+  const resolvedBetaAccountability = profile === "beta_reader_personalized"
+    ? Boolean(beta_accountability ?? true)
+    : false;
 
   return {
     ok: true,
@@ -307,6 +342,7 @@ export function buildReviewBundlePlan(dbHandle, {
         include_scene_ids: Boolean(include_scene_ids),
         include_metadata_sidebar: Boolean(include_metadata_sidebar),
         include_paragraph_anchors: Boolean(include_paragraph_anchors),
+        beta_accountability: resolvedBetaAccountability,
         ...(resolvedRecipientName ? { recipient_name: resolvedRecipientName } : {}),
       },
     },

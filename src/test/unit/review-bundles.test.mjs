@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import os from "node:os";
 import fs from "node:fs";
 import path from "node:path";
-import { buildReviewBundlePlan, renderReviewBundleMarkdown, ReviewBundlePlanError } from "../../review-bundles/review-bundles.js";
+import { buildReviewBundlePlan, renderReviewBundleMarkdown, ReviewBundlePlanError, buildPageFingerprintToken, buildFingerprintSeed } from "../../review-bundles/review-bundles.js";
 import { insertTestScene, setupReviewBundleTestDb } from "../helpers/db.js";
 
 describe("buildReviewBundlePlan", () => {
@@ -77,6 +77,67 @@ describe("buildReviewBundlePlan", () => {
       assert.deepEqual(plan.ordering.map(row => row.scene_id), ["sc-001"]);
       assert.deepEqual(plan.summary.excluded_scene_ids, ["sc-003"]);
       assert.ok(plan.warning_summary.requested_scene_ids_filtered_out);
+    } finally {
+      db.close();
+    }
+  });
+
+  test("supports multi-chapter filtering via chapters array", () => {
+    const db = setupReviewBundleTestDb();
+    try {
+      insertTestScene(db, {
+        sceneId: "sc-101",
+        part: 1,
+        chapter: 1,
+        timelinePosition: 1,
+        wordCount: 220,
+      });
+      insertTestScene(db, {
+        sceneId: "sc-102",
+        part: 1,
+        chapter: 2,
+        timelinePosition: 1,
+        wordCount: 240,
+      });
+      insertTestScene(db, {
+        sceneId: "sc-103",
+        part: 1,
+        chapter: 3,
+        timelinePosition: 1,
+        wordCount: 260,
+      });
+
+      const plan = buildReviewBundlePlan(db, {
+        project_id: "test-novel",
+        profile: "outline_discussion",
+        chapters: [1, 3],
+      });
+
+      assert.deepEqual(plan.ordering.map(row => row.scene_id), ["sc-101", "sc-103"]);
+      assert.deepEqual(plan.resolved_scope.filters.chapters, [1, 3]);
+    } finally {
+      db.close();
+    }
+  });
+
+  test("rejects using chapter and chapters together", () => {
+    const db = setupReviewBundleTestDb();
+    try {
+      insertTestScene(db, {
+        sceneId: "sc-104",
+        part: 1,
+        chapter: 1,
+        timelinePosition: 1,
+      });
+      assert.throws(
+        () => buildReviewBundlePlan(db, {
+          project_id: "test-novel",
+          profile: "outline_discussion",
+          chapter: 1,
+          chapters: [1, 2],
+        }),
+        error => error instanceof ReviewBundlePlanError && error.code === "INVALID_CHAPTER_FILTER"
+      );
     } finally {
       db.close();
     }
@@ -192,6 +253,29 @@ describe("buildReviewBundlePlan", () => {
       });
 
       assert.equal(plan.resolved_scope.options.recipient_name, "Jordan Example");
+    } finally {
+      db.close();
+    }
+  });
+
+  test("beta profile enables accountability option by default", () => {
+    const db = setupReviewBundleTestDb();
+    try {
+      insertTestScene(db, {
+        sceneId: "sc-012",
+        part: 1,
+        chapter: 1,
+        timelinePosition: 1,
+        wordCount: 250,
+      });
+
+      const plan = buildReviewBundlePlan(db, {
+        project_id: "test-novel",
+        profile: "beta_reader_personalized",
+        recipient_name: "Jordan Example",
+      });
+
+      assert.equal(plan.resolved_scope.options.beta_accountability, true);
     } finally {
       db.close();
     }
@@ -358,6 +442,26 @@ describe("buildReviewBundlePlan", () => {
       fs.rmSync(tempDir, { recursive: true, force: true });
       db.close();
     }
+  });
+});
+
+describe("review-bundle fingerprint helpers", () => {
+  test("buildPageFingerprintToken is deterministic per page and unique across pages", () => {
+    const seed = buildFingerprintSeed(
+      {
+        profile: "beta_reader_personalized",
+        resolved_scope: { project_id: "test-novel", filters: {} },
+        ordering: [{ scene_id: "sc-001" }],
+      },
+      "2026-01-01T00:00:00.000Z",
+      "Jordan Example"
+    );
+    const token1a = buildPageFingerprintToken({ seed, pageNumber: 1, recipientDisplayName: "Jordan Example" });
+    const token1b = buildPageFingerprintToken({ seed, pageNumber: 1, recipientDisplayName: "Jordan Example" });
+    const token2 = buildPageFingerprintToken({ seed, pageNumber: 2, recipientDisplayName: "Jordan Example" });
+
+    assert.equal(token1a, token1b);
+    assert.notEqual(token1a, token2);
   });
 });
 
