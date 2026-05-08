@@ -148,6 +148,20 @@ describe("preview_review_bundle tool", () => {
     assert.equal(parsed.ok, false);
     assert.equal(parsed.error.code, "INVALID_CHAPTER_FILTER");
   });
+
+  test("rejects empty chapters array in preview schema", async () => {
+    try {
+      const text = await callTool("preview_review_bundle", {
+        project_id: "test-novel",
+        profile: "outline_discussion",
+        chapters: [],
+      });
+      const parsed = JSON.parse(text);
+      assert.equal(parsed.ok, false);
+    } catch (error) {
+      assert.match(String(error?.message ?? error), /MCP error/);
+    }
+  });
 });
 
 describe("create_review_bundle tool", () => {

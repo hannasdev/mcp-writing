@@ -309,10 +309,14 @@ function buildFingerprintSeed(plan, generatedAt, recipientDisplayName) {
   return JSON.stringify(base);
 }
 
-function buildPageFingerprintToken({ seed, pageNumber, recipientDisplayName }) {
+function buildFingerprintSeedHash(seed) {
+  return crypto.createHash("sha256").update(String(seed)).digest("hex");
+}
+
+function buildPageFingerprintToken({ seedHash, pageNumber }) {
   const digest = crypto
     .createHash("sha256")
-    .update(`${seed}|page:${pageNumber}|recipient:${recipientDisplayName}`)
+    .update(`${seedHash}|page:${pageNumber}`)
     .digest("hex")
     .slice(0, 12)
     .toUpperCase();
@@ -407,6 +411,7 @@ export function renderReviewBundlePdfWithMetadata(dbHandle, plan, { generatedAt,
   const fingerprintSeed = betaAccountabilityEnabled
     ? buildFingerprintSeed(plan, effectiveGeneratedAt, recipientDisplayName)
     : null;
+  const fingerprintSeedHash = fingerprintSeed ? buildFingerprintSeedHash(fingerprintSeed) : null;
   const pageTokens = [];
   let pageNumber = 0;
 
@@ -426,12 +431,11 @@ export function renderReviewBundlePdfWithMetadata(dbHandle, plan, { generatedAt,
   });
 
   const drawAccountabilityFooter = () => {
-    if (!betaAccountabilityEnabled || !fingerprintSeed) return;
+    if (!betaAccountabilityEnabled || !fingerprintSeedHash) return;
     pageNumber += 1;
     const token = buildPageFingerprintToken({
-      seed: fingerprintSeed,
+      seedHash: fingerprintSeedHash,
       pageNumber,
-      recipientDisplayName,
     });
     pageTokens.push({ page: pageNumber, token });
     const footerY = doc.page.height - doc.page.margins.bottom - 12;
@@ -579,4 +583,5 @@ export {
   renderBetaFeedbackFormMarkdown,
   buildPageFingerprintToken,
   buildFingerprintSeed,
+  buildFingerprintSeedHash,
 };
