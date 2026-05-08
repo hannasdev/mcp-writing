@@ -8,6 +8,14 @@ This complements `CHANGELOG.md`:
 
 ## Unreleased
 
+### 2026-05-08 — Add standardized post-merge cleanup skill and helper
+
+- What changed: Added `skills/post-merge-cleanup/SKILL.md` and `skills/post-merge-cleanup/scripts/post-merge-cleanup.mjs` to run a consistent post-merge workflow (verify merged PR state, sync `main` from `origin/main`, clean local/optional remote branch, and report unresolved review threads).
+- Why it matters: Reduces repeated manual cleanup steps and avoids branch/state drift after merges.
+- Who is affected: Maintainers and contributors who merge PRs and handle post-merge repository hygiene.
+- Action needed: Optional. Use `node skills/post-merge-cleanup/scripts/post-merge-cleanup.mjs --pr <number> --branch <name>` after merges.
+- PR: [#186](https://github.com/hannasdev/mcp-writing/pull/186)
+
 ### 2026-05-08 — Add accountable beta bundle fingerprinting with chapter-set support
 
 - What changed: `beta_reader_personalized` review bundles now support chapter-set selection (`chapters`) and include per-page accountability footers in PDF output with recipient name, page number, and a unique page fingerprint token; manifests now include fingerprint metadata.

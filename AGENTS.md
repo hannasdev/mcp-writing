@@ -95,6 +95,7 @@ Use these specialized skills:
 - `skills/release-log/SKILL.md` (used during Pull Request step for human-readable value notes)
 - `skills/code-review/SKILL.md` (used during Review handling step)
 - `skills/review-comment-resolution/SKILL.md` (used when processing review comments end-to-end)
+- `skills/post-merge-cleanup/SKILL.md` (used after merge to run consistent branch/worktree cleanup)
 
 These define execution details. This file defines workflow and constraints.
 
