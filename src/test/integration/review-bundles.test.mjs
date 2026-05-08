@@ -158,6 +158,23 @@ describe("preview_review_bundle tool", () => {
     assert.ok(parsed.planned_outputs.some(name => name.endsWith(".manifest.json")));
   });
 
+  test("beta preview resolves metadata toggles as disabled", async () => {
+    const text = await callTool("preview_review_bundle", {
+      project_id: "test-novel",
+      profile: "beta_reader_personalized",
+      recipient_name: "Jordan Example",
+      include_scene_ids: true,
+      include_metadata_sidebar: true,
+      include_paragraph_anchors: true,
+    });
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.resolved_scope.options.include_scene_ids, false);
+    assert.equal(parsed.resolved_scope.options.include_metadata_sidebar, false);
+    assert.equal(parsed.resolved_scope.options.include_paragraph_anchors, false);
+  });
+
   test("supports chapters array filter in preview", async () => {
     const text = await callTool("preview_review_bundle", {
       project_id: "test-novel",
