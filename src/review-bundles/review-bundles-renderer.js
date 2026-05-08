@@ -722,13 +722,14 @@ export function renderReviewBundlePdfWithMetadata(dbHandle, plan, { generatedAt,
               }
             );
           }
-          prose = normalizeHardWrappedProse(resolved);
           let sceneDateline = null;
           if (isBetaProfile) {
             prose = normalizeBetaProseFlow(resolved);
             const extracted = extractSceneDateline(prose);
-            sceneDateline = extracted.dateline;
+            sceneDateline = extracted.dateline ? normalizeBetaTypography(extracted.dateline) : null;
             prose = normalizeBetaTypography(extracted.body);
+          } else {
+            prose = normalizeHardWrappedProse(resolved);
           }
 
           if (sceneDateline) {
