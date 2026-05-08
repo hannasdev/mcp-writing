@@ -297,16 +297,39 @@ function renderSceneBlock(scene, options) {
   return parts.join("\n\n");
 }
 
+function normalizeFingerprintFilters(filters) {
+  const normalized = { ...(filters ?? {}) };
+  if (Array.isArray(normalized.scene_ids)) {
+    normalized.scene_ids = [...new Set(normalized.scene_ids.map(sceneId => String(sceneId)))].sort();
+  }
+  return normalized;
+}
+
+function stableSerializeForFingerprint(value) {
+  if (Array.isArray(value)) {
+    return value.map(item => stableSerializeForFingerprint(item));
+  }
+  if (value && typeof value === "object") {
+    return Object.keys(value)
+      .sort()
+      .reduce((result, key) => {
+        result[key] = stableSerializeForFingerprint(value[key]);
+        return result;
+      }, {});
+  }
+  return value;
+}
+
 function buildFingerprintSeed(plan, generatedAt, recipientDisplayName) {
   const base = {
     project_id: plan.resolved_scope?.project_id ?? "",
     profile: plan.profile ?? "",
     recipient_name: recipientDisplayName ?? "",
-    filters: plan.resolved_scope?.filters ?? {},
+    filters: normalizeFingerprintFilters(plan.resolved_scope?.filters),
     scene_ids: (plan.ordering ?? []).map(row => row.scene_id),
     generated_at: generatedAt ?? "",
   };
-  return JSON.stringify(base);
+  return JSON.stringify(stableSerializeForFingerprint(base));
 }
 
 function buildFingerprintSeedHash(seed) {
