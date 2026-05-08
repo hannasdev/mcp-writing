@@ -233,6 +233,122 @@ function readProse(filePath, { syncDir } = {}) {
   }
 }
 
+function normalizeHardWrappedProse(rawProse) {
+  const prose = String(rawProse ?? "").replace(/\r\n?/g, "\n").trim();
+  if (!prose) return "";
+  const paragraphs = prose
+    .split(/\n\s*\n/g)
+    .map(paragraph => paragraph.replace(/\s*\n\s*/g, " ").trim())
+    .filter(Boolean);
+  return paragraphs.join("\n\n");
+}
+
+function extractSceneDateline(prose) {
+  const normalized = String(prose ?? "").replace(/\r\n?/g, "\n").trim();
+  if (!normalized) {
+    return { dateline: null, body: "" };
+  }
+
+  const lines = normalized
+    .split("\n")
+    .map(line => line.trim())
+    .filter(Boolean);
+  if (lines.length === 0) {
+    return { dateline: null, body: "" };
+  }
+
+  const firstParagraph = lines[0];
+  const dashMatch = firstParagraph.match(/^(.+?)\s*[–-]\s*(.+)$/);
+  const left = dashMatch?.[1]?.trim() ?? "";
+  const right = dashMatch?.[2]?.trim() ?? "";
+  const totalWords = firstParagraph.split(/\s+/).filter(Boolean).length;
+  const looksLikeDateline = (
+    firstParagraph.length >= 6
+    && firstParagraph.length <= 90
+    && Boolean(dashMatch)
+    && left.length >= 2
+    && right.length >= 2
+    && totalWords <= 14
+    && !/[!?]/.test(firstParagraph)
+    && !/[“”"']/.test(firstParagraph)
+  );
+
+  if (!looksLikeDateline) {
+    return { dateline: null, body: normalized };
+  }
+
+  return {
+    dateline: firstParagraph,
+    body: lines.slice(1).join("\n"),
+  };
+}
+
+function normalizeBetaProseFlow(prose) {
+  const normalized = String(prose ?? "").replace(/\r\n?/g, "\n").trim();
+  if (!normalized) return "";
+  const paragraphs = normalized
+    .split(/\n\s*\n/g)
+    .map(paragraph => paragraph
+      .split("\n")
+      .map(line => line.trim())
+      .filter(Boolean)
+      .join("\n"))
+    .filter(Boolean);
+  // For beta exports, convert paragraph blocks into regular line breaks so the
+  // reading flow stays continuous without large section gaps.
+  return paragraphs.join("\n");
+}
+
+function normalizeBetaTypography(prose) {
+  return String(prose ?? "")
+    .replace(/(^|\s)--(\s|$)/g, "$1—$2");
+}
+
+function renderProseWithInlineEmphasis(doc, prose, {
+  bodyFont,
+  italicFont,
+  fontSize,
+  width,
+  align = "left",
+  lineGap = 0,
+  paragraphGap = 0,
+  blankLineMoveDown = 0.15,
+}) {
+  const lines = String(prose ?? "").split("\n");
+  for (const line of lines) {
+    if (line.length === 0) {
+      doc.moveDown(blankLineMoveDown);
+      continue;
+    }
+
+    if (line.trim() === "***") {
+      doc.moveDown(0.5);
+      doc.fontSize(fontSize).font(bodyFont);
+      doc.text("***", { align: "center", width, lineGap, paragraphGap: 0 });
+      doc.moveDown(0.5);
+      continue;
+    }
+
+    const segments = line.split(/(\*[^*\n]+\*)/g).filter(Boolean);
+
+    for (let index = 0; index < segments.length; index += 1) {
+      const segment = segments[index];
+      const isItalic = /^\*[^*\n]+\*$/.test(segment);
+      const text = isItalic ? segment.slice(1, -1) : segment;
+      if (!text) continue;
+      doc.fontSize(fontSize).font(isItalic ? italicFont : bodyFont);
+      doc.text(text, {
+        align,
+        width,
+        lineGap,
+        paragraphGap,
+        continued: index < segments.length - 1,
+      });
+    }
+  }
+  doc.font(bodyFont).fontSize(fontSize);
+}
+
 function renderSceneBlock(scene, options) {
   const {
     profile,
@@ -278,11 +394,11 @@ function renderSceneBlock(scene, options) {
 
   const prose = scene.prose ?? "";
   if (!includeParagraphAnchors || prose.length === 0) {
-    parts.push(prose);
+    parts.push(normalizeHardWrappedProse(prose));
     return parts.join("\n\n");
   }
 
-  const paragraphs = prose
+  const paragraphs = normalizeHardWrappedProse(prose)
     .split(/\n\s*\n/g)
     .map(p => p.trim())
     .filter(Boolean);
@@ -433,12 +549,13 @@ export function renderReviewBundlePdfWithMetadata(dbHandle, plan, { generatedAt,
   const syncDir = syncDirOpt ?? process.env.WRITING_SYNC_DIR ?? null;
   const isBetaProfile = profile === "beta_reader_personalized";
   const proseFontSize = isBetaProfile ? 8 : 10;
-  const proseLineGap = isBetaProfile ? 3.2 : 3;
+  const proseLineGap = isBetaProfile ? 1.6 : 3;
   const bodyFont = profile === "beta_reader_personalized" ? "Times-Roman" : "Helvetica";
   const coverHeadingFont = profile === "beta_reader_personalized" ? "Times-Bold" : "Helvetica-Bold";
   // Beta scene headings intentionally use body font (non-bold) per product direction.
   const sceneHeadingFont = isBetaProfile ? bodyFont : coverHeadingFont;
-  const metaFont = profile === "beta_reader_personalized" ? "Times-Italic" : "Helvetica-Oblique";
+  const italicFont = profile === "beta_reader_personalized" ? "Times-Italic" : "Helvetica-Oblique";
+  const metaFont = italicFont;
 
   const sceneIds = plan.ordering.map(row => row.scene_id);
   const rows = loadBundleSceneRows(dbHandle, plan.resolved_scope.project_id, sceneIds);
@@ -494,7 +611,7 @@ export function renderReviewBundlePdfWithMetadata(dbHandle, plan, { generatedAt,
     doc.restore();
     // Restore prose style so auto-flowed text keeps consistent typography
     // on pages added during long text rendering.
-    doc.font(bodyFont).fontSize(proseFontSize);
+    doc.font(bodyFont).fontSize(proseFontSize).fillColor("#000000");
     doc.x = previousX;
     doc.y = previousY;
   };
@@ -530,8 +647,9 @@ export function renderReviewBundlePdfWithMetadata(dbHandle, plan, { generatedAt,
 
     try {
       doc.addPage();
-      doc.fontSize(24).font(coverHeadingFont).text(`Review Bundle: ${plan.resolved_scope.project_id}`, { align: "left" });
-      doc.moveDown(0.5);
+      const coverLabel = `Review Bundle: ${plan.resolved_scope.project_id}`;
+      doc.fontSize(isBetaProfile ? 11 : 24).font(coverHeadingFont).text(coverLabel, { align: "left" });
+      doc.moveDown(isBetaProfile ? 0.2 : 0.5);
       doc.fontSize(11).font(bodyFont);
       if (profile !== "beta_reader_personalized") {
         doc.text(`Profile: ${profile}`, { align: "left" });
@@ -604,14 +722,34 @@ export function renderReviewBundlePdfWithMetadata(dbHandle, plan, { generatedAt,
               }
             );
           }
-          prose = resolved;
+          prose = normalizeHardWrappedProse(resolved);
+          let sceneDateline = null;
+          if (isBetaProfile) {
+            prose = normalizeBetaProseFlow(resolved);
+            const extracted = extractSceneDateline(prose);
+            sceneDateline = extracted.dateline;
+            prose = normalizeBetaTypography(extracted.body);
+          }
+
+          if (sceneDateline) {
+            doc.fontSize(10).font(metaFont);
+            doc.text(sceneDateline, {
+              align: "center",
+              width: doc.page.width - doc.page.margins.left - doc.page.margins.right,
+            });
+            doc.moveDown(1.0);
+          }
 
           const textWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
-          doc.fontSize(proseFontSize).font(bodyFont);
-          doc.text(prose, {
+          renderProseWithInlineEmphasis(doc, prose, {
+            bodyFont,
+            italicFont,
+            fontSize: proseFontSize,
             align: "left",
             width: textWidth,
             lineGap: proseLineGap,
+            paragraphGap: 0,
+            blankLineMoveDown: isBetaProfile ? 0.15 : 0.65,
           });
         }
 
@@ -642,4 +780,5 @@ export {
   buildPageFingerprintToken,
   buildFingerprintSeed,
   buildFingerprintSeedHash,
+  extractSceneDateline,
 };

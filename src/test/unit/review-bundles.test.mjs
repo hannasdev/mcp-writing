@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import os from "node:os";
 import fs from "node:fs";
 import path from "node:path";
-import { buildReviewBundlePlan, renderReviewBundleMarkdown, ReviewBundlePlanError, buildPageFingerprintToken, buildFingerprintSeed, buildFingerprintSeedHash } from "../../review-bundles/review-bundles.js";
+import { buildReviewBundlePlan, renderReviewBundleMarkdown, ReviewBundlePlanError, buildPageFingerprintToken, buildFingerprintSeed, buildFingerprintSeedHash, extractSceneDateline } from "../../review-bundles/review-bundles.js";
 import { insertTestScene, setupReviewBundleTestDb } from "../helpers/db.js";
 
 describe("buildReviewBundlePlan", () => {
@@ -421,9 +421,68 @@ describe("buildReviewBundlePlan", () => {
         project_id: "test-novel",
         profile: "outline_discussion",
       });
-      const markdown = renderReviewBundleMarkdown(db, plan, { generatedAt: "2026-01-01T00:00:00.000Z" });
+      const markdown = renderReviewBundleMarkdown(db, plan, {
+        generatedAt: "2026-01-01T00:00:00.000Z",
+        syncDir: fs.realpathSync.native(tempDir),
+      });
 
       assert.ok(markdown.includes("A \\*bold\\* \\[link\\] \\`code\\` logline"));
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+      db.close();
+    }
+  });
+
+  test("renderReviewBundleMarkdown normalizes hard-wrapped prose lines into paragraph flow", () => {
+    const db = setupReviewBundleTestDb();
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "bundle-hard-wrap-"));
+    const scenePath = path.join(tempDir, "sc-001.md");
+    fs.writeFileSync(
+      scenePath,
+      [
+        "Sebastian walks into the kitchen in the early morning, humming a tune, with Mneme flying in",
+        "behind him and landing on the kitchen counter.",
+        "",
+        "Edda glances up as he approaches, sipping her morning coffee and scrolling through the news on",
+        "her tablet.",
+      ].join("\n"),
+      "utf8"
+    );
+
+    try {
+      const now = new Date().toISOString();
+      db.prepare(`
+        INSERT INTO scenes (
+          scene_id, project_id, title, part, chapter, timeline_position, word_count,
+          file_path, prose_checksum, metadata_stale, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        "sc-001",
+        "test-novel",
+        "Hard Wrap Test",
+        1,
+        1,
+        1,
+        10,
+        scenePath,
+        "deadbeef",
+        0,
+        now
+      );
+
+      const plan = buildReviewBundlePlan(db, {
+        project_id: "test-novel",
+        profile: "editor_detailed",
+      });
+      const markdown = renderReviewBundleMarkdown(db, plan, {
+        generatedAt: "2026-01-01T00:00:00.000Z",
+        syncDir: fs.realpathSync.native(tempDir),
+      });
+
+      assert.ok(markdown.includes("with Mneme flying in behind him and landing on the kitchen counter."));
+      assert.ok(markdown.includes("through the news on her tablet."));
+      assert.ok(!markdown.includes("with Mneme flying in\nbehind him"));
+      assert.ok(!markdown.includes("news on\nher tablet"));
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true });
       db.close();
@@ -571,6 +630,28 @@ describe("review-bundle fingerprint helpers", () => {
 
     assert.equal(token1a, token1b);
     assert.notEqual(token1a, token2);
+  });
+});
+
+describe("review-bundle dateline helpers", () => {
+  test("extractSceneDateline recognizes place-time lines with punctuation", () => {
+    const prose = [
+      "St. Louis – 6:30 a.m.",
+      "The envelope had been slipped under the door.",
+    ].join("\n");
+    const extracted = extractSceneDateline(prose);
+    assert.equal(extracted.dateline, "St. Louis – 6:30 a.m.");
+    assert.equal(extracted.body, "The envelope had been slipped under the door.");
+  });
+
+  test("extractSceneDateline ignores normal sentence openings", () => {
+    const prose = [
+      "The envelope had been slipped under the door.",
+      "She kept staring at it.",
+    ].join("\n");
+    const extracted = extractSceneDateline(prose);
+    assert.equal(extracted.dateline, null);
+    assert.equal(extracted.body, prose);
   });
 });
 
