@@ -18,8 +18,8 @@ npm start
 ## Common Workflows
 
 Use this decision order to choose tools quickly:
-1. Start with metadata-only tools (`find_scenes`, `search_metadata`, `get_arc`) to narrow scope.
-2. Load prose tools (`get_scene_prose`, `get_chapter_prose`) only for scenes you must inspect closely.
+1. Start with metadata-only tools (`find_scenes()`, `search_metadata()`, `get_arc()`) to narrow scope.
+2. Load prose tools (`get_scene_prose()`, `get_chapter_prose()`) only for scenes you must inspect closely.
 3. Apply edit or metadata update tools only after scope and target are confirmed.
 
 ## Key Concepts
