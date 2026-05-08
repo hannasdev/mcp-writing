@@ -374,6 +374,18 @@ function renderProseWithInlineEmphasis(doc, prose, {
   doc.font(bodyFont).fontSize(fontSize);
 }
 
+function isEpigraphScene(scene) {
+  const tags = Array.isArray(scene?.tags)
+    ? scene.tags
+      .map(tag => String(tag ?? "").trim().toLowerCase())
+      .filter(Boolean)
+    : [];
+  if (tags.includes("epigraph")) return true;
+
+  const title = String(scene?.title ?? "").trim();
+  return /^epigraph(?:\b|\s|[-:])/i.test(title);
+}
+
 function renderSceneBlock(scene, options) {
   const {
     profile,
@@ -384,7 +396,7 @@ function renderSceneBlock(scene, options) {
   } = options;
 
   const isBetaProfile = profile === "beta_reader_personalized";
-  const isEpigraph = isBetaProfile && scene.tags?.includes("epigraph");
+  const isEpigraph = isBetaProfile && isEpigraphScene(scene);
 
   const parts = [];
 
@@ -733,7 +745,7 @@ export function renderReviewBundlePdfWithMetadata(dbHandle, plan, { generatedAt,
         }
 
         // Skip title rendering for epigraphs in beta profile
-        const isEpigraph = isBetaProfile && scene.tags?.includes("epigraph");
+        const isEpigraph = isBetaProfile && isEpigraphScene(scene);
         if (!isEpigraph) {
           doc.fontSize(isBetaProfile ? 13 : 14).font(sceneHeadingFont);
           let heading = scene.title || scene.scene_id;

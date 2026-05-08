@@ -8,6 +8,14 @@ This complements `CHANGELOG.md`:
 
 ## Unreleased
 
+### 2026-05-08 — Suppress epigraph document titles in beta exports
+
+- What changed: Beta review-bundle rendering now suppresses epigraph scene headings more robustly, including cases where epigraph metadata tags are missing/case-variant and the scene title starts with "Epigraph ...".
+- Why it matters: Prevents duplicate or unwanted heading output (for example, "Epigraph Chapter 15") while keeping chapter headings and epigraph prose intact.
+- Who is affected: Authors generating `beta_reader_personalized` review-bundle exports.
+- Action needed: None.
+- PR: TBD
+
 ### 2026-05-08 — Add standardized post-merge cleanup skill and helper
 
 - What changed: Added `skills/post-merge-cleanup/SKILL.md` and `skills/post-merge-cleanup/scripts/post-merge-cleanup.mjs` to run a consistent post-merge workflow (verify merged PR state, sync `main` from `origin/main`, clean local/optional remote branch, and report unresolved review threads).
