@@ -335,12 +335,15 @@ export function buildReviewBundlePlan(dbHandle, {
     : undefined;
 
   const safeBundleName = slugifyBundleName(bundle_name || `${project_id}-${profile}`);
+  const normalizedSceneIds = Array.isArray(scene_ids)
+    ? Array.from(new Set(scene_ids.map(sceneId => String(sceneId)))).sort()
+    : undefined;
   const appliedFilters = {
     ...(part !== undefined ? { part } : {}),
     ...(chapter !== undefined ? { chapter } : {}),
     ...(Array.isArray(normalizedChapters) ? { chapters: normalizedChapters } : {}),
     ...(tag ? { tag } : {}),
-    ...(Array.isArray(scene_ids) ? { scene_ids } : {}),
+    ...(Array.isArray(normalizedSceneIds) ? { scene_ids: normalizedSceneIds } : {}),
   };
   const resolvedBetaAccountability = profile === "beta_reader_personalized"
     ? Boolean(beta_accountability ?? true)

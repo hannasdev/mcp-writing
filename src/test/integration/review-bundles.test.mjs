@@ -277,9 +277,12 @@ describe("create_review_bundle tool", () => {
       assert.ok(fs.existsSync(parsed.output_paths.feedback_form_md));
 
       const markdown = fs.readFileSync(parsed.output_paths.bundle_markdown, "utf8");
-      assert.ok(markdown.includes("- Profile: beta_reader_personalized"));
+      assert.ok(!markdown.includes("- Profile: beta_reader_personalized"));
       assert.ok(markdown.includes("- Recipient: Jordan Example"));
       assert.ok(markdown.includes("She was at the bottom of the gangway"));
+      assert.ok(!markdown.includes("[sc-001]"));
+      assert.ok(!markdown.includes("POV:"));
+      assert.ok(!markdown.includes("Beat:"));
 
       const manifest = JSON.parse(fs.readFileSync(parsed.output_paths.manifest_json, "utf8"));
 
@@ -370,7 +373,36 @@ describe("create_review_bundle tool", () => {
       const pdfBytes = fs.readFileSync(parsed.output_paths.bundle_pdf);
       const inflatedStreamsText = extractPdfFlateText(pdfBytes);
       const decodedPdfText = decodePdfHexText(inflatedStreamsText);
-      assert.match(decodedPdfText, /For: Jordan Example \| Fingerprint: BR-[A-Z0-9-]+-P\d{3} \| Page \d+/);
+      assert.match(decodedPdfText, /For: Jordan Example \| Fingerprint: BR-[A-Z0-9-]+-P\d{3}/);
+    } finally {
+      fs.rmSync(outDir, { recursive: true, force: true });
+    }
+  });
+
+  test("beta PDF omits fingerprint metadata when accountability is disabled", async () => {
+    const outDir = fs.mkdtempSync(path.join(writeSyncDir, "review-bundles-beta-pdf-no-fingerprint-"));
+    try {
+      const text = await callWriteTool("create_review_bundle", {
+        project_id: "test-novel",
+        profile: "beta_reader_personalized",
+        recipient_name: "Jordan Example",
+        beta_accountability: false,
+        output_dir: outDir,
+        format: "pdf",
+      });
+      const parsed = JSON.parse(text);
+
+      assert.ok(parsed.ok, JSON.stringify(parsed));
+      assert.ok(parsed.output_paths?.bundle_pdf);
+      assert.ok(parsed.output_paths?.manifest_json);
+
+      const manifest = JSON.parse(fs.readFileSync(parsed.output_paths.manifest_json, "utf8"));
+      assert.equal(Object.hasOwn(manifest, "fingerprint"), false);
+
+      const pdfBytes = fs.readFileSync(parsed.output_paths.bundle_pdf);
+      const inflatedStreamsText = extractPdfFlateText(pdfBytes);
+      const decodedPdfText = decodePdfHexText(inflatedStreamsText);
+      assert.doesNotMatch(decodedPdfText, /Fingerprint:\s*BR-[A-Z0-9-]+-P\d{3}/);
     } finally {
       fs.rmSync(outDir, { recursive: true, force: true });
     }
