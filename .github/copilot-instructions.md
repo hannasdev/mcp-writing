@@ -15,7 +15,7 @@ The server must be running before use. Start it with:
 npm start
 ```
 
-## Common Workflows
+## Tool Selection Order
 
 Use this decision order to choose tools quickly:
 1. Start with metadata-only tools (`find_scenes()`, `search_metadata()`, `get_arc()`) to narrow scope.
