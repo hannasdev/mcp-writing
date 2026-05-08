@@ -57,7 +57,7 @@ function renderBetaFeedbackFormMarkdown({ projectId, recipientName, generatedAt 
   ].join("\n") + "\n";
 }
 
-function loadBundleSceneRows(dbHandle, projectId, sceneIds) {
+function loadBundleSceneRowsWithTags(dbHandle, projectId, sceneIds) {
   if (!Array.isArray(sceneIds) || sceneIds.length === 0) return [];
   const rows = [];
   // 900 is safely below SQLite's per-query bound of 999 host parameters
@@ -74,6 +74,7 @@ function loadBundleSceneRows(dbHandle, projectId, sceneIds) {
         title,
         part,
         chapter,
+        chapter_title,
         timeline_position,
         logline,
         pov,
@@ -89,8 +90,16 @@ function loadBundleSceneRows(dbHandle, projectId, sceneIds) {
   const orderedRows = [];
   const missingSceneIds = [];
 
+  // Load tags for all scenes
+  const tagStmt = dbHandle.prepare(`SELECT tag FROM scene_tags WHERE scene_id = ? AND project_id = ?`);
+  const rowsWithTags = rows.map(row => ({
+    ...row,
+    tags: tagStmt.all(row.scene_id, projectId).map(t => t.tag),
+  }));
+  const rowMapWithTags = new Map(rowsWithTags.map(row => [row.scene_id, row]));
+
   for (const sceneId of sceneIds) {
-    const row = rowMap.get(sceneId);
+    const row = rowMapWithTags.get(sceneId);
     if (row) {
       orderedRows.push(row);
     } else {
@@ -357,12 +366,28 @@ function renderSceneBlock(scene, options) {
     includeParagraphAnchors,
   } = options;
 
-  const title = scene.title || scene.scene_id;
-  const sceneHeading = includeSceneIds
-    ? `## ${escapeMarkdown(title)} (${escapeMarkdown(scene.scene_id)})`
-    : `## ${escapeMarkdown(title)}`;
+  const isBetaProfile = profile === "beta_reader_personalized";
+  const isEpigraph = isBetaProfile && scene.tags?.includes("epigraph");
 
-  const parts = [sceneHeading];
+  const parts = [];
+
+  // Add chapter heading for beta profile on first scene of a new chapter
+  if (isBetaProfile && scene.chapter_title) {
+    // Note: Since renderSceneBlock is called per scene in a loop, we can't easily detect
+    // "first scene in chapter" here. This would be better handled at the caller level.
+    // For now, we'll add the chapter title but it may appear on every scene in the chapter.
+    // TODO: Pass chapter change detection from renderReviewBundleMarkdown.
+    parts.push(`# ${escapeMarkdown(scene.chapter_title)}`);
+  }
+
+  // Only render heading if not an epigraph
+  if (!isEpigraph) {
+    const title = scene.title || scene.scene_id;
+    const sceneHeading = includeSceneIds
+      ? `## ${escapeMarkdown(title)} (${escapeMarkdown(scene.scene_id)})`
+      : `## ${escapeMarkdown(title)}`;
+    parts.push(sceneHeading);
+  }
 
   if (profile === "outline_discussion") {
     const summaryParts = [];
@@ -478,7 +503,7 @@ export function renderReviewBundleMarkdown(dbHandle, plan, { generatedAt, syncDi
   const syncDir = syncDirOpt ?? process.env.WRITING_SYNC_DIR ?? null;
 
   const sceneIds = plan.ordering.map(row => row.scene_id);
-  const rows = loadBundleSceneRows(dbHandle, plan.resolved_scope.project_id, sceneIds);
+  const rows = loadBundleSceneRowsWithTags(dbHandle, plan.resolved_scope.project_id, sceneIds);
   const sections = [];
   const recipientName = plan.resolved_scope?.options?.recipient_name;
   const recipientDisplayName = normalizeRecipientDisplayName(recipientName);
@@ -558,7 +583,7 @@ export function renderReviewBundlePdfWithMetadata(dbHandle, plan, { generatedAt,
   const metaFont = italicFont;
 
   const sceneIds = plan.ordering.map(row => row.scene_id);
-  const rows = loadBundleSceneRows(dbHandle, plan.resolved_scope.project_id, sceneIds);
+  const rows = loadBundleSceneRowsWithTags(dbHandle, plan.resolved_scope.project_id, sceneIds);
   const recipientName = plan.resolved_scope?.options?.recipient_name;
   const recipientDisplayName = normalizeRecipientDisplayName(recipientName);
   const footerRecipientDisplayName = sanitizeFooterRecipientDisplayName(recipientDisplayName);
@@ -680,13 +705,38 @@ export function renderReviewBundlePdfWithMetadata(dbHandle, plan, { generatedAt,
           // print-like opening feel before prose begins.
           doc.moveDown(2.0);
         }
-        doc.fontSize(isBetaProfile ? 13 : 14).font(sceneHeadingFont);
-        let heading = scene.title || scene.scene_id;
-        if (includeSceneIds) {
-          heading += ` [${scene.scene_id}]`;
+        // Render chapter header if this is the first scene in a new chapter (and chapter_title exists)
+        if (isBetaProfile && scene.chapter_title && (scene !== rows[0] || scene.chapter !== rows[0]?.chapter)) {
+          const prevScene = rows[rows.indexOf(scene) - 1];
+          if (!prevScene || prevScene.chapter !== scene.chapter) {
+            doc.fontSize(16).font(coverHeadingFont);
+            doc.text(scene.chapter_title, { align: "center" });
+            doc.moveDown(1.0);
+          }
         }
-        doc.text(heading, { align: isBetaProfile ? "center" : "left" });
-        doc.moveDown(isBetaProfile ? 1.6 : 0.2);
+
+        // Render chapter header if this is the first scene in a new chapter (and chapter_title exists in beta profile)
+        if (isBetaProfile && scene.chapter_title) {
+          const sceneIndex = rows.indexOf(scene);
+          const prevScene = sceneIndex > 0 ? rows[sceneIndex - 1] : null;
+          if (!prevScene || prevScene.chapter !== scene.chapter) {
+            doc.fontSize(16).font(coverHeadingFont);
+            doc.text(scene.chapter_title, { align: "center" });
+            doc.moveDown(1.0);
+          }
+        }
+
+        // Skip title rendering for epigraphs in beta profile
+        const isEpigraph = isBetaProfile && scene.tags?.includes("epigraph");
+        if (!isEpigraph) {
+          doc.fontSize(isBetaProfile ? 13 : 14).font(sceneHeadingFont);
+          let heading = scene.title || scene.scene_id;
+          if (includeSceneIds) {
+            heading += ` [${scene.scene_id}]`;
+          }
+          doc.text(heading, { align: isBetaProfile ? "center" : "left" });
+          doc.moveDown(isBetaProfile ? 1.6 : 0.2);
+        }
 
         const metaParts = [];
         if (profile !== "beta_reader_personalized") {

@@ -358,12 +358,7 @@ export function importScrivenerSync({
       continue;
     }
 
-    if (isEpigraph(rawTitle)) {
-      logger(`  SKIP  (epigraph) ${filename}`);
-      skipped++;
-      continue;
-    }
-
+    const isEpigraphScene = isEpigraph(rawTitle);
     const title = cleanTitle(rawTitle);
     const existingScene = existingScenes.get(String(binderId)) ?? null;
     const sceneId = existingScene?.meta?.scene_id ?? makeSceneId(binderId, title);
@@ -383,6 +378,7 @@ export function importScrivenerSync({
       title,
       timeline_position: seq,
       ...(beatCarry ? { save_the_cat_beat: beatCarry } : {}),
+      ...(isEpigraphScene ? { tags: [...(existingScene?.meta?.tags ?? []), "epigraph"].filter((v, i, a) => a.indexOf(v) === i) } : {}),
     };
 
     if (!beatCarry && existingScene?.meta && Object.hasOwn(existingScene.meta, "save_the_cat_beat")) {
@@ -424,7 +420,7 @@ export function importScrivenerSync({
   logger("");
   logger(`${"-".repeat(50)}`);
   logger(`Created:  ${created} sidecars${dryRun ? " (dry run)" : ""}`);
-  logger(`Skipped:  ${skipped} (empty / epigraph / pattern)`);
+  logger(`Skipped:  ${skipped} (empty / pattern)`);
   if (existing) logger(`Existing: ${existing} already had sidecars`);
   logger(`Beat markers seen: ${beatMarkersSeen}`);
 
