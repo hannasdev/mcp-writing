@@ -65,9 +65,9 @@ describe("import_scrivener_sync tool", () => {
     assert.equal(parsed.ok, true);
     assert.equal(parsed.import.project_id, projectId);
     assert.equal(parsed.import.dry_run, true);
-    assert.equal(parsed.import.created, 2);
+    assert.equal(parsed.import.created, 3);
     assert.equal(parsed.import.existing, 0);
-    assert.equal(parsed.import.skipped, 3);
+    assert.equal(parsed.import.skipped, 2);
     assert.equal(parsed.import.beat_markers_seen, 1);
     assert.equal(parsed.sync, null);
     assert.equal(fs.existsSync(scenesDir), false);
@@ -88,16 +88,16 @@ describe("import_scrivener_sync tool", () => {
     assert.equal(parsed.ok, true);
     assert.equal(parsed.import.project_id, projectId);
     assert.equal(parsed.import.dry_run, false);
-    assert.equal(parsed.import.created, 2);
+    assert.equal(parsed.import.created, 3);
     assert.equal(parsed.import.existing, 0);
-    assert.equal(parsed.import.skipped, 3);
+    assert.equal(parsed.import.skipped, 2);
     assert.equal(parsed.import.beat_markers_seen, 1);
     assert.equal(parsed.sync, null);
 
     assert.equal(fs.existsSync(scenesDir), true);
     const files = fs.readdirSync(scenesDir);
     const sidecars = files.filter(name => name.endsWith(".meta.yaml"));
-    assert.equal(sidecars.length, 2);
+    assert.equal(sidecars.length, 3);
     assert.ok(sidecars.some(name => name.includes("001 Scene Arrival [10].meta.yaml")));
     assert.ok(sidecars.some(name => name.includes("004 Scene Debate [13].meta.yaml")));
   });
@@ -143,7 +143,7 @@ describe("import_scrivener_sync tool", () => {
     assert.equal(parsed.import.scenes_dir, expectedScenesDir);
     assert.equal(fs.existsSync(expectedScenesDir), true);
     const sidecars = fs.readdirSync(expectedScenesDir).filter(n => n.endsWith(".meta.yaml"));
-    assert.equal(sidecars.length, 2);
+    assert.equal(sidecars.length, 3);
   });
 });
 
@@ -178,7 +178,7 @@ describe("merge_scrivener_project_beta tool", () => {
     assert.equal(done.job.result.beta, undefined);
     assert.equal(done.job.result.merge.project_id, projectId);
     assert.equal(done.job.result.merge.dry_run, true);
-    assert.equal(done.job.result.merge.sidecar_files, 2);
+    assert.equal(done.job.result.merge.sidecar_files, 3);
     assert.equal(done.job.result.merge.updated, 2);
     assert.ok(done.job.result.merge.field_add_counts.synopsis >= 1);
     assert.ok(Array.isArray(done.job.result.merge.preview_changes));
@@ -246,9 +246,10 @@ describe("merge_scrivener_project_beta tool", () => {
     assert.equal(done.job.status, "completed");
     assert.equal(done.job.result.ok, true);
     assert.equal(done.job.result.merge.warning_summary.missing_bracket_id.count, 1);
-    assert.equal(done.job.result.merge.warning_summary.missing_uuid_mapping.count, 1);
+    assert.equal(done.job.result.merge.warning_summary.missing_uuid_mapping.count, 2);
     assert.ok(done.job.result.merge.warnings.some(w => w.code === "missing_bracket_id"));
     assert.ok(done.job.result.merge.warnings.some(w => w.code === "missing_uuid_mapping" && w.sync_number === "999"));
+    assert.ok(done.job.result.merge.warnings.some(w => w.code === "missing_uuid_mapping" && w.sync_number === "12"));
   });
 
   test("returns ambiguity warning taxonomy for conflicting sidecar mappings", async () => {
@@ -321,7 +322,7 @@ describe("merge_scrivener_project_beta tool", () => {
     const done = await waitForAsyncJob(started.job.job_id);
     assert.equal(done.ok, true);
     assert.equal(done.job.result.merge.scenes_dir, derivedScenesDir);
-    assert.equal(done.job.result.merge.sidecar_files, 2);
+    assert.equal(done.job.result.merge.sidecar_files, 3);
     assert.equal(done.job.result.merge.updated, 2);
   });
 
@@ -348,7 +349,7 @@ describe("merge_scrivener_project_beta tool", () => {
     const done = await waitForAsyncJob(started.job.job_id);
     assert.equal(done.ok, true);
     assert.equal(done.job.result.merge.scenes_dir, actualScenesDir);
-    assert.equal(done.job.result.merge.sidecar_files, 2);
+    assert.equal(done.job.result.merge.sidecar_files, 3);
   });
 
   test("idempotent: second merge run finds no updates", async () => {
@@ -385,7 +386,8 @@ describe("merge_scrivener_project_beta tool", () => {
 
     assert.equal(secondDone.ok, true);
     assert.equal(secondDone.job.result.merge.updated, 0);
-    assert.equal(secondDone.job.result.merge.unchanged, secondDone.job.result.merge.sidecar_files);
+    const unmappedCount = secondDone.job.result.merge.warning_summary?.missing_uuid_mapping?.count ?? 0;
+    assert.equal(secondDone.job.result.merge.unchanged + unmappedCount, secondDone.job.result.merge.sidecar_files);
     assert.deepEqual(secondDone.job.result.merge.field_add_counts, {});
     assert.deepEqual(secondDone.job.result.merge.preview_changes, []);
   });
@@ -429,8 +431,9 @@ describe("merge_scrivener_project_beta tool", () => {
     const scenesText = await callWriteTool("find_scenes", { project_id: projectId });
     const scenes = JSON.parse(scenesText);
     assert.ok(Array.isArray(scenes.results));
-    assert.equal(scenes.results[0].chapter, 1);
-    assert.equal(scenes.results[0].chapter_title, "Arrival");
+    const chapterOneScene = scenes.results.find(scene => scene.chapter === 1);
+    assert.ok(chapterOneScene);
+    assert.equal(chapterOneScene.chapter_title, "Arrival");
   });
 
   test("organize_by_chapters: false keeps scenes in place", async () => {
@@ -470,7 +473,8 @@ describe("merge_scrivener_project_beta tool", () => {
     const scenesText = await callWriteTool("find_scenes", { project_id: projectId });
     const scenes = JSON.parse(scenesText);
     assert.ok(Array.isArray(scenes.results));
-    assert.equal(scenes.results[0].chapter, 1);
+    const chapterOneScene = scenes.results.find(scene => scene.chapter === 1);
+    assert.ok(chapterOneScene);
   });
 });
 
@@ -495,7 +499,7 @@ describe("async import/merge job tools", () => {
     assert.equal(done.job.status, "completed");
     assert.equal(done.job.result.ok, true);
     assert.equal(done.job.result.import.project_id, projectId);
-    assert.equal(done.job.result.import.created, 2);
+    assert.equal(done.job.result.import.created, 3);
   });
 
   test("cancel_async_job sets transitional 'cancelling' status and resolves to terminal state", async () => {

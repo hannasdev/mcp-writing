@@ -57,7 +57,7 @@ function renderBetaFeedbackFormMarkdown({ projectId, recipientName, generatedAt 
   ].join("\n") + "\n";
 }
 
-function loadBundleSceneRows(dbHandle, projectId, sceneIds) {
+function loadBundleSceneRowsWithTags(dbHandle, projectId, sceneIds) {
   if (!Array.isArray(sceneIds) || sceneIds.length === 0) return [];
   const rows = [];
   // 900 is safely below SQLite's per-query bound of 999 host parameters
@@ -74,6 +74,7 @@ function loadBundleSceneRows(dbHandle, projectId, sceneIds) {
         title,
         part,
         chapter,
+        chapter_title,
         timeline_position,
         logline,
         pov,
@@ -85,12 +86,36 @@ function loadBundleSceneRows(dbHandle, projectId, sceneIds) {
     rows.push(...chunkRows);
   }
 
-  const rowMap = new Map(rows.map(row => [row.scene_id, row]));
   const orderedRows = [];
   const missingSceneIds = [];
 
+  // Load tags in batches to avoid N+1 queries for large bundles.
+  const tagsBySceneId = new Map(rows.map(row => [row.scene_id, []]));
+  const tagChunkSize = 900;
+  for (let offset = 0; offset < rows.length; offset += tagChunkSize) {
+    const chunk = rows.slice(offset, offset + tagChunkSize);
+    const chunkSceneIds = chunk.map(row => row.scene_id);
+    if (chunkSceneIds.length === 0) continue;
+    const placeholders = chunkSceneIds.map(() => "?").join(",");
+    const tagRows = dbHandle.prepare(`
+      SELECT scene_id, tag
+      FROM scene_tags
+      WHERE project_id = ? AND scene_id IN (${placeholders})
+    `).all(projectId, ...chunkSceneIds);
+    for (const tagRow of tagRows) {
+      const tags = tagsBySceneId.get(tagRow.scene_id);
+      if (tags) tags.push(tagRow.tag);
+    }
+  }
+
+  const rowsWithTags = rows.map(row => ({
+    ...row,
+    tags: tagsBySceneId.get(row.scene_id) ?? [],
+  }));
+  const rowMapWithTags = new Map(rowsWithTags.map(row => [row.scene_id, row]));
+
   for (const sceneId of sceneIds) {
-    const row = rowMap.get(sceneId);
+    const row = rowMapWithTags.get(sceneId);
     if (row) {
       orderedRows.push(row);
     } else {
@@ -355,14 +380,27 @@ function renderSceneBlock(scene, options) {
     includeSceneIds,
     includeMetadataSidebar,
     includeParagraphAnchors,
+    showChapterHeading,
   } = options;
 
-  const title = scene.title || scene.scene_id;
-  const sceneHeading = includeSceneIds
-    ? `## ${escapeMarkdown(title)} (${escapeMarkdown(scene.scene_id)})`
-    : `## ${escapeMarkdown(title)}`;
+  const isBetaProfile = profile === "beta_reader_personalized";
+  const isEpigraph = isBetaProfile && scene.tags?.includes("epigraph");
 
-  const parts = [sceneHeading];
+  const parts = [];
+
+  // Render chapter heading only when the caller detects a chapter transition.
+  if (isBetaProfile && scene.chapter_title && showChapterHeading) {
+    parts.push(`## ${escapeMarkdown(scene.chapter_title)}`);
+  }
+
+  // Only render heading if not an epigraph
+  if (!isEpigraph) {
+    const title = scene.title || scene.scene_id;
+    const sceneHeading = includeSceneIds
+      ? `## ${escapeMarkdown(title)} (${escapeMarkdown(scene.scene_id)})`
+      : `## ${escapeMarkdown(title)}`;
+    parts.push(sceneHeading);
+  }
 
   if (profile === "outline_discussion") {
     const summaryParts = [];
@@ -478,7 +516,7 @@ export function renderReviewBundleMarkdown(dbHandle, plan, { generatedAt, syncDi
   const syncDir = syncDirOpt ?? process.env.WRITING_SYNC_DIR ?? null;
 
   const sceneIds = plan.ordering.map(row => row.scene_id);
-  const rows = loadBundleSceneRows(dbHandle, plan.resolved_scope.project_id, sceneIds);
+  const rows = loadBundleSceneRowsWithTags(dbHandle, plan.resolved_scope.project_id, sceneIds);
   const sections = [];
   const recipientName = plan.resolved_scope?.options?.recipient_name;
   const recipientDisplayName = normalizeRecipientDisplayName(recipientName);
@@ -507,7 +545,8 @@ export function renderReviewBundleMarkdown(dbHandle, plan, { generatedAt, syncDi
     );
   }
 
-  for (const scene of rows) {
+  for (let sceneIndex = 0; sceneIndex < rows.length; sceneIndex += 1) {
+    const scene = rows[sceneIndex];
     let prose = "";
     if (profile === "editor_detailed" || profile === "beta_reader_personalized") {
       const resolved = readProse(scene.file_path, { syncDir });
@@ -525,11 +564,16 @@ export function renderReviewBundleMarkdown(dbHandle, plan, { generatedAt, syncDi
       prose = resolved;
     }
     const withProse = { ...scene, prose };
+    const prevScene = sceneIndex > 0 ? rows[sceneIndex - 1] : null;
+    const showChapterHeading = isBetaProfile
+      && Boolean(scene.chapter_title)
+      && (!prevScene || prevScene.chapter !== scene.chapter);
     sections.push(renderSceneBlock(withProse, {
       profile,
       includeSceneIds,
       includeMetadataSidebar,
       includeParagraphAnchors,
+      showChapterHeading,
     }));
   }
 
@@ -558,7 +602,7 @@ export function renderReviewBundlePdfWithMetadata(dbHandle, plan, { generatedAt,
   const metaFont = italicFont;
 
   const sceneIds = plan.ordering.map(row => row.scene_id);
-  const rows = loadBundleSceneRows(dbHandle, plan.resolved_scope.project_id, sceneIds);
+  const rows = loadBundleSceneRowsWithTags(dbHandle, plan.resolved_scope.project_id, sceneIds);
   const recipientName = plan.resolved_scope?.options?.recipient_name;
   const recipientDisplayName = normalizeRecipientDisplayName(recipientName);
   const footerRecipientDisplayName = sanitizeFooterRecipientDisplayName(recipientDisplayName);
@@ -674,19 +718,31 @@ export function renderReviewBundlePdfWithMetadata(dbHandle, plan, { generatedAt,
         doc.moveDown();
       }
 
-      for (const scene of rows) {
+      for (let sceneIndex = 0; sceneIndex < rows.length; sceneIndex += 1) {
+        const scene = rows[sceneIndex];
+        const prevScene = sceneIndex > 0 ? rows[sceneIndex - 1] : null;
         if (isBetaProfile) {
           // Give chapter titles generous vertical breathing room for a
           // print-like opening feel before prose begins.
           doc.moveDown(2.0);
         }
-        doc.fontSize(isBetaProfile ? 13 : 14).font(sceneHeadingFont);
-        let heading = scene.title || scene.scene_id;
-        if (includeSceneIds) {
-          heading += ` [${scene.scene_id}]`;
+        if (isBetaProfile && scene.chapter_title && (!prevScene || prevScene.chapter !== scene.chapter)) {
+          doc.fontSize(16).font(coverHeadingFont);
+          doc.text(scene.chapter_title, { align: "center" });
+          doc.moveDown(1.0);
         }
-        doc.text(heading, { align: isBetaProfile ? "center" : "left" });
-        doc.moveDown(isBetaProfile ? 1.6 : 0.2);
+
+        // Skip title rendering for epigraphs in beta profile
+        const isEpigraph = isBetaProfile && scene.tags?.includes("epigraph");
+        if (!isEpigraph) {
+          doc.fontSize(isBetaProfile ? 13 : 14).font(sceneHeadingFont);
+          let heading = scene.title || scene.scene_id;
+          if (includeSceneIds) {
+            heading += ` [${scene.scene_id}]`;
+          }
+          doc.text(heading, { align: isBetaProfile ? "center" : "left" });
+          doc.moveDown(isBetaProfile ? 1.6 : 0.2);
+        }
 
         const metaParts = [];
         if (profile !== "beta_reader_personalized") {
@@ -758,7 +814,7 @@ export function renderReviewBundlePdfWithMetadata(dbHandle, plan, { generatedAt,
         // Add page break between scenes only for prose-including profiles where
         // clear scene separation matters. For outline_discussion, let content flow.
         const includesProse = profile === "editor_detailed" || profile === "beta_reader_personalized";
-        if (includesProse && scene !== rows[rows.length - 1]) {
+        if (includesProse && sceneIndex < rows.length - 1) {
           doc.addPage();
         }
       }
