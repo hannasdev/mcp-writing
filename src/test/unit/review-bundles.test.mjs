@@ -3,8 +3,9 @@ import assert from "node:assert/strict";
 import os from "node:os";
 import fs from "node:fs";
 import path from "node:path";
-import { buildReviewBundlePlan, renderReviewBundleMarkdown, ReviewBundlePlanError, buildPageFingerprintToken, buildFingerprintSeed, buildFingerprintSeedHash, extractSceneDateline } from "../../review-bundles/review-bundles.js";
+import { buildReviewBundlePlan, renderReviewBundleMarkdown, renderReviewBundlePdf, ReviewBundlePlanError, buildPageFingerprintToken, buildFingerprintSeed, buildFingerprintSeedHash, extractSceneDateline } from "../../review-bundles/review-bundles.js";
 import { insertTestScene, setupReviewBundleTestDb } from "../helpers/db.js";
+import { decodePdfHexText, extractPdfFlateText } from "../helpers/pdf.js";
 
 describe("buildReviewBundlePlan", () => {
   test("orders scenes deterministically with timeline and scene_id fallback", () => {
@@ -483,6 +484,172 @@ describe("buildReviewBundlePlan", () => {
       assert.ok(markdown.includes("through the news on her tablet."));
       assert.ok(!markdown.includes("with Mneme flying in\nbehind him"));
       assert.ok(!markdown.includes("news on\nher tablet"));
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+      db.close();
+    }
+  });
+
+  test("renderReviewBundleMarkdown suppresses epigraph scene title in beta profile", () => {
+    const db = setupReviewBundleTestDb();
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "bundle-beta-epigraph-"));
+    const scenePath = path.join(tempDir, "sc-epigraph-015.md");
+    fs.writeFileSync(
+      scenePath,
+      [
+        '"Some people leave behind ideas. Others leave behind a mess. Sebastian does both."',
+        "- Edda Hoffman",
+      ].join("\n"),
+      "utf8"
+    );
+
+    try {
+      const now = new Date().toISOString();
+      db.prepare(`
+        INSERT INTO scenes (
+          scene_id, project_id, title, part, chapter, chapter_title, timeline_position, word_count,
+          file_path, prose_checksum, metadata_stale, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        "sc-epigraph-015",
+        "test-novel",
+        "Epigraph Chapter 15",
+        1,
+        15,
+        "Semantic Drift",
+        1,
+        32,
+        scenePath,
+        "deadbeef",
+        0,
+        now
+      );
+
+      const plan = buildReviewBundlePlan(db, {
+        project_id: "test-novel",
+        profile: "beta_reader_personalized",
+        recipient_name: "Jordan Example",
+      });
+      const markdown = renderReviewBundleMarkdown(db, plan, {
+        generatedAt: "2026-01-01T00:00:00.000Z",
+        syncDir: fs.realpathSync.native(tempDir),
+      });
+
+      assert.ok(markdown.includes("## Semantic Drift"));
+      assert.ok(!markdown.includes("## Epigraph Chapter 15"));
+      assert.ok(markdown.includes("Some people leave behind ideas."));
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+      db.close();
+    }
+  });
+
+  test("renderReviewBundleMarkdown suppresses epigraph title when tag casing/spacing varies", () => {
+    const db = setupReviewBundleTestDb();
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "bundle-beta-epigraph-tag-normalized-"));
+    const scenePath = path.join(tempDir, "sc-epigraph-tagged-015.md");
+    fs.writeFileSync(
+      scenePath,
+      [
+        '"Some people leave behind ideas. Others leave behind a mess. Sebastian does both."',
+        "- Edda Hoffman",
+      ].join("\n"),
+      "utf8"
+    );
+
+    try {
+      const now = new Date().toISOString();
+      db.prepare(`
+        INSERT INTO scenes (
+          scene_id, project_id, title, part, chapter, chapter_title, timeline_position, word_count,
+          file_path, prose_checksum, metadata_stale, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        "sc-epigraph-tagged-015",
+        "test-novel",
+        "Quoted opener",
+        1,
+        15,
+        "Semantic Drift",
+        1,
+        32,
+        scenePath,
+        "deadbeef",
+        0,
+        now
+      );
+      db.prepare(`INSERT INTO scene_tags (scene_id, project_id, tag) VALUES (?, ?, ?)`)
+        .run("sc-epigraph-tagged-015", "test-novel", "  EPIGRAPH  ");
+
+      const plan = buildReviewBundlePlan(db, {
+        project_id: "test-novel",
+        profile: "beta_reader_personalized",
+        recipient_name: "Jordan Example",
+      });
+      const markdown = renderReviewBundleMarkdown(db, plan, {
+        generatedAt: "2026-01-01T00:00:00.000Z",
+        syncDir: fs.realpathSync.native(tempDir),
+      });
+
+      assert.ok(markdown.includes("## Semantic Drift"));
+      assert.ok(!markdown.includes("## Quoted opener"));
+      assert.ok(markdown.includes("Some people leave behind ideas."));
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+      db.close();
+    }
+  });
+
+  test("renderReviewBundlePdf suppresses epigraph scene title in beta profile", async () => {
+    const db = setupReviewBundleTestDb();
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "bundle-beta-epigraph-pdf-"));
+    const scenePath = path.join(tempDir, "sc-epigraph-015.md");
+    fs.writeFileSync(
+      scenePath,
+      [
+        '"Some people leave behind ideas. Others leave behind a mess. Sebastian does both."',
+        "- Edda Hoffman",
+      ].join("\n"),
+      "utf8"
+    );
+
+    try {
+      const now = new Date().toISOString();
+      db.prepare(`
+        INSERT INTO scenes (
+          scene_id, project_id, title, part, chapter, chapter_title, timeline_position, word_count,
+          file_path, prose_checksum, metadata_stale, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        "sc-epigraph-015",
+        "test-novel",
+        "Epigraph Chapter 15",
+        1,
+        15,
+        "Semantic Drift",
+        1,
+        32,
+        scenePath,
+        "deadbeef",
+        0,
+        now
+      );
+
+      const plan = buildReviewBundlePlan(db, {
+        project_id: "test-novel",
+        profile: "beta_reader_personalized",
+        recipient_name: "Jordan Example",
+      });
+      const pdfBytes = await renderReviewBundlePdf(db, plan, {
+        generatedAt: "2026-01-01T00:00:00.000Z",
+        syncDir: fs.realpathSync.native(tempDir),
+      });
+      const inflatedStreamsText = extractPdfFlateText(pdfBytes);
+      const decodedPdfText = decodePdfHexText(inflatedStreamsText);
+
+      assert.match(decodedPdfText, /Semantic Drift/);
+      assert.doesNotMatch(decodedPdfText, /Epigraph Chapter 15/);
+      assert.match(decodedPdfText, /Some people leave behind ideas\./);
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true });
       db.close();

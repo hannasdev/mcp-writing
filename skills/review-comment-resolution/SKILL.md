@@ -42,13 +42,16 @@ After applying fixes:
 1. Run relevant validation (lint/tests/docs generation as applicable).
 2. Commit with a focused message.
 3. Push branch updates.
-4. Resolve only threads that are fully addressed.
-5. Re-check unresolved thread count.
-6. Re-check PR checks status.
+4. Reply on each addressed thread with a concise resolution note (what changed + validation evidence), tailored to that thread by default.
+5. Resolve only threads that are fully addressed.
+6. Re-check unresolved thread count.
+7. Re-check PR checks status.
 
 ## Non-negotiable rules
 
 - Do not resolve a thread before the fix is pushed.
+- Do not resolve a thread without a resolution reply comment unless explicitly requested by the user.
+- Do not use one generic reply across unrelated threads; use shared wording only when comments are functionally overlapping.
 - Do not resolve threads that are only partially addressed.
 - Do not batch unrelated refactors into review-response commits.
 - Do not blindly apply every reviewer request if it conflicts with product intent.
@@ -81,7 +84,7 @@ Use the bundled helper to run the thread workflow consistently:
 - Behavior: strict (non-zero exit on invalid thread IDs, already-resolved IDs, and failing/pending PR checks)
 - Commands:
    - `list` - show unresolved review threads (or all with `--all`)
-   - `resolve` - resolve specific thread IDs
+   - `resolve` - comment + resolve specific thread IDs (thread-specific by default)
    - `status` - print unresolved count and run `gh pr checks`
 
 Examples:
@@ -89,7 +92,19 @@ Examples:
 ```bash
 node skills/review-comment-resolution/scripts/review-comments.mjs list --pr 171
 node skills/review-comment-resolution/scripts/review-comments.mjs resolve --pr 171 --ids PRRT_xxx,PRRT_yyy
+node skills/review-comment-resolution/scripts/review-comments.mjs resolve --pr 171 --ids PRRT_xxx,PRRT_yyy --comment "Addressed in 1234abc. Added regression test."
+node skills/review-comment-resolution/scripts/review-comments.mjs resolve --pr 171 --ids PRRT_xxx,PRRT_yyy --comment "Shared root cause fixed in 1234abc." --shared-comment
+node skills/review-comment-resolution/scripts/review-comments.mjs resolve --pr 171 --ids PRRT_xxx,PRRT_yyy --comments-file /tmp/thread-comments.json
 node skills/review-comment-resolution/scripts/review-comments.mjs status --pr 171
+```
+
+Minimal `--comments-file` example:
+
+```json
+{
+   "PRRT_xxx": "Addressed in 1234abc. What changed: fixed numbering in SKILL.md. Validation: node --experimental-sqlite --test src/test/unit/review-comments-script.test.mjs.",
+   "PRRT_yyy": "Addressed in 1234abc. What changed: added tag-normalization regression test. Validation: node --experimental-sqlite --test src/test/unit/review-bundles.test.mjs."
+}
 ```
 
 ## Recommended command sequence (GitHub CLI)
@@ -114,7 +129,8 @@ query($owner:String!, $name:String!, $pr:Int!, $endCursor:String) {\
    }\
 }' -f owner='hannasdev' -f name='mcp-writing' -F pr=<number>
 
-# 2) Resolve addressed thread IDs
+# 2) Reply and resolve addressed thread IDs
+gh api graphql -f query='mutation($threadId:ID!, $body:String!){addPullRequestReviewThreadReply(input:{pullRequestReviewThreadId:$threadId, body:$body}){comment{id}}}' -f threadId='<thread_id>' -f body='Addressed in <commit>. Validation: <test command>'
 gh api graphql -f query='mutation($id:ID!){resolveReviewThread(input:{threadId:$id}){thread{id isResolved}}}' -f id='<thread_id>'
 
 # 3) Verify unresolved count and check status
