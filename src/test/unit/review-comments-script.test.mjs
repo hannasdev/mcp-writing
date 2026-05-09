@@ -41,6 +41,17 @@ const pr = getArgValue("pr", "-F");
 if (args[0] === "api" && args[1] === "graphql") {
   const query = getArgValue("query");
 
+  if (query && query.includes("addPullRequestReviewThreadReply")) {
+    process.stdout.write(JSON.stringify({
+      data: {
+        addPullRequestReviewThreadReply: {
+          comment: { id: "comment-1", body: getArgValue("body") || "" }
+        }
+      }
+    }));
+    process.exit(0);
+  }
+
   if (query && query.includes("resolveReviewThread")) {
     process.stdout.write(JSON.stringify({
       data: {
@@ -220,11 +231,37 @@ describe("review-comments helper script", () => {
     const { result, log } = runHelper(["resolve", "--pr", "172", "--id", "thread-1"]);
 
     assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.match(result.stdout, /commented: thread-1/);
     assert.match(result.stdout, /resolved: thread-1/);
 
     const graphqlCalls = log.filter((args) => args[0] === "api" && args[1] === "graphql");
+    const hasReplyMutation = graphqlCalls.some((args) => args.some((arg) => typeof arg === "string" && arg.includes("addPullRequestReviewThreadReply")));
     const hasResolveMutation = graphqlCalls.some((args) => args.some((arg) => typeof arg === "string" && arg.includes("resolveReviewThread")));
+    assert.equal(hasReplyMutation, true, "expected an addPullRequestReviewThreadReply mutation call");
     assert.equal(hasResolveMutation, true, "expected a resolveReviewThread mutation call");
+  });
+
+  test("resolve allows explicit no-comment mode", () => {
+    const { result, log } = runHelper(["resolve", "--pr", "172", "--id", "thread-1", "--no-comment"]);
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.doesNotMatch(result.stdout, /commented:/);
+    assert.match(result.stdout, /resolved: thread-1/);
+
+    const graphqlCalls = log.filter((args) => args[0] === "api" && args[1] === "graphql");
+    const hasReplyMutation = graphqlCalls.some((args) => args.some((arg) => typeof arg === "string" && arg.includes("addPullRequestReviewThreadReply")));
+    assert.equal(hasReplyMutation, false, "did not expect addPullRequestReviewThreadReply in --no-comment mode");
+  });
+
+  test("resolve supports custom comment text", () => {
+    const customComment = "Addressed in abc123. Added regression test.";
+    const { result, log } = runHelper(["resolve", "--pr", "172", "--id", "thread-1", "--comment", customComment]);
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const graphqlCalls = log.filter((args) => args[0] === "api" && args[1] === "graphql");
+    const replyCall = graphqlCalls.find((args) => args.some((arg) => typeof arg === "string" && arg.includes("addPullRequestReviewThreadReply")));
+    assert.ok(replyCall, "expected addPullRequestReviewThreadReply call");
+    assert.ok(replyCall.includes(`body=${customComment}`));
   });
 
   test("rejects malformed --pr values", () => {
@@ -273,7 +310,7 @@ describe("review-comments helper script", () => {
     const { result } = runHelper(["list", "--pr", "172", "--id", "thread-1"]);
 
     assert.notEqual(result.status, 0);
-    assert.match(result.stderr, /--id and --ids are not valid for 'list'/);
+    assert.match(result.stderr, /--id, --ids, --comment, and --no-comment are not valid for 'list'/);
   });
 
   test("rejects --all flag with 'resolve' command", () => {
@@ -294,6 +331,22 @@ describe("review-comments helper script", () => {
     const { result } = runHelper(["status", "--pr", "172", "--id", "thread-1", "--all"]);
 
     assert.notEqual(result.status, 0);
-    assert.match(result.stderr, /--id, --ids, and --all are not valid for 'status'/);
+    assert.match(result.stderr, /--id, --ids, --all, --comment, and --no-comment are not valid for 'status'/);
+  });
+
+  test("rejects --comment and --no-comment together", () => {
+    const { result } = runHelper([
+      "resolve",
+      "--pr",
+      "172",
+      "--id",
+      "thread-1",
+      "--comment",
+      "Addressed.",
+      "--no-comment",
+    ]);
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /--comment and --no-comment cannot be used together/);
   });
 });

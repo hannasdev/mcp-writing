@@ -11,6 +11,8 @@ function parseArgs(argv) {
     usedIdFlags: false,
     usedAllFlag: false,
     repo: "hannasdev/mcp-writing",
+    comment: null,
+    skipComment: false,
   };
 
   if (argv.length === 0 || argv.includes("-h") || argv.includes("--help")) {
@@ -72,6 +74,22 @@ function parseArgs(argv) {
       const value = readFlagValue("--repo", argv[i + 1]);
       args.repo = value;
       i += 1;
+      continue;
+    }
+
+    if (token === "--comment") {
+      const value = readFlagValue("--comment", argv[i + 1]);
+      const trimmed = String(value).trim();
+      if (trimmed.length === 0) {
+        throw new Error("Provide a non-empty comment with --comment <text>");
+      }
+      args.comment = trimmed;
+      i += 1;
+      continue;
+    }
+
+    if (token === "--no-comment") {
+      args.skipComment = true;
       continue;
     }
 
@@ -230,11 +248,36 @@ function resolveThread(threadId) {
   }
 }
 
-function resolveThreads({ pr, ids, repo }) {
+function replyToThread(threadId, body) {
+  const mutation = "mutation($threadId:ID!, $body:String!){addPullRequestReviewThreadReply(input:{pullRequestReviewThreadId:$threadId, body:$body}){comment{id body}}}";
+  const payload = runGhJson([
+    "api",
+    "graphql",
+    "-f",
+    `query=${mutation}`,
+    "-f",
+    `threadId=${threadId}`,
+    "-f",
+    `body=${body}`,
+  ]);
+  const createdId = payload?.data?.addPullRequestReviewThreadReply?.comment?.id;
+  if (!createdId) {
+    throw new Error(`Failed to add reply comment for thread ${threadId}`);
+  }
+}
+
+function resolveThreads({ pr, ids, repo, comment, skipComment }) {
   ensurePrNumber(pr);
   if (ids.length === 0) {
     throw new Error("Provide at least one thread id using --id or --ids");
   }
+  if (comment && skipComment) {
+    throw new Error("--comment and --no-comment cannot be used together");
+  }
+
+  const replyComment = skipComment
+    ? null
+    : (comment ?? "Addressed in the latest update. Resolving this thread.");
 
   const threads = fetchReviewThreads(pr, repo);
   const threadById = new Map(threads.map((thread) => [thread.id, thread]));
@@ -251,6 +294,10 @@ function resolveThreads({ pr, ids, repo }) {
   }
 
   for (const id of uniqueIds) {
+    if (replyComment) {
+      replyToThread(id, replyComment);
+      console.log(`commented: ${id}`);
+    }
     resolveThread(id);
     console.log(`resolved: ${id}`);
   }
@@ -283,8 +330,8 @@ function printHelp() {
   console.log("");
   console.log("Usage:");
   console.log("  node skills/review-comment-resolution/scripts/review-comments.mjs list --pr <number> [--all] [--repo <owner/name>]");
-  console.log("  node skills/review-comment-resolution/scripts/review-comments.mjs resolve --pr <number> --ids <id1,id2> [--repo <owner/name>]");
-  console.log("  node skills/review-comment-resolution/scripts/review-comments.mjs resolve --pr <number> --id <id1> --id <id2> [--repo <owner/name>]");
+  console.log("  node skills/review-comment-resolution/scripts/review-comments.mjs resolve --pr <number> --ids <id1,id2> [--comment <text>] [--no-comment] [--repo <owner/name>]");
+  console.log("  node skills/review-comment-resolution/scripts/review-comments.mjs resolve --pr <number> --id <id1> --id <id2> [--comment <text>] [--no-comment] [--repo <owner/name>]");
   console.log("  node skills/review-comment-resolution/scripts/review-comments.mjs status --pr <number> [--repo <owner/name>]");
 }
 
@@ -297,8 +344,8 @@ function main() {
   }
 
   if (args.command === "list") {
-    if (args.usedIdFlags) {
-      throw new Error("--id and --ids are not valid for 'list'. Use 'list' to view threads.");
+    if (args.usedIdFlags || args.comment !== null || args.skipComment) {
+      throw new Error("--id, --ids, --comment, and --no-comment are not valid for 'list'. Use 'list' to view threads.");
     }
     printThreads({ pr: args.pr, includeResolved: args.includeResolved, repo: args.repo });
     return;
@@ -311,13 +358,13 @@ function main() {
     if (args.ids.length === 0) {
       throw new Error("'resolve' requires --id <id> or --ids <id1,id2>.");
     }
-    resolveThreads({ pr: args.pr, ids: args.ids, repo: args.repo });
+    resolveThreads({ pr: args.pr, ids: args.ids, repo: args.repo, comment: args.comment, skipComment: args.skipComment });
     return;
   }
 
   if (args.command === "status") {
-    if (args.usedIdFlags || args.usedAllFlag) {
-      throw new Error("--id, --ids, and --all are not valid for 'status'. Use 'status' to view PR review state.");
+    if (args.usedIdFlags || args.usedAllFlag || args.comment !== null || args.skipComment) {
+      throw new Error("--id, --ids, --all, --comment, and --no-comment are not valid for 'status'. Use 'status' to view PR review state.");
     }
     printStatus(args.pr, args.repo);
     return;
