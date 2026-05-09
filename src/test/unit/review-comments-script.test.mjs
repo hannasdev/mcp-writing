@@ -205,6 +205,13 @@ function runHelper(args, env = {}) {
   return { result, log };
 }
 
+function createCommentsFile(content) {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "review-comments-json-test-"));
+  const filePath = path.join(tmpDir, "comments.json");
+  fs.writeFileSync(filePath, JSON.stringify(content), "utf8");
+  return { tmpDir, filePath };
+}
+
 describe("review-comments helper script", () => {
   test("list paginates review threads until hasNextPage=false", () => {
     const { result, log } = runHelper(["list", "--pr", "172"]);
@@ -261,7 +268,77 @@ describe("review-comments helper script", () => {
     const graphqlCalls = log.filter((args) => args[0] === "api" && args[1] === "graphql");
     const replyCall = graphqlCalls.find((args) => args.some((arg) => typeof arg === "string" && arg.includes("addPullRequestReviewThreadReply")));
     assert.ok(replyCall, "expected addPullRequestReviewThreadReply call");
-    assert.ok(replyCall.includes(`body=${customComment}`));
+    const bodyArg = replyCall.find((arg) => typeof arg === "string" && arg.startsWith("body=")) ?? "";
+    const body = bodyArg.replace(/^body=/, "");
+    assert.match(body, /Addressed thread feedback for a\.md:10/);
+    assert.ok(body.includes(customComment));
+  });
+
+  test("resolve defaults to thread-specific replies when no comment is provided", () => {
+    const { result, log } = runHelper(["resolve", "--pr", "172", "--ids", "thread-1,thread-2"]);
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const graphqlCalls = log.filter((args) => args[0] === "api" && args[1] === "graphql");
+    const replyCalls = graphqlCalls.filter((args) => args.some((arg) => typeof arg === "string" && arg.includes("addPullRequestReviewThreadReply")));
+    assert.equal(replyCalls.length, 2);
+    const bodies = replyCalls
+      .map((args) => args.find((arg) => typeof arg === "string" && arg.startsWith("body=")) ?? "")
+      .map((entry) => entry.replace(/^body=/, ""));
+    assert.equal(bodies[0].includes("a.md:10"), true);
+    assert.equal(bodies[1].includes("b.md:20"), true);
+    assert.notEqual(bodies[0], bodies[1]);
+  });
+
+  test("resolve supports shared reply mode for overlapping comments", () => {
+    const sharedComment = "Shared root cause fixed in latest commit.";
+    const { result, log } = runHelper([
+      "resolve",
+      "--pr",
+      "172",
+      "--ids",
+      "thread-1,thread-2",
+      "--comment",
+      sharedComment,
+      "--shared-comment",
+    ]);
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const graphqlCalls = log.filter((args) => args[0] === "api" && args[1] === "graphql");
+    const replyCalls = graphqlCalls.filter((args) => args.some((arg) => typeof arg === "string" && arg.includes("addPullRequestReviewThreadReply")));
+    assert.equal(replyCalls.length, 2);
+    for (const call of replyCalls) {
+      assert.ok(call.includes(`body=${sharedComment}`));
+    }
+  });
+
+  test("resolve supports per-thread comments from file", () => {
+    const { tmpDir, filePath } = createCommentsFile({
+      "thread-1": "Addressed thread 1.",
+      "thread-2": "Addressed thread 2.",
+    });
+    try {
+      const { result, log } = runHelper([
+        "resolve",
+        "--pr",
+        "172",
+        "--ids",
+        "thread-1,thread-2",
+        "--comments-file",
+        filePath,
+      ]);
+
+      assert.equal(result.status, 0, result.stderr || result.stdout);
+      const graphqlCalls = log.filter((args) => args[0] === "api" && args[1] === "graphql");
+      const replyCalls = graphqlCalls.filter((args) => args.some((arg) => typeof arg === "string" && arg.includes("addPullRequestReviewThreadReply")));
+      assert.equal(replyCalls.length, 2);
+      const bodies = replyCalls
+        .map((args) => args.find((arg) => typeof arg === "string" && arg.startsWith("body=")) ?? "")
+        .map((entry) => entry.replace(/^body=/, ""));
+      assert.equal(bodies.includes("Addressed thread 1."), true);
+      assert.equal(bodies.includes("Addressed thread 2."), true);
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
   });
 
   test("rejects malformed --pr values", () => {
@@ -310,7 +387,7 @@ describe("review-comments helper script", () => {
     const { result } = runHelper(["list", "--pr", "172", "--id", "thread-1"]);
 
     assert.notEqual(result.status, 0);
-    assert.match(result.stderr, /--id, --ids, --comment, and --no-comment are not valid for 'list'/);
+    assert.match(result.stderr, /--id, --ids, --comment, --shared-comment, --comments-file, and --no-comment are not valid for 'list'/);
   });
 
   test("rejects --all flag with 'resolve' command", () => {
@@ -331,7 +408,7 @@ describe("review-comments helper script", () => {
     const { result } = runHelper(["status", "--pr", "172", "--id", "thread-1", "--all"]);
 
     assert.notEqual(result.status, 0);
-    assert.match(result.stderr, /--id, --ids, --all, --comment, and --no-comment are not valid for 'status'/);
+    assert.match(result.stderr, /--id, --ids, --all, --comment, --shared-comment, --comments-file, and --no-comment are not valid for 'status'/);
   });
 
   test("rejects --comment and --no-comment together", () => {
@@ -348,5 +425,52 @@ describe("review-comments helper script", () => {
 
     assert.notEqual(result.status, 0);
     assert.match(result.stderr, /--comment and --no-comment cannot be used together/);
+  });
+
+  test("rejects --shared-comment without --comment", () => {
+    const { result } = runHelper(["resolve", "--pr", "172", "--id", "thread-1", "--shared-comment"]);
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /--shared-comment requires --comment <text>/);
+  });
+
+  test("rejects --comment and --comments-file together", () => {
+    const { tmpDir, filePath } = createCommentsFile({ "thread-1": "Addressed." });
+    try {
+      const { result } = runHelper([
+        "resolve",
+        "--pr",
+        "172",
+        "--id",
+        "thread-1",
+        "--comment",
+        "Addressed.",
+        "--comments-file",
+        filePath,
+      ]);
+      assert.notEqual(result.status, 0);
+      assert.match(result.stderr, /--comment and --comments-file cannot be used together/);
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  test("rejects comments file that omits requested thread id", () => {
+    const { tmpDir, filePath } = createCommentsFile({ "thread-1": "Addressed." });
+    try {
+      const { result } = runHelper([
+        "resolve",
+        "--pr",
+        "172",
+        "--ids",
+        "thread-1,thread-2",
+        "--comments-file",
+        filePath,
+      ]);
+      assert.notEqual(result.status, 0);
+      assert.match(result.stderr, /--comments-file is missing a non-empty comment for thread thread-2/);
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
   });
 });

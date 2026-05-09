@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import fs from "node:fs";
 import { execFileSync, spawnSync } from "node:child_process";
 
 function parseArgs(argv) {
@@ -13,6 +14,8 @@ function parseArgs(argv) {
     repo: "hannasdev/mcp-writing",
     comment: null,
     skipComment: false,
+    sharedComment: false,
+    commentsFile: null,
   };
 
   if (argv.length === 0 || argv.includes("-h") || argv.includes("--help")) {
@@ -90,6 +93,18 @@ function parseArgs(argv) {
 
     if (token === "--no-comment") {
       args.skipComment = true;
+      continue;
+    }
+
+    if (token === "--shared-comment") {
+      args.sharedComment = true;
+      continue;
+    }
+
+    if (token === "--comments-file") {
+      const value = readFlagValue("--comments-file", argv[i + 1]);
+      args.commentsFile = value;
+      i += 1;
       continue;
     }
 
@@ -214,6 +229,49 @@ function summarizeBody(body) {
   return `${singleLine.slice(0, 177)}...`;
 }
 
+function buildThreadContext(thread) {
+  const first = thread?.comments?.nodes?.[0] ?? {};
+  return {
+    path: first.path ?? "n/a",
+    line: first.line ?? "n/a",
+    summary: summarizeBody(first.body ?? ""),
+  };
+}
+
+function buildDefaultReplyForThread(thread) {
+  const { path, line, summary } = buildThreadContext(thread);
+  return [
+    `Addressed thread feedback for ${path}:${line}.`,
+    `What changed: implemented the requested update for this comment (${summary}).`,
+    "Validation: ran targeted checks/tests for this change.",
+    "Resolving this thread.",
+  ].join(" ");
+}
+
+function loadCommentsFromFile(filePath, threadIds) {
+  const raw = fs.readFileSync(filePath, "utf8");
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (error) {
+    throw new Error(`Failed to parse --comments-file JSON: ${error.message}`);
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("--comments-file must contain a JSON object mapping thread id to comment text");
+  }
+
+  const commentById = new Map();
+  for (const id of threadIds) {
+    const value = parsed[id];
+    const text = typeof value === "string" ? value.trim() : "";
+    if (!text) {
+      throw new Error(`--comments-file is missing a non-empty comment for thread ${id}`);
+    }
+    commentById.set(id, text);
+  }
+  return commentById;
+}
+
 function printThreads({ pr, includeResolved, repo }) {
   const threads = fetchReviewThreads(pr, repo);
   const filtered = includeResolved ? threads : threads.filter((thread) => !thread.isResolved);
@@ -266,7 +324,7 @@ function replyToThread(threadId, body) {
   }
 }
 
-function resolveThreads({ pr, ids, repo, comment, skipComment }) {
+function resolveThreads({ pr, ids, repo, comment, skipComment, sharedComment, commentsFile }) {
   ensurePrNumber(pr);
   if (ids.length === 0) {
     throw new Error("Provide at least one thread id using --id or --ids");
@@ -274,10 +332,21 @@ function resolveThreads({ pr, ids, repo, comment, skipComment }) {
   if (comment && skipComment) {
     throw new Error("--comment and --no-comment cannot be used together");
   }
-
-  const replyComment = skipComment
-    ? null
-    : (comment ?? "Addressed in the latest update. What changed: implemented the requested fix and updated related coverage. Validation: ran targeted checks/tests. Resolving this thread.");
+  if (commentsFile && skipComment) {
+    throw new Error("--comments-file and --no-comment cannot be used together");
+  }
+  if (comment && commentsFile) {
+    throw new Error("--comment and --comments-file cannot be used together");
+  }
+  if (sharedComment && skipComment) {
+    throw new Error("--shared-comment and --no-comment cannot be used together");
+  }
+  if (sharedComment && commentsFile) {
+    throw new Error("--shared-comment cannot be used with --comments-file");
+  }
+  if (sharedComment && !comment) {
+    throw new Error("--shared-comment requires --comment <text>");
+  }
 
   const threads = fetchReviewThreads(pr, repo);
   const threadById = new Map(threads.map((thread) => [thread.id, thread]));
@@ -293,7 +362,35 @@ function resolveThreads({ pr, ids, repo, comment, skipComment }) {
     throw new Error(`Thread id(s) are already resolved on PR #${pr}: ${alreadyResolved.join(", ")}`);
   }
 
+  const replyByThreadId = new Map();
+  if (!skipComment) {
+    if (commentsFile) {
+      const loaded = loadCommentsFromFile(commentsFile, uniqueIds);
+      for (const id of uniqueIds) {
+        replyByThreadId.set(id, loaded.get(id));
+      }
+    } else if (comment && sharedComment) {
+      for (const id of uniqueIds) {
+        replyByThreadId.set(id, comment);
+      }
+    } else if (comment) {
+      for (const id of uniqueIds) {
+        const thread = threadById.get(id);
+        const { path, line } = buildThreadContext(thread);
+        replyByThreadId.set(
+          id,
+          `Addressed thread feedback for ${path}:${line}. What changed: ${comment} Validation: ran targeted checks/tests. Resolving this thread.`
+        );
+      }
+    } else {
+      for (const id of uniqueIds) {
+        replyByThreadId.set(id, buildDefaultReplyForThread(threadById.get(id)));
+      }
+    }
+  }
+
   for (const id of uniqueIds) {
+    const replyComment = replyByThreadId.get(id);
     if (replyComment) {
       replyToThread(id, replyComment);
       console.log(`commented: ${id}`);
@@ -330,8 +427,8 @@ function printHelp() {
   console.log("");
   console.log("Usage:");
   console.log("  node skills/review-comment-resolution/scripts/review-comments.mjs list --pr <number> [--all] [--repo <owner/name>]");
-  console.log("  node skills/review-comment-resolution/scripts/review-comments.mjs resolve --pr <number> --ids <id1,id2> [--comment <text>] [--no-comment] [--repo <owner/name>]");
-  console.log("  node skills/review-comment-resolution/scripts/review-comments.mjs resolve --pr <number> --id <id1> --id <id2> [--comment <text>] [--no-comment] [--repo <owner/name>]");
+  console.log("  node skills/review-comment-resolution/scripts/review-comments.mjs resolve --pr <number> --ids <id1,id2> [--comment <text>] [--shared-comment] [--comments-file <path.json>] [--no-comment] [--repo <owner/name>]");
+  console.log("  node skills/review-comment-resolution/scripts/review-comments.mjs resolve --pr <number> --id <id1> --id <id2> [--comment <text>] [--shared-comment] [--comments-file <path.json>] [--no-comment] [--repo <owner/name>]");
   console.log("  node skills/review-comment-resolution/scripts/review-comments.mjs status --pr <number> [--repo <owner/name>]");
 }
 
@@ -344,8 +441,8 @@ function main() {
   }
 
   if (args.command === "list") {
-    if (args.usedIdFlags || args.comment !== null || args.skipComment) {
-      throw new Error("--id, --ids, --comment, and --no-comment are not valid for 'list'. Use 'list' to view threads.");
+    if (args.usedIdFlags || args.comment !== null || args.skipComment || args.sharedComment || args.commentsFile !== null) {
+      throw new Error("--id, --ids, --comment, --shared-comment, --comments-file, and --no-comment are not valid for 'list'. Use 'list' to view threads.");
     }
     printThreads({ pr: args.pr, includeResolved: args.includeResolved, repo: args.repo });
     return;
@@ -358,13 +455,21 @@ function main() {
     if (args.ids.length === 0) {
       throw new Error("'resolve' requires --id <id> or --ids <id1,id2>.");
     }
-    resolveThreads({ pr: args.pr, ids: args.ids, repo: args.repo, comment: args.comment, skipComment: args.skipComment });
+    resolveThreads({
+      pr: args.pr,
+      ids: args.ids,
+      repo: args.repo,
+      comment: args.comment,
+      skipComment: args.skipComment,
+      sharedComment: args.sharedComment,
+      commentsFile: args.commentsFile,
+    });
     return;
   }
 
   if (args.command === "status") {
-    if (args.usedIdFlags || args.usedAllFlag || args.comment !== null || args.skipComment) {
-      throw new Error("--id, --ids, --all, --comment, and --no-comment are not valid for 'status'. Use 'status' to view PR review state.");
+    if (args.usedIdFlags || args.usedAllFlag || args.comment !== null || args.skipComment || args.sharedComment || args.commentsFile !== null) {
+      throw new Error("--id, --ids, --all, --comment, --shared-comment, --comments-file, and --no-comment are not valid for 'status'. Use 'status' to view PR review state.");
     }
     printStatus(args.pr, args.repo);
     return;
