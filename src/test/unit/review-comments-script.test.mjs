@@ -227,7 +227,7 @@ describe("review-comments helper script", () => {
     assert.match(result.stdout, /unresolved threads: 2/);
   });
 
-  test("resolve calls resolveReviewThread mutation", () => {
+  test("resolve posts reply comment then resolves thread", () => {
     const { result, log } = runHelper(["resolve", "--pr", "172", "--id", "thread-1"]);
 
     assert.equal(result.status, 0, result.stderr || result.stdout);

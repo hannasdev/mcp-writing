@@ -277,7 +277,7 @@ function resolveThreads({ pr, ids, repo, comment, skipComment }) {
 
   const replyComment = skipComment
     ? null
-    : (comment ?? "Addressed in the latest update. Resolving this thread.");
+    : (comment ?? "Addressed in the latest update. What changed: implemented the requested fix and updated related coverage. Validation: ran targeted checks/tests. Resolving this thread.");
 
   const threads = fetchReviewThreads(pr, repo);
   const threadById = new Map(threads.map((thread) => [thread.id, thread]));

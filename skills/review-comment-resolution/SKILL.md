@@ -44,8 +44,8 @@ After applying fixes:
 3. Push branch updates.
 4. Reply on each addressed thread with a concise resolution note (what changed + validation evidence).
 5. Resolve only threads that are fully addressed.
-5. Re-check unresolved thread count.
-6. Re-check PR checks status.
+6. Re-check unresolved thread count.
+7. Re-check PR checks status.
 
 ## Non-negotiable rules
 
