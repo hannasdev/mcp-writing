@@ -98,6 +98,15 @@ node skills/review-comment-resolution/scripts/review-comments.mjs resolve --pr 1
 node skills/review-comment-resolution/scripts/review-comments.mjs status --pr 171
 ```
 
+Minimal `--comments-file` example:
+
+```json
+{
+   "PRRT_xxx": "Addressed in 1234abc. What changed: fixed numbering in SKILL.md. Validation: node --experimental-sqlite --test src/test/unit/review-comments-script.test.mjs.",
+   "PRRT_yyy": "Addressed in 1234abc. What changed: added tag-normalization regression test. Validation: node --experimental-sqlite --test src/test/unit/review-bundles.test.mjs."
+}
+```
+
 ## Recommended command sequence (GitHub CLI)
 
 Prefer the helper script above. Use raw commands only as fallback.
