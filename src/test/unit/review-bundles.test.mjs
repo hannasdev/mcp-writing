@@ -3,8 +3,43 @@ import assert from "node:assert/strict";
 import os from "node:os";
 import fs from "node:fs";
 import path from "node:path";
-import { buildReviewBundlePlan, renderReviewBundleMarkdown, ReviewBundlePlanError, buildPageFingerprintToken, buildFingerprintSeed, buildFingerprintSeedHash, extractSceneDateline } from "../../review-bundles/review-bundles.js";
+import zlib from "node:zlib";
+import { buildReviewBundlePlan, renderReviewBundleMarkdown, renderReviewBundlePdf, ReviewBundlePlanError, buildPageFingerprintToken, buildFingerprintSeed, buildFingerprintSeedHash, extractSceneDateline } from "../../review-bundles/review-bundles.js";
 import { insertTestScene, setupReviewBundleTestDb } from "../helpers/db.js";
+
+function extractPdfFlateText(pdfBytes) {
+  const markerStart = Buffer.from("stream\n", "latin1");
+  const markerEnd = Buffer.from("\nendstream", "latin1");
+  const chunks = [];
+  let offset = 0;
+
+  while (offset < pdfBytes.length) {
+    const start = pdfBytes.indexOf(markerStart, offset);
+    if (start === -1) break;
+    const dataStart = start + markerStart.length;
+    const end = pdfBytes.indexOf(markerEnd, dataStart);
+    if (end === -1) break;
+    const compressed = pdfBytes.subarray(dataStart, end);
+    try {
+      chunks.push(zlib.inflateSync(compressed).toString("latin1"));
+    } catch {
+      // Non-flate or non-text stream; ignore.
+    }
+    offset = end + markerEnd.length;
+  }
+  return chunks.join("\n");
+}
+
+function decodePdfHexText(inflatedPdfText) {
+  const parts = [];
+  const re = /<([0-9A-Fa-f]+)>/g;
+  let match;
+  while ((match = re.exec(inflatedPdfText)) !== null) {
+    const hex = match[1].length % 2 === 0 ? match[1] : `0${match[1]}`;
+    parts.push(Buffer.from(hex, "hex").toString("latin1"));
+  }
+  return parts.join("");
+}
 
 describe("buildReviewBundlePlan", () => {
   test("orders scenes deterministically with timeline and scene_id fallback", () => {
@@ -537,6 +572,62 @@ describe("buildReviewBundlePlan", () => {
       assert.ok(markdown.includes("## Semantic Drift"));
       assert.ok(!markdown.includes("## Epigraph Chapter 15"));
       assert.ok(markdown.includes("Some people leave behind ideas."));
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+      db.close();
+    }
+  });
+
+  test("renderReviewBundlePdf suppresses epigraph scene title in beta profile", async () => {
+    const db = setupReviewBundleTestDb();
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "bundle-beta-epigraph-pdf-"));
+    const scenePath = path.join(tempDir, "sc-epigraph-015.md");
+    fs.writeFileSync(
+      scenePath,
+      [
+        '"Some people leave behind ideas. Others leave behind a mess. Sebastian does both."',
+        "- Edda Hoffman",
+      ].join("\n"),
+      "utf8"
+    );
+
+    try {
+      const now = new Date().toISOString();
+      db.prepare(`
+        INSERT INTO scenes (
+          scene_id, project_id, title, part, chapter, chapter_title, timeline_position, word_count,
+          file_path, prose_checksum, metadata_stale, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        "sc-epigraph-015",
+        "test-novel",
+        "Epigraph Chapter 15",
+        1,
+        15,
+        "Semantic Drift",
+        1,
+        32,
+        scenePath,
+        "deadbeef",
+        0,
+        now
+      );
+
+      const plan = buildReviewBundlePlan(db, {
+        project_id: "test-novel",
+        profile: "beta_reader_personalized",
+        recipient_name: "Jordan Example",
+      });
+      const pdfBytes = await renderReviewBundlePdf(db, plan, {
+        generatedAt: "2026-01-01T00:00:00.000Z",
+        syncDir: fs.realpathSync.native(tempDir),
+      });
+      const inflatedStreamsText = extractPdfFlateText(pdfBytes);
+      const decodedPdfText = decodePdfHexText(inflatedStreamsText);
+
+      assert.match(decodedPdfText, /Semantic Drift/);
+      assert.doesNotMatch(decodedPdfText, /Epigraph Chapter 15/);
+      assert.match(decodedPdfText, /Some people leave behind ideas\./);
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true });
       db.close();

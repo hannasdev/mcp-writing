@@ -14,7 +14,7 @@ This complements `CHANGELOG.md`:
 - Why it matters: Prevents duplicate or unwanted heading output (for example, "Epigraph Chapter 15") while keeping chapter headings and epigraph prose intact.
 - Who is affected: Authors generating `beta_reader_personalized` review-bundle exports.
 - Action needed: None.
-- PR: TBD
+- PR: [#187](https://github.com/hannasdev/mcp-writing/pull/187)
 
 ### 2026-05-08 — Add standardized post-merge cleanup skill and helper
 
