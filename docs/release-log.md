@@ -8,6 +8,14 @@ This complements `CHANGELOG.md`:
 
 ## Unreleased
 
+### 2026-05-14 — Move chapter and epigraph migration plans into active development
+
+- What changed: The chapter and epigraph migration PRDs were moved from `docs/prd/inbox` to `docs/prd/in-progress`, and the chapter plan now spells out the migration path from scene-scoped chapter metadata to first-class chapter entities.
+- Why it matters: Maintainers can now treat the chapter/epigraph work as active roadmap work with a clear breaking migration plan instead of an inbox idea, which makes sequencing and implementation expectations explicit.
+- Who is affected: Maintainers and contributors working on manuscript structure, sync/import, query, and rendering changes.
+- Action needed: None.
+- PR: #192
+
 ### 2026-05-14 — Editorial PDF redesign for outline_discussion profile
 
 - What changed: The `outline_discussion` PDF now renders as a professional editorial document — cover page with book title and author, running header, centered page numbers, Times Roman typography, chapter dividers, and styled epigraph scenes. New optional `bundle_title` and `author_name` parameters let you customise the cover. `include_scene_ids` defaults to `false` for this profile.
