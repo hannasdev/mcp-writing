@@ -14,7 +14,7 @@ This complements `CHANGELOG.md`:
 - Why it matters: The outline PDF is now a shareable, reader-ready document rather than a plain structured dump. Epigraphs are rendered in a centered italic column with breathing room, clearly distinguishing them from regular scenes.
 - Who is affected: Anyone planning or generating `outline_discussion` bundles via `preview_review_bundle` (planning) and `create_review_bundle` (artifact generation).
 - Action needed: If your `outline_discussion` workflow relied on scene IDs appearing by default, pass `include_scene_ids: true`. Pass `bundle_title` and `author_name` to customise the cover page.
-- PR: #TBD
+- PR: #191
 
 ### 2026-05-14 — Consistent response envelopes for metadata-read tools
 

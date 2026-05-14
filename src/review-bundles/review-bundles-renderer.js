@@ -702,6 +702,7 @@ export function renderReviewBundlePdfWithMetadata(dbHandle, plan, { generatedAt,
     // these, any title or heading that spans the break renders in the wrong font.
     const prevFontName = doc._font?.name ?? bodyFont;
     const prevFontSize = doc._fontSize ?? proseFontSize;
+    const prevFillColor = doc._fillColor ?? "#000000";
     doc.save();
     // Running header: "Outline Overview" — centered, small italic, muted
     doc.font("Times-Italic").fontSize(8).fillColor("#888888");
@@ -716,7 +717,7 @@ export function renderReviewBundlePdfWithMetadata(dbHandle, plan, { generatedAt,
     doc.restore();
     // Restore font, size, and fill color. doc.restore() syncs the PDF graphics
     // state operator stack but not PDFKit's internal JS tracking variables.
-    doc.font(prevFontName).fontSize(prevFontSize).fillColor("#000000");
+    doc.font(prevFontName).fontSize(prevFontSize).fillColor(prevFillColor);
     doc.x = previousX;
     doc.y = previousY;
   };

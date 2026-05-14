@@ -457,6 +457,49 @@ describe("buildReviewBundlePlan", () => {
     }
   });
 
+  test("outline profile scopes cover metadata options; other profiles omit them", () => {
+    const db = setupReviewBundleTestDb();
+    try {
+      insertTestScene(db, {
+        sceneId: "sc-017",
+        part: 1,
+        chapter: 1,
+        timelinePosition: 1,
+        wordCount: 250,
+      });
+
+      const outlineWithCover = buildReviewBundlePlan(db, {
+        project_id: "test-novel",
+        profile: "outline_discussion",
+        bundle_title: "Test Title",
+        author_name: "Test Author",
+      });
+      assert.equal(outlineWithCover.resolved_scope.options.bundle_title, "Test Title");
+      assert.equal(outlineWithCover.resolved_scope.options.author_name, "Test Author");
+
+      const editorWithCover = buildReviewBundlePlan(db, {
+        project_id: "test-novel",
+        profile: "editor_detailed",
+        bundle_title: "Test Title",
+        author_name: "Test Author",
+      });
+      assert.equal(Object.hasOwn(editorWithCover.resolved_scope.options, "bundle_title"), false);
+      assert.equal(Object.hasOwn(editorWithCover.resolved_scope.options, "author_name"), false);
+
+      const betaWithCover = buildReviewBundlePlan(db, {
+        project_id: "test-novel",
+        profile: "beta_reader_personalized",
+        recipient_name: "Jordan",
+        bundle_title: "Test Title",
+        author_name: "Test Author",
+      });
+      assert.equal(Object.hasOwn(betaWithCover.resolved_scope.options, "bundle_title"), false);
+      assert.equal(Object.hasOwn(betaWithCover.resolved_scope.options, "author_name"), false);
+    } finally {
+      db.close();
+    }
+  });
+
   test("renderReviewBundleMarkdown escapes outline loglines with markdown metacharacters", () => {
     const db = setupReviewBundleTestDb();
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "bundle-outline-"));
@@ -793,6 +836,8 @@ describe("buildReviewBundlePlan", () => {
       assert.match(decodedPdfText, /The Lamb/);
       assert.match(decodedPdfText, /Hanna/);
       assert.match(decodedPdfText, /Outline Overview/);
+      // Verify running header appears on content pages: page number only appears in footer
+      assert.match(decodedPdfText, /1/);
       assert.match(decodedPdfText, /Chapter 7/);
       assert.match(decodedPdfText, /A Father's Embrace/);
       assert.match(decodedPdfText, /A key reconciliation scene\./);
