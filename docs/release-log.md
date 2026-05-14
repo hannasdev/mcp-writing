@@ -14,7 +14,7 @@ This complements `CHANGELOG.md`:
 - Why it matters: Agents and integrations can now parse all metadata-read responses with a single consistent pattern, reducing brittle per-tool parsing logic.
 - Who is affected: Any integration or prompt that directly parses the JSON response from these four tools.
 - Action needed: Update parsers. Sheet tools: use `parsed.results[0]` instead of the flat object. `list_scene_references`: use `parsed.results` instead of `parsed.references`. `get_relationship_arc`: use `parsed.results` instead of the top-level array. Safe parsing patterns are in `README.md`.
-- PR: #pending
+- PR: [#189](https://github.com/hannasdev/mcp-writing/pull/189)
 
 ### 2026-05-08 — Suppress epigraph document titles in beta exports
 
