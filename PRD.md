@@ -48,6 +48,12 @@ Define a shared setup contract for configuration-driven writing features so setu
 
 **Status:** In progress. Product direction is shifting away from onboarding-heavy MCP workflow expansion and toward a shared contract plus thin client adapters.
 
+### 📚 [Chapter and Epigraph Migration Gates](docs/prd/in-progress/chapters.md) 🚧
+
+Define the breaking migration plan for first-class chapters, divisions, epigraphs, and the removal of scene-scoped chapter identity.
+
+**Status:** In progress. Migration gates, acceptance criteria, and epigraph alignment are defined; implementation work will follow the staged schema, sync, query, and rendering changes described in the plan.
+
 ---
 
 ## Deferred Backlog (Not Active)
@@ -99,7 +105,7 @@ The canonical tool list and contracts are maintained in [docs/tools.md](docs/too
 Writing MCP is now in continuous development rather than sequential phase delivery.
 
 - **Core platform complete:** the major shipped capabilities are indexed in [docs/prd/completed-features.md](docs/prd/completed-features.md).
-- **Active development:** OpenClaw integration and the client-agnostic setup contract.
+- **Active development:** OpenClaw integration, the client-agnostic setup contract, and the chapter/epigraph migration gates.
 - **Deferred backlog:** embeddings search.
 - **Ideas and open questions:** tracked separately so future exploration does not distort the active roadmap.
 
@@ -111,5 +117,6 @@ Writing MCP is now in continuous development rather than sequential phase delive
 - [Beta Reader Accountability and Book-Like Layout](docs/prd/done/beta-reader-accountability-layout.md) — chapter-scoped beta packets with per-page accountability and book-like PDF defaults
 - [OpenClaw Integration](docs/prd/in-progress/openclaw-integration.md) — deployment and runtime integration
 - [Client-Agnostic Setup Contract](docs/prd/in-progress/client-agnostic-setup.md) — shared setup contract and client-hosted setup UI direction
+- [Chapter and Epigraph Migration Gates](docs/prd/in-progress/chapters.md) — canonical breaking migration plan for chapters, divisions, and epigraphs
 - [Open Ideas](docs/prd/inbox/ideas-and-questions.md) — design questions, feature ideas
 - [Workflow Discovery](docs/prd/done/describe-workflows.md) — `describe_workflows` tool, entry-point for AI navigation
