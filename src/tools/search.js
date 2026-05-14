@@ -371,7 +371,7 @@ export function registerSearchTools(s, {
   // ---- get_character_sheet -------------------------------------------------
   s.tool(
     "get_character_sheet",
-    "Get full character details: role, arc_summary, traits, the canonical sheet content, and any adjacent support notes when the character uses a folder-based layout. Use this when the reasoning task needs the character's canonical profile rather than only their scene progression.",
+    "Get full character details: role, arc_summary, traits, the canonical sheet content, and any adjacent support notes when the character uses a folder-based layout. Use this when the reasoning task needs the character's canonical profile rather than only their scene progression. Response shape note: returns a structured envelope (`results`, `total_count`) with one result row.",
     {
       character_id: z.string().describe("The character_id to look up (e.g. 'char-sebastian'). Use list_characters to find valid IDs."),
     },
@@ -402,9 +402,17 @@ export function registerSearchTools(s, {
         traits,
         notes: notes || undefined,
         supporting_notes: supportingNotes.length ? supportingNotes : undefined,
-        next_step: "Use get_arc with this character_id to trace scene-level progression, then open specific scenes with get_scene_prose when prose evidence is needed.",
       };
-      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      return {
+        content: [{
+          type: "text",
+          text: JSON.stringify({
+            results: [result],
+            total_count: 1,
+            next_step: "Use get_arc with this character_id to trace scene-level progression, then open specific scenes with get_scene_prose when prose evidence is needed.",
+          }, null, 2),
+        }],
+      };
     }
   );
 
@@ -444,7 +452,7 @@ export function registerSearchTools(s, {
   // ---- get_place_sheet -----------------------------------------------------
   s.tool(
     "get_place_sheet",
-    "Get full place details: associated_characters, tags, the canonical sheet content, and any adjacent support notes when the place uses a folder-based layout. Use this when the current scene or question makes the place itself materially relevant.",
+    "Get full place details: associated_characters, tags, the canonical sheet content, and any adjacent support notes when the place uses a folder-based layout. Use this when the current scene or question makes the place itself materially relevant. Response shape note: returns a structured envelope (`results`, `total_count`) with one result row.",
     {
       place_id: z.string().describe("The place_id to look up (e.g. 'place-harbor-district'). Use list_places to find valid IDs."),
     },
@@ -480,9 +488,17 @@ export function registerSearchTools(s, {
         tags: tags.length ? tags : undefined,
         notes: notes || undefined,
         supporting_notes: supportingNotes.length ? supportingNotes : undefined,
-        next_step: "Use find_scenes with related filters to locate scenes where this place matters, then open targeted scenes with get_scene_prose when prose context is needed.",
       };
-      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      return {
+        content: [{
+          type: "text",
+          text: JSON.stringify({
+            results: [result],
+            total_count: 1,
+            next_step: "Use find_scenes with related filters to locate scenes where this place matters, then open targeted scenes with get_scene_prose when prose context is needed.",
+          }, null, 2),
+        }],
+      };
     }
   );
 
@@ -635,7 +651,7 @@ export function registerSearchTools(s, {
   // ---- list_scene_references -----------------------------------------------
   s.tool(
     "list_scene_references",
-    "List direct reference documents linked from a scene via metadata (for example, reference_ids). Returns only one-hop scene -> reference links and does not recursively traverse related references. If scene IDs are reused across projects, omitting project_id returns CONFLICT with candidate project_ids.",
+    "List direct reference documents linked from a scene via metadata (for example, reference_ids). Returns only one-hop scene -> reference links and does not recursively traverse related references. If scene IDs are reused across projects, omitting project_id returns CONFLICT with candidate project_ids. Response shape note: returns a structured envelope (`results`, `total_count`) plus the resolved `scene_id` and `project_id` context.",
     {
       scene_id: z.string().describe("Scene ID to inspect."),
       project_id: z.string().optional().describe("Optional project ID to disambiguate duplicate scene IDs across projects."),
@@ -714,9 +730,10 @@ export function registerSearchTools(s, {
         content: [{
           type: "text",
           text: JSON.stringify({
+            results: references,
+            total_count: references.length,
             scene_id: scene.scene_id,
             project_id: scene.project_id,
-            references,
           }, null, 2),
         }],
       };
@@ -869,7 +886,7 @@ export function registerSearchTools(s, {
   // ---- get_relationship_arc ------------------------------------------------
   s.tool(
     "get_relationship_arc",
-    "Show how the relationship between two characters evolves across scenes, in order. Uses explicitly recorded relationship entries — returns nothing if no entries exist yet. Use list_characters to get character_id values.",
+    "Show how the relationship between two characters evolves across scenes, in order. Uses explicitly recorded relationship entries — returns nothing if no entries exist yet. Use list_characters to get character_id values. Response shape note: returns a structured envelope { results, total_count, from_character, to_character }.",
     {
       from_character: z.string().describe("character_id of the first character (e.g. 'char-sebastian')."),
       to_character:   z.string().describe("character_id of the second character (e.g. 'char-mira-nystrom')."),
@@ -892,7 +909,7 @@ export function registerSearchTools(s, {
       if (rows.length === 0) {
         return errorResponse("NO_RESULTS", `No relationship data found between '${from_character}' and '${to_character}'.`);
       }
-      return { content: [{ type: "text", text: JSON.stringify(rows, null, 2) }] };
+      return { content: [{ type: "text", text: JSON.stringify({ results: rows, total_count: rows.length, from_character, to_character }, null, 2) }] };
     }
   );
 

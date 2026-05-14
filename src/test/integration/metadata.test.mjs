@@ -87,8 +87,9 @@ describe("update_place_sheet tool", () => {
 
     const sheet = await callWriteTool("get_place_sheet", { place_id: "harbor-district" });
     const parsed = JSON.parse(sheet);
-    assert.ok(parsed.associated_characters.includes("marcus"));
-    assert.ok(parsed.tags.includes("docks"));
+    assert.equal(parsed.total_count, 1);
+    assert.ok(parsed.results[0].associated_characters.includes("marcus"));
+    assert.ok(parsed.results[0].tags.includes("docks"));
   });
 
   test("returns error for unknown place", async () => {

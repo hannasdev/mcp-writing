@@ -92,6 +92,30 @@ const warning = parsed.warning ?? null;
 const nextStep = parsed.next_step ?? null;
 ```
 
+### `get_character_sheet`, `get_place_sheet`, `list_scene_references`, `get_relationship_arc` response-shape standardization
+
+These metadata-read tools now return structured envelopes instead of flat objects or raw arrays.
+
+- `get_character_sheet` and `get_place_sheet`: previously returned a flat object of field values; now return `{ results: [row], total_count: 1, next_step }`.
+- `list_scene_references`: previously returned `{ references, scene_id, project_id }`; now returns `{ results, total_count, scene_id, project_id }`.
+- `get_relationship_arc`: previously returned a raw JSON array; now returns `{ results, total_count, from_character, to_character }`.
+
+Safe parsing pattern for sheet tools:
+
+```js
+const parsed = JSON.parse(toolText);
+const sheet = parsed.results?.[0] ?? {};
+const nextStep = parsed.next_step ?? null;
+```
+
+Safe parsing pattern for list/arc tools:
+
+```js
+const parsed = JSON.parse(toolText);
+const items = parsed.results ?? [];
+const totalCount = parsed.total_count ?? items.length;
+```
+
 ## Usage scenarios
 
 ### 1) Continuity pass before sending chapters to beta readers

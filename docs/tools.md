@@ -248,7 +248,7 @@ List indexed characters with their character_id, name, role, and arc_summary. Us
 
 ## get_character_sheet
 
-Get full character details: role, arc_summary, traits, the canonical sheet content, and any adjacent support notes when the character uses a folder-based layout. Use this when the reasoning task needs the character's canonical profile rather than only their scene progression.
+Get full character details: role, arc_summary, traits, the canonical sheet content, and any adjacent support notes when the character uses a folder-based layout. Use this when the reasoning task needs the character's canonical profile rather than only their scene progression. Response shape note: returns a structured envelope (`results`, `total_count`) with one result row.
 
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |
@@ -269,7 +269,7 @@ List indexed places with their place_id and name. Use this mainly as a lookup an
 
 ## get_place_sheet
 
-Get full place details: associated_characters, tags, the canonical sheet content, and any adjacent support notes when the place uses a folder-based layout. Use this when the current scene or question makes the place itself materially relevant.
+Get full place details: associated_characters, tags, the canonical sheet content, and any adjacent support notes when the place uses a folder-based layout. Use this when the current scene or question makes the place itself materially relevant. Response shape note: returns a structured envelope (`results`, `total_count`) with one result row.
 
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |
@@ -303,7 +303,7 @@ Full-text search across indexed reference document titles, summaries, and tags. 
 
 ## list_scene_references
 
-List direct reference documents linked from a scene via metadata (for example, reference_ids). Returns only one-hop scene -> reference links and does not recursively traverse related references. If scene IDs are reused across projects, omitting project_id returns CONFLICT with candidate project_ids.
+List direct reference documents linked from a scene via metadata (for example, reference_ids). Returns only one-hop scene -> reference links and does not recursively traverse related references. If scene IDs are reused across projects, omitting project_id returns CONFLICT with candidate project_ids. Response shape note: returns a structured envelope (`results`, `total_count`) plus the resolved `scene_id` and `project_id` context.
 
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |
@@ -349,7 +349,7 @@ Get ordered scene metadata for all scenes belonging to a thread, including the p
 
 ## get_relationship_arc
 
-Show how the relationship between two characters evolves across scenes, in order. Uses explicitly recorded relationship entries — returns nothing if no entries exist yet. Use list_characters to get character_id values.
+Show how the relationship between two characters evolves across scenes, in order. Uses explicitly recorded relationship entries — returns nothing if no entries exist yet. Use list_characters to get character_id values. Response shape note: returns a structured envelope { results, total_count, from_character, to_character }.
 
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |

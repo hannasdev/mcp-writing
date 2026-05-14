@@ -219,9 +219,10 @@ describe("reference link search tools", () => {
 
       assert.equal(parsed.scene_id, "sc-001");
       assert.equal(parsed.project_id, "test-novel");
-      assert.equal(parsed.references.length, 1);
-      assert.equal(parsed.references[0].doc_id, "ref-vampirism");
-      assert.deepEqual(parsed.references[0].tags, ["lore", "vampirism"]);
+      assert.equal(parsed.total_count, 1);
+      assert.equal(parsed.results.length, 1);
+      assert.equal(parsed.results[0].doc_id, "ref-vampirism");
+      assert.deepEqual(parsed.results[0].tags, ["lore", "vampirism"]);
     } finally {
       db.close();
     }
