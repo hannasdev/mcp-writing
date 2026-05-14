@@ -5,6 +5,12 @@ import matter from "gray-matter";
 import PDFDocument from "pdfkit";
 import { ReviewBundlePlanError, normalizeRecipientDisplayName } from "./review-bundles-planner.js";
 
+function prettifyProjectId(projectId) {
+  // "universe-1/book-1-the-lamb" -> "Book 1 The Lamb"
+  const slug = String(projectId ?? "").split("/").pop() ?? "";
+  return slug.split("-").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+}
+
 function escapeMarkdown(text) {
   return String(text ?? "")
     .replace(/\\/g, "\\\\")
@@ -604,14 +610,16 @@ export function renderReviewBundlePdfWithMetadata(dbHandle, plan, { generatedAt,
     : Boolean(plan.resolved_scope?.options?.include_scene_ids);
   const syncDir = syncDirOpt ?? process.env.WRITING_SYNC_DIR ?? null;
   const isBetaProfile = profile === "beta_reader_personalized";
+  const isOutlineProfile = profile === "outline_discussion";
   const proseFontSize = isBetaProfile ? 8 : 10;
   const proseLineGap = isBetaProfile ? 1.6 : 3;
-  const bodyFont = profile === "beta_reader_personalized" ? "Times-Roman" : "Helvetica";
-  const coverHeadingFont = profile === "beta_reader_personalized" ? "Times-Bold" : "Helvetica-Bold";
-  // Beta scene headings intentionally use body font (non-bold) per product direction.
-  const sceneHeadingFont = isBetaProfile ? bodyFont : coverHeadingFont;
-  const italicFont = profile === "beta_reader_personalized" ? "Times-Italic" : "Helvetica-Oblique";
+  // outline_discussion and beta_reader_personalized both use Times for a professional editorial feel.
+  const bodyFont = (isBetaProfile || isOutlineProfile) ? "Times-Roman" : "Helvetica";
+  const coverHeadingFont = (isBetaProfile || isOutlineProfile) ? "Times-Bold" : "Helvetica-Bold";
+  const italicFont = (isBetaProfile || isOutlineProfile) ? "Times-Italic" : "Helvetica-Oblique";
   const metaFont = italicFont;
+  // Beta uses bodyFont (non-bold); outline uses italicFont (elegant, lighter weight); editor uses Bold.
+  const sceneHeadingFont = isBetaProfile ? bodyFont : (isOutlineProfile ? italicFont : coverHeadingFont);
 
   const sceneIds = plan.ordering.map(row => row.scene_id);
   const rows = loadBundleSceneRowsWithTags(dbHandle, plan.resolved_scope.project_id, sceneIds);
@@ -627,12 +635,21 @@ export function renderReviewBundlePdfWithMetadata(dbHandle, plan, { generatedAt,
   const fingerprintSeedHash = fingerprintSeed ? buildFingerprintSeedHash(fingerprintSeed) : null;
   const pageTokens = [];
   let pageNumber = 0;
+  let outlineCoverCompleted = false;
+  let outlineContentPageNumber = 0;
 
   const pdfOptions = profile === "beta_reader_personalized"
     ? {
         size: [432, 648], // 6x9in in PDF points
         // Extra bottom margin reserves clear space above the accountability footer.
         margins: { top: 64, right: 58, bottom: 96, left: 58 },
+        autoFirstPage: false,
+      }
+    : profile === "outline_discussion"
+    ? {
+        size: "Letter",
+        // Extra bottom margin reserves space for centered page number footer.
+        margins: { top: 72, right: 72, bottom: 90, left: 72 },
         autoFirstPage: false,
       }
     : {
@@ -671,7 +688,46 @@ export function renderReviewBundlePdfWithMetadata(dbHandle, plan, { generatedAt,
     doc.x = previousX;
     doc.y = previousY;
   };
-  doc.on("pageAdded", drawAccountabilityFooter);
+
+  const drawOutlineHeaderFooter = () => {
+    if (!isOutlineProfile) return;
+    // Do not render running chrome while the cover is still laying out.
+    // Very long title/author text can auto-add pages before explicit content starts.
+    if (!outlineCoverCompleted) return;
+    outlineContentPageNumber += 1;
+    const contentPageNum = outlineContentPageNumber;
+    const previousX = doc.x;
+    const previousY = doc.y;
+    // Capture the full text-rendering state before drawing. When a doc.text()
+    // call triggers a page break mid-flow, PDFKit re-applies its internal
+    // _font/_fontSize to the new page after pageAdded fires. Without restoring
+    // these, any title or heading that spans the break renders in the wrong font.
+    const prevFontName = doc._font?.name ?? bodyFont;
+    const prevFontSize = doc._fontSize ?? proseFontSize;
+    const prevFillColor = doc._fillColor ?? "#000000";
+    doc.save();
+    // Running header: "Outline Overview" — centered, small italic, muted
+    doc.font("Times-Italic").fontSize(8).fillColor("#888888");
+    const headerText = "Outline Overview";
+    const headerX = (doc.page.width - doc.widthOfString(headerText)) / 2;
+    doc.text(headerText, headerX, 34, { lineBreak: false });
+    // Centered page number in footer
+    doc.font("Times-Roman").fontSize(9).fillColor("#888888");
+    const pageText = String(contentPageNum);
+    const pageX = (doc.page.width - doc.widthOfString(pageText)) / 2;
+    doc.text(pageText, pageX, doc.page.height - 48, { lineBreak: false });
+    doc.restore();
+    // Restore font, size, and fill color. doc.restore() syncs the PDF graphics
+    // state operator stack but not PDFKit's internal JS tracking variables.
+    doc.font(prevFontName).fontSize(prevFontSize).fillColor(prevFillColor);
+    doc.x = previousX;
+    doc.y = previousY;
+  };
+
+  doc.on("pageAdded", () => {
+    drawAccountabilityFooter();
+    drawOutlineHeaderFooter();
+  });
 
   // Register listeners before any content is written so render-time errors
   // always reject the returned Promise.
@@ -703,20 +759,60 @@ export function renderReviewBundlePdfWithMetadata(dbHandle, plan, { generatedAt,
 
     try {
       doc.addPage();
-      const coverLabel = `Review Bundle: ${plan.resolved_scope.project_id}`;
-      doc.fontSize(isBetaProfile ? 11 : 24).font(coverHeadingFont).text(coverLabel, { align: "left" });
-      doc.moveDown(isBetaProfile ? 0.2 : 0.5);
-      doc.fontSize(11).font(bodyFont);
-      if (profile !== "beta_reader_personalized") {
-        doc.text(`Profile: ${profile}`, { align: "left" });
-      }
-      if (profile === "beta_reader_personalized") {
-        doc.text(`Recipient: ${recipientDisplayName}`, { align: "left" });
+
+      if (isOutlineProfile) {
+        // Clean editorial cover: title, optional author, rule, document type label.
+        const textWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+        const bundleTitle = plan.resolved_scope.options.bundle_title
+          ?? prettifyProjectId(plan.resolved_scope.project_id);
+        const authorName = plan.resolved_scope.options.author_name ?? null;
+        // Position title roughly 35% down the page for a balanced layout.
+        const coverTitleY = doc.page.height * 0.35;
+        doc.fontSize(28).font("Times-Bold").fillColor("#000000");
+        doc.text(bundleTitle, doc.page.margins.left, coverTitleY, { width: textWidth, align: "center" });
+        doc.moveDown(1.0);
+        if (authorName) {
+          doc.fontSize(14).font("Times-Roman");
+          doc.text(authorName, { width: textWidth, align: "center" });
+          doc.moveDown(1.0);
+        } else {
+          doc.moveDown(0.9);
+        }
+        // Hairline rule
+        const ruleY = doc.y;
+        doc.moveTo(doc.page.margins.left, ruleY)
+           .lineTo(doc.page.margins.left + textWidth, ruleY)
+           .strokeColor("#888888")
+           .lineWidth(0.5)
+           .stroke();
+        doc.moveDown(0.8);
+        // Document type label
+        doc.fontSize(11).font("Times-Italic").fillColor("#888888");
+        doc.text("Outline Overview", { width: textWidth, align: "center" });
+        doc.moveDown(0.3);
+        doc.fontSize(9).font("Times-Roman").fillColor("#777777");
+        doc.text(`Generated: ${effectiveGeneratedAt}`, { width: textWidth, align: "center" });
+        doc.fillColor("#000000");
+        outlineCoverCompleted = true;
+        // Start scene content on a fresh page so the cover is always standalone
+        // and the pageAdded event fires to draw the running header + footer.
+        doc.addPage();
       } else {
-        doc.text(`Generated: ${effectiveGeneratedAt}`, { align: "left" });
-        doc.text(`Scenes: ${plan.summary.scene_count}`, { align: "left" });
+        const coverLabel = `Review Bundle: ${plan.resolved_scope.project_id}`;
+        doc.fontSize(isBetaProfile ? 11 : 24).font(coverHeadingFont).text(coverLabel, { align: "left" });
+        doc.moveDown(isBetaProfile ? 0.2 : 0.5);
+        doc.fontSize(11).font(bodyFont);
+        if (profile !== "beta_reader_personalized") {
+          doc.text(`Profile: ${profile}`, { align: "left" });
+        }
+        if (profile === "beta_reader_personalized") {
+          doc.text(`Recipient: ${recipientDisplayName}`, { align: "left" });
+        } else {
+          doc.text(`Generated: ${effectiveGeneratedAt}`, { align: "left" });
+          doc.text(`Scenes: ${plan.summary.scene_count}`, { align: "left" });
+        }
+        doc.moveDown();
       }
-      doc.moveDown();
 
       if (profile === "beta_reader_personalized") {
         doc.fontSize(12).font("Times-Bold").text("Usage Notice", { align: "left" });
@@ -744,20 +840,38 @@ export function renderReviewBundlePdfWithMetadata(dbHandle, plan, { generatedAt,
           doc.moveDown(1.0);
         }
 
-        // Skip title rendering for epigraphs in beta profile
-        const isEpigraph = isBetaProfile && isEpigraphScene(scene);
+        // For outline_discussion: chapter dividers when the chapter changes.
+        if (isOutlineProfile && scene.chapter != null) {
+          if (!prevScene || prevScene.chapter !== scene.chapter) {
+            if (sceneIndex > 0) doc.moveDown(1.2);
+            const textWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+            const chapterLabel = `Chapter ${scene.chapter}`;
+            doc.fontSize(10).font("Times-Bold").fillColor("#000000");
+            doc.text(chapterLabel, { width: textWidth });
+            doc.moveDown(0.25);
+            doc.moveTo(doc.page.margins.left, doc.y)
+               .lineTo(doc.page.margins.left + textWidth, doc.y)
+               .strokeColor("#cccccc").lineWidth(0.5).stroke();
+            doc.moveDown(0.6);
+          } else if (sceneIndex > 0) {
+            doc.moveDown(1.2);
+          }
+        }
+
+        // Skip title for epigraphs in beta and outline profiles.
+        const isEpigraph = (isBetaProfile || isOutlineProfile) && isEpigraphScene(scene);
         if (!isEpigraph) {
-          doc.fontSize(isBetaProfile ? 13 : 14).font(sceneHeadingFont);
+          doc.fontSize(isBetaProfile ? 13 : isOutlineProfile ? 12 : 14).font(sceneHeadingFont);
           let heading = scene.title || scene.scene_id;
           if (includeSceneIds) {
             heading += ` [${scene.scene_id}]`;
           }
           doc.text(heading, { align: isBetaProfile ? "center" : "left" });
-          doc.moveDown(isBetaProfile ? 1.6 : 0.2);
+          doc.moveDown(isBetaProfile ? 1.6 : isOutlineProfile ? 0.5 : 0.2);
         }
 
         const metaParts = [];
-        if (profile !== "beta_reader_personalized") {
+        if (profile !== "beta_reader_personalized" && !isEpigraph) {
           if (scene.pov) metaParts.push(`POV: ${scene.pov}`);
           if (scene.save_the_cat_beat) metaParts.push(`Beat: ${scene.save_the_cat_beat}`);
         }
@@ -766,17 +880,17 @@ export function renderReviewBundlePdfWithMetadata(dbHandle, plan, { generatedAt,
           doc.fontSize(9).font(metaFont);
           doc.text(metaParts.join(" • "), { align: "left", width: metaWidth });
           doc.font(bodyFont);
-          doc.moveDown(0.2);
+          doc.moveDown(isOutlineProfile ? 0.4 : 0.2);
         }
 
-        if (profile === "outline_discussion" && scene.logline) {
-          doc.fontSize(10).font("Helvetica-Oblique");
+        if (profile === "outline_discussion" && !isEpigraph && scene.logline) {
+          doc.fontSize(10).font(bodyFont);
           const textWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
-          doc.text(`"${scene.logline}"`, { align: "left", width: textWidth });
-          doc.moveDown(0.3);
+          doc.text(scene.logline, { align: "left", width: textWidth, lineGap: 2 });
+          doc.moveDown(0.6);
         }
 
-        if (profile === "editor_detailed" || profile === "beta_reader_personalized") {
+        if (profile === "editor_detailed" || profile === "beta_reader_personalized" || (isOutlineProfile && isEpigraph)) {
           let prose = "";
           const resolved = readProse(scene.file_path, { syncDir });
           if (resolved === null) {
@@ -810,16 +924,37 @@ export function renderReviewBundlePdfWithMetadata(dbHandle, plan, { generatedAt,
           }
 
           const textWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
-          renderProseWithInlineEmphasis(doc, prose, {
-            bodyFont,
-            italicFont,
-            fontSize: proseFontSize,
-            align: "left",
-            width: textWidth,
-            lineGap: proseLineGap,
-            paragraphGap: 0,
-            blankLineMoveDown: isBetaProfile ? 0.15 : 0.65,
-          });
+          if (isOutlineProfile && isEpigraph) {
+            // Epigraphs: centered, italic, narrower column with extra breathing room.
+            const epigraphWidth = Math.round(textWidth * 0.68);
+            const epigraphIndent = Math.round((textWidth - epigraphWidth) / 2);
+            doc.moveDown(1.5);
+            const savedX = doc.x;
+            doc.x = doc.page.margins.left + epigraphIndent;
+            renderProseWithInlineEmphasis(doc, prose, {
+              bodyFont: italicFont,
+              italicFont: bodyFont,
+              fontSize: proseFontSize,
+              align: "left",
+              width: epigraphWidth,
+              lineGap: proseLineGap,
+              paragraphGap: 0,
+              blankLineMoveDown: 0.65,
+            });
+            doc.x = savedX;
+            doc.moveDown(1.5);
+          } else {
+            renderProseWithInlineEmphasis(doc, prose, {
+              bodyFont,
+              italicFont,
+              fontSize: proseFontSize,
+              align: "left",
+              width: textWidth,
+              lineGap: proseLineGap,
+              paragraphGap: 0,
+              blankLineMoveDown: isBetaProfile ? 0.15 : 0.65,
+            });
+          }
         }
 
         doc.moveDown(0.5);

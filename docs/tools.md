@@ -491,12 +491,14 @@ Dry-run planning tool for review bundles. Resolves scene scope, deterministic or
 | `tag` | `string` | No | Optional tag filter (exact match). |
 | `scene_ids` | `string[]` | No | Optional explicit scene_id allowlist. Intersects with other filters. |
 | `strictness` | `enum` | No | Strictness mode: warn (default) or fail. |
-| `include_scene_ids` | `boolean` | No | Rendering option (default true). Echoed in resolved_scope.options for downstream rendering; does not change planning results. |
+| `include_scene_ids` | `boolean` | No | Rendering option (default true for editor_detailed; false for outline_discussion). beta_reader_personalized always resolves this to false, even when true is passed. Echoed in resolved_scope.options for downstream rendering; does not change planning results. |
 | `include_metadata_sidebar` | `boolean` | No | Rendering option (default false). Echoed in resolved_scope.options for downstream rendering; does not change planning results. |
 | `include_paragraph_anchors` | `boolean` | No | Rendering option (default false). Echoed in resolved_scope.options for downstream rendering; does not change planning results. |
 | `recipient_name` | `string` | No | Optional recipient display name for beta_reader_personalized profile. |
 | `beta_accountability` | `boolean` | No | Enable accountability footer + fingerprint metadata for beta_reader_personalized output (default true for beta profile). |
 | `bundle_name` | `string` | No | Optional output bundle base name override (slugified in planned outputs). |
+| `bundle_title` | `string` | No | Optional book or document title for the cover page (outline_discussion PDF only). |
+| `author_name` | `string` | No | Optional author name for the cover page (outline_discussion PDF only). |
 | `format` | `enum("pdf","markdown","both")` | No | Planned output format: pdf (default), markdown, or both. Affects planned_outputs filenames only; preview_review_bundle does not render artifacts. |
 
 ---
@@ -516,12 +518,14 @@ Generate review bundle artifacts (PDF/markdown) from planned scene scope. Writes
 | `tag` | `string` | No | Optional tag filter (exact match). |
 | `scene_ids` | `string[]` | No | Optional explicit scene_id allowlist. Intersects with other filters. |
 | `strictness` | `enum` | No | Strictness mode: warn (default) or fail. |
-| `include_scene_ids` | `boolean` | No | Include scene IDs in headings (default true). Applies to both PDF and markdown. |
+| `include_scene_ids` | `boolean` | No | Include scene IDs in headings (default true for editor_detailed; false for outline_discussion). beta_reader_personalized always resolves this to false, even when true is passed. Applies to both PDF and markdown. |
 | `include_metadata_sidebar` | `boolean` | No | Include metadata sidebar in markdown output (default false). Markdown only — no effect on PDF. |
 | `include_paragraph_anchors` | `boolean` | No | Include paragraph anchors in markdown output (default false). Markdown only — no effect on PDF. |
 | `recipient_name` | `string` | No | Optional recipient display name for beta_reader_personalized profile. |
 | `beta_accountability` | `boolean` | No | Enable accountability footer + fingerprint metadata for beta_reader_personalized output (default true for beta profile). |
 | `bundle_name` | `string` | No | Optional output bundle base name override (slugified in filenames). |
+| `bundle_title` | `string` | No | Optional book or document title for the cover page (outline_discussion PDF only). |
+| `author_name` | `string` | No | Optional author name for the cover page (outline_discussion PDF only). |
 | `source_commit` | `string` | No | Optional explicit source commit for provenance. Defaults to current HEAD when available. |
 | `format` | `enum("pdf","markdown","both")` | No | Output format: pdf (default), markdown, or both. |
 
