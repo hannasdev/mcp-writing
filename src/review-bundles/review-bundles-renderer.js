@@ -766,11 +766,11 @@ export function renderReviewBundlePdfWithMetadata(dbHandle, plan, { generatedAt,
         // Position title roughly 35% down the page for a balanced layout.
         const coverTitleY = doc.page.height * 0.35;
         doc.fontSize(28).font("Times-Bold").fillColor("#000000");
-        doc.text(bundleTitle, doc.page.margins.left, coverTitleY, { width: textWidth });
+        doc.text(bundleTitle, doc.page.margins.left, coverTitleY, { width: textWidth, align: "center" });
         doc.moveDown(0.5);
         if (authorName) {
           doc.fontSize(14).font("Times-Roman");
-          doc.text(authorName, { width: textWidth });
+          doc.text(authorName, { width: textWidth, align: "center" });
           doc.moveDown(0.8);
         } else {
           doc.moveDown(0.5);
@@ -785,7 +785,7 @@ export function renderReviewBundlePdfWithMetadata(dbHandle, plan, { generatedAt,
         doc.moveDown(0.8);
         // Document type label
         doc.fontSize(11).font("Times-Italic").fillColor("#888888");
-        doc.text("Outline Overview", { width: textWidth });
+        doc.text("Outline Overview", { width: textWidth, align: "center" });
         doc.fillColor("#000000");
         // Start scene content on a fresh page so the cover is always standalone
         // and the pageAdded event fires to draw the running header + footer.
