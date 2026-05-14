@@ -9,3 +9,4 @@ sync/
 txt/
 my-project-sync/
 tmp/
+.vscode/settings.json
