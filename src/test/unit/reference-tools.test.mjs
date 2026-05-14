@@ -885,3 +885,33 @@ describe("reference link search tools", () => {
     }
   });
 });
+
+  describe("get_relationship_arc tool", () => {
+    test("success path returns { results, total_count, from_character, to_character } envelope", async () => {
+      const db = openDb(":memory:");
+      try {
+        seedProject(db, "proj");
+        seedScene(db, { sceneId: "sc-001", projectId: "proj" });
+        db.prepare(`
+          INSERT INTO character_relationships
+            (from_character, to_character, relationship_type, strength, scene_id, note)
+          VALUES (?, ?, ?, ?, ?, ?)
+        `).run("char-elena", "char-marcus", "ally", "high", "sc-001", "Meet at harbor");
+
+        const harness = makeToolHarness(db);
+        const result = await harness.call("get_relationship_arc", {
+          from_character: "char-elena",
+          to_character: "char-marcus",
+        });
+
+        assert.equal(Array.isArray(result.results), true);
+        assert.equal(result.total_count, 1);
+        assert.equal(result.from_character, "char-elena");
+        assert.equal(result.to_character, "char-marcus");
+        assert.equal(result.results[0].relationship_type, "ally");
+        assert.equal(result.results[0].strength, "high");
+      } finally {
+        db.close();
+      }
+    });
+  });

@@ -86,6 +86,7 @@ Safe parsing pattern:
 
 ```js
 const parsed = JSON.parse(toolText);
+if (parsed.ok === false) throw new Error(parsed.error?.message ?? "tool error");
 const scenes = parsed.results ?? [];
 const totalCount = parsed.total_count ?? scenes.length;
 const warning = parsed.warning ?? null;
@@ -104,6 +105,7 @@ Safe parsing pattern for sheet tools:
 
 ```js
 const parsed = JSON.parse(toolText);
+if (parsed.ok === false) throw new Error(parsed.error?.message ?? "tool error");
 const sheet = parsed.results?.[0] ?? {};
 const nextStep = parsed.next_step ?? null;
 ```
@@ -112,6 +114,7 @@ Safe parsing pattern for list/arc tools:
 
 ```js
 const parsed = JSON.parse(toolText);
+if (parsed.ok === false) throw new Error(parsed.error?.message ?? "tool error");
 const items = parsed.results ?? [];
 const totalCount = parsed.total_count ?? items.length;
 ```
