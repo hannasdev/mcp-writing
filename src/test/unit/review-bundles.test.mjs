@@ -791,6 +791,7 @@ describe("buildReviewBundlePlan", () => {
       const decodedPdfText = decodePdfHexText(inflatedStreamsText);
 
       assert.match(decodedPdfText, /The Lamb/);
+      assert.match(decodedPdfText, /Hanna/);
       assert.match(decodedPdfText, /Outline Overview/);
       assert.match(decodedPdfText, /Chapter 7/);
       assert.match(decodedPdfText, /A Father's Embrace/);

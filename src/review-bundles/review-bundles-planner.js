@@ -374,8 +374,8 @@ export function buildReviewBundlePlan(dbHandle, {
         include_paragraph_anchors: resolvedIncludeParagraphAnchors,
         beta_accountability: resolvedBetaAccountability,
         ...(resolvedRecipientName ? { recipient_name: resolvedRecipientName } : {}),
-        ...(normalizedBundleTitle ? { bundle_title: normalizedBundleTitle } : {}),
-        ...(normalizedAuthorName ? { author_name: normalizedAuthorName } : {}),
+        ...(isOutlineProfile && normalizedBundleTitle ? { bundle_title: normalizedBundleTitle } : {}),
+        ...(isOutlineProfile && normalizedAuthorName ? { author_name: normalizedAuthorName } : {}),
       },
     },
     ordering: rows.map(row => ({

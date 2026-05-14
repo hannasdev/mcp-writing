@@ -13,7 +13,7 @@ This complements `CHANGELOG.md`:
 - What changed: The `outline_discussion` PDF now renders as a professional editorial document — cover page with book title and author, running header, centered page numbers, Times Roman typography, chapter dividers, and styled epigraph scenes. New optional `bundle_title` and `author_name` parameters let you customise the cover. `include_scene_ids` defaults to `false` for this profile.
 - Why it matters: The outline PDF is now a shareable, reader-ready document rather than a plain structured dump. Epigraphs are rendered in a centered italic column with breathing room, clearly distinguishing them from regular scenes.
 - Who is affected: Anyone planning or generating `outline_discussion` bundles via `preview_review_bundle` (planning) and `create_review_bundle` (artifact generation).
-- Action needed: None. Defaults are backward-compatible. Pass `bundle_title` and `author_name` to customise the cover page.
+- Action needed: If your `outline_discussion` workflow relied on scene IDs appearing by default, pass `include_scene_ids: true`. Pass `bundle_title` and `author_name` to customise the cover page.
 - PR: #TBD
 
 ### 2026-05-14 — Consistent response envelopes for metadata-read tools
