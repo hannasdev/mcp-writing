@@ -1,6 +1,16 @@
 # Beta Reader Accountability and Book-Like Layout
 
-**Status:** 📋 Proposed (inbox)
+**Status:** ✅ Done (shipped 2026-05-08)
+
+## Implementation Status
+
+Implemented across planner, renderer, writer, tool schemas, and tests.
+
+- Tool contract supports `chapters` and `beta_accountability` for beta bundles.
+- Beta PDF output includes per-page visible accountability footer and per-page fingerprint tokens.
+- Manifest includes fingerprint metadata for accountable beta PDF bundles.
+- Beta PDF layout uses book-like defaults (6x9 page geometry).
+- Release entry: [Release Log](../../release-log.md)
 
 ## Problem
 
@@ -99,11 +109,11 @@ These are defaults, not user-exposed publishing controls.
 2. Book-like smaller pages improve readability but increase total page count.
 3. Deterministic tokening improves traceability but requires careful input normalization to avoid accidental drift.
 
-## Open Decisions
+## Resolved Decisions
 
-1. Should footer appear on cover and notice pages, or prose pages only?
-2. Should the token include a human-recognizable recipient fragment (for example initials), or remain opaque?
-3. Should chapter selection add explicit `chapters: number[]` for review bundles, or rely on repeated existing filtering calls?
+1. Footer appears on all beta PDF pages (cover, notice, and prose pages).
+2. Token remains opaque and readable (`BR-...-P###`) without embedding recipient fragments.
+3. Chapter selection uses explicit `chapters: number[]` support, with deterministic normalization and validation.
 
 ## Acceptance Criteria
 
@@ -134,8 +144,8 @@ These are defaults, not user-exposed publishing controls.
 
 ## Related
 
-- [Review Bundles for Editorial Workflows](../done/review-bundles.md)
-- [Review Bundles — Implementation Checklist](../done/review-bundles-implementation.md)
+- [Review Bundles for Editorial Workflows](./review-bundles.md)
+- [Review Bundles — Implementation Checklist](./review-bundles-implementation.md)
 - [PRD Overview](../../../PRD.md)
 
 ## Implementation Plan

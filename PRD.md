@@ -21,11 +21,13 @@ The writing environment is a plain-text sync folder, integrated with Scrivener v
 Completed feature summaries now live in [docs/prd/completed-features.md](docs/prd/completed-features.md).
 
 Core completed areas:
+
 - [Metadata Architecture & Ownership](docs/prd/done/metadata.md)
 - [Import & Sync Operations](docs/prd/done/import-sync.md)
 - [Prose Editing & Version Control](docs/prd/done/editing.md)
 - [Search, Querying & Analysis](docs/prd/done/search-analysis.md)
 - [Review Bundles for Editorial Workflows](docs/prd/done/review-bundles.md)
+- [Beta Reader Accountability and Book-Like Layout](docs/prd/done/beta-reader-accountability-layout.md)
 - [Scrivener Direct Extraction](docs/prd/done/scrivener-direct-extraction-beta.md)
 - [Reference Document Querying](docs/prd/done/reference-docs.md)
 - [Guideline Generation](docs/prd/done/guideline-generation.md)
@@ -63,12 +65,14 @@ Semantic search for queries that require understanding meaning, not just keyword
 ## Open Questions & Ideas
 
 See [ideas-and-questions.md](docs/prd/inbox/ideas-and-questions.md) for:
+
 - Resolved design questions (enrichment model, sidecar files, database inclusion)
 - Deferred edge cases (mass reorders, circular relationships, multi-book arcs)
 - Feature ideas (tag enhancements, relationship graphs, continuity checker)
 - Operational improvements (first-time setup, permission warnings)
 
 Additional completed structural proposal:
+
 - [Root Structure Reorganization](docs/prd/done/root-structure-reorganization.md)
 
 ---
@@ -104,6 +108,7 @@ Writing MCP is now in continuous development rather than sequential phase delive
 ## For More Details
 
 - [Completed Features Index](docs/prd/completed-features.md) — shipped capability summaries and links
+- [Beta Reader Accountability and Book-Like Layout](docs/prd/done/beta-reader-accountability-layout.md) — chapter-scoped beta packets with per-page accountability and book-like PDF defaults
 - [OpenClaw Integration](docs/prd/in-progress/openclaw-integration.md) — deployment and runtime integration
 - [Client-Agnostic Setup Contract](docs/prd/in-progress/client-agnostic-setup.md) — shared setup contract and client-hosted setup UI direction
 - [Open Ideas](docs/prd/inbox/ideas-and-questions.md) — design questions, feature ideas

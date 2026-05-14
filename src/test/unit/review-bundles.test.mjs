@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import os from "node:os";
 import fs from "node:fs";
 import path from "node:path";
-import { buildReviewBundlePlan, renderReviewBundleMarkdown, renderReviewBundlePdf, ReviewBundlePlanError, buildPageFingerprintToken, buildFingerprintSeed, buildFingerprintSeedHash, extractSceneDateline } from "../../review-bundles/review-bundles.js";
+import { buildReviewBundlePlan, renderReviewBundleMarkdown, renderReviewBundlePdf, renderReviewBundlePdfWithMetadata, ReviewBundlePlanError, buildPageFingerprintToken, buildFingerprintSeed, buildFingerprintSeedHash, extractSceneDateline } from "../../review-bundles/review-bundles.js";
 import { insertTestScene, setupReviewBundleTestDb } from "../helpers/db.js";
 import { decodePdfHexText, extractPdfFlateText } from "../helpers/pdf.js";
 
@@ -797,6 +797,65 @@ describe("review-bundle fingerprint helpers", () => {
 
     assert.equal(token1a, token1b);
     assert.notEqual(token1a, token2);
+  });
+
+  test("renderReviewBundlePdfWithMetadata is reproducible for fixed inputs and varies by recipient", async () => {
+    const db = setupReviewBundleTestDb();
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "bundle-fingerprint-repro-"));
+    const scenePath = path.join(tempDir, "sc-001.md");
+    const longProse = Array.from(
+      { length: 140 },
+      (_, index) => `Paragraph ${index + 1}: The rain kept falling over the harbor while the ferry horn echoed.`
+    ).join("\n\n");
+    fs.writeFileSync(scenePath, longProse, "utf8");
+
+    try {
+      const now = new Date().toISOString();
+      db.prepare(`
+        INSERT INTO scenes (
+          scene_id, project_id, title, part, chapter, timeline_position, word_count,
+          file_path, prose_checksum, metadata_stale, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        "sc-001",
+        "test-novel",
+        "Fingerprint Repro Test",
+        1,
+        1,
+        1,
+        3000,
+        scenePath,
+        "deadbeef",
+        0,
+        now
+      );
+
+      const generatedAt = "2026-01-01T00:00:00.000Z";
+      const syncDir = fs.realpathSync.native(tempDir);
+      const planA = buildReviewBundlePlan(db, {
+        project_id: "test-novel",
+        profile: "beta_reader_personalized",
+        recipient_name: "Jordan Example",
+      });
+
+      const a1 = await renderReviewBundlePdfWithMetadata(db, planA, { generatedAt, syncDir });
+      const a2 = await renderReviewBundlePdfWithMetadata(db, planA, { generatedAt, syncDir });
+
+      assert.ok(Array.isArray(a1.fingerprint?.page_tokens));
+      assert.ok(a1.fingerprint.page_tokens.length >= 1);
+      assert.deepEqual(a1.fingerprint.page_tokens, a2.fingerprint.page_tokens);
+
+      const planB = buildReviewBundlePlan(db, {
+        project_id: "test-novel",
+        profile: "beta_reader_personalized",
+        recipient_name: "Taylor Example",
+      });
+      const b1 = await renderReviewBundlePdfWithMetadata(db, planB, { generatedAt, syncDir });
+      assert.notDeepEqual(a1.fingerprint.page_tokens, b1.fingerprint.page_tokens);
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+      db.close();
+    }
   });
 });
 

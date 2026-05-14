@@ -357,6 +357,35 @@ describe("create_review_bundle tool", () => {
       const inflatedStreamsText = extractPdfFlateText(pdfBytes);
       const decodedPdfText = decodePdfHexText(inflatedStreamsText);
       assert.match(decodedPdfText, /For: Jordan Example \| Fingerprint: BR-[A-Z0-9-]+-P\d{3}/);
+
+      const renderedFingerprints = decodedPdfText.match(/Fingerprint:\s*BR-[A-Z0-9-]+-P\d{3}/g) ?? [];
+      assert.equal(renderedFingerprints.length, manifest.fingerprint.page_tokens.length);
+      for (const entry of manifest.fingerprint.page_tokens) {
+        assert.match(decodedPdfText, new RegExp(`Fingerprint:\\s*${entry.token}`));
+      }
+    } finally {
+      fs.rmSync(outDir, { recursive: true, force: true });
+    }
+  });
+
+  test("beta PDF uses 6x9 page size media box", async () => {
+    const outDir = fs.mkdtempSync(path.join(writeSyncDir, "review-bundles-beta-pdf-layout-"));
+    try {
+      const text = await callWriteTool("create_review_bundle", {
+        project_id: "test-novel",
+        profile: "beta_reader_personalized",
+        recipient_name: "Jordan Example",
+        output_dir: outDir,
+        format: "pdf",
+      });
+      const parsed = JSON.parse(text);
+
+      assert.ok(parsed.ok, JSON.stringify(parsed));
+      assert.ok(parsed.output_paths?.bundle_pdf);
+
+      const pdfBytes = fs.readFileSync(parsed.output_paths.bundle_pdf);
+      const rawPdf = pdfBytes.toString("latin1");
+      assert.match(rawPdf, /\/MediaBox\s*\[\s*0\s+0\s+432(?:\.0+)?\s+648(?:\.0+)?\s*\]/);
     } finally {
       fs.rmSync(outDir, { recursive: true, force: true });
     }

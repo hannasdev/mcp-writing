@@ -12,7 +12,7 @@ Unresolved design questions, feature ideas, and edge cases that haven't yet been
 
 **Q:** Where do pending `propose_edit` proposals live? In-memory (lost on restart) or persisted in SQLite?
 
-**Status:** In-memory is simpler but means a restart between propose and commit loses the proposal. Acceptable for Phase 3.
+**Status:** In-memory is simpler but means a restart between propose and commit loses the proposal. Acceptable under current workflow assumptions.
 
 **Future:** Consider persistent proposal storage if users report frequent restarts losing work.
 
@@ -41,6 +41,7 @@ When a character appears across multiple books (series with shared universe), sh
 ### Tagging System Enhancement
 
 Current tags are free-form strings. Could benefit from:
+
 - Predefined tag categories (tone, pacing, theme, etc.)
 - Tag autocomplete during metadata edits
 - Tag migration/renaming tools
@@ -50,6 +51,7 @@ Current tags are free-form strings. Could benefit from:
 ### Relationship Strength Indicators
 
 Currently `character_relationships` stores strength as low/medium/high. Could be enhanced to:
+
 - Show strength trend over time (strengthening? weakening?)
 - Visualize relationship web as a graph
 - Query by relationship type
@@ -59,6 +61,7 @@ Currently `character_relationships` stores strength as low/medium/high. Could be
 ### Continuity Checker
 
 Tool to surface potential continuity issues:
+
 - Character appears in scene but not in character list
 - Place mentioned in prose but not in places list
 - Timeline gaps or inconsistencies
@@ -68,31 +71,34 @@ Tool to surface potential continuity issues:
 ### Comparative Scene Analysis
 
 Tool to compare two scenes:
+
 - Prose style similarity
 - Character behavior consistency
 - Setting/atmosphere contrast
 
-**Priority:** Low — deferred to Phase 4+ with embeddings.
+**Priority:** Low — deferred backlog item, likely revisited with embeddings work.
 
 ## Operational Notes
 
 ### First-Time Setup Friction
 
 Users report initial sync folder setup requires:
+
 1. Manual git init
 2. Manual folder structure creation
 3. Manual Scrivener External Folder Sync configuration
 
-**Potential improvement:** Add an `init_project` tool that scaffolds folder structure and guides Scrivener setup. (Phase 4A candidate)
+**Potential improvement:** Add an `init_project` tool that scaffolds folder structure and guides Scrivener setup (future backlog candidate).
 
 ### Permission Warnings
 
 Current behavior: `get_runtime_config` surfaces permission issues but doesn't help fix them. Could provide:
+
 - Suggested `chmod` commands
 - Volumes that need remounting
 - Folder initialization steps
 
-**Status:** Deferred to Phase 4A improvements.
+**Status:** Deferred backlog improvement.
 
 ## Related
 
