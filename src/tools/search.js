@@ -886,7 +886,7 @@ export function registerSearchTools(s, {
   // ---- get_relationship_arc ------------------------------------------------
   s.tool(
     "get_relationship_arc",
-    "Show how the relationship between two characters evolves across scenes, in order. Uses explicitly recorded relationship entries — returns nothing if no entries exist yet. Use list_characters to get character_id values. Response shape note: returns a structured envelope { results, total_count, from_character, to_character }.",
+    "Show how the relationship between two characters evolves across scenes, in order. Uses explicitly recorded relationship entries — returns a NO_RESULTS error if no entries exist yet. Use list_characters to get character_id values. Response shape note: returns a structured envelope { results, total_count, from_character, to_character }.",
     {
       from_character: z.string().describe("character_id of the first character (e.g. 'char-sebastian')."),
       to_character:   z.string().describe("character_id of the second character (e.g. 'char-mira-nystrom')."),

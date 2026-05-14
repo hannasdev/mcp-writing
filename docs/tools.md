@@ -349,7 +349,7 @@ Get ordered scene metadata for all scenes belonging to a thread, including the p
 
 ## get_relationship_arc
 
-Show how the relationship between two characters evolves across scenes, in order. Uses explicitly recorded relationship entries — returns nothing if no entries exist yet. Use list_characters to get character_id values. Response shape note: returns a structured envelope { results, total_count, from_character, to_character }.
+Show how the relationship between two characters evolves across scenes, in order. Uses explicitly recorded relationship entries — returns a NO_RESULTS error if no entries exist yet. Use list_characters to get character_id values. Response shape note: returns a structured envelope { results, total_count, from_character, to_character }.
 
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |
