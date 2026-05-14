@@ -1043,9 +1043,12 @@ describe("buildReviewBundlePlan", () => {
       for (let i = 1; i <= 4; i++) {
         const chapter = i <= 2 ? 5 : 6;
         const scenePath = path.join(tempDir, `sc-000${i}.md`);
-        const longLogline = "This is a very long logline. ".repeat(15);
-        const prose = `Scene ${i} prose body.\n`.repeat(20);
-        fs.writeFileSync(scenePath, prose, "utf8");
+        // Outline profile renders loglines, not prose; keep prose minimal and
+        // force page breaks using very long logline text instead.
+        const longLogline = i === 1
+          ? `START_MARKER ${"This is a very long logline. ".repeat(700)} END_MARKER`
+          : "This is a very long logline. ".repeat(30);
+        fs.writeFileSync(scenePath, `Scene ${i} prose body.\n`, "utf8");
 
         db.prepare(`
           INSERT INTO scenes (
@@ -1087,7 +1090,9 @@ describe("buildReviewBundlePlan", () => {
       assert.match(decodedPdfText, /Scene 2 Title/);
       assert.match(decodedPdfText, /Scene 3 Title/);
       assert.match(decodedPdfText, /Scene 4 Title/);
-      assert.match(decodedPdfText, /This is a very long logline\./);
+      assert.match(decodedPdfText, /START_MARKER/);
+      assert.match(decodedPdfText, /END_MARKER/);
+      assert.ok(countMatches(decodedPdfText, /Outline Overview/g) >= 3);
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true });
       db.close();
