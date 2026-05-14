@@ -129,11 +129,13 @@ export function buildReviewBundlePlan(dbHandle, {
   tag,
   scene_ids,
   strictness = "warn",
-  include_scene_ids = true,
+  include_scene_ids,
   include_metadata_sidebar = false,
   include_paragraph_anchors = false,
   beta_accountability,
   bundle_name,
+  bundle_title,
+  author_name,
   recipient_name,
   format = "pdf",
 } = {}) {
@@ -349,7 +351,12 @@ export function buildReviewBundlePlan(dbHandle, {
     ? Boolean(beta_accountability ?? true)
     : false;
   const isBetaProfile = profile === "beta_reader_personalized";
-  const resolvedIncludeSceneIds = isBetaProfile ? false : Boolean(include_scene_ids);
+  const isOutlineProfile = profile === "outline_discussion";
+  // Beta always suppresses scene IDs; outline_discussion defaults to false (structural overview)
+  // but can be explicitly enabled. editor_detailed defaults to true.
+  const resolvedIncludeSceneIds = isBetaProfile
+    ? false
+    : Boolean(include_scene_ids ?? (isOutlineProfile ? false : true));
   const resolvedIncludeMetadataSidebar = isBetaProfile ? false : Boolean(include_metadata_sidebar);
   const resolvedIncludeParagraphAnchors = isBetaProfile ? false : Boolean(include_paragraph_anchors);
 
@@ -365,6 +372,8 @@ export function buildReviewBundlePlan(dbHandle, {
         include_paragraph_anchors: resolvedIncludeParagraphAnchors,
         beta_accountability: resolvedBetaAccountability,
         ...(resolvedRecipientName ? { recipient_name: resolvedRecipientName } : {}),
+        ...(bundle_title != null ? { bundle_title: String(bundle_title).trim() } : {}),
+        ...(author_name != null ? { author_name: String(author_name).trim() } : {}),
       },
     },
     ordering: rows.map(row => ({
