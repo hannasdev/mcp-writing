@@ -7,6 +7,10 @@ import { buildReviewBundlePlan, renderReviewBundleMarkdown, renderReviewBundlePd
 import { insertTestScene, setupReviewBundleTestDb } from "../helpers/db.js";
 import { decodePdfHexText, extractPdfFlateText } from "../helpers/pdf.js";
 
+function countMatches(text, pattern) {
+  return (text.match(pattern) ?? []).length;
+}
+
 describe("buildReviewBundlePlan", () => {
   test("orders scenes deterministically with timeline and scene_id fallback", () => {
     const db = setupReviewBundleTestDb();
@@ -836,14 +840,16 @@ describe("buildReviewBundlePlan", () => {
       assert.match(decodedPdfText, /The Lamb/);
       assert.match(decodedPdfText, /Hanna/);
       assert.match(decodedPdfText, /Outline Overview/);
-      // Verify running header appears on content pages: page number only appears in footer
-      assert.match(decodedPdfText, /1/);
       assert.match(decodedPdfText, /Chapter 7/);
       assert.match(decodedPdfText, /A Father's Embrace/);
       assert.match(decodedPdfText, /A key reconciliation scene\./);
       assert.match(decodedPdfText, /An epigraph line appears here\./);
       assert.doesNotMatch(decodedPdfText, /Should be suppressed for epigraph scenes\./);
       assert.doesNotMatch(decodedPdfText, /Epigraph Chapter 7/);
+      // Cover contains one "Outline Overview" label and content pages add running headers.
+      assert.equal(countMatches(decodedPdfText, /Outline Overview/g), 2);
+      // Generated timestamp only appears on the cover.
+      assert.equal(countMatches(decodedPdfText, /Generated: 2026-01-01T00:00:00\.000Z/g), 1);
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true });
       db.close();
@@ -971,7 +977,124 @@ describe("buildReviewBundlePlan", () => {
       db.close();
     }
   });
+
+  test("outline profile keeps cover overflow pages free of running header/footer", async () => {
+    const db = setupReviewBundleTestDb();
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "bundle-outline-cover-overflow-"));
+    const scenePath = path.join(tempDir, "sc-outline-overflow-001.md");
+    fs.writeFileSync(scenePath, "Brief scene prose.\n", "utf8");
+    const now = new Date().toISOString();
+    const longCoverTitle = `${"The Lamb ".repeat(420)}CONTINUATION_MARKER`;
+
+    try {
+      db.prepare(`
+        INSERT INTO scenes (
+          scene_id, project_id, title, part, chapter, timeline_position, word_count,
+          logline, file_path, prose_checksum, metadata_stale, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        "sc-outline-overflow-001",
+        "test-novel",
+        "Overflow Guard Scene",
+        1,
+        7,
+        1,
+        120,
+        "A short logline to keep content pages deterministic.",
+        scenePath,
+        "deadbeef",
+        0,
+        now
+      );
+
+      const plan = buildReviewBundlePlan(db, {
+        project_id: "test-novel",
+        profile: "outline_discussion",
+        bundle_title: longCoverTitle,
+        author_name: "Hanna",
+      });
+      const pdfBytes = await renderReviewBundlePdf(db, plan, {
+        generatedAt: "2026-01-01T00:00:00.000Z",
+        syncDir: fs.realpathSync.native(tempDir),
+      });
+      const inflatedStreamsText = extractPdfFlateText(pdfBytes);
+      const decodedPdfText = decodePdfHexText(inflatedStreamsText);
+
+      // This marker is at the very end of the long title, so its presence proves
+      // PDFKit continued the same cover doc.text() flow across auto-added pages.
+      assert.match(decodedPdfText, /CONTINUATION_MARKER/);
+      assert.match(decodedPdfText, /Overflow Guard Scene/);
+      // Exactly one cover label + one running header for the single content page.
+      assert.equal(countMatches(decodedPdfText, /Outline Overview/g), 2);
+      // Timestamp should remain cover-only even when cover overflow adds pages.
+      assert.equal(countMatches(decodedPdfText, /Generated: 2026-01-01T00:00:00\.000Z/g), 1);
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+      db.close();
+    }
+  });
+
+  test("outline profile: font/size state restores correctly when pageAdded fires mid-content", async () => {
+    const db = setupReviewBundleTestDb();
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "bundle-pageadded-state-"));
+    const now = new Date().toISOString();
+
+    try {
+      for (let i = 1; i <= 4; i++) {
+        const chapter = i <= 2 ? 5 : 6;
+        const scenePath = path.join(tempDir, `sc-000${i}.md`);
+        const longLogline = "This is a very long logline. ".repeat(15);
+        const prose = `Scene ${i} prose body.\n`.repeat(20);
+        fs.writeFileSync(scenePath, prose, "utf8");
+
+        db.prepare(`
+          INSERT INTO scenes (
+            scene_id, project_id, title, part, chapter, timeline_position, word_count,
+            logline, file_path, prose_checksum, metadata_stale, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          `sc-000${i}`,
+          "test-novel",
+          `Scene ${i} Title`,
+          1,
+          chapter,
+          i,
+          100,
+          longLogline,
+          scenePath,
+          "deadbeef",
+          0,
+          now
+        );
+      }
+
+      const plan = buildReviewBundlePlan(db, {
+        project_id: "test-novel",
+        profile: "outline_discussion",
+        bundle_title: "Outline with Multi-Page Content",
+      });
+      const pdfBytes = await renderReviewBundlePdf(db, plan, {
+        generatedAt: "2026-01-01T00:00:00.000Z",
+        syncDir: fs.realpathSync.native(tempDir),
+      });
+      const inflatedStreamsText = extractPdfFlateText(pdfBytes);
+      const decodedPdfText = decodePdfHexText(inflatedStreamsText);
+
+      assert.match(decodedPdfText, /Outline with Multi-Page Content/);
+      assert.match(decodedPdfText, /Chapter 5/);
+      assert.match(decodedPdfText, /Chapter 6/);
+      assert.match(decodedPdfText, /Scene 1 Title/);
+      assert.match(decodedPdfText, /Scene 2 Title/);
+      assert.match(decodedPdfText, /Scene 3 Title/);
+      assert.match(decodedPdfText, /Scene 4 Title/);
+      assert.match(decodedPdfText, /This is a very long logline\./);
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+      db.close();
+    }
+  });
 });
+
 
 describe("review-bundle fingerprint helpers", () => {
   test("buildPageFingerprintToken is deterministic per page and unique across pages", () => {

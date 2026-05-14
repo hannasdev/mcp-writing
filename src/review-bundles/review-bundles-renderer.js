@@ -635,7 +635,8 @@ export function renderReviewBundlePdfWithMetadata(dbHandle, plan, { generatedAt,
   const fingerprintSeedHash = fingerprintSeed ? buildFingerprintSeedHash(fingerprintSeed) : null;
   const pageTokens = [];
   let pageNumber = 0;
-  let outlinePageNumber = 0;
+  let outlineCoverCompleted = false;
+  let outlineContentPageNumber = 0;
 
   const pdfOptions = profile === "beta_reader_personalized"
     ? {
@@ -690,10 +691,11 @@ export function renderReviewBundlePdfWithMetadata(dbHandle, plan, { generatedAt,
 
   const drawOutlineHeaderFooter = () => {
     if (!isOutlineProfile) return;
-    outlinePageNumber += 1;
-    // Skip header/footer on the cover page (first page).
-    if (outlinePageNumber === 1) return;
-    const contentPageNum = outlinePageNumber - 1;
+    // Do not render running chrome while the cover is still laying out.
+    // Very long title/author text can auto-add pages before explicit content starts.
+    if (!outlineCoverCompleted) return;
+    outlineContentPageNumber += 1;
+    const contentPageNum = outlineContentPageNumber;
     const previousX = doc.x;
     const previousY = doc.y;
     // Capture the full text-rendering state before drawing. When a doc.text()
@@ -791,6 +793,7 @@ export function renderReviewBundlePdfWithMetadata(dbHandle, plan, { generatedAt,
         doc.fontSize(9).font("Times-Roman").fillColor("#777777");
         doc.text(`Generated: ${effectiveGeneratedAt}`, { width: textWidth, align: "center" });
         doc.fillColor("#000000");
+        outlineCoverCompleted = true;
         // Start scene content on a fresh page so the cover is always standalone
         // and the pageAdded event fires to draw the running header + footer.
         doc.addPage();
