@@ -306,10 +306,14 @@ describe("get_character_sheet tool", () => {
   test("elena sheet includes traits", async () => {
     const text = await callTool("get_character_sheet", { character_id: "elena" });
     const parsed = JSON.parse(text);
+    const row = parsed.results[0];
     assert.ok((text.includes("driven") || text.includes("walls")),
       `Expected trait keywords for elena, got: ${text.slice(0, 200)}`);
+    assert.equal(parsed.total_count, 1);
+    assert.equal(Array.isArray(parsed.results), true);
     assert.equal(typeof parsed.next_step, "string");
     assert.ok(parsed.next_step.includes("get_arc"));
+    assert.equal(Array.isArray(row.traits), true);
   });
 
   test("marcus sheet includes arc_summary", async () => {
@@ -330,11 +334,13 @@ describe("get_character_sheet tool", () => {
 
     const text = await callWriteTool("get_character_sheet", { character_id: "alba" });
     const parsed = JSON.parse(text);
+    const row = parsed.results[0];
 
-    assert.equal(parsed.notes, "Canonical sheet content.");
-    assert.equal(parsed.supporting_notes.length, 1);
-    assert.equal(parsed.supporting_notes[0].file_name, "arc.md");
-    assert.equal(parsed.supporting_notes[0].content, "Alba support arc notes.");
+    assert.equal(parsed.total_count, 1);
+    assert.equal(row.notes, "Canonical sheet content.");
+    assert.equal(row.supporting_notes.length, 1);
+    assert.equal(row.supporting_notes[0].file_name, "arc.md");
+    assert.equal(row.supporting_notes[0].content, "Alba support arc notes.");
   });
 
   test("returns next_step guidance on unknown character", async () => {
@@ -362,10 +368,12 @@ describe("get_place_sheet tool", () => {
   test("harbor-district sheet includes associated_characters and tags", async () => {
     const text = await callTool("get_place_sheet", { place_id: "harbor-district" });
     const parsed = JSON.parse(text);
+    const row = parsed.results[0];
 
-    assert.ok(parsed.associated_characters.includes("elena"));
-    assert.ok(parsed.tags.includes("urban"));
-    assert.ok(parsed.notes.includes("brine and diesel"));
+    assert.equal(parsed.total_count, 1);
+    assert.ok(row.associated_characters.includes("elena"));
+    assert.ok(row.tags.includes("urban"));
+    assert.ok(row.notes.includes("brine and diesel"));
     assert.equal(typeof parsed.next_step, "string");
     assert.ok(parsed.next_step.includes("find_scenes"));
   });
@@ -382,13 +390,15 @@ describe("get_place_sheet tool", () => {
 
     const text = await callWriteTool("get_place_sheet", { place_id: "aevi-labs" });
     const parsed = JSON.parse(text);
+    const row = parsed.results[0];
 
-    assert.equal(parsed.notes, "Canonical place sheet content.");
-    assert.equal(parsed.associated_characters[0], "alba");
-    assert.equal(parsed.tags[0], "lab");
-    assert.equal(parsed.supporting_notes.length, 1);
-    assert.equal(parsed.supporting_notes[0].file_name, "history.md");
-    assert.equal(parsed.supporting_notes[0].content, "Aevi Labs support history notes.");
+    assert.equal(parsed.total_count, 1);
+    assert.equal(row.notes, "Canonical place sheet content.");
+    assert.equal(row.associated_characters[0], "alba");
+    assert.equal(row.tags[0], "lab");
+    assert.equal(row.supporting_notes.length, 1);
+    assert.equal(row.supporting_notes[0].file_name, "history.md");
+    assert.equal(row.supporting_notes[0].content, "Aevi Labs support history notes.");
   });
 
   test("returns next_step guidance on unknown place", async () => {
@@ -507,9 +517,10 @@ describe("reference link tools", () => {
 
     assert.equal(parsed.scene_id, "sc-ref-001");
     assert.equal(parsed.project_id, "test-novel");
-    assert.equal(parsed.references.length, 2);
-    assert.ok(parsed.references.some(row => row.doc_id === "ref-blood-rules"));
-    assert.ok(parsed.references.some(row => row.doc_id === "ref-sebastian-blood"));
+    assert.equal(parsed.total_count, 2);
+    assert.equal(parsed.results.length, 2);
+    assert.ok(parsed.results.some(row => row.doc_id === "ref-blood-rules"));
+    assert.ok(parsed.results.some(row => row.doc_id === "ref-sebastian-blood"));
   });
 
   test("list_scene_references returns CONFLICT for ambiguous scene_id without project_id", async () => {
@@ -615,7 +626,7 @@ describe("reference link tools", () => {
       project_id: "test-novel",
     });
     const listedParsed = JSON.parse(listedText);
-    assert.ok(listedParsed.references.some((row) => row.doc_id === "ref-apply-mode"));
+    assert.ok(listedParsed.results.some((row) => row.doc_id === "ref-apply-mode"));
   });
 
 });
@@ -831,9 +842,9 @@ describe("upsert_reference_link tool", () => {
       project_id: "test-novel",
     });
     const listedParsed = JSON.parse(listed);
-    assert.equal(listedParsed.references.length, 1);
-    assert.equal(listedParsed.references[0].doc_id, "ref-upsert-target");
-    assert.equal(listedParsed.references[0].relation, "see_also");
+    assert.equal(listedParsed.results.length, 1);
+    assert.equal(listedParsed.results[0].doc_id, "ref-upsert-target");
+    assert.equal(listedParsed.results[0].relation, "see_also");
 
     await callWriteTool("sync");
 
@@ -842,9 +853,9 @@ describe("upsert_reference_link tool", () => {
       project_id: "test-novel",
     });
     const listedAfterSyncParsed = JSON.parse(listedAfterSync);
-    assert.equal(listedAfterSyncParsed.references.length, 1);
-    assert.equal(listedAfterSyncParsed.references[0].doc_id, "ref-upsert-target");
-    assert.equal(listedAfterSyncParsed.references[0].relation, "see_also");
+    assert.equal(listedAfterSyncParsed.results.length, 1);
+    assert.equal(listedAfterSyncParsed.results[0].doc_id, "ref-upsert-target");
+    assert.equal(listedAfterSyncParsed.results[0].relation, "see_also");
   });
 
   test("returns conflict for ambiguous scene source without project scope", async () => {

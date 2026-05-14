@@ -8,6 +8,14 @@ This complements `CHANGELOG.md`:
 
 ## Unreleased
 
+### 2026-05-14 — Consistent response envelopes for metadata-read tools
+
+- What changed: Four metadata-read tools now return structured envelopes `{ results, total_count, ... }` instead of flat objects or raw arrays: `get_character_sheet`, `get_place_sheet`, `list_scene_references`, and `get_relationship_arc`.
+- Why it matters: Agents and integrations can now parse all metadata-read responses with a single consistent pattern, reducing brittle per-tool parsing logic.
+- Who is affected: Any integration or prompt that directly parses the JSON response from these four tools.
+- Action needed: Update parsers. Sheet tools: use `parsed.results[0]` instead of the flat object. `list_scene_references`: use `parsed.results` instead of `parsed.references`. `get_relationship_arc`: use `parsed.results` instead of the top-level array. Safe parsing patterns are in `README.md`.
+- PR: [#189](https://github.com/hannasdev/mcp-writing/pull/189)
+
 ### 2026-05-08 — Suppress epigraph document titles in beta exports
 
 - What changed: Beta review-bundle rendering now suppresses epigraph scene headings more robustly, including cases where epigraph metadata tags are missing/case-variant and the scene title starts with "Epigraph ...".
