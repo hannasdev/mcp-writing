@@ -390,6 +390,73 @@ describe("buildReviewBundlePlan", () => {
     }
   });
 
+  test("outline profile defaults scene IDs off and allows explicit override", () => {
+    const db = setupReviewBundleTestDb();
+    try {
+      insertTestScene(db, {
+        sceneId: "sc-015",
+        part: 1,
+        chapter: 1,
+        timelinePosition: 1,
+        wordCount: 250,
+      });
+
+      const outlineDefault = buildReviewBundlePlan(db, {
+        project_id: "test-novel",
+        profile: "outline_discussion",
+      });
+      assert.equal(outlineDefault.resolved_scope.options.include_scene_ids, false);
+
+      const outlineExplicit = buildReviewBundlePlan(db, {
+        project_id: "test-novel",
+        profile: "outline_discussion",
+        include_scene_ids: true,
+      });
+      assert.equal(outlineExplicit.resolved_scope.options.include_scene_ids, true);
+
+      const editorDefault = buildReviewBundlePlan(db, {
+        project_id: "test-novel",
+        profile: "editor_detailed",
+      });
+      assert.equal(editorDefault.resolved_scope.options.include_scene_ids, true);
+    } finally {
+      db.close();
+    }
+  });
+
+  test("planner ignores blank cover metadata values", () => {
+    const db = setupReviewBundleTestDb();
+    try {
+      insertTestScene(db, {
+        sceneId: "sc-016",
+        part: 1,
+        chapter: 1,
+        timelinePosition: 1,
+        wordCount: 250,
+      });
+
+      const blankValues = buildReviewBundlePlan(db, {
+        project_id: "test-novel",
+        profile: "outline_discussion",
+        bundle_title: "   ",
+        author_name: "   ",
+      });
+      assert.equal(Object.hasOwn(blankValues.resolved_scope.options, "bundle_title"), false);
+      assert.equal(Object.hasOwn(blankValues.resolved_scope.options, "author_name"), false);
+
+      const explicitValues = buildReviewBundlePlan(db, {
+        project_id: "test-novel",
+        profile: "outline_discussion",
+        bundle_title: "  The Lamb  ",
+        author_name: "  Hanna  ",
+      });
+      assert.equal(explicitValues.resolved_scope.options.bundle_title, "The Lamb");
+      assert.equal(explicitValues.resolved_scope.options.author_name, "Hanna");
+    } finally {
+      db.close();
+    }
+  });
+
   test("renderReviewBundleMarkdown escapes outline loglines with markdown metacharacters", () => {
     const db = setupReviewBundleTestDb();
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "bundle-outline-"));
@@ -650,6 +717,87 @@ describe("buildReviewBundlePlan", () => {
       assert.match(decodedPdfText, /Semantic Drift/);
       assert.doesNotMatch(decodedPdfText, /Epigraph Chapter 15/);
       assert.match(decodedPdfText, /Some people leave behind ideas\./);
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+      db.close();
+    }
+  });
+
+  test("renderReviewBundlePdf applies outline cover/header/chapter and epigraph rendering", async () => {
+    const db = setupReviewBundleTestDb();
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "bundle-outline-pdf-"));
+    const chapterScenePath = path.join(tempDir, "sc-outline-001.md");
+    const epigraphScenePath = path.join(tempDir, "sc-outline-002.md");
+    fs.writeFileSync(chapterScenePath, "Regular scene prose.\n", "utf8");
+    fs.writeFileSync(epigraphScenePath, "An epigraph line appears here.\n", "utf8");
+
+    try {
+      const now = new Date().toISOString();
+      db.prepare(`
+        INSERT INTO scenes (
+          scene_id, project_id, title, part, chapter, timeline_position, word_count,
+          logline, file_path, prose_checksum, metadata_stale, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        "sc-outline-001",
+        "test-novel",
+        "A Father's Embrace",
+        1,
+        7,
+        1,
+        120,
+        "A key reconciliation scene.",
+        chapterScenePath,
+        "deadbeef",
+        0,
+        now
+      );
+      db.prepare(`
+        INSERT INTO scenes (
+          scene_id, project_id, title, part, chapter, timeline_position, word_count,
+          logline, file_path, prose_checksum, metadata_stale, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        "sc-outline-002",
+        "test-novel",
+        "Epigraph Chapter 7",
+        1,
+        7,
+        2,
+        20,
+        "Should be suppressed for epigraph scenes.",
+        epigraphScenePath,
+        "deadbeef",
+        0,
+        now
+      );
+      db.prepare(`INSERT INTO scene_tags (scene_id, project_id, tag) VALUES (?, ?, ?)`).run(
+        "sc-outline-002",
+        "test-novel",
+        "epigraph"
+      );
+
+      const plan = buildReviewBundlePlan(db, {
+        project_id: "test-novel",
+        profile: "outline_discussion",
+        bundle_title: "The Lamb",
+        author_name: "Hanna",
+      });
+      const pdfBytes = await renderReviewBundlePdf(db, plan, {
+        generatedAt: "2026-01-01T00:00:00.000Z",
+        syncDir: fs.realpathSync.native(tempDir),
+      });
+      const inflatedStreamsText = extractPdfFlateText(pdfBytes);
+      const decodedPdfText = decodePdfHexText(inflatedStreamsText);
+
+      assert.match(decodedPdfText, /The Lamb/);
+      assert.match(decodedPdfText, /Outline Overview/);
+      assert.match(decodedPdfText, /Chapter 7/);
+      assert.match(decodedPdfText, /A Father's Embrace/);
+      assert.match(decodedPdfText, /A key reconciliation scene\./);
+      assert.match(decodedPdfText, /An epigraph line appears here\./);
+      assert.doesNotMatch(decodedPdfText, /Should be suppressed for epigraph scenes\./);
+      assert.doesNotMatch(decodedPdfText, /Epigraph Chapter 7/);
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true });
       db.close();

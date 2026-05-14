@@ -335,6 +335,8 @@ export function buildReviewBundlePlan(dbHandle, {
   const resolvedRecipientName = profile === "beta_reader_personalized"
     ? normalizeRecipientDisplayName(recipient_name)
     : undefined;
+  const normalizedBundleTitle = bundle_title == null ? undefined : String(bundle_title).trim() || undefined;
+  const normalizedAuthorName = author_name == null ? undefined : String(author_name).trim() || undefined;
 
   const safeBundleName = slugifyBundleName(bundle_name || `${project_id}-${profile}`);
   const normalizedSceneIds = Array.isArray(scene_ids)
@@ -372,8 +374,8 @@ export function buildReviewBundlePlan(dbHandle, {
         include_paragraph_anchors: resolvedIncludeParagraphAnchors,
         beta_accountability: resolvedBetaAccountability,
         ...(resolvedRecipientName ? { recipient_name: resolvedRecipientName } : {}),
-        ...(bundle_title != null ? { bundle_title: String(bundle_title).trim() } : {}),
-        ...(author_name != null ? { author_name: String(author_name).trim() } : {}),
+        ...(normalizedBundleTitle ? { bundle_title: normalizedBundleTitle } : {}),
+        ...(normalizedAuthorName ? { author_name: normalizedAuthorName } : {}),
       },
     },
     ordering: rows.map(row => ({
