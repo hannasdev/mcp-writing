@@ -73,6 +73,16 @@ To support this flexibly:
 - Chapters are ingestible from sync files.
 - Chapter metadata can become stale and must be reindexed after source changes.
 
+## Migration Approach
+
+This is a breaking migration branch, but it still needs an explicit source-to-target mapping so implementation can proceed without guesswork.
+
+- Existing scene-level `part`, `chapter`, and `chapter_title` values are treated as migration inputs, not long-term identity fields.
+- During import and sync, chapter identity is derived into canonical `chapters` records first, then scenes are linked via `chapter_id`.
+- Where current scene metadata is ambiguous or inconsistent, the migration should emit deterministic warnings and leave the source row unchanged rather than inventing identity.
+- Prologue and epilogue should be represented as optional explicit entities or flags in the new model, not inferred from scene number offsets.
+- Any helper or rendering path that still depends on scene-local numeric chapter fields must be updated in the same migration slice as the schema change.
+
 ## Acceptance Criteria
 
 1. Chapters exist as standalone entities with required IDs and titles.
@@ -80,8 +90,8 @@ To support this flexibly:
 3. Chapters support optional chapter synopsis/logline.
 4. Chapters support linked-list ordering and deterministic `sort_index` ordering.
 5. Validation detects chapter chain errors (cycles, broken links, multiple heads, orphans).
-6. Optional divisions can be assigned to chapters and support multiple naming conventions.
-7. Exactly one prologue and at most one epilogue are supported outside chapter membership.
+6. Divisions are first-class optional entities and can be assigned to chapters.
+7. Prologue and epilogue are optional and, when present, are represented explicitly outside chapter membership.
 8. Sync pipeline indexes chapter entities from sync folder sources.
 9. Chapter records participate in metadata staleness tracking.
 10. Tooling can list and retrieve chapters independent of scenes.
