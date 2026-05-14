@@ -80,7 +80,7 @@ This is a breaking migration branch, but it still needs an explicit source-to-ta
 - Existing scene-level `part`, `chapter`, and `chapter_title` values are treated as migration inputs, not long-term identity fields.
 - During import and sync, chapter identity is derived into canonical `chapters` records first, then scenes are linked via `chapter_id`.
 - Where current scene metadata is ambiguous or inconsistent, the migration should emit deterministic warnings and leave the source row unchanged rather than inventing identity.
-- Prologue and epilogue should be represented as optional explicit entities or flags in the new model, not inferred from scene number offsets.
+- Prologue and epilogue should be represented as optional explicit entities in the new model, not inferred from scene number offsets.
 - Any helper or rendering path that still depends on scene-local numeric chapter fields must be updated in the same migration slice as the schema change.
 
 ## Acceptance Criteria
@@ -112,7 +112,7 @@ Functional requirements:
 2. Add canonical linkage from scene to chapter via `chapter_id`.
 3. Support chapter ordering fields (`prev_chapter_id`, `next_chapter_id`, `sort_index`).
 4. Support optional division ownership of chapters (`division_id`).
-5. Support explicit prologue and epilogue entities outside chapter membership.
+5. Support optional explicit prologue and epilogue entities outside chapter membership.
 
 Gate checks:
 
