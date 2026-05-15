@@ -1,5 +1,26 @@
 # Chapters
 
+## Status
+
+This document no longer describes a purely future migration.
+The initial chapter/epigraph rollout is already implemented in the codebase:
+
+- canonical `chapters` and `epigraphs` tables exist
+- scenes support canonical `chapter_id`
+- `list_chapters` and `find_epigraphs` are available
+- chapter-aware search, prose retrieval, and review-bundle rendering are shipped
+- numeric chapter targeting remains as a compatibility layer in some tools
+
+This file remains in `in-progress/` because it still captures follow-up work that is not fully settled or completed:
+
+- deferred division support
+- final cleanup of compatibility behavior and release-readiness documentation
+- confirmation that the remaining gates still match the implementation path
+
+Read this document as a follow-up and consolidation plan for chapter structure, not as a statement that none of the chapter work has shipped yet.
+
+For milestone accounting of what is already delivered, use [chapters-epigraphs-implementation.md](../done/chapters-epigraphs-implementation.md).
+
 ## Document Relationship
 
 This document is the canonical migration plan for structure changes in the manuscript domain.

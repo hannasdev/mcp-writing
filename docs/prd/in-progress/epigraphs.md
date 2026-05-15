@@ -1,5 +1,24 @@
 # Epigraphs
 
+## Status
+
+The initial epigraph implementation is already shipped alongside canonical chapter indexing.
+This document remains relevant because it defines constraints and follow-up alignment for the remaining chapter-structure work, but it should not be read as if epigraph support is still entirely speculative.
+
+Implemented baseline:
+
+- project-scoped `epigraphs` records exist
+- `find_epigraphs` is available
+- review bundles render chapter-linked epigraph content before scenes
+
+Remaining value in this document:
+
+- clarify the intended source contract and validation behavior
+- keep epigraph-specific constraints aligned with the remaining chapter follow-up gates
+- document what should happen if compatibility behavior is tightened later
+
+For milestone accounting of the shipped chapter/epigraph rollout, use [chapters-epigraphs-implementation.md](../done/chapters-epigraphs-implementation.md).
+
 ## Problem
 
 Epigraphs are structurally and editorially different from scenes.

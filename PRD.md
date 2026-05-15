@@ -48,11 +48,11 @@ Define a shared setup contract for configuration-driven writing features so setu
 
 **Status:** In progress. Product direction is shifting away from onboarding-heavy MCP workflow expansion and toward a shared contract plus thin client adapters.
 
-### 📚 [Chapter and Epigraph Migration Gates](docs/prd/in-progress/chapters.md) 🚧
+### 📚 [Chapter Structure Follow-up](docs/prd/in-progress/chapters.md) 🚧
 
-Define the breaking migration plan for first-class chapters, divisions, epigraphs, and the removal of scene-scoped chapter identity.
+Track the remaining follow-up work around first-class chapters, deferred divisions, and final documentation cleanup after the initial chapter/epigraph rollout.
 
-**Status:** In progress. Migration gates, acceptance criteria, and epigraph alignment are defined; implementation work will follow the staged schema, sync, query, and rendering changes described in the plan.
+**Status:** Partially delivered. Canonical chapters and epigraphs, `chapter_id` targeting, dedicated chapter/epigraph tools, and chapter-aware bundle rendering have already shipped. The in-progress plan now exists to clarify what remains open, especially deferred divisions and final consolidation work.
 
 ---
 
@@ -105,7 +105,7 @@ The canonical tool list and contracts are maintained in [docs/tools.md](docs/too
 Writing MCP is now in continuous development rather than sequential phase delivery.
 
 - **Core platform complete:** the major shipped capabilities are indexed in [docs/prd/completed-features.md](docs/prd/completed-features.md).
-- **Active development:** OpenClaw integration, the client-agnostic setup contract, and the chapter/epigraph migration gates.
+- **Active development:** OpenClaw integration, the client-agnostic setup contract, and chapter-structure follow-up work after the first-class chapter/epigraph rollout.
 - **Deferred backlog:** embeddings search.
 - **Ideas and open questions:** tracked separately so future exploration does not distort the active roadmap.
 
@@ -117,6 +117,7 @@ Writing MCP is now in continuous development rather than sequential phase delive
 - [Beta Reader Accountability and Book-Like Layout](docs/prd/done/beta-reader-accountability-layout.md) — chapter-scoped beta packets with per-page accountability and book-like PDF defaults
 - [OpenClaw Integration](docs/prd/in-progress/openclaw-integration.md) — deployment and runtime integration
 - [Client-Agnostic Setup Contract](docs/prd/in-progress/client-agnostic-setup.md) — shared setup contract and client-hosted setup UI direction
-- [Chapter and Epigraph Migration Gates](docs/prd/in-progress/chapters.md) — canonical breaking migration plan for chapters, divisions, and epigraphs
+- [Chapter Structure Follow-up](docs/prd/in-progress/chapters.md) — remaining follow-up plan for chapters, deferred divisions, and consolidation after the shipped chapter/epigraph rollout
+- [Chapter and Epigraph Implementation Checklist](docs/prd/done/chapters-epigraphs-implementation.md) — delivered milestones and remaining follow-up for the current chapter/epigraph delivery
 - [Open Ideas](docs/prd/inbox/ideas-and-questions.md) — design questions, feature ideas
 - [Workflow Discovery](docs/prd/done/describe-workflows.md) — `describe_workflows` tool, entry-point for AI navigation
