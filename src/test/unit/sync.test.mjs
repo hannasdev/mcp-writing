@@ -1418,7 +1418,8 @@ describe("syncAll", () => {
     );
 
     const result = syncAll(db, dir, { quiet: true });
-    assert.equal(result.indexed, 2);
+    assert.equal(result.indexed, 1);
+    assert.equal(result.epigraphsIndexed, 1);
 
     const chapter = db.prepare(`SELECT chapter_id, title, sort_index FROM chapters WHERE project_id = 'test-novel'`).get();
     assert.equal(chapter.chapter_id, "ch-01-the-perfect-chapter");
@@ -1434,6 +1435,56 @@ describe("syncAll", () => {
     assert.equal(epigraph.epigraph_id, "epi-001");
     assert.equal(epigraph.chapter_id, "ch-01-the-perfect-chapter");
     assert.match(epigraph.body, /quiet line/);
+
+    db.close();
+    fs.rmSync(dir, { recursive: true });
+  });
+
+  test("preserves canonical chapter identity when a chapter folder is renamed", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sync-"));
+    const db = openDb(":memory:");
+    const initialChapterDir = path.join(dir, "projects", "test-novel", "Draft", "01-Old chapter title");
+    fs.mkdirSync(initialChapterDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(initialChapterDir, "sc-001.md"),
+      "---\nscene_id: sc-001\ntitle: Arrival\nchapter_title: Old Chapter Title\nchapter_logline: Before the rename\n---\nScene prose."
+    );
+
+    syncAll(db, dir, { quiet: true });
+
+    const originalChapter = db.prepare(`
+      SELECT chapter_id, title, sort_index
+      FROM chapters
+      WHERE project_id = 'test-novel'
+    `).get();
+    assert.equal(originalChapter.chapter_id, "ch-01-old-chapter-title");
+
+    const renamedChapterDir = path.join(dir, "projects", "test-novel", "Draft", "01-Renamed chapter title");
+    fs.renameSync(initialChapterDir, renamedChapterDir);
+    fs.writeFileSync(
+      path.join(renamedChapterDir, "sc-001.md"),
+      "---\nscene_id: sc-001\ntitle: Arrival\nchapter_title: Old Chapter Title\nchapter_logline: Before the rename\n---\nScene prose."
+    );
+
+    syncAll(db, dir, { quiet: true });
+
+    const chapters = db.prepare(`
+      SELECT chapter_id, title, sort_index
+      FROM chapters
+      WHERE project_id = 'test-novel'
+      ORDER BY sort_index
+    `).all();
+    assert.equal(chapters.length, 1);
+    assert.equal(chapters[0].chapter_id, "ch-01-old-chapter-title");
+    assert.equal(chapters[0].title, "Renamed Chapter Title");
+
+    const scene = db.prepare(`
+      SELECT chapter_id, chapter_title
+      FROM scenes
+      WHERE scene_id = 'sc-001' AND project_id = 'test-novel'
+    `).get();
+    assert.equal(scene.chapter_id, "ch-01-old-chapter-title");
+    assert.equal(scene.chapter_title, "Renamed Chapter Title");
 
     db.close();
     fs.rmSync(dir, { recursive: true });

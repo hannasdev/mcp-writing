@@ -427,7 +427,8 @@ function renderSceneBlock(scene, options) {
   } = options;
 
   const isBetaProfile = profile === "beta_reader_personalized";
-  const isEpigraph = isBetaProfile && isEpigraphScene(scene);
+  const isOutlineProfile = profile === "outline_discussion";
+  const isEpigraph = (isBetaProfile || isOutlineProfile) && isEpigraphScene(scene);
 
   const parts = [];
 
@@ -446,6 +447,11 @@ function renderSceneBlock(scene, options) {
   }
 
   if (profile === "outline_discussion") {
+    if (isEpigraph) {
+      const prose = normalizeHardWrappedProse(scene.prose ?? "");
+      if (prose) parts.push(prose);
+      return parts.join("\n\n");
+    }
     const summaryParts = [];
     if (scene.pov) summaryParts.push(`POV: ${scene.pov}`);
     if (scene.save_the_cat_beat) summaryParts.push(`Beat: ${scene.save_the_cat_beat}`);
@@ -629,7 +635,7 @@ export function renderReviewBundleMarkdown(dbHandle, plan, { generatedAt, syncDi
       includeSceneIds,
       includeMetadataSidebar,
       includeParagraphAnchors,
-      showChapterHeading,
+      showChapterHeading: showChapterHeading && !epigraphsByChapter.has(scene.chapter_id),
     }));
   }
 

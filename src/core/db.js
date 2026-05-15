@@ -2,6 +2,19 @@ import { DatabaseSync } from "node:sqlite";
 
 const dbStartupWarnings = [];
 
+function slugifyLegacyChapterValue(value) {
+  return String(value ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function formatLegacyChapterId(sortIndex, title) {
+  const chapterNumber = String(sortIndex).padStart(2, "0");
+  const chapterSlug = slugifyLegacyChapterValue(title) || `chapter-${sortIndex}`;
+  return `ch-${chapterNumber}-${chapterSlug}`;
+}
+
 function cloneWarningDetails(details) {
   if (!details) return details;
 
@@ -584,6 +597,82 @@ const MIGRATIONS = [
         tag               TEXT NOT NULL,
         PRIMARY KEY (epigraph_id, project_id, tag)
       );
+    `);
+  },
+  // 9: backfill canonical chapters and scene chapter_id values from legacy scene chapter fields
+  (db) => {
+    const sceneColumns = db.prepare(`PRAGMA table_info(scenes)`).all();
+    const hasChapterId = sceneColumns.some((column) => column.name === "chapter_id");
+    const hasLegacyChapter = sceneColumns.some((column) => column.name === "chapter");
+    const hasLegacyChapterTitle = sceneColumns.some((column) => column.name === "chapter_title");
+    if (!hasChapterId || !hasLegacyChapter || !hasLegacyChapterTitle) {
+      return;
+    }
+
+    const legacyChapters = db.prepare(`
+      SELECT
+        project_id,
+        chapter AS sort_index,
+        COALESCE(NULLIF(TRIM(chapter_title), ''), '') AS chapter_title,
+        COALESCE(NULLIF(TRIM(file_path), ''), '') AS file_path,
+        COALESCE(NULLIF(TRIM(updated_at), ''), '') AS updated_at
+      FROM scenes
+      WHERE chapter IS NOT NULL
+      ORDER BY project_id, chapter, timeline_position, scene_id
+    `).all();
+
+    const chapterRows = new Map();
+    for (const row of legacyChapters) {
+      const key = `${row.project_id}::${row.sort_index}`;
+      if (chapterRows.has(key)) continue;
+      const title = row.chapter_title || `Chapter ${row.sort_index}`;
+      chapterRows.set(key, {
+        chapter_id: formatLegacyChapterId(row.sort_index, title),
+        project_id: row.project_id,
+        title,
+        sort_index: row.sort_index,
+        source_path: row.file_path ? row.file_path.replace(/[\\/][^\\/]+$/, "") : null,
+        updated_at: row.updated_at || new Date().toISOString(),
+      });
+    }
+
+    const insertChapter = db.prepare(`
+      INSERT INTO chapters (
+        chapter_id, project_id, title, sort_index, logline, source_path, source_checksum, metadata_stale, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT (project_id, sort_index) DO UPDATE SET
+        title = COALESCE(chapters.title, excluded.title),
+        source_path = COALESCE(chapters.source_path, excluded.source_path),
+        updated_at = CASE
+          WHEN chapters.updated_at IS NULL OR chapters.updated_at = '' THEN excluded.updated_at
+          ELSE chapters.updated_at
+        END
+    `);
+
+    for (const chapter of chapterRows.values()) {
+      insertChapter.run(
+        chapter.chapter_id,
+        chapter.project_id,
+        chapter.title,
+        chapter.sort_index,
+        null,
+        chapter.source_path,
+        null,
+        0,
+        chapter.updated_at
+      );
+    }
+
+    db.exec(`
+      UPDATE scenes
+      SET chapter_id = (
+        SELECT c.chapter_id
+        FROM chapters c
+        WHERE c.project_id = scenes.project_id
+          AND c.sort_index = scenes.chapter
+      )
+      WHERE chapter IS NOT NULL
+        AND (chapter_id IS NULL OR chapter_id = '');
     `);
   },
 ];

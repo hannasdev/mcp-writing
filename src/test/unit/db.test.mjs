@@ -437,6 +437,130 @@ describe("openDb", () => {
       fs.rmSync(dbPath, { force: true });
     }
   });
+
+  test("backfills canonical chapters from legacy scene chapter fields", () => {
+    const dbPath = makeTempPath();
+    try {
+      const legacyDb = new DatabaseSync(dbPath);
+      legacyDb.exec(`
+        CREATE TABLE schema_version (
+          id INTEGER PRIMARY KEY CHECK (id = 1),
+          version INTEGER NOT NULL
+        );
+      `);
+      legacyDb.exec(`INSERT INTO schema_version (id, version) VALUES (1, 8);`);
+      legacyDb.exec(`
+        CREATE TABLE projects (
+          project_id TEXT PRIMARY KEY,
+          universe_id TEXT,
+          name TEXT NOT NULL
+        );
+        CREATE TABLE scenes (
+          scene_id TEXT NOT NULL,
+          project_id TEXT NOT NULL,
+          chapter_id TEXT,
+          scene_role TEXT,
+          title TEXT,
+          part INTEGER,
+          chapter INTEGER,
+          chapter_title TEXT,
+          pov TEXT,
+          logline TEXT,
+          scene_change TEXT,
+          causality INTEGER,
+          stakes INTEGER,
+          scene_functions TEXT,
+          save_the_cat_beat TEXT,
+          timeline_position INTEGER,
+          story_time TEXT,
+          word_count INTEGER,
+          file_path TEXT NOT NULL,
+          prose_checksum TEXT,
+          metadata_stale INTEGER NOT NULL DEFAULT 0,
+          updated_at TEXT NOT NULL,
+          PRIMARY KEY (scene_id, project_id)
+        );
+        CREATE TABLE chapters (
+          chapter_id TEXT NOT NULL,
+          project_id TEXT NOT NULL,
+          title TEXT NOT NULL,
+          sort_index INTEGER NOT NULL,
+          logline TEXT,
+          source_path TEXT,
+          source_checksum TEXT,
+          metadata_stale INTEGER NOT NULL DEFAULT 0,
+          updated_at TEXT NOT NULL,
+          PRIMARY KEY (chapter_id, project_id),
+          UNIQUE (project_id, sort_index)
+        );
+        CREATE TABLE epigraphs (
+          epigraph_id TEXT NOT NULL,
+          project_id TEXT NOT NULL,
+          chapter_id TEXT NOT NULL,
+          body TEXT NOT NULL,
+          file_path TEXT NOT NULL,
+          prose_checksum TEXT,
+          metadata_stale INTEGER NOT NULL DEFAULT 0,
+          updated_at TEXT NOT NULL,
+          PRIMARY KEY (epigraph_id, project_id),
+          UNIQUE (project_id, chapter_id)
+        );
+        CREATE TABLE epigraph_characters (
+          epigraph_id TEXT NOT NULL,
+          project_id TEXT NOT NULL,
+          character_id TEXT NOT NULL,
+          PRIMARY KEY (epigraph_id, project_id, character_id)
+        );
+        CREATE TABLE epigraph_tags (
+          epigraph_id TEXT NOT NULL,
+          project_id TEXT NOT NULL,
+          tag TEXT NOT NULL,
+          PRIMARY KEY (epigraph_id, project_id, tag)
+        );
+      `);
+      legacyDb.prepare(`INSERT INTO projects (project_id, universe_id, name) VALUES (?, ?, ?)`)
+        .run("test-novel", null, "Test Novel");
+      const updatedAt = "2026-01-01T00:00:00.000Z";
+      legacyDb.prepare(`
+        INSERT INTO scenes (
+          scene_id, project_id, title, chapter, chapter_title, timeline_position,
+          file_path, prose_checksum, metadata_stale, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        "sc-001",
+        "test-novel",
+        "Arrival",
+        3,
+        "A New Dawn",
+        1,
+        "/tmp/test-novel/Draft/03-A New Dawn/sc-001.md",
+        "deadbeef",
+        0,
+        updatedAt
+      );
+      legacyDb.close();
+
+      const db = openDb(dbPath);
+      const chapter = db.prepare(`
+        SELECT chapter_id, title, sort_index
+        FROM chapters
+        WHERE project_id = 'test-novel'
+      `).get();
+      assert.equal(chapter.chapter_id, "ch-03-a-new-dawn");
+      assert.equal(chapter.title, "A New Dawn");
+      assert.equal(chapter.sort_index, 3);
+
+      const scene = db.prepare(`
+        SELECT chapter_id
+        FROM scenes
+        WHERE scene_id = 'sc-001' AND project_id = 'test-novel'
+      `).get();
+      assert.equal(scene.chapter_id, "ch-03-a-new-dawn");
+      db.close();
+    } finally {
+      fs.rmSync(dbPath, { force: true });
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------
