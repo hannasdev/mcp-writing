@@ -1703,6 +1703,74 @@ describe("syncAll", () => {
     db.close();
     fs.rmSync(dir, { recursive: true });
   });
+
+  test("skips epigraphs whose explicit chapter_id does not resolve to a canonical chapter row", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sync-"));
+    const db = openDb(":memory:");
+    const epigraphPath = path.join(dir, "projects", "test-novel", "Draft", "epigraph.md");
+    fs.mkdirSync(path.dirname(epigraphPath), { recursive: true });
+    fs.writeFileSync(
+      epigraphPath,
+      "---\nkind: epigraph\nchapter_id: ch-99-missing\nepigraph_id: epi-missing\n---\nLoose epigraph prose."
+    );
+
+    const result = syncAll(db, dir, { quiet: true });
+
+    assert.equal(result.epigraphsIndexed, 0);
+    assert.equal(db.prepare(`SELECT COUNT(*) AS count FROM epigraphs WHERE project_id = 'test-novel'`).get().count, 0);
+    assert.ok(result.warnings.some((warning) => warning.includes("unknown chapter_id 'ch-99-missing'")));
+
+    db.close();
+    fs.rmSync(dir, { recursive: true });
+  });
+
+  test("updates an existing chapter epigraph when its explicit epigraph_id changes", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sync-"));
+    const db = openDb(":memory:");
+    const chapterDir = path.join(dir, "projects", "test-novel", "Draft", "01-The perfect chapter");
+    fs.mkdirSync(chapterDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(chapterDir, "sc-001.md"),
+      "---\nscene_id: sc-001\ntitle: Arrival\nchapter_title: The Perfect Chapter\n---\nScene prose."
+    );
+    const epigraphPath = path.join(chapterDir, "epigraph.md");
+    fs.writeFileSync(
+      epigraphPath,
+      "---\nepigraph_id: epi-001\ncharacters:\n  - elena\n---\nA quiet line before the chapter."
+    );
+
+    syncAll(db, dir, { quiet: true });
+
+    fs.writeFileSync(
+      epigraphPath,
+      "---\nepigraph_id: epi-renamed\ncharacters:\n  - elena\n---\nA quiet line before the chapter."
+    );
+
+    const result = syncAll(db, dir, { quiet: true });
+    const epigraphs = db.prepare(`
+      SELECT epigraph_id, chapter_id, body
+      FROM epigraphs
+      WHERE project_id = 'test-novel'
+      ORDER BY epigraph_id
+    `).all();
+
+    assert.equal(result.epigraphsIndexed, 1);
+    assert.deepEqual(
+      epigraphs.map((row) => [row.epigraph_id, row.chapter_id, row.body]),
+      [["epi-renamed", "ch-01-the-perfect-chapter", "A quiet line before the chapter."]]
+    );
+    assert.equal(
+      db.prepare(`SELECT COUNT(*) AS count FROM epigraph_characters WHERE project_id = 'test-novel' AND epigraph_id = 'epi-renamed'`).get().count,
+      1
+    );
+    assert.equal(
+      db.prepare(`SELECT COUNT(*) AS count FROM epigraph_characters WHERE project_id = 'test-novel' AND epigraph_id = 'epi-001'`).get().count,
+      0
+    );
+
+    db.close();
+    fs.rmSync(dir, { recursive: true });
+  });
 });
 
 describe("walkFiles symlink support", () => {

@@ -514,7 +514,7 @@ Dry-run planning tool for review bundles. Resolves scene scope, deterministic or
 | `part` | `integer` | No | Optional part filter. |
 | `chapter` | `integer` | No | Optional compatibility chapter filter. |
 | `chapter_id` | `string` | No | Optional canonical chapter identifier. |
-| `chapters` | `number[]` | No | Optional chapter-set filter. Use this for one/few specific chapters. Do not combine with chapter. |
+| `chapters` | `number[]` | No | Optional chapter-set filter. Use this for one/few specific chapters. Do not combine with chapter or chapter_id. |
 | `tag` | `string` | No | Optional tag filter (exact match). |
 | `scene_ids` | `string[]` | No | Optional explicit scene_id allowlist. Intersects with other filters. |
 | `strictness` | `enum` | No | Strictness mode: warn (default) or fail. |
@@ -542,7 +542,7 @@ Generate review bundle artifacts (PDF/markdown) from planned scene scope. Writes
 | `part` | `integer` | No | Optional part filter. |
 | `chapter` | `integer` | No | Optional compatibility chapter filter. |
 | `chapter_id` | `string` | No | Optional canonical chapter identifier. |
-| `chapters` | `number[]` | No | Optional chapter-set filter. Use this for one/few specific chapters. Do not combine with chapter. |
+| `chapters` | `number[]` | No | Optional chapter-set filter. Use this for one/few specific chapters. Do not combine with chapter or chapter_id. |
 | `tag` | `string` | No | Optional tag filter (exact match). |
 | `scene_ids` | `string[]` | No | Optional explicit scene_id allowlist. Intersects with other filters. |
 | `strictness` | `enum` | No | Strictness mode: warn (default) or fail. |

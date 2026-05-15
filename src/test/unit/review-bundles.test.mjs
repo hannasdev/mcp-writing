@@ -177,6 +177,30 @@ describe("buildReviewBundlePlan", () => {
     }
   });
 
+  test("rejects using chapter_id and chapters together", () => {
+    const db = setupReviewBundleTestDb();
+    try {
+      insertTestScene(db, {
+        sceneId: "sc-104",
+        part: 1,
+        chapter: 1,
+        chapterId: "ch-01-opening",
+        timelinePosition: 1,
+      });
+      assert.throws(
+        () => buildReviewBundlePlan(db, {
+          project_id: "test-novel",
+          profile: "outline_discussion",
+          chapter_id: "ch-01-opening",
+          chapters: [1, 2],
+        }),
+        error => error instanceof ReviewBundlePlanError && error.code === "INVALID_CHAPTER_FILTER"
+      );
+    } finally {
+      db.close();
+    }
+  });
+
   test("rejects scene_ids lists larger than the SQLite-safe planner limit", () => {
     const db = setupReviewBundleTestDb();
     try {
