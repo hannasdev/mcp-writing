@@ -248,6 +248,20 @@ describe("canonical chapter and epigraph tools", () => {
     assert.ok(scenesParsed.results.every((row) => row.chapter_id === firstChapter.chapter_id));
   });
 
+  test("requires project_id when filtering scenes by chapter_id", async () => {
+    const chaptersText = await callWriteTool("list_chapters", { project_id: "test-novel" });
+    const chaptersParsed = JSON.parse(chaptersText);
+    const firstChapter = chaptersParsed.results.find((row) => row.sort_index === 1);
+    assert.ok(firstChapter);
+
+    const scenesText = await callWriteTool("find_scenes", {
+      chapter_id: firstChapter.chapter_id,
+    });
+    const scenesParsed = JSON.parse(scenesText);
+    assert.equal(scenesParsed.ok, false);
+    assert.equal(scenesParsed.error.code, "VALIDATION_ERROR");
+  });
+
   test("indexes explicit epigraph files and returns them through find_epigraphs", async () => {
     const chapterDir = path.join(writeSyncDir, "projects", "test-novel", "Draft", "03-A New Dawn");
     fs.mkdirSync(chapterDir, { recursive: true });

@@ -1489,6 +1489,52 @@ describe("syncAll", () => {
     db.close();
     fs.rmSync(dir, { recursive: true });
   });
+
+  test("does not merge scenes from duplicate chapter-order folders into one canonical chapter", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sync-"));
+    const db = openDb(":memory:");
+    const firstChapterDir = path.join(dir, "projects", "test-novel", "Draft", "01-First chapter");
+    const secondChapterDir = path.join(dir, "projects", "test-novel", "Draft", "01-Second chapter");
+    fs.mkdirSync(firstChapterDir, { recursive: true });
+    fs.mkdirSync(secondChapterDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(firstChapterDir, "sc-001.md"),
+      "---\nscene_id: sc-001\ntitle: Arrival\n---\nScene prose."
+    );
+    fs.writeFileSync(
+      path.join(secondChapterDir, "sc-002.md"),
+      "---\nscene_id: sc-002\ntitle: Collision\n---\nOther scene prose."
+    );
+
+    const result = syncAll(db, dir, { quiet: true });
+
+    const chapters = db.prepare(`
+      SELECT chapter_id, title, sort_index
+      FROM chapters
+      WHERE project_id = 'test-novel'
+      ORDER BY sort_index, chapter_id
+    `).all();
+    assert.equal(chapters.length, 1);
+    assert.equal(chapters[0].title, "First Chapter");
+
+    const firstScene = db.prepare(`
+      SELECT chapter_id, chapter_title
+      FROM scenes
+      WHERE scene_id = 'sc-001' AND project_id = 'test-novel'
+    `).get();
+    const secondScene = db.prepare(`
+      SELECT chapter_id, chapter_title
+      FROM scenes
+      WHERE scene_id = 'sc-002' AND project_id = 'test-novel'
+    `).get();
+    assert.equal(firstScene.chapter_id, "ch-01-first-chapter");
+    assert.equal(secondScene.chapter_id, null);
+    assert.equal(secondScene.chapter_title, "Second Chapter");
+    assert.ok(result.warnings.some((warning) => warning.includes("duplicate chapter order 1")));
+
+    db.close();
+    fs.rmSync(dir, { recursive: true });
+  });
 });
 
 describe("walkFiles symlink support", () => {

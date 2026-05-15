@@ -111,6 +111,13 @@ export function registerSearchTools(s, {
       page_size:  z.number().int().min(1).max(200).optional().describe("Optional page size for paginated responses (default: 20, max: 200)."),
     },
     async ({ project_id, character, beat, tag, part, chapter, chapter_id, pov, page, page_size }) => {
+      if (chapter_id && !project_id) {
+        return errorResponse(
+          "VALIDATION_ERROR",
+          "Provide project_id when filtering by chapter_id.",
+          { chapter_id }
+        );
+      }
       let query = `
         SELECT DISTINCT s.scene_id, s.project_id, s.chapter_id, s.title, s.part, s.chapter, s.chapter_title, s.pov,
                s.logline, s.scene_change, s.causality, s.stakes, s.scene_functions,
