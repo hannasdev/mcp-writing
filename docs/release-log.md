@@ -8,6 +8,14 @@ This complements `CHANGELOG.md`:
 
 ## Unreleased
 
+### 2026-05-15 — Add canonical chapter and epigraph indexing
+
+- What changed: Writing MCP now indexes first-class chapters and epigraphs from ordered draft folders, adds canonical `chapter_id` targeting, and keeps numeric chapter filters as compatibility aliases. Review bundles also render explicit chapter-linked epigraph content before scenes.
+- Why it matters: Chapter structure is now editable and queryable as its own domain concept instead of being reconstructed from repeated scene fields, which makes rename/reorder workflows and chapter-scoped retrieval more reliable.
+- Who is affected: Authors and maintainers using sync, search, chapter retrieval, or review bundle workflows for structured manuscript projects.
+- Action needed: If you want canonical chapter indexing, organize draft content into ordered chapter folders such as `01-The perfect chapter` and place explicit `epigraph.md` files inside the relevant chapter folder. Existing numeric chapter filters still work during migration.
+- PR: [#193](https://github.com/hannasdev/mcp-writing/pull/193)
+
 ### 2026-05-14 — Move chapter and epigraph migration plans into active development
 
 - What changed: The chapter and epigraph migration PRDs were moved from `docs/prd/inbox` to `docs/prd/in-progress`, and the chapter plan now spells out the migration path from scene-scoped chapter metadata to first-class chapter entities.
