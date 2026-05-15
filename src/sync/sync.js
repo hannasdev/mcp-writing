@@ -1084,6 +1084,23 @@ function resolveCanonicalChapterRecord(db, {
     };
   }
 
+  const byTitle = db.prepare(`
+    SELECT chapter_id, title, sort_index, logline, source_path, source_checksum, metadata_stale
+    FROM chapters
+    WHERE project_id = ? AND title = ?
+    ORDER BY chapter_id
+  `).all(projectId, title);
+
+  if (byTitle.length === 1) {
+    return {
+      ...byTitle[0],
+      chapter_id: byTitle[0].chapter_id,
+      title,
+      sort_index: sortIndex,
+      source_path: normalizedSourcePath,
+    };
+  }
+
   const bySortIndex = db.prepare(`
     SELECT chapter_id, title, sort_index, logline, source_path, source_checksum, metadata_stale
     FROM chapters
@@ -1129,6 +1146,24 @@ function resolveCanonicalChapterRecord(db, {
   };
 }
 
+function parkConflictingChapterSortIndex(db, { projectId, chapterId, targetSortIndex }) {
+  if (!projectId || !chapterId || targetSortIndex == null) return;
+
+  const conflictingChapter = db.prepare(`
+    SELECT chapter_id, sort_index
+    FROM chapters
+    WHERE project_id = ? AND sort_index = ? AND chapter_id != ?
+  `).get(projectId, targetSortIndex, chapterId);
+
+  if (!conflictingChapter) return;
+
+  db.prepare(`
+    UPDATE chapters
+    SET sort_index = ?
+    WHERE project_id = ? AND chapter_id = ?
+  `).run(-1000000 - Number(conflictingChapter.sort_index), projectId, conflictingChapter.chapter_id);
+}
+
 export function indexSceneFile(db, syncDir, file, meta, prose) {
   const { universe_id, project_id } = inferProjectAndUniverse(syncDir, file);
   const chapterStructure = inferChapterStructureFromPath(syncDir, file, meta);
@@ -1153,12 +1188,18 @@ export function indexSceneFile(db, syncDir, file, meta, prose) {
   const chapterTitle = chapterStructure.chapter?.title ?? meta.chapter_title ?? null;
   const chapterSourcePath = chapterStructure.chapter?.folder_key ?? path.dirname(file);
   let chapterWarning = null;
+  const derivedChapterId = (
+    chapterId
+    ?? (chapterSortIndex != null && chapterTitle
+      ? `ch-${String(chapterSortIndex).padStart(2, "0")}-${slugifyChapterValue(chapterTitle) || `chapter-${chapterSortIndex}`}`
+      : null)
+  );
 
-  if (chapterId && chapterSortIndex != null && chapterTitle) {
+  if (chapterSortIndex != null && chapterTitle) {
     const canonicalChapter = resolveCanonicalChapterRecord(db, {
       syncDir,
       projectId: project_id,
-      derivedChapterId: chapterId,
+      derivedChapterId,
       sortIndex: chapterSortIndex,
       title: chapterTitle,
       sourcePath: chapterSourcePath,
@@ -1170,6 +1211,11 @@ export function indexSceneFile(db, syncDir, file, meta, prose) {
       chapterId = canonicalChapter?.chapter_id ?? chapterId;
     }
     if (chapterId) {
+      parkConflictingChapterSortIndex(db, {
+        projectId: project_id,
+        chapterId,
+        targetSortIndex: chapterSortIndex,
+      });
       const chapterChecksum = checksumProse(`${chapterSortIndex}:${chapterTitle}:${meta.chapter_logline ?? ""}`);
       const existingChapter = db.prepare(
         `SELECT source_checksum, metadata_stale FROM chapters WHERE chapter_id = ? AND project_id = ?`
@@ -1257,6 +1303,7 @@ export function indexSceneFile(db, syncDir, file, meta, prose) {
     return {
       isStale: existingEpigraph && existingEpigraph.prose_checksum !== epigraphChecksum ? 1 : 0,
       skippedAsEpigraph: true,
+      epigraphIndexed: true,
       chapterId,
       epigraphId,
     };
@@ -1556,8 +1603,10 @@ export function syncAll(db, syncDir, { quiet = false, writable = false } = {}) {
       if (result.warning) {
         warnings.push(result.warning);
       }
-      if (chapterStructure.chapter && result.chapterId) {
+      if (result.chapterId) {
         seenChapterKeys.add(`${result.chapterId}::${project_id}`);
+      }
+      if (chapterStructure.chapter && result.chapterId) {
         const chapterMapKey = `${project_id}::${chapterStructure.chapter.sort_index}`;
         const existingChapterFolder = chapterFoldersByProject.get(chapterMapKey);
         if (!existingChapterFolder) {
@@ -1572,12 +1621,14 @@ export function syncAll(db, syncDir, { quiet = false, writable = false } = {}) {
         }
       }
       if (result.skippedAsEpigraph) {
-        if (result.epigraphId) {
+        if (result.epigraphIndexed && result.epigraphId) {
           const epigraphId = result.epigraphId;
           seenEpigraphKeys.add(`${epigraphId}::${project_id}`);
         }
-        epigraphsIndexed++;
-        if (result.isStale) epigraphsStaleMarked++;
+        if (result.epigraphIndexed) {
+          epigraphsIndexed++;
+          if (result.isStale) epigraphsStaleMarked++;
+        }
         continue;
       }
       const { isStale } = result;

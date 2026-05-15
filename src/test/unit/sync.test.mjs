@@ -1535,6 +1535,92 @@ describe("syncAll", () => {
     db.close();
     fs.rmSync(dir, { recursive: true });
   });
+
+  test("preserves canonical chapter identities across chapter reorder renames", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sync-"));
+    const db = openDb(":memory:");
+    const oldDir = path.join(dir, "projects", "test-novel", "Draft", "01-Old chapter");
+    const newDir = path.join(dir, "projects", "test-novel", "Draft", "02-New chapter");
+    fs.mkdirSync(oldDir, { recursive: true });
+    fs.mkdirSync(newDir, { recursive: true });
+    fs.writeFileSync(path.join(oldDir, "sc-001.md"), "---\nscene_id: sc-001\ntitle: Old Scene\n---\nOld prose.");
+    fs.writeFileSync(path.join(newDir, "sc-002.md"), "---\nscene_id: sc-002\ntitle: New Scene\n---\nNew prose.");
+
+    syncAll(db, dir, { quiet: true });
+
+    fs.renameSync(oldDir, path.join(dir, "projects", "test-novel", "Draft", "tmp-old"));
+    fs.renameSync(newDir, path.join(dir, "projects", "test-novel", "Draft", "01-New chapter"));
+    fs.renameSync(path.join(dir, "projects", "test-novel", "Draft", "tmp-old"), path.join(dir, "projects", "test-novel", "Draft", "02-Old chapter"));
+
+    syncAll(db, dir, { quiet: true });
+
+    const scenes = db.prepare(`
+      SELECT scene_id, chapter_id, chapter, chapter_title
+      FROM scenes
+      WHERE project_id = 'test-novel'
+      ORDER BY scene_id
+    `).all();
+    assert.deepEqual(
+      scenes.map((row) => [row.scene_id, row.chapter_id, row.chapter, row.chapter_title]),
+      [
+        ["sc-001", "ch-01-old-chapter", 2, "Old Chapter"],
+        ["sc-002", "ch-02-new-chapter", 1, "New Chapter"],
+      ]
+    );
+
+    db.close();
+    fs.rmSync(dir, { recursive: true });
+  });
+
+  test("retains canonical chapter linkage for flat scenes with legacy chapter metadata", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sync-"));
+    const db = openDb(":memory:");
+    const scenePath = path.join(dir, "projects", "test-novel", "scenes", "sc-legacy.md");
+    fs.mkdirSync(path.dirname(scenePath), { recursive: true });
+    fs.writeFileSync(
+      scenePath,
+      "---\nscene_id: sc-legacy\ntitle: Legacy Scene\nchapter: 3\nchapter_title: A New Dawn\n---\nLegacy prose."
+    );
+
+    syncAll(db, dir, { quiet: true });
+    syncAll(db, dir, { quiet: true });
+
+    const scene = db.prepare(`
+      SELECT chapter_id, chapter, chapter_title
+      FROM scenes
+      WHERE scene_id = 'sc-legacy' AND project_id = 'test-novel'
+    `).get();
+    const chapter = db.prepare(`
+      SELECT chapter_id, title, sort_index
+      FROM chapters
+      WHERE project_id = 'test-novel'
+    `).get();
+
+    assert.equal(chapter.chapter_id, "ch-03-a-new-dawn");
+    assert.equal(scene.chapter_id, "ch-03-a-new-dawn");
+    assert.equal(scene.chapter, 3);
+    assert.equal(scene.chapter_title, "A New Dawn");
+
+    db.close();
+    fs.rmSync(dir, { recursive: true });
+  });
+
+  test("does not count unlinked epigraph warnings as indexed epigraphs", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sync-"));
+    const db = openDb(":memory:");
+    const epigraphPath = path.join(dir, "projects", "test-novel", "Draft", "epigraph.md");
+    fs.mkdirSync(path.dirname(epigraphPath), { recursive: true });
+    fs.writeFileSync(epigraphPath, "---\nkind: epigraph\n---\nLoose epigraph prose.");
+
+    const result = syncAll(db, dir, { quiet: true });
+
+    assert.equal(result.epigraphsIndexed, 0);
+    assert.equal(db.prepare(`SELECT COUNT(*) AS count FROM epigraphs WHERE project_id = 'test-novel'`).get().count, 0);
+    assert.ok(result.warnings.some((warning) => warning.includes("Epigraph requires explicit chapter linkage")));
+
+    db.close();
+    fs.rmSync(dir, { recursive: true });
+  });
 });
 
 describe("walkFiles symlink support", () => {
