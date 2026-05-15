@@ -5,6 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 import {
   checksumProse, inferProjectAndUniverse, inferScenePositionFromPath,
+  inferChapterStructureFromPath,
   inferReferenceDocType, isReferenceFile, deriveReferenceDocId,
   deriveReferenceSummary, deriveReferenceTitle, normalizeReferenceTags,
   normalizeReferenceIdList,
@@ -254,6 +255,23 @@ describe("inferScenePositionFromPath", () => {
   test("returns nulls when the path has no part/chapter segments", () => {
     const result = inferScenePositionFromPath(syncDir, "/sync/projects/novel/scenes/scene.md");
     assert.deepEqual(result, { part: null, chapter: null });
+  });
+});
+
+describe("inferChapterStructureFromPath", () => {
+  const syncDir = "/sync";
+
+  test("detects v1 chapter folders with ordered prefix and title", () => {
+    const result = inferChapterStructureFromPath(syncDir, "/sync/projects/novel/Draft/01-The perfect chapter/sc-001.md");
+    assert.equal(result.chapter.sort_index, 1);
+    assert.equal(result.chapter.title, "The Perfect Chapter");
+    assert.equal(result.chapter.chapter_id, "ch-01-the-perfect-chapter");
+  });
+
+  test("detects explicit prologue folder outside chapters", () => {
+    const result = inferChapterStructureFromPath(syncDir, "/sync/projects/novel/Draft/prologue/sc-000.md");
+    assert.equal(result.role, "prologue");
+    assert.equal(result.chapter, null);
   });
 });
 
@@ -1380,6 +1398,42 @@ describe("syncAll", () => {
     assert.ok(result.warnings.some(w => w.includes("Path/metadata mismatch")));
     assert.equal(scene.part, 1);
     assert.equal(scene.chapter, 1);
+
+    db.close();
+    fs.rmSync(dir, { recursive: true });
+  });
+
+  test("indexes canonical chapters and epigraphs from explicit chapter folders", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sync-"));
+    const db = openDb(":memory:");
+    const chapterDir = path.join(dir, "projects", "test-novel", "Draft", "01-The perfect chapter");
+    fs.mkdirSync(chapterDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(chapterDir, "sc-001.md"),
+      "---\nscene_id: sc-001\ntitle: Arrival\nchapter_title: The Perfect Chapter\n---\nScene prose."
+    );
+    fs.writeFileSync(
+      path.join(chapterDir, "epigraph.md"),
+      "---\nepigraph_id: epi-001\ncharacters:\n  - elena\n---\nA quiet line before the chapter."
+    );
+
+    const result = syncAll(db, dir, { quiet: true });
+    assert.equal(result.indexed, 2);
+
+    const chapter = db.prepare(`SELECT chapter_id, title, sort_index FROM chapters WHERE project_id = 'test-novel'`).get();
+    assert.equal(chapter.chapter_id, "ch-01-the-perfect-chapter");
+    assert.equal(chapter.title, "The Perfect Chapter");
+    assert.equal(chapter.sort_index, 1);
+
+    const scene = db.prepare(`SELECT chapter_id, chapter, chapter_title FROM scenes WHERE scene_id = 'sc-001' AND project_id = 'test-novel'`).get();
+    assert.equal(scene.chapter_id, "ch-01-the-perfect-chapter");
+    assert.equal(scene.chapter, 1);
+    assert.equal(scene.chapter_title, "The Perfect Chapter");
+
+    const epigraph = db.prepare(`SELECT epigraph_id, chapter_id, body FROM epigraphs WHERE project_id = 'test-novel'`).get();
+    assert.equal(epigraph.epigraph_id, "epi-001");
+    assert.equal(epigraph.chapter_id, "ch-01-the-perfect-chapter");
+    assert.match(epigraph.body, /quiet line/);
 
     db.close();
     fs.rmSync(dir, { recursive: true });

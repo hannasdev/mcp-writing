@@ -39,6 +39,23 @@ function readSceneEntityIdsFromMetadata({ scenePath, syncDir }) {
   };
 }
 
+function resolveChapterByCompatibilityKey(db, { projectId, chapterNumber, chapterId }) {
+  if (!projectId) return null;
+  if (chapterId) {
+    return db.prepare(`
+      SELECT chapter_id, project_id, title, sort_index, logline, metadata_stale
+      FROM chapters
+      WHERE project_id = ? AND chapter_id = ?
+    `).get(projectId, chapterId);
+  }
+  if (chapterNumber == null) return null;
+  return db.prepare(`
+    SELECT chapter_id, project_id, title, sort_index, logline, metadata_stale
+    FROM chapters
+    WHERE project_id = ? AND sort_index = ?
+  `).get(projectId, chapterNumber);
+}
+
 function selectApplyCandidates(enrichedCandidates, selectedDocIds, maxApply) {
   const selectedSet = selectedDocIds ? new Set(selectedDocIds) : null;
   const chosenByDocId = new Map();
@@ -70,21 +87,22 @@ export function registerSearchTools(s, {
   // ---- find_scenes ---------------------------------------------------------
   s.tool(
     "find_scenes",
-    "Find scenes by filtering on character, Save the Cat beat, tags, part, chapter, or POV. Returns ordered scene metadata only — no prose. All filters are optional and combinable. Supports pagination via page/page_size and auto-paginates large result sets with total_count. Warns if any matching scenes have stale metadata. Response shape note: always returns a structured envelope (`results`, `total_count`, with pagination fields when paging is active).",
+    "Find scenes by filtering on character, Save the Cat beat, tags, chapter identity, numeric compatibility chapter, or POV. Returns ordered scene metadata only — no prose. All filters are optional and combinable. Supports pagination via page/page_size and auto-paginates large result sets with total_count. Warns if any matching scenes have stale metadata. Response shape note: always returns a structured envelope (`results`, `total_count`, with pagination fields when paging is active).",
     {
       project_id: z.string().optional().describe("Project ID (e.g. 'the-lamb'). Use to scope results to one project."),
       character:  z.string().optional().describe("A character_id (e.g. 'char-mira-nystrom'). Returns only scenes that character appears in. Use list_characters first to find valid IDs."),
       beat:       z.string().optional().describe("Save the Cat beat name (e.g. 'Opening Image'). Exact match."),
       tag:        z.string().optional().describe("Scene tag to filter by. Exact match."),
       part:       z.number().int().optional().describe("Part number (integer, e.g. 1). Chapters are numbered globally across the whole project."),
-      chapter:    z.number().int().optional().describe("Chapter number (integer, e.g. 3). Chapters are numbered globally across the whole project — do not reset per part."),
+      chapter:    z.number().int().optional().describe("Compatibility chapter number resolved from canonical chapter sort order."),
+      chapter_id: z.string().optional().describe("Canonical chapter identifier. Use list_chapters to find valid values."),
       pov:        z.string().optional().describe("POV character_id. Use list_characters first to find valid IDs."),
       page:       z.number().int().min(1).optional().describe("Optional page number for paginated responses (1-based)."),
       page_size:  z.number().int().min(1).max(200).optional().describe("Optional page size for paginated responses (default: 20, max: 200)."),
     },
-    async ({ project_id, character, beat, tag, part, chapter, pov, page, page_size }) => {
+    async ({ project_id, character, beat, tag, part, chapter, chapter_id, pov, page, page_size }) => {
       let query = `
-        SELECT DISTINCT s.scene_id, s.project_id, s.title, s.part, s.chapter, s.chapter_title, s.pov,
+        SELECT DISTINCT s.scene_id, s.project_id, s.chapter_id, s.title, s.part, s.chapter, s.chapter_title, s.pov,
                s.logline, s.scene_change, s.causality, s.stakes, s.scene_functions,
                s.save_the_cat_beat, s.timeline_position, s.story_time,
                s.word_count, s.metadata_stale
@@ -105,12 +123,13 @@ export function registerSearchTools(s, {
       if (project_id)  { conditions.push(`s.project_id = ?`);        params.push(project_id); }
       if (beat)        { conditions.push(`s.save_the_cat_beat = ?`);  params.push(beat); }
       if (part)        { conditions.push(`s.part = ?`);               params.push(part); }
-      if (chapter)     { conditions.push(`s.chapter = ?`);            params.push(chapter); }
+      if (chapter_id)  { conditions.push(`s.chapter_id = ?`);         params.push(chapter_id); }
+      else if (chapter) { conditions.push(`s.chapter = ?`);           params.push(chapter); }
       if (pov)         { conditions.push(`s.pov = ?`);                params.push(pov); }
 
       if (joins.length)      query += " " + joins.join(" ");
       if (conditions.length) query += " WHERE " + conditions.join(" AND ");
-      query += " ORDER BY s.part, s.chapter, s.timeline_position";
+      query += " ORDER BY s.part, s.chapter, s.timeline_position, s.scene_id";
 
       const rows = db.prepare(query).all(...params);
       if (rows.length === 0) {
@@ -229,21 +248,32 @@ export function registerSearchTools(s, {
   // ---- get_chapter_prose ---------------------------------------------------
   s.tool(
     "get_chapter_prose",
-    `Load the full prose for every scene in a chapter, concatenated in order. Expensive — only use when you need to read an entire chapter. Capped at ${MAX_CHAPTER_SCENES} scenes. Use find_scenes first to confirm the chapter exists.`,
+    `Load the full prose for every scene in a chapter, concatenated in order. Canonical targeting uses chapter_id; numeric chapter remains available as a compatibility alias resolved from chapter sort order. Expensive — only use when you need to read an entire chapter. Capped at ${MAX_CHAPTER_SCENES} scenes. Use find_scenes first to confirm the chapter exists.`,
     {
       project_id: z.string().describe("Project ID (e.g. 'the-lamb')."),
-      part:       z.number().int().describe("Part number (integer)."),
-      chapter:    z.number().int().describe("Chapter number (integer, globally numbered across the whole project)."),
+      chapter_id: z.string().optional().describe("Canonical chapter identifier."),
+      chapter:    z.number().int().optional().describe("Compatibility chapter number resolved from canonical sort order."),
     },
-    async ({ project_id, part, chapter }) => {
+    async ({ project_id, chapter_id, chapter }) => {
+      if (!chapter_id && chapter == null) {
+        return errorResponse("VALIDATION_ERROR", "Provide chapter_id or chapter.");
+      }
+      const resolvedChapter = resolveChapterByCompatibilityKey(db, { projectId: project_id, chapterNumber: chapter, chapterId: chapter_id });
+      if (!resolvedChapter) {
+        return errorResponse("NOT_FOUND", "Chapter not found for the provided project and identifier.", {
+          project_id,
+          chapter_id: chapter_id ?? null,
+          chapter: chapter ?? null,
+        });
+      }
       const allScenes = db.prepare(`
         SELECT scene_id, title, file_path FROM scenes
-        WHERE project_id = ? AND part = ? AND chapter = ?
-        ORDER BY timeline_position
-      `).all(project_id, part, chapter);
+        WHERE project_id = ? AND chapter_id = ?
+        ORDER BY timeline_position, scene_id
+      `).all(project_id, resolvedChapter.chapter_id);
 
       if (allScenes.length === 0) {
-        return errorResponse("NO_RESULTS", `No scenes found for Part ${part}, Chapter ${chapter}.`);
+        return errorResponse("NO_RESULTS", `No scenes found for chapter '${resolvedChapter.title}'.`);
       }
 
       const truncated = allScenes.length > MAX_CHAPTER_SCENES;
@@ -266,10 +296,89 @@ export function registerSearchTools(s, {
           ...(truncated
             ? { warning: `Chapter has ${allScenes.length} scenes — only the first ${MAX_CHAPTER_SCENES} were loaded. Set MAX_CHAPTER_SCENES to increase this limit.` }
             : {}),
+          chapter: resolvedChapter,
           next_step: truncated
             ? "Narrow with find_scenes and inspect key scenes individually with get_scene_prose before expanding chapter scope."
             : "If you only need a subset, switch to find_scenes + get_scene_prose for tighter context control.",
         },
+      };
+    }
+  );
+
+  // ---- list_chapters ------------------------------------------------------
+  s.tool(
+    "list_chapters",
+    "List canonical chapters for a project. Returns chapter_id plus compatibility sort order so callers can migrate from numeric chapter targeting without losing orientation.",
+    {
+      project_id: z.string().describe("Project ID."),
+    },
+    async ({ project_id }) => {
+      const rows = db.prepare(`
+        SELECT chapter_id, project_id, title, sort_index, logline, metadata_stale
+        FROM chapters
+        WHERE project_id = ?
+        ORDER BY sort_index, chapter_id
+      `).all(project_id);
+
+      if (rows.length === 0) {
+        return errorResponse("NO_RESULTS", `No chapters found for project '${project_id}'.`);
+      }
+
+      return {
+        content: [{
+          type: "text",
+          text: JSON.stringify({
+            results: rows,
+            total_count: rows.length,
+          }, null, 2),
+        }],
+      };
+    }
+  );
+
+  // ---- find_epigraphs -----------------------------------------------------
+  s.tool(
+    "find_epigraphs",
+    "List canonical epigraphs for a project, optionally narrowed to a canonical chapter_id or compatibility chapter number.",
+    {
+      project_id: z.string().describe("Project ID."),
+      chapter_id: z.string().optional().describe("Canonical chapter identifier."),
+      chapter: z.number().int().optional().describe("Compatibility chapter number resolved from canonical sort order."),
+    },
+    async ({ project_id, chapter_id, chapter }) => {
+      const resolvedChapter = (chapter_id || chapter != null)
+        ? resolveChapterByCompatibilityKey(db, { projectId: project_id, chapterNumber: chapter, chapterId: chapter_id })
+        : null;
+      if ((chapter_id || chapter != null) && !resolvedChapter) {
+        return errorResponse("NOT_FOUND", "Chapter not found for the provided epigraph filter.", {
+          project_id,
+          chapter_id: chapter_id ?? null,
+          chapter: chapter ?? null,
+        });
+      }
+
+      const rows = db.prepare(`
+        SELECT e.epigraph_id, e.project_id, e.chapter_id, c.title AS chapter_title, c.sort_index AS chapter,
+               e.body, e.metadata_stale
+        FROM epigraphs e
+        JOIN chapters c ON c.chapter_id = e.chapter_id AND c.project_id = e.project_id
+        WHERE e.project_id = ?
+          AND (? IS NULL OR e.chapter_id = ?)
+        ORDER BY c.sort_index, e.epigraph_id
+      `).all(project_id, resolvedChapter?.chapter_id ?? null, resolvedChapter?.chapter_id ?? null);
+
+      if (rows.length === 0) {
+        return errorResponse("NO_RESULTS", `No epigraphs found for project '${project_id}'.`);
+      }
+
+      return {
+        content: [{
+          type: "text",
+          text: JSON.stringify({
+            results: rows,
+            total_count: rows.length,
+          }, null, 2),
+        }],
       };
     }
   );
@@ -532,7 +641,7 @@ export function registerSearchTools(s, {
 
       if (!shouldPaginate) {
         const rows = db.prepare(`
-          SELECT f.scene_id, f.project_id, s.title, s.logline, s.part, s.chapter, s.chapter_title, s.metadata_stale
+          SELECT f.scene_id, f.project_id, s.chapter_id, s.title, s.logline, s.part, s.chapter, s.chapter_title, s.metadata_stale
           FROM scenes_fts f
           JOIN scenes s ON s.scene_id = f.scene_id AND s.project_id = f.project_id
           WHERE scenes_fts MATCH ?
@@ -557,7 +666,7 @@ export function registerSearchTools(s, {
       const offset = (normalizedPage - 1) * safePageSize;
 
       const rows = db.prepare(`
-        SELECT f.scene_id, f.project_id, s.title, s.logline, s.part, s.chapter, s.chapter_title, s.metadata_stale
+        SELECT f.scene_id, f.project_id, s.chapter_id, s.title, s.logline, s.part, s.chapter, s.chapter_title, s.metadata_stale
         FROM scenes_fts f
         JOIN scenes s ON s.scene_id = f.scene_id AND s.project_id = f.project_id
         WHERE scenes_fts MATCH ?
@@ -853,7 +962,7 @@ export function registerSearchTools(s, {
                st.beat AS thread_beat, s.timeline_position, s.story_time, s.metadata_stale
         FROM scenes s
         JOIN scene_threads st ON st.scene_id = s.scene_id AND st.project_id = s.project_id AND st.thread_id = ?
-        ORDER BY s.part, s.chapter, s.timeline_position
+        ORDER BY s.part, s.chapter, s.timeline_position, s.scene_id
       `).all(thread_id);
       const staleCount = rows.filter(r => r.metadata_stale).length;
       const warning = staleCount > 0 ? `${staleCount} scene(s) have stale metadata.` : undefined;
@@ -899,11 +1008,12 @@ export function registerSearchTools(s, {
                s.part, s.chapter, s.chapter_title, s.timeline_position, s.title AS scene_title
         FROM character_relationships r
         LEFT JOIN scenes s ON s.scene_id = r.scene_id
+          AND (r.scene_id IS NULL OR s.project_id = COALESCE(?, s.project_id))
         WHERE r.from_character = ? AND r.to_character = ?
       `;
-      const params = [from_character, to_character];
+      const params = [project_id ?? null, from_character, to_character];
       if (project_id) { query += ` AND (s.project_id = ? OR r.scene_id IS NULL)`; params.push(project_id); }
-      query += ` ORDER BY s.part, s.chapter, s.timeline_position`;
+      query += ` ORDER BY s.part, s.chapter, s.timeline_position, s.scene_id`;
 
       const rows = db.prepare(query).all(...params);
       if (rows.length === 0) {

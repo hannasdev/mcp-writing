@@ -215,13 +215,12 @@ describe("get_scene_prose tool", () => {
 });
 
 describe("get_chapter_prose tool", () => {
-  test("returns prose for both scenes in part 1 chapter 1", async () => {
+  test("returns prose for both scenes in chapter 1 compatibility mode", async () => {
     const result = await ctx.client.callTool({
       name: "get_chapter_prose",
       arguments: {
-      project_id: "test-novel",
-      part: 1,
-      chapter: 1,
+        project_id: "test-novel",
+        chapter: 1,
       },
     });
     const text = result.content?.[0]?.text ?? "";
@@ -229,6 +228,53 @@ describe("get_chapter_prose tool", () => {
       `Expected chapter prose keywords, got: ${text.slice(0, 200)}`);
     assert.ok(!text.includes("Suggested next step"));
     assert.ok(result.structuredContent.next_step.includes("find_scenes + get_scene_prose"));
+  });
+});
+
+describe("canonical chapter and epigraph tools", () => {
+  test("lists canonical chapters and supports chapter_id scene filtering", async () => {
+    const chaptersText = await callWriteTool("list_chapters", { project_id: "test-novel" });
+    const chaptersParsed = JSON.parse(chaptersText);
+    assert.equal(chaptersParsed.total_count >= 2, true);
+    const firstChapter = chaptersParsed.results.find((row) => row.sort_index === 1);
+    assert.ok(firstChapter);
+
+    const scenesText = await callTool("find_scenes", {
+      project_id: "test-novel",
+      chapter_id: firstChapter.chapter_id,
+    });
+    const scenesParsed = JSON.parse(scenesText);
+    assert.equal(scenesParsed.total_count, 2);
+    assert.ok(scenesParsed.results.every((row) => row.chapter_id === firstChapter.chapter_id));
+  });
+
+  test("indexes explicit epigraph files and returns them through find_epigraphs", async () => {
+    const chapterDir = path.join(writeSyncDir, "projects", "test-novel", "Draft", "03-A New Dawn");
+    fs.mkdirSync(chapterDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(chapterDir, "sc-004.md"),
+      "---\nscene_id: sc-004\ntitle: Dawn Scene\nchapter_title: A New Dawn\ncharacters:\n  - elena\n---\nMorning prose."
+    );
+    fs.writeFileSync(
+      path.join(chapterDir, "epigraph.md"),
+      "---\nepigraph_id: epi-dawn\ntags:\n  - omen\n---\nThis is the hour before the hinge turns."
+    );
+
+    await callWriteTool("sync");
+
+    const chaptersText = await callWriteTool("list_chapters", { project_id: "test-novel" });
+    const chaptersParsed = JSON.parse(chaptersText);
+    const dawnChapter = chaptersParsed.results.find((row) => row.title === "A New Dawn");
+    assert.ok(dawnChapter);
+
+    const epigraphsText = await callWriteTool("find_epigraphs", {
+      project_id: "test-novel",
+      chapter_id: dawnChapter.chapter_id,
+    });
+    const epigraphsParsed = JSON.parse(epigraphsText);
+    assert.equal(epigraphsParsed.total_count, 1);
+    assert.equal(epigraphsParsed.results[0].epigraph_id, "epi-dawn");
+    assert.match(epigraphsParsed.results[0].body, /hinge turns/);
   });
 });
 

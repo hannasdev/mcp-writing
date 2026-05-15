@@ -75,19 +75,23 @@ function loadBundleSceneRowsWithTags(dbHandle, projectId, sceneIds) {
     const placeholders = chunk.map(() => "?").join(",");
     const chunkRows = dbHandle.prepare(`
       SELECT
-        scene_id,
-        project_id,
-        title,
-        part,
-        chapter,
-        chapter_title,
-        timeline_position,
-        logline,
-        pov,
-        save_the_cat_beat,
-        file_path
+        s.scene_id,
+        s.project_id,
+        s.chapter_id,
+        s.scene_role,
+        s.title,
+        s.part,
+        s.chapter,
+        COALESCE(c.title, s.chapter_title) AS chapter_title,
+        s.timeline_position,
+        s.logline,
+        s.pov,
+        s.save_the_cat_beat,
+        s.file_path
       FROM scenes
-      WHERE project_id = ? AND scene_id IN (${placeholders})
+      s
+      LEFT JOIN chapters c ON c.chapter_id = s.chapter_id AND c.project_id = s.project_id
+      WHERE s.project_id = ? AND s.scene_id IN (${placeholders})
     `).all(projectId, ...chunk);
     rows.push(...chunkRows);
   }
@@ -143,6 +147,26 @@ function loadBundleSceneRowsWithTags(dbHandle, projectId, sceneIds) {
   }
 
   return orderedRows;
+}
+
+function loadEpigraphsByChapter(dbHandle, projectId) {
+  const rows = dbHandle.prepare(`
+    SELECT e.epigraph_id, e.chapter_id, e.body, c.title AS chapter_title, c.sort_index AS chapter
+    FROM epigraphs e
+    JOIN chapters c ON c.chapter_id = e.chapter_id AND c.project_id = e.project_id
+    WHERE e.project_id = ?
+    ORDER BY c.sort_index, e.epigraph_id
+  `).all(projectId);
+
+  return new Map(rows.map(row => [row.chapter_id, {
+    scene_id: row.epigraph_id,
+    chapter_id: row.chapter_id,
+    chapter: row.chapter,
+    chapter_title: row.chapter_title,
+    title: "Epigraph",
+    prose: String(row.body ?? "").trim(),
+    tags: ["epigraph"],
+  }]));
 }
 
 function normalizeRelativePath(inputPath) {
@@ -381,6 +405,7 @@ function renderProseWithInlineEmphasis(doc, prose, {
 }
 
 function isEpigraphScene(scene) {
+  if (scene?.entity_kind === "epigraph") return true;
   const tags = Array.isArray(scene?.tags)
     ? scene.tags
       .map(tag => String(tag ?? "").trim().toLowerCase())
@@ -535,6 +560,7 @@ export function renderReviewBundleMarkdown(dbHandle, plan, { generatedAt, syncDi
 
   const sceneIds = plan.ordering.map(row => row.scene_id);
   const rows = loadBundleSceneRowsWithTags(dbHandle, plan.resolved_scope.project_id, sceneIds);
+  const epigraphsByChapter = loadEpigraphsByChapter(dbHandle, plan.resolved_scope.project_id);
   const sections = [];
   const recipientName = plan.resolved_scope?.options?.recipient_name;
   const recipientDisplayName = normalizeRecipientDisplayName(recipientName);
@@ -586,6 +612,18 @@ export function renderReviewBundleMarkdown(dbHandle, plan, { generatedAt, syncDi
     const showChapterHeading = isBetaProfile
       && Boolean(scene.chapter_title)
       && (!prevScene || prevScene.chapter !== scene.chapter);
+    if ((!prevScene || prevScene.chapter_id !== scene.chapter_id) && scene.chapter_id && epigraphsByChapter.has(scene.chapter_id)) {
+      sections.push(renderSceneBlock({
+        ...epigraphsByChapter.get(scene.chapter_id),
+        entity_kind: "epigraph",
+      }, {
+        profile,
+        includeSceneIds: false,
+        includeMetadataSidebar: false,
+        includeParagraphAnchors: false,
+        showChapterHeading,
+      }));
+    }
     sections.push(renderSceneBlock(withProse, {
       profile,
       includeSceneIds,
@@ -623,6 +661,7 @@ export function renderReviewBundlePdfWithMetadata(dbHandle, plan, { generatedAt,
 
   const sceneIds = plan.ordering.map(row => row.scene_id);
   const rows = loadBundleSceneRowsWithTags(dbHandle, plan.resolved_scope.project_id, sceneIds);
+  const epigraphsByChapter = loadEpigraphsByChapter(dbHandle, plan.resolved_scope.project_id);
   const recipientName = plan.resolved_scope?.options?.recipient_name;
   const recipientDisplayName = normalizeRecipientDisplayName(recipientName);
   const footerRecipientDisplayName = sanitizeFooterRecipientDisplayName(recipientDisplayName);
@@ -856,6 +895,28 @@ export function renderReviewBundlePdfWithMetadata(dbHandle, plan, { generatedAt,
           } else if (sceneIndex > 0) {
             doc.moveDown(1.2);
           }
+        }
+
+        if ((!prevScene || prevScene.chapter_id !== scene.chapter_id) && scene.chapter_id && epigraphsByChapter.has(scene.chapter_id)) {
+          const epigraph = epigraphsByChapter.get(scene.chapter_id);
+          const textWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+          const epigraphWidth = Math.round(textWidth * 0.68);
+          const epigraphIndent = Math.round((textWidth - epigraphWidth) / 2);
+          const savedX = doc.x;
+          doc.moveDown(isBetaProfile ? 0.5 : 0.8);
+          doc.x = doc.page.margins.left + epigraphIndent;
+          renderProseWithInlineEmphasis(doc, epigraph.prose, {
+            bodyFont: italicFont,
+            italicFont: bodyFont,
+            fontSize: proseFontSize,
+            align: "left",
+            width: epigraphWidth,
+            lineGap: proseLineGap,
+            paragraphGap: 0,
+            blankLineMoveDown: 0.65,
+          });
+          doc.x = savedX;
+          doc.moveDown(1.0);
         }
 
         // Skip title for epigraphs in beta and outline profiles.

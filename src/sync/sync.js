@@ -79,16 +79,112 @@ export function inferScenePositionFromPath(syncDir, filePath) {
   return { part, chapter };
 }
 
+function titleCaseFolderLabel(value) {
+  return String(value ?? "")
+    .replace(/[-_]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\b\w/g, char => char.toUpperCase());
+}
+
+function slugifyChapterValue(value) {
+  return String(value ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+export function inferChapterStructureFromPath(syncDir, filePath, meta = {}) {
+  const rel = path.relative(syncDir, filePath);
+  const parts = rel.split(path.sep);
+  let role = null;
+  let chapterFolder = null;
+  let chapterSortIndex = null;
+  let chapterTitle = null;
+  let chapterFolderKey = null;
+
+  for (let index = 0; index < parts.length - 1; index += 1) {
+    const segment = parts[index];
+    const normalized = segment.toLowerCase();
+
+    if (normalized === "prologue" || normalized === "00-prologue") {
+      role = "prologue";
+      continue;
+    }
+    if (normalized === "epilogue" || normalized === "99-epilogue") {
+      role = "epilogue";
+      continue;
+    }
+
+    let match = segment.match(/^(\d+)-(.+)$/);
+    if (!match) {
+      match = segment.match(/^chapter-(\d+)(?:-(.+))?$/i);
+    }
+    if (!match) continue;
+
+    chapterFolder = segment;
+    chapterSortIndex = Number.parseInt(match[1], 10);
+    chapterTitle = titleCaseFolderLabel(meta.chapter_title ?? match[2] ?? `Chapter ${chapterSortIndex}`);
+    chapterFolderKey = parts.slice(0, index + 1).join(path.sep);
+  }
+
+  const baseName = path.basename(filePath, path.extname(filePath)).toLowerCase();
+  const explicitEpigraph = meta.kind === "epigraph"
+    || meta.type === "epigraph"
+    || typeof meta.epigraph_id === "string"
+    || baseName === "epigraph";
+
+  if (chapterSortIndex == null) {
+    const fallback = inferScenePositionFromPath(syncDir, filePath);
+    if (fallback.chapter != null) {
+      chapterSortIndex = fallback.chapter;
+      chapterTitle = titleCaseFolderLabel(meta.chapter_title ?? `Chapter ${fallback.chapter}`);
+      chapterFolderKey = chapterFolderKey ?? parts.slice(0, Math.max(0, parts.length - 1)).join(path.sep);
+    }
+  }
+
+  if (chapterSortIndex == null) {
+    return {
+      role,
+      isEpigraph: explicitEpigraph,
+      chapter: null,
+    };
+  }
+
+  const chapterSlug = slugifyChapterValue(chapterTitle) || `chapter-${chapterSortIndex}`;
+  return {
+    role,
+    isEpigraph: explicitEpigraph,
+    chapter: {
+      chapter_id: `ch-${String(chapterSortIndex).padStart(2, "0")}-${chapterSlug}`,
+      sort_index: chapterSortIndex,
+      title: chapterTitle,
+      folder_name: chapterFolder ?? `chapter-${chapterSortIndex}`,
+      folder_key: chapterFolderKey ?? parts.slice(0, Math.max(0, parts.length - 1)).join(path.sep),
+    },
+  };
+}
+
 export function normalizeSceneMetaForPath(syncDir, filePath, meta = {}) {
   const derived = inferScenePositionFromPath(syncDir, filePath);
+  const chapterStructure = inferChapterStructureFromPath(syncDir, filePath, meta);
   const normalized = { ...meta };
 
   if (derived.part !== null) normalized.part = derived.part;
   if (derived.chapter !== null) normalized.chapter = derived.chapter;
+  if (chapterStructure.chapter?.chapter_id) {
+    normalized.chapter_id = chapterStructure.chapter.chapter_id;
+    normalized.chapter = chapterStructure.chapter.sort_index;
+    normalized.chapter_title = chapterStructure.chapter.title;
+  }
+  if (chapterStructure.role) {
+    normalized.scene_role = chapterStructure.role;
+  }
 
   return {
     meta: normalized,
     derived,
+    chapterStructure,
     mismatches: {
       part: derived.part !== null && meta.part != null && meta.part !== derived.part,
       chapter: derived.chapter !== null && meta.chapter != null && meta.chapter !== derived.chapter,
@@ -926,8 +1022,42 @@ function pruneMissingScenes(db, seenSceneKeys, syncDir) {
   }
 }
 
+function pruneMissingChapters(db, seenChapterKeys, syncDir) {
+  const projectScope = inferSceneProjectScopeFromSyncDir(syncDir);
+  const rows = projectScope
+    ? db.prepare(`SELECT chapter_id, project_id FROM chapters WHERE project_id = ?`).all(projectScope)
+    : db.prepare(`SELECT chapter_id, project_id FROM chapters`).all();
+
+  for (const row of rows) {
+    const key = `${row.chapter_id}::${row.project_id}`;
+    if (seenChapterKeys.has(key)) continue;
+    db.prepare(`DELETE FROM epigraph_characters WHERE project_id = ? AND epigraph_id IN (SELECT epigraph_id FROM epigraphs WHERE project_id = ? AND chapter_id = ?)`)
+      .run(row.project_id, row.project_id, row.chapter_id);
+    db.prepare(`DELETE FROM epigraph_tags WHERE project_id = ? AND epigraph_id IN (SELECT epigraph_id FROM epigraphs WHERE project_id = ? AND chapter_id = ?)`)
+      .run(row.project_id, row.project_id, row.chapter_id);
+    db.prepare(`DELETE FROM epigraphs WHERE project_id = ? AND chapter_id = ?`).run(row.project_id, row.chapter_id);
+    db.prepare(`DELETE FROM chapters WHERE chapter_id = ? AND project_id = ?`).run(row.chapter_id, row.project_id);
+  }
+}
+
+function pruneMissingEpigraphs(db, seenEpigraphKeys, syncDir) {
+  const projectScope = inferSceneProjectScopeFromSyncDir(syncDir);
+  const rows = projectScope
+    ? db.prepare(`SELECT epigraph_id, project_id FROM epigraphs WHERE project_id = ?`).all(projectScope)
+    : db.prepare(`SELECT epigraph_id, project_id FROM epigraphs`).all();
+
+  for (const row of rows) {
+    const key = `${row.epigraph_id}::${row.project_id}`;
+    if (seenEpigraphKeys.has(key)) continue;
+    db.prepare(`DELETE FROM epigraph_characters WHERE epigraph_id = ? AND project_id = ?`).run(row.epigraph_id, row.project_id);
+    db.prepare(`DELETE FROM epigraph_tags WHERE epigraph_id = ? AND project_id = ?`).run(row.epigraph_id, row.project_id);
+    db.prepare(`DELETE FROM epigraphs WHERE epigraph_id = ? AND project_id = ?`).run(row.epigraph_id, row.project_id);
+  }
+}
+
 export function indexSceneFile(db, syncDir, file, meta, prose) {
   const { universe_id, project_id } = inferProjectAndUniverse(syncDir, file);
+  const chapterStructure = inferChapterStructureFromPath(syncDir, file, meta);
   const referenceIds = normalizeReferenceIdList(meta.reference_ids ?? meta.references);
   const explicitSceneLinks = collectExplicitReferenceLinks(
     meta,
@@ -944,6 +1074,93 @@ export function indexSceneFile(db, syncDir, file, meta, prose) {
     project_id, universe_id ?? null, project_id
   );
 
+  const chapterId = meta.chapter_id ?? chapterStructure.chapter?.chapter_id ?? null;
+  const chapterSortIndex = chapterStructure.chapter?.sort_index ?? meta.chapter ?? null;
+  const chapterTitle = chapterStructure.chapter?.title ?? meta.chapter_title ?? null;
+
+  if (chapterId && chapterSortIndex != null && chapterTitle) {
+    const chapterChecksum = checksumProse(`${chapterSortIndex}:${chapterTitle}:${meta.logline ?? meta.synopsis ?? ""}`);
+    const existingChapter = db.prepare(
+      `SELECT source_checksum, metadata_stale FROM chapters WHERE chapter_id = ? AND project_id = ?`
+    ).get(chapterId, project_id);
+    db.prepare(`
+      INSERT INTO chapters (
+        chapter_id, project_id, title, sort_index, logline, source_path, source_checksum, metadata_stale, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT (chapter_id, project_id) DO UPDATE SET
+        title = excluded.title,
+        sort_index = excluded.sort_index,
+        logline = excluded.logline,
+        source_path = excluded.source_path,
+        source_checksum = excluded.source_checksum,
+        metadata_stale = CASE
+          WHEN excluded.source_checksum != chapters.source_checksum THEN 1
+          ELSE chapters.metadata_stale
+        END,
+        updated_at = excluded.updated_at
+    `).run(
+      chapterId,
+      project_id,
+      chapterTitle,
+      chapterSortIndex,
+      meta.chapter_logline ?? null,
+      chapterStructure.chapter?.folder_key ?? path.dirname(file),
+      chapterChecksum,
+      existingChapter && existingChapter.source_checksum !== chapterChecksum ? 1 : 0,
+      new Date().toISOString()
+    );
+  }
+
+  if (chapterStructure.isEpigraph) {
+    if (!chapterId) {
+      return { isStale: 0, skippedAsEpigraph: true, warning: `Epigraph requires explicit chapter linkage: ${path.relative(syncDir, file)}` };
+    }
+
+    const epigraphId = meta.epigraph_id ?? `epi-${slugifyChapterValue(`${project_id}-${chapterId}`)}`;
+    const epigraphChecksum = checksumProse(prose);
+    const existingEpigraph = db.prepare(
+      `SELECT prose_checksum FROM epigraphs WHERE epigraph_id = ? AND project_id = ?`
+    ).get(epigraphId, project_id);
+
+    db.prepare(`
+      INSERT INTO epigraphs (
+        epigraph_id, project_id, chapter_id, body, file_path, prose_checksum, metadata_stale, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT (epigraph_id, project_id) DO UPDATE SET
+        chapter_id = excluded.chapter_id,
+        body = excluded.body,
+        file_path = excluded.file_path,
+        prose_checksum = excluded.prose_checksum,
+        metadata_stale = CASE
+          WHEN excluded.prose_checksum != epigraphs.prose_checksum THEN 1
+          ELSE epigraphs.metadata_stale
+        END,
+        updated_at = excluded.updated_at
+    `).run(
+      epigraphId,
+      project_id,
+      chapterId,
+      prose,
+      file,
+      epigraphChecksum,
+      existingEpigraph && existingEpigraph.prose_checksum !== epigraphChecksum ? 1 : 0,
+      new Date().toISOString()
+    );
+
+    db.prepare(`DELETE FROM epigraph_characters WHERE epigraph_id = ? AND project_id = ?`).run(epigraphId, project_id);
+    db.prepare(`DELETE FROM epigraph_tags WHERE epigraph_id = ? AND project_id = ?`).run(epigraphId, project_id);
+    for (const characterId of (meta.characters ?? [])) {
+      db.prepare(`INSERT OR IGNORE INTO epigraph_characters (epigraph_id, project_id, character_id) VALUES (?, ?, ?)`)
+        .run(epigraphId, project_id, characterId);
+    }
+    for (const tag of (meta.tags ?? [])) {
+      db.prepare(`INSERT OR IGNORE INTO epigraph_tags (epigraph_id, project_id, tag) VALUES (?, ?, ?)`)
+        .run(epigraphId, project_id, tag);
+    }
+
+    return { isStale: existingEpigraph && existingEpigraph.prose_checksum !== epigraphChecksum ? 1 : 0, skippedAsEpigraph: true };
+  }
+
   const newChecksum = checksumProse(prose);
   const existing = db.prepare(
     `SELECT prose_checksum FROM scenes WHERE scene_id = ? AND project_id = ?`
@@ -953,12 +1170,14 @@ export function indexSceneFile(db, syncDir, file, meta, prose) {
 
   db.prepare(`
     INSERT INTO scenes (
-      scene_id, project_id, title, part, chapter, chapter_title, pov, logline, scene_change,
+      scene_id, project_id, chapter_id, scene_role, title, part, chapter, chapter_title, pov, logline, scene_change,
       causality, stakes, scene_functions,
       save_the_cat_beat, timeline_position, story_time, word_count,
       file_path, prose_checksum, metadata_stale, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT (scene_id, project_id) DO UPDATE SET
+      chapter_id = excluded.chapter_id,
+      scene_role = excluded.scene_role,
       title = excluded.title,
       part = excluded.part,
       chapter = excluded.chapter,
@@ -979,7 +1198,8 @@ export function indexSceneFile(db, syncDir, file, meta, prose) {
       updated_at = excluded.updated_at
   `).run(
     meta.scene_id, project_id,
-    meta.title ?? null, meta.part ?? null, meta.chapter ?? null, meta.chapter_title ?? null,
+    chapterId, meta.scene_role ?? chapterStructure.role ?? null,
+    meta.title ?? null, meta.part ?? null, chapterSortIndex, chapterTitle,
     meta.pov ?? null, meta.logline ?? meta.synopsis ?? null,
     meta.scene_change ?? meta.change ?? null,
     meta.causality ?? null, meta.stakes ?? null,
@@ -1083,6 +1303,7 @@ const WARNING_TYPE_LABELS = {
   no_scene_id: "Skipped (no scene_id)",
   duplicate_scene_id: "Duplicate scene_id",
   path_metadata_mismatch: "Path/metadata mismatch",
+  chapter_structure: "Chapter structure",
   orphaned_sidecar: "Orphaned sidecar",
   moved_scene: "Moved scene",
   nested_mirror: "Ignored nested mirror path",
@@ -1092,6 +1313,7 @@ const WARNING_PATTERNS = [
   { type: "no_scene_id",            re: /^Skipped \(no scene_id\):/  },
   { type: "duplicate_scene_id",     re: /^Duplicate scene_id/        },
   { type: "path_metadata_mismatch", re: /^Path\/metadata mismatch/   },
+  { type: "chapter_structure",      re: /^(Chapter structure warning|Epigraph requires explicit chapter linkage)/ },
   { type: "moved_scene",            re: /^Moved scene detected:/      },
   { type: "orphaned_sidecar",       re: /^Orphaned sidecar/          },
   { type: "nested_mirror",          re: /^Ignored nested mirror path:/ },
@@ -1127,9 +1349,13 @@ export function syncAll(db, syncDir, { quiet = false, writable = false } = {}) {
   const seenSceneIds = new Map(); // scene_id+project_id → file path, for duplicate detection
   const seenSceneKeys = new Set();
   const indexedSceneIds = new Set(); // scene_id only — for orphaned sidecar move detection
+  const seenChapterKeys = new Set();
+  const seenEpigraphKeys = new Set();
   const indexedReferenceDocIds = new Set();
   let sceneIndexFailures = 0;
   const warnings = [];
+  const chapterFoldersByProject = new Map();
+  const roleFoldersByProject = new Map();
 
   const scanFiles = [];
   for (const file of files) {
@@ -1178,8 +1404,9 @@ export function syncAll(db, syncDir, { quiet = false, writable = false } = {}) {
     try {
       const { meta, sourceMeta, sidecarGenerated, derived, mismatches } = readMeta(file, syncDir, { writable });
       if (sidecarGenerated) sidecarsMigrated++;
+      const chapterStructure = inferChapterStructureFromPath(syncDir, file, meta);
 
-      if (!meta.scene_id) {
+      if (!meta.scene_id && !chapterStructure.isEpigraph) {
         skipped++;
         if (!quiet) warnings.push(`Skipped (no scene_id): ${path.relative(syncDir, file)}`);
         continue;
@@ -1188,16 +1415,45 @@ export function syncAll(db, syncDir, { quiet = false, writable = false } = {}) {
       // Duplicate scene_id detection
       const { project_id } = inferProjectAndUniverse(syncDir, file);
       const key = `${meta.scene_id}::${project_id}`;
-      if (seenSceneIds.has(key)) {
+      if (meta.scene_id && seenSceneIds.has(key)) {
         warnings.push(
           `Duplicate scene_id "${meta.scene_id}" in project "${project_id}":\n` +
           `  ${path.relative(syncDir, seenSceneIds.get(key))}\n` +
           `  ${path.relative(syncDir, file)}`
         );
-      } else {
+      } else if (meta.scene_id) {
         seenSceneIds.set(key, file);
       }
-      seenSceneKeys.add(key);
+      if (meta.scene_id) seenSceneKeys.add(key);
+
+      if (chapterStructure.chapter) {
+        seenChapterKeys.add(`${chapterStructure.chapter.chapter_id}::${project_id}`);
+        const chapterMapKey = `${project_id}::${chapterStructure.chapter.sort_index}`;
+        const existingChapterFolder = chapterFoldersByProject.get(chapterMapKey);
+        if (!existingChapterFolder) {
+          chapterFoldersByProject.set(chapterMapKey, {
+            title: chapterStructure.chapter.title,
+            folder_key: chapterStructure.chapter.folder_key,
+          });
+        } else if (existingChapterFolder.folder_key !== chapterStructure.chapter.folder_key) {
+          warnings.push(
+            `Chapter structure warning: duplicate chapter order ${chapterStructure.chapter.sort_index} in project "${project_id}" for ${chapterStructure.chapter.folder_key} and ${existingChapterFolder.folder_key}.`
+          );
+        }
+      }
+
+      if (chapterStructure.role) {
+        const roleKey = `${project_id}::${chapterStructure.role}`;
+        const existingRoleFolder = roleFoldersByProject.get(roleKey);
+        const currentRoleFolder = path.dirname(file);
+        if (!existingRoleFolder) {
+          roleFoldersByProject.set(roleKey, currentRoleFolder);
+        } else if (existingRoleFolder !== currentRoleFolder) {
+          warnings.push(
+            `Chapter structure warning: multiple ${chapterStructure.role} folders in project "${project_id}": ${path.relative(syncDir, existingRoleFolder)} and ${path.relative(syncDir, currentRoleFolder)}.`
+          );
+        }
+      }
 
       if (mismatches.part || mismatches.chapter) {
         const details = [];
@@ -1209,7 +1465,19 @@ export function syncAll(db, syncDir, { quiet = false, writable = false } = {}) {
       }
 
       const { data: _frontmatter, content: prose } = parseFile(file);
-      const { isStale } = indexSceneFile(db, syncDir, file, meta, prose);
+      const result = indexSceneFile(db, syncDir, file, meta, prose);
+      if (result.warning) {
+        warnings.push(result.warning);
+      }
+      if (result.skippedAsEpigraph) {
+        if (meta.chapter_id ?? chapterStructure.chapter?.chapter_id) {
+          const epigraphId = meta.epigraph_id ?? `epi-${slugifyChapterValue(`${project_id}-${meta.chapter_id ?? chapterStructure.chapter?.chapter_id}`)}`;
+          seenEpigraphKeys.add(`${epigraphId}::${project_id}`);
+        }
+        indexed++;
+        continue;
+      }
+      const { isStale } = result;
       indexedSceneIds.add(meta.scene_id);
       if (isStale) staleMarked++;
       indexed++;
@@ -1221,6 +1489,8 @@ export function syncAll(db, syncDir, { quiet = false, writable = false } = {}) {
 
   if (canPruneScenes(syncDir) && sceneIndexFailures === 0) {
     pruneMissingScenes(db, seenSceneKeys, syncDir);
+    pruneMissingEpigraphs(db, seenEpigraphKeys, syncDir);
+    pruneMissingChapters(db, seenChapterKeys, syncDir);
   }
 
   // --- Orphaned sidecar detection ---

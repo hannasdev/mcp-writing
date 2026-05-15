@@ -46,6 +46,8 @@ export const SCHEMA = `
   CREATE TABLE IF NOT EXISTS scenes (
     scene_id          TEXT NOT NULL,
     project_id        TEXT NOT NULL REFERENCES projects(project_id),
+    chapter_id        TEXT,
+    scene_role        TEXT,
     title             TEXT,
     part              INTEGER,
     chapter           INTEGER,
@@ -65,6 +67,47 @@ export const SCHEMA = `
     metadata_stale    INTEGER NOT NULL DEFAULT 0,
     updated_at        TEXT NOT NULL,
     PRIMARY KEY (scene_id, project_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS chapters (
+    chapter_id        TEXT NOT NULL,
+    project_id        TEXT NOT NULL REFERENCES projects(project_id),
+    title             TEXT NOT NULL,
+    sort_index        INTEGER NOT NULL,
+    logline           TEXT,
+    source_path       TEXT,
+    source_checksum   TEXT,
+    metadata_stale    INTEGER NOT NULL DEFAULT 0,
+    updated_at        TEXT NOT NULL,
+    PRIMARY KEY (chapter_id, project_id),
+    UNIQUE (project_id, sort_index)
+  );
+
+  CREATE TABLE IF NOT EXISTS epigraphs (
+    epigraph_id       TEXT NOT NULL,
+    project_id        TEXT NOT NULL REFERENCES projects(project_id),
+    chapter_id        TEXT NOT NULL,
+    body              TEXT NOT NULL,
+    file_path         TEXT NOT NULL,
+    prose_checksum    TEXT,
+    metadata_stale    INTEGER NOT NULL DEFAULT 0,
+    updated_at        TEXT NOT NULL,
+    PRIMARY KEY (epigraph_id, project_id),
+    UNIQUE (project_id, chapter_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS epigraph_characters (
+    epigraph_id       TEXT NOT NULL,
+    project_id        TEXT NOT NULL,
+    character_id      TEXT NOT NULL,
+    PRIMARY KEY (epigraph_id, project_id, character_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS epigraph_tags (
+    epigraph_id       TEXT NOT NULL,
+    project_id        TEXT NOT NULL,
+    tag               TEXT NOT NULL,
+    PRIMARY KEY (epigraph_id, project_id, tag)
   );
 
   CREATE TABLE IF NOT EXISTS scene_characters (
@@ -483,6 +526,65 @@ const MIGRATIONS = [
         },
       });
     }
+  },
+  // 8: add canonical chapter/epigraph entities and scene linkage fields
+  (db) => {
+    const sceneColumns = db.prepare(`PRAGMA table_info(scenes)`).all();
+    if (!sceneColumns.some(c => c.name === "chapter_id")) {
+      db.exec(`ALTER TABLE scenes ADD COLUMN chapter_id TEXT;`);
+    }
+    if (!sceneColumns.some(c => c.name === "scene_role")) {
+      db.exec(`ALTER TABLE scenes ADD COLUMN scene_role TEXT;`);
+    }
+
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS chapters (
+        chapter_id        TEXT NOT NULL,
+        project_id        TEXT NOT NULL REFERENCES projects(project_id),
+        title             TEXT NOT NULL,
+        sort_index        INTEGER NOT NULL,
+        logline           TEXT,
+        source_path       TEXT,
+        source_checksum   TEXT,
+        metadata_stale    INTEGER NOT NULL DEFAULT 0,
+        updated_at        TEXT NOT NULL,
+        PRIMARY KEY (chapter_id, project_id),
+        UNIQUE (project_id, sort_index)
+      );
+    `);
+
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS epigraphs (
+        epigraph_id       TEXT NOT NULL,
+        project_id        TEXT NOT NULL REFERENCES projects(project_id),
+        chapter_id        TEXT NOT NULL,
+        body              TEXT NOT NULL,
+        file_path         TEXT NOT NULL,
+        prose_checksum    TEXT,
+        metadata_stale    INTEGER NOT NULL DEFAULT 0,
+        updated_at        TEXT NOT NULL,
+        PRIMARY KEY (epigraph_id, project_id),
+        UNIQUE (project_id, chapter_id)
+      );
+    `);
+
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS epigraph_characters (
+        epigraph_id       TEXT NOT NULL,
+        project_id        TEXT NOT NULL,
+        character_id      TEXT NOT NULL,
+        PRIMARY KEY (epigraph_id, project_id, character_id)
+      );
+    `);
+
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS epigraph_tags (
+        epigraph_id       TEXT NOT NULL,
+        project_id        TEXT NOT NULL,
+        tag               TEXT NOT NULL,
+        PRIMARY KEY (epigraph_id, project_id, tag)
+      );
+    `);
   },
 ];
 
