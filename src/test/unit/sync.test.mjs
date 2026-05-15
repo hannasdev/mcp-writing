@@ -1605,6 +1605,88 @@ describe("syncAll", () => {
     fs.rmSync(dir, { recursive: true });
   });
 
+  test("defaults canonical chapter title for legacy numeric-only chapter metadata", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sync-"));
+    const db = openDb(":memory:");
+    const scenePath = path.join(dir, "projects", "test-novel", "scenes", "sc-number-only.md");
+    fs.mkdirSync(path.dirname(scenePath), { recursive: true });
+    fs.writeFileSync(
+      scenePath,
+      "---\nscene_id: sc-number-only\ntitle: Numbered Legacy Scene\nchapter: 4\n---\nLegacy prose."
+    );
+
+    syncAll(db, dir, { quiet: true });
+    syncAll(db, dir, { quiet: true });
+
+    const scene = db.prepare(`
+      SELECT chapter_id, chapter, chapter_title
+      FROM scenes
+      WHERE scene_id = 'sc-number-only' AND project_id = 'test-novel'
+    `).get();
+    const chapter = db.prepare(`
+      SELECT chapter_id, title, sort_index
+      FROM chapters
+      WHERE project_id = 'test-novel'
+    `).get();
+
+    assert.equal(chapter.chapter_id, "ch-04-chapter-4");
+    assert.equal(chapter.title, "Chapter 4");
+    assert.equal(scene.chapter_id, "ch-04-chapter-4");
+    assert.equal(scene.chapter, 4);
+    assert.equal(scene.chapter_title, "Chapter 4");
+
+    db.close();
+    fs.rmSync(dir, { recursive: true });
+  });
+
+  test("does not reuse canonical chapter rows by shared source path in flat legacy layouts", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sync-"));
+    const db = openDb(":memory:");
+    const scenesDir = path.join(dir, "projects", "test-novel", "scenes");
+    fs.mkdirSync(scenesDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(scenesDir, "sc-001.md"),
+      "---\nscene_id: sc-001\ntitle: First Legacy Scene\nchapter: 1\nchapter_title: One Dawn\n---\nFirst prose."
+    );
+    fs.writeFileSync(
+      path.join(scenesDir, "sc-002.md"),
+      "---\nscene_id: sc-002\ntitle: Second Legacy Scene\nchapter: 2\nchapter_title: Two Dusk\n---\nSecond prose."
+    );
+
+    syncAll(db, dir, { quiet: true });
+
+    const chapters = db.prepare(`
+      SELECT chapter_id, title, sort_index, source_path
+      FROM chapters
+      WHERE project_id = 'test-novel'
+      ORDER BY sort_index
+    `).all();
+    const scenes = db.prepare(`
+      SELECT scene_id, chapter_id, chapter, chapter_title
+      FROM scenes
+      WHERE project_id = 'test-novel'
+      ORDER BY scene_id
+    `).all();
+
+    assert.deepEqual(
+      chapters.map((row) => [row.chapter_id, row.title, row.sort_index, row.source_path]),
+      [
+        ["ch-01-one-dawn", "One Dawn", 1, scenesDir],
+        ["ch-02-two-dusk", "Two Dusk", 2, scenesDir],
+      ]
+    );
+    assert.deepEqual(
+      scenes.map((row) => [row.scene_id, row.chapter_id, row.chapter, row.chapter_title]),
+      [
+        ["sc-001", "ch-01-one-dawn", 1, "One Dawn"],
+        ["sc-002", "ch-02-two-dusk", 2, "Two Dusk"],
+      ]
+    );
+
+    db.close();
+    fs.rmSync(dir, { recursive: true });
+  });
+
   test("does not count unlinked epigraph warnings as indexed epigraphs", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sync-"));
     const db = openDb(":memory:");

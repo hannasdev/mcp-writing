@@ -66,6 +66,40 @@ function resolveChapterByCompatibilityKey(db, { projectId, chapterNumber, chapte
   `).get(projectId, chapterNumber);
 }
 
+function resolveValidatedChapterFilter(db, { projectId, chapterNumber, chapterId }) {
+  if (!projectId) return { chapter: null };
+  if (!chapterId && chapterNumber == null) return { chapter: null };
+
+  const resolvedById = chapterId
+    ? resolveChapterByCompatibilityKey(db, { projectId, chapterId })
+    : null;
+  const resolvedByNumber = chapterNumber != null
+    ? resolveChapterByCompatibilityKey(db, { projectId, chapterNumber })
+    : null;
+
+  if (chapterId && chapterNumber != null) {
+    if (!resolvedById || !resolvedByNumber) {
+      return {
+        error: {
+          code: "NOT_FOUND",
+          message: "Chapter not found for the provided project and identifier.",
+        },
+      };
+    }
+    if (resolvedById.chapter_id !== resolvedByNumber.chapter_id) {
+      return {
+        error: {
+          code: "VALIDATION_ERROR",
+          message: "chapter_id and chapter must refer to the same canonical chapter when both are provided.",
+        },
+      };
+    }
+    return { chapter: resolvedById };
+  }
+
+  return { chapter: resolvedById ?? resolvedByNumber ?? null };
+}
+
 function selectApplyCandidates(enrichedCandidates, selectedDocIds, maxApply) {
   const selectedSet = selectedDocIds ? new Set(selectedDocIds) : null;
   const chosenByDocId = new Map();
@@ -118,6 +152,20 @@ export function registerSearchTools(s, {
           { chapter_id }
         );
       }
+      const resolvedChapterFilter = project_id && (chapter_id || chapter != null)
+        ? resolveValidatedChapterFilter(db, { projectId: project_id, chapterNumber: chapter, chapterId: chapter_id })
+        : { chapter: null };
+      if (resolvedChapterFilter.error) {
+        return errorResponse(
+          resolvedChapterFilter.error.code,
+          resolvedChapterFilter.error.message,
+          {
+            project_id: project_id ?? null,
+            chapter_id: chapter_id ?? null,
+            chapter: chapter ?? null,
+          }
+        );
+      }
       let query = `
         SELECT DISTINCT s.scene_id, s.project_id, s.chapter_id, s.title, s.part, s.chapter, s.chapter_title, s.pov,
                s.logline, s.scene_change, s.causality, s.stakes, s.scene_functions,
@@ -140,7 +188,10 @@ export function registerSearchTools(s, {
       if (project_id)  { conditions.push(`s.project_id = ?`);        params.push(project_id); }
       if (beat)        { conditions.push(`s.save_the_cat_beat = ?`);  params.push(beat); }
       if (part)        { conditions.push(`s.part = ?`);               params.push(part); }
-      if (chapter_id)  { conditions.push(`s.chapter_id = ?`);         params.push(chapter_id); }
+      if (resolvedChapterFilter.chapter) {
+        conditions.push(`s.chapter_id = ?`);
+        params.push(resolvedChapterFilter.chapter.chapter_id);
+      } else if (chapter_id)  { conditions.push(`s.chapter_id = ?`);         params.push(chapter_id); }
       else if (chapter) { conditions.push(`s.chapter = ?`);           params.push(chapter); }
       if (pov)         { conditions.push(`s.pov = ?`);                params.push(pov); }
 
@@ -275,7 +326,23 @@ export function registerSearchTools(s, {
       if (!chapter_id && chapter == null) {
         return errorResponse("VALIDATION_ERROR", "Provide chapter_id or chapter.");
       }
-      const resolvedChapter = resolveChapterByCompatibilityKey(db, { projectId: project_id, chapterNumber: chapter, chapterId: chapter_id });
+      const resolvedChapterFilter = resolveValidatedChapterFilter(db, {
+        projectId: project_id,
+        chapterNumber: chapter,
+        chapterId: chapter_id,
+      });
+      if (resolvedChapterFilter.error) {
+        return errorResponse(
+          resolvedChapterFilter.error.code,
+          resolvedChapterFilter.error.message,
+          {
+            project_id,
+            chapter_id: chapter_id ?? null,
+            chapter: chapter ?? null,
+          }
+        );
+      }
+      const resolvedChapter = resolvedChapterFilter.chapter;
       if (!resolvedChapter) {
         return errorResponse("NOT_FOUND", "Chapter not found for the provided project and identifier.", {
           project_id,
@@ -363,9 +430,21 @@ export function registerSearchTools(s, {
       chapter: z.number().int().optional().describe("Compatibility chapter number resolved from canonical sort order."),
     },
     async ({ project_id, chapter_id, chapter }) => {
-      const resolvedChapter = (chapter_id || chapter != null)
-        ? resolveChapterByCompatibilityKey(db, { projectId: project_id, chapterNumber: chapter, chapterId: chapter_id })
-        : null;
+      const resolvedChapterFilter = (chapter_id || chapter != null)
+        ? resolveValidatedChapterFilter(db, { projectId: project_id, chapterNumber: chapter, chapterId: chapter_id })
+        : { chapter: null };
+      if (resolvedChapterFilter.error) {
+        return errorResponse(
+          resolvedChapterFilter.error.code,
+          resolvedChapterFilter.error.message,
+          {
+            project_id,
+            chapter_id: chapter_id ?? null,
+            chapter: chapter ?? null,
+          }
+        );
+      }
+      const resolvedChapter = resolvedChapterFilter.chapter;
       if ((chapter_id || chapter != null) && !resolvedChapter) {
         return errorResponse("NOT_FOUND", "Chapter not found for the provided epigraph filter.", {
           project_id,

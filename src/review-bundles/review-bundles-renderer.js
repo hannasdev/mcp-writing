@@ -417,6 +417,10 @@ function isEpigraphScene(scene) {
   return /^epigraph(?:\b|\s|[-:])/i.test(title);
 }
 
+function isCanonicalEpigraphInsert(scene) {
+  return scene?.entity_kind === "epigraph";
+}
+
 function renderSceneBlock(scene, options) {
   const {
     profile,
@@ -429,6 +433,7 @@ function renderSceneBlock(scene, options) {
   const isBetaProfile = profile === "beta_reader_personalized";
   const isOutlineProfile = profile === "outline_discussion";
   const isEpigraph = (isBetaProfile || isOutlineProfile) && isEpigraphScene(scene);
+  const isCanonicalEpigraph = isCanonicalEpigraphInsert(scene);
 
   const parts = [];
 
@@ -447,7 +452,7 @@ function renderSceneBlock(scene, options) {
   }
 
   if (profile === "outline_discussion") {
-    if (isEpigraph) {
+    if (isCanonicalEpigraph) {
       const prose = normalizeHardWrappedProse(scene.prose ?? "");
       if (prose) parts.push(prose);
       return parts.join("\n\n");

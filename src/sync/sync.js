@@ -161,6 +161,7 @@ export function inferChapterStructureFromPath(syncDir, filePath, meta = {}) {
       title: chapterTitle,
       folder_name: chapterFolder ?? `chapter-${chapterSortIndex}`,
       folder_key: chapterFolderKey ?? parts.slice(0, Math.max(0, parts.length - 1)).join(path.sep),
+      source_kind: chapterFolder ? "chapter_folder" : "legacy_layout",
     },
   };
 }
@@ -1062,11 +1063,12 @@ function resolveCanonicalChapterRecord(db, {
   sortIndex,
   title,
   sourcePath,
+  allowSourcePathMatch = false,
 }) {
   if (!projectId || sortIndex == null || !title) return null;
 
   const normalizedSourcePath = sourcePath ?? null;
-  const bySourcePath = normalizedSourcePath
+  const bySourcePath = allowSourcePathMatch && normalizedSourcePath
     ? db.prepare(`
         SELECT chapter_id, title, sort_index, logline, source_checksum, metadata_stale
         FROM chapters
@@ -1185,8 +1187,9 @@ export function indexSceneFile(db, syncDir, file, meta, prose) {
 
   let chapterId = meta.chapter_id ?? chapterStructure.chapter?.chapter_id ?? null;
   const chapterSortIndex = chapterStructure.chapter?.sort_index ?? meta.chapter ?? null;
-  const chapterTitle = chapterStructure.chapter?.title ?? meta.chapter_title ?? null;
+  const chapterTitle = chapterStructure.chapter?.title ?? meta.chapter_title ?? (chapterSortIndex != null ? `Chapter ${chapterSortIndex}` : null);
   const chapterSourcePath = chapterStructure.chapter?.folder_key ?? path.dirname(file);
+  const allowChapterSourcePathMatch = chapterStructure.chapter?.source_kind === "chapter_folder";
   let chapterWarning = null;
   const derivedChapterId = (
     chapterId
@@ -1203,6 +1206,7 @@ export function indexSceneFile(db, syncDir, file, meta, prose) {
       sortIndex: chapterSortIndex,
       title: chapterTitle,
       sourcePath: chapterSourcePath,
+      allowSourcePathMatch: allowChapterSourcePathMatch,
     });
     if (canonicalChapter?.ambiguous) {
       chapterWarning = `Chapter structure warning: duplicate chapter order ${chapterSortIndex} in project "${project_id}" for ${canonicalChapter.existingSourcePath} and ${canonicalChapter.conflictingSourcePath}.`;

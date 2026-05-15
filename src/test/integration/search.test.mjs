@@ -262,6 +262,40 @@ describe("canonical chapter and epigraph tools", () => {
     assert.equal(scenesParsed.error.code, "VALIDATION_ERROR");
   });
 
+  test("rejects conflicting mixed chapter filters across chapter-aware tools", async () => {
+    const chaptersText = await callWriteTool("list_chapters", { project_id: "test-novel" });
+    const chaptersParsed = JSON.parse(chaptersText);
+    const firstChapter = chaptersParsed.results.find((row) => row.sort_index === 1);
+    assert.ok(firstChapter);
+
+    const findScenesText = await callWriteTool("find_scenes", {
+      project_id: "test-novel",
+      chapter_id: firstChapter.chapter_id,
+      chapter: 2,
+    });
+    const findScenesParsed = JSON.parse(findScenesText);
+    assert.equal(findScenesParsed.ok, false);
+    assert.equal(findScenesParsed.error.code, "VALIDATION_ERROR");
+
+    const chapterProseText = await callWriteTool("get_chapter_prose", {
+      project_id: "test-novel",
+      chapter_id: firstChapter.chapter_id,
+      chapter: 2,
+    });
+    const chapterProseParsed = JSON.parse(chapterProseText);
+    assert.equal(chapterProseParsed.ok, false);
+    assert.equal(chapterProseParsed.error.code, "VALIDATION_ERROR");
+
+    const epigraphsText = await callWriteTool("find_epigraphs", {
+      project_id: "test-novel",
+      chapter_id: firstChapter.chapter_id,
+      chapter: 2,
+    });
+    const epigraphsParsed = JSON.parse(epigraphsText);
+    assert.equal(epigraphsParsed.ok, false);
+    assert.equal(epigraphsParsed.error.code, "VALIDATION_ERROR");
+  });
+
   test("indexes explicit epigraph files and returns them through find_epigraphs", async () => {
     const chapterDir = path.join(writeSyncDir, "projects", "test-novel", "Draft", "03-A New Dawn");
     fs.mkdirSync(chapterDir, { recursive: true });
@@ -289,6 +323,15 @@ describe("canonical chapter and epigraph tools", () => {
     assert.equal(epigraphsParsed.total_count, 1);
     assert.equal(epigraphsParsed.results[0].epigraph_id, "epi-dawn");
     assert.match(epigraphsParsed.results[0].body, /hinge turns/);
+
+    const compatibleEpigraphsText = await callWriteTool("find_epigraphs", {
+      project_id: "test-novel",
+      chapter_id: dawnChapter.chapter_id,
+      chapter: 3,
+    });
+    const compatibleEpigraphsParsed = JSON.parse(compatibleEpigraphsText);
+    assert.equal(compatibleEpigraphsParsed.total_count, 1);
+    assert.equal(compatibleEpigraphsParsed.results[0].epigraph_id, "epi-dawn");
   });
 });
 
