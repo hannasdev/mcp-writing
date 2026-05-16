@@ -146,7 +146,7 @@ These are defaults, not user-exposed publishing controls.
 
 - [Review Bundles for Editorial Workflows](./review-bundles.md)
 - [Review Bundles — Implementation Checklist](./review-bundles-implementation.md)
-- [PRD Overview](../../../PRD.md)
+- [Product Overview](../../../PRODUCT.md)
 
 ## Implementation Plan
 

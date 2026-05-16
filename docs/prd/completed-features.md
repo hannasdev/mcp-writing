@@ -1,8 +1,8 @@
 # Completed Features
 
-This document indexes completed product areas that were previously summarized inline in [PRD.md](../../PRD.md).
+This document indexes completed product areas that were previously summarized inline in [PRODUCT.md](../../PRODUCT.md).
 
-Use this page when you want shipped capability summaries and links to the underlying done PRDs. Use `PRD.md` for the high-level product overview, active development, backlog, and navigation.
+Use this page when you want shipped capability summaries and links to the underlying done PRDs. Use `PRODUCT.md` for the high-level product overview, active development, backlog, and navigation.
 
 ## Core Platform
 
@@ -115,7 +115,7 @@ Reusable prose styleguide system with config resolution, skill generation, and e
 
 Follow-up work:
 
-- [Client-Agnostic Setup Contract](in-progress/client-agnostic-setup.md)
+- [Client-Agnostic Setup Contract](todo/client-agnostic-setup.md)
 
 ## Additional Completed PRDs
 

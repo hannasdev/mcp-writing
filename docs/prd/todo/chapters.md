@@ -11,7 +11,9 @@ The initial chapter/epigraph rollout is already implemented in the codebase:
 - chapter-aware search, prose retrieval, and review-bundle rendering are shipped
 - numeric chapter targeting remains as a compatibility layer in some tools
 
-This file remains in `in-progress/` because it still captures follow-up work that is not fully settled or completed:
+This file now lives in `todo/` because the remaining chapter, epigraph, and division follow-up work is deferred while structural manuscript state boundaries are clarified.
+
+It still captures follow-up work that is not fully settled or completed:
 
 - deferred division support
 - final cleanup of compatibility behavior and release-readiness documentation
@@ -25,6 +27,8 @@ For milestone accounting of what is already delivered, use [chapters-epigraphs-i
 
 This document is the canonical migration plan for structure changes in the manuscript domain.
 It defines the shared milestone gates and cross-cutting functional requirements for chapters, epigraphs, search, sync, rendering, and release readiness.
+
+Use [Managed Structure Contract](../managed-structure-contract.md) as the design arbiter for whether chapter, epigraph, and future division workflows should mutate canonical state through MCP tools, generated views, import workflows, or maintenance/repair paths.
 
 Use this file when:
 

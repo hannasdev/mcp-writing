@@ -3,7 +3,8 @@
 ## Status
 
 The initial epigraph implementation is already shipped alongside canonical chapter indexing.
-This document remains relevant because it defines constraints and follow-up alignment for the remaining chapter-structure work, but it should not be read as if epigraph support is still entirely speculative.
+This follow-up document is deferred while structural manuscript state boundaries are clarified.
+It remains relevant because it defines constraints and follow-up alignment for the remaining chapter-structure work, but it should not be read as if epigraph support is still entirely speculative.
 
 Implemented baseline:
 

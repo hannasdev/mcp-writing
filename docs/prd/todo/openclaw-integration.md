@@ -1,6 +1,9 @@
 # OpenClaw Availability & Integration
 
-**Status:** 🚧 In Progress
+**Status:** 📋 Deferred backlog (not active)
+
+This work is intentionally deferred while product focus shifts to structural manuscript state boundaries and workflow doctrine.
+The integration plan remains available for future pickup, but it should not be treated as active implementation scope.
 
 ## Goal
 
@@ -381,6 +384,6 @@ Risk:
 
 ## Related
 
-- [PRD.md](../../../PRD.md) — product-level design principles and feature map
+- [PRODUCT.md](../../../PRODUCT.md) — product-level design principles and feature map
 - [docs/setup.md](../../setup.md) — runtime setup and prerequisites
 - [docs/docker.md](../../docker.md) — OpenClaw and container integration notes

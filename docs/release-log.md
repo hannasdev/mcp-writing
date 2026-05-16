@@ -90,10 +90,10 @@ This complements `CHANGELOG.md`:
 
 ### 2026-05-05 — Split PRD overview from completed-feature archive
 
-- What changed: Restructured `PRD.md` into a lighter project overview, moved completed-feature summaries into a dedicated `docs/prd/completed-features.md` index, replaced the inlined tool summary with a pointer to auto-generated `docs/tools.md`, and added a new in-progress PRD (`docs/prd/in-progress/client-agnostic-setup.md`) that defines a client-agnostic setup contract with client-hosted UI flows.
+- What changed: Restructured the top-level product overview into a lighter navigation document, moved completed-feature summaries into a dedicated `docs/prd/completed-features.md` index, replaced the inlined tool summary with a pointer to auto-generated `docs/tools.md`, and added a now-deferred PRD (`docs/prd/todo/client-agnostic-setup.md`) that defines a client-agnostic setup contract with client-hosted UI flows.
 - Why it matters: Maintainers and contributors can navigate roadmap status faster, while setup direction now favors reusable MCP capabilities plus client-native onboarding UX instead of growing the tool list for first-run-only workflows.
 - Who is affected: Maintainers and contributors updating PRDs, setup UX direction, or roadmap documentation.
-- Action needed: Optional. Use `docs/prd/completed-features.md` for shipped capability summaries and keep `PRD.md` focused on active direction and navigation.
+- Action needed: Optional. Use `docs/prd/completed-features.md` for shipped capability summaries and keep `PRODUCT.md` focused on active direction and navigation.
 - PR: [#175](https://github.com/hannasdev/mcp-writing/pull/175)
 
 ### 2026-05-03 — Prose styleguide skill with formal output contract

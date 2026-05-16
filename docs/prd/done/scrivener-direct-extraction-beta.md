@@ -165,4 +165,4 @@ If any criterion regresses, the feature stays beta.
 
 - [import-sync.md](../done/import-sync.md) — Current import architecture and identity model
 - [metadata.md](../done/metadata.md) — Sidecar ownership and write rules
-- [openclaw-integration.md](openclaw-integration.md) — Active integration planning context
+- [openclaw-integration.md](../todo/openclaw-integration.md) — Deferred integration planning context

@@ -1,6 +1,9 @@
 # PRD: Client-Agnostic Setup Contract
 
-**Status:** 🚧 In Progress
+**Status:** 📋 Deferred backlog (not active)
+
+This work is intentionally deferred while product focus shifts to structural manuscript state boundaries and workflow doctrine.
+The setup contract direction remains available for future pickup, but it should not be treated as active implementation scope.
 
 ## Goal
 

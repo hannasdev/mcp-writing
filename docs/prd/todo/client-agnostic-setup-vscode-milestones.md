@@ -1,8 +1,11 @@
 # Client-Agnostic Setup — VS Code First Milestones
 
-Status: Draft for review  
+Status: Deferred backlog (not active)  
 Owner: MCP Writing  
 Date: 2026-05-05
+
+This milestone plan is intentionally deferred with the broader client-agnostic setup contract.
+It remains available for future pickup, but it should not be treated as active implementation scope.
 
 ## Objective
 

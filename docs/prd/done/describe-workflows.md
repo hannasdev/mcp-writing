@@ -231,4 +231,4 @@ The `context` object is computed at call time and reflects current server state.
 - [x] Define static `WORKFLOW_CATALOGUE` constant with all 9 workflows
 - [x] Register tool first in tool registration order
 - [x] Add integration tests: shape, all workflow ids, `scene_count` vs db, per-workflow structural validity
-- [x] Update `PRD.md` overview to reference this feature
+- [x] Update product overview to reference this feature

@@ -14,7 +14,7 @@ Review changes for correctness, maintainability, scope control, and alignment wi
 Before giving review feedback:
 
 1. Review the diff against `main`.
-2. Review related context in `PRD.md`.
+2. Review related context in `PRODUCT.md`.
 3. Identify the purpose of the change.
 4. Check whether the implementation matches that purpose.
 5. Check whether the change introduces unnecessary scope.
@@ -46,7 +46,7 @@ Use these labels when useful:
 
 ## Rules
 
-- Do not approve changes that contradict `PRD.md`.
+- Do not approve changes that contradict `PRODUCT.md`.
 - Do not approve hidden scope expansion.
 - Do not request unrelated refactors.
 - Do not nitpick style unless it affects readability or consistency.
@@ -89,7 +89,7 @@ Use these labels when useful:
 ### Documentation
 
 - Does user-facing behavior need docs?
-- Does `PRD.md` need an update?
+- Does `PRODUCT.md` need an update?
 - Does the PR description match the actual change?
 
 ## Review output format
