@@ -42,14 +42,14 @@ Instead of feeding an entire manuscript to an AI and hoping it fits in the conte
 
 | Guide | Description |
 |---|---|
-| [docs/setup.md](docs/setup.md) | Prerequisites, first-time setup, Scrivener import, native sync format |
+| [docs/guides/setup.md](docs/guides/setup.md) | Prerequisites, first-time setup, Scrivener import, native sync format |
 | [mcp-writing-vscode](https://github.com/hannasdev/mcp-writing-vscode) | VS Code extension for client-native setup flows |
-| [docs/docker.md](docs/docker.md) | Docker Compose, OpenClaw integration, SSH hardening |
-| [docs/data-ownership.md](docs/data-ownership.md) | Which tools write which files, import safety rules |
-| [docs/tools.md](docs/tools.md) | Full tool reference — auto-generated from source |
+| [docs/guides/docker.md](docs/guides/docker.md) | Docker Compose, OpenClaw integration, SSH hardening |
+| [docs/foundations/managed-structure-contract.md](docs/foundations/managed-structure-contract.md) | Design boundaries for structural mutation, generated views, import, and maintenance workflows |
+| [docs/agents/tools.md](docs/agents/tools.md) | Full tool reference — auto-generated from source |
 | [docs/agents/README.md](docs/agents/README.md) | Index of agent-focused guidance, examples, and boot files |
 | [docs/agents/use-cases.md](docs/agents/use-cases.md) | Agent-oriented transcripts and prompt/tooling examples |
-| [docs/development.md](docs/development.md) | Running locally, tests, environment variables, troubleshooting |
+| [docs/guides/development.md](docs/guides/development.md) | Running locally, tests, environment variables, troubleshooting |
 
 ## Breaking changes
 
