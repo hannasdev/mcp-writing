@@ -14,7 +14,7 @@ This complements `CHANGELOG.md`:
 - Why it matters: Future PRs and AI-assisted maintainer workflows now update the actual human release log instead of following stale instructions.
 - Who is affected: Maintainers and contributors preparing PR descriptions or release-log entries.
 - Action needed: None.
-- PR: TBD
+- PR: [#195](https://github.com/hannasdev/mcp-writing/pull/195)
 
 ### 2026-05-16 — Reorganize product docs around managed structure design
 
