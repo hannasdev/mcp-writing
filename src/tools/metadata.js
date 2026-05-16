@@ -3,6 +3,7 @@ import fs from "node:fs";
 import matter from "gray-matter";
 import { readMeta, writeMeta, indexSceneFile, normalizeSceneMetaForPath } from "../sync/sync.js";
 import { validateProjectId, validateUniverseId } from "../sync/importer.js";
+import { resolveValidatedChapterFilter } from "../core/chapter-resolution.js";
 import {
   persistSceneReferenceLink,
   upsertExplicitReferenceLinkRow,
@@ -523,7 +524,8 @@ export function registerMetadataTools(s, {
         save_the_cat_beat: z.string().optional(),
         pov:               z.string().optional(),
         part:              z.number().int().optional(),
-        chapter:           z.number().int().optional(),
+        chapter:           z.number().int().optional().describe("Compatibility chapter number. When it resolves to a canonical chapter, update_scene_metadata also persists the matching chapter_id."),
+        chapter_id:        z.string().nullable().optional().describe("Canonical chapter identifier. Use list_chapters to find valid values. Pass null to clear an explicit chapter link on an unchaptered scene."),
         timeline_position: z.number().int().optional(),
         story_time:        z.string().optional(),
         tags:              z.array(z.string()).optional(),
@@ -542,7 +544,62 @@ export function registerMetadataTools(s, {
       }
       try {
         const { meta } = readMeta(scene.file_path, SYNC_DIR, { writable: true });
-        const updated = normalizeSceneMetaForPath(SYNC_DIR, scene.file_path, { ...meta, ...fields }).meta;
+        const nextFields = { ...fields };
+
+        if (fields.chapter_id === null && fields.chapter !== undefined) {
+          return errorResponse(
+            "VALIDATION_ERROR",
+            "chapter_id cannot be null when chapter is also provided.",
+            {
+              project_id,
+              chapter_id: null,
+              chapter: fields.chapter,
+            }
+          );
+        }
+
+        if (fields.chapter_id === null) {
+          nextFields.chapter = null;
+          nextFields.chapter_title = null;
+        } else if (fields.chapter_id !== undefined || fields.chapter !== undefined) {
+          const resolvedChapterFilter = resolveValidatedChapterFilter(db, {
+            projectId: project_id,
+            chapterNumber: fields.chapter,
+            chapterId: fields.chapter_id,
+          });
+
+          if (resolvedChapterFilter.error) {
+            return errorResponse(
+              resolvedChapterFilter.error.code,
+              resolvedChapterFilter.error.message,
+              {
+                project_id,
+                chapter_id: fields.chapter_id ?? null,
+                chapter: fields.chapter ?? null,
+              }
+            );
+          }
+
+          const resolvedChapter = resolvedChapterFilter.chapter;
+
+          if (!resolvedChapter) {
+            return errorResponse(
+              "NOT_FOUND",
+              "Chapter not found for the provided project and identifier.",
+              {
+                project_id,
+                chapter_id: fields.chapter_id ?? null,
+                chapter: fields.chapter ?? null,
+              }
+            );
+          }
+
+          nextFields.chapter_id = resolvedChapter.chapter_id;
+          nextFields.chapter = resolvedChapter.sort_index;
+          nextFields.chapter_title = resolvedChapter.title ?? null;
+        }
+
+        const updated = normalizeSceneMetaForPath(SYNC_DIR, scene.file_path, { ...meta, ...nextFields }).meta;
         writeMeta(scene.file_path, updated);
 
         const { content: prose } = matter(fs.readFileSync(scene.file_path, "utf8"));

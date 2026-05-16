@@ -548,6 +548,24 @@ describe("bootstrap_prose_styleguide_config tool", () => {
     assert.equal(Object.hasOwn(parsed.suggested_config, "tense"), true);
     assert.equal(parsed.suggested_config.tense.suggested_value, "present");
   });
+
+  test("rejects conflicting mixed chapter filters", async () => {
+    const chaptersText = await callWriteTool("list_chapters", { project_id: "test-novel" });
+    const chaptersParsed = JSON.parse(chaptersText);
+    const firstChapter = chaptersParsed.results.find((row) => row.sort_index === 1);
+    assert.ok(firstChapter);
+
+    const text = await callWriteTool("bootstrap_prose_styleguide_config", {
+      project_id: "test-novel",
+      chapter_id: firstChapter.chapter_id,
+      chapter: 2,
+    });
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.ok, false);
+    assert.equal(parsed.error.code, "VALIDATION_ERROR");
+    assert.match(parsed.error.message, /must refer to the same canonical chapter/);
+  });
 });
 
 describe("setup_prose_styleguide_skill tool", () => {

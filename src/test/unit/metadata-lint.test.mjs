@@ -151,6 +151,46 @@ describe("metadata lint", () => {
     assert.ok(!result.issues.some(i => i.code === "MIXED_CHARACTER_REFERENCE_STYLE"));
   });
 
+  test("validates epigraph metadata object schema", () => {
+    const result = validateMetadataObject({
+      kind: "epigraph",
+      epigraph_id: "epi-dawn",
+      chapter_id: "ch-01-dawn",
+      characters: ["char-elena"],
+      tags: ["omen"],
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.kind, "epigraph");
+    assert.equal(result.issues.length, 0);
+  });
+
+  test("accepts epigraph compatibility chapter fields without unknown-key warnings", () => {
+    const result = validateMetadataObject({
+      kind: "epigraph",
+      epigraph_id: "epi-dawn",
+      chapter: 1,
+      chapter_title: "Dawn",
+      characters: ["char-elena"],
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.kind, "epigraph");
+    assert.ok(!result.issues.some(i => i.code === "UNKNOWN_KEY"));
+  });
+
+  test("warns on mixed canonical and non-canonical epigraph character references", () => {
+    const result = validateMetadataObject({
+      kind: "epigraph",
+      epigraph_id: "epi-dawn",
+      chapter_id: "ch-01-dawn",
+      characters: ["char-elena", "Victor Sidorin"],
+    });
+
+    assert.equal(result.ok, true);
+    assert.ok(result.issues.some(i => i.code === "MIXED_CHARACTER_REFERENCE_STYLE"));
+  });
+
   test("flags schema errors and legacy keys", () => {
     const result = validateMetadataObject({
       scene_id: "sc-001",
