@@ -177,6 +177,30 @@ describe("buildReviewBundlePlan", () => {
     }
   });
 
+  test("rejects using chapter_id and chapters together", () => {
+    const db = setupReviewBundleTestDb();
+    try {
+      insertTestScene(db, {
+        sceneId: "sc-104",
+        part: 1,
+        chapter: 1,
+        chapterId: "ch-01-opening",
+        timelinePosition: 1,
+      });
+      assert.throws(
+        () => buildReviewBundlePlan(db, {
+          project_id: "test-novel",
+          profile: "outline_discussion",
+          chapter_id: "ch-01-opening",
+          chapters: [1, 2],
+        }),
+        error => error instanceof ReviewBundlePlanError && error.code === "INVALID_CHAPTER_FILTER"
+      );
+    } finally {
+      db.close();
+    }
+  });
+
   test("rejects scene_ids lists larger than the SQLite-safe planner limit", () => {
     const db = setupReviewBundleTestDb();
     try {
@@ -658,6 +682,210 @@ describe("buildReviewBundlePlan", () => {
     }
   });
 
+  test("renderReviewBundleMarkdown renders canonical epigraph prose in outline profile", () => {
+    const db = setupReviewBundleTestDb();
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "bundle-outline-canonical-epigraph-"));
+    const scenePath = path.join(tempDir, "sc-outline-015.md");
+    fs.writeFileSync(scenePath, "Regular outline scene prose.\n", "utf8");
+
+    try {
+      const now = new Date().toISOString();
+      db.prepare(`
+        INSERT INTO chapters (
+          chapter_id, project_id, title, sort_index, logline, source_path, source_checksum, metadata_stale, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        "ch-15-semantic-drift",
+        "test-novel",
+        "Semantic Drift",
+        15,
+        null,
+        path.join(tempDir, "15-Semantic Drift"),
+        null,
+        0,
+        now
+      );
+      db.prepare(`
+        INSERT INTO epigraphs (
+          epigraph_id, project_id, chapter_id, body, file_path, prose_checksum, metadata_stale, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        "epi-015",
+        "test-novel",
+        "ch-15-semantic-drift",
+        "An epigraph line appears here.",
+        path.join(tempDir, "epigraph.md"),
+        "deadbeef",
+        0,
+        now
+      );
+      db.prepare(`
+        INSERT INTO scenes (
+          scene_id, project_id, chapter_id, title, part, chapter, chapter_title, timeline_position, word_count,
+          logline, file_path, prose_checksum, metadata_stale, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        "sc-outline-015",
+        "test-novel",
+        "ch-15-semantic-drift",
+        "Scene After Epigraph",
+        1,
+        15,
+        "Semantic Drift",
+        1,
+        140,
+        "A key outline summary.",
+        scenePath,
+        "deadbeef",
+        0,
+        now
+      );
+
+      const plan = buildReviewBundlePlan(db, {
+        project_id: "test-novel",
+        profile: "outline_discussion",
+      });
+      const markdown = renderReviewBundleMarkdown(db, plan, {
+        generatedAt: "2026-01-01T00:00:00.000Z",
+        syncDir: fs.realpathSync.native(tempDir),
+      });
+
+      assert.ok(markdown.includes("An epigraph line appears here."));
+      assert.ok(markdown.includes("## Scene After Epigraph"));
+      assert.ok(markdown.includes("A key outline summary."));
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+      db.close();
+    }
+  });
+
+  test("renderReviewBundleMarkdown preserves legacy epigraph scene summaries in outline profile", () => {
+    const db = setupReviewBundleTestDb();
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "bundle-outline-legacy-epigraph-"));
+    const scenePath = path.join(tempDir, "sc-outline-legacy-015.md");
+    fs.writeFileSync(scenePath, "Legacy epigraph prose should not be loaded for outline markdown.\n", "utf8");
+
+    try {
+      const now = new Date().toISOString();
+      db.prepare(`
+        INSERT INTO scenes (
+          scene_id, project_id, title, part, chapter, chapter_title, timeline_position, word_count,
+          logline, file_path, prose_checksum, metadata_stale, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        "sc-outline-legacy-015",
+        "test-novel",
+        "Epigraph: Threshold",
+        1,
+        15,
+        "Semantic Drift",
+        1,
+        80,
+        "Legacy epigraph summary remains visible.",
+        scenePath,
+        "deadbeef",
+        0,
+        now
+      );
+      db.prepare(`
+        INSERT INTO scene_tags (scene_id, project_id, tag)
+        VALUES (?, ?, ?)
+      `).run("sc-outline-legacy-015", "test-novel", "epigraph");
+
+      const plan = buildReviewBundlePlan(db, {
+        project_id: "test-novel",
+        profile: "outline_discussion",
+      });
+      const markdown = renderReviewBundleMarkdown(db, plan, {
+        generatedAt: "2026-01-01T00:00:00.000Z",
+        syncDir: fs.realpathSync.native(tempDir),
+      });
+
+      assert.ok(markdown.includes("Legacy epigraph summary remains visible."));
+      assert.ok(!markdown.includes("Legacy epigraph prose should not be loaded for outline markdown."));
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+      db.close();
+    }
+  });
+
+  test("renderReviewBundleMarkdown shows beta chapter heading only once when canonical epigraph exists", () => {
+    const db = setupReviewBundleTestDb();
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "bundle-beta-canonical-epigraph-"));
+    const scenePath = path.join(tempDir, "sc-beta-015.md");
+    fs.writeFileSync(scenePath, "Regular beta scene prose.\n", "utf8");
+
+    try {
+      const now = new Date().toISOString();
+      db.prepare(`
+        INSERT INTO chapters (
+          chapter_id, project_id, title, sort_index, logline, source_path, source_checksum, metadata_stale, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        "ch-15-semantic-drift",
+        "test-novel",
+        "Semantic Drift",
+        15,
+        null,
+        path.join(tempDir, "15-Semantic Drift"),
+        null,
+        0,
+        now
+      );
+      db.prepare(`
+        INSERT INTO epigraphs (
+          epigraph_id, project_id, chapter_id, body, file_path, prose_checksum, metadata_stale, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        "epi-015",
+        "test-novel",
+        "ch-15-semantic-drift",
+        "An epigraph line appears here.",
+        path.join(tempDir, "epigraph.md"),
+        "deadbeef",
+        0,
+        now
+      );
+      db.prepare(`
+        INSERT INTO scenes (
+          scene_id, project_id, chapter_id, title, part, chapter, chapter_title, timeline_position, word_count,
+          file_path, prose_checksum, metadata_stale, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        "sc-beta-015",
+        "test-novel",
+        "ch-15-semantic-drift",
+        "Scene After Epigraph",
+        1,
+        15,
+        "Semantic Drift",
+        1,
+        140,
+        scenePath,
+        "deadbeef",
+        0,
+        now
+      );
+
+      const plan = buildReviewBundlePlan(db, {
+        project_id: "test-novel",
+        profile: "beta_reader_personalized",
+        recipient_name: "Jordan Example",
+      });
+      const markdown = renderReviewBundleMarkdown(db, plan, {
+        generatedAt: "2026-01-01T00:00:00.000Z",
+        syncDir: fs.realpathSync.native(tempDir),
+      });
+
+      assert.equal(countMatches(markdown, /^## Semantic Drift$/gm), 1);
+      assert.ok(markdown.includes("An epigraph line appears here."));
+      assert.ok(markdown.includes("## Scene After Epigraph"));
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+      db.close();
+    }
+  });
+
   test("renderReviewBundleMarkdown suppresses epigraph title when tag casing/spacing varies", () => {
     const db = setupReviewBundleTestDb();
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "bundle-beta-epigraph-tag-normalized-"));
@@ -850,6 +1078,88 @@ describe("buildReviewBundlePlan", () => {
       assert.equal(countMatches(decodedPdfText, /Outline Overview/g), 2);
       // Generated timestamp only appears on the cover.
       assert.equal(countMatches(decodedPdfText, /Generated: 2026-01-01T00:00:00\.000Z/g), 1);
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+      db.close();
+    }
+  });
+
+  test("renderReviewBundlePdf renders canonical epigraph insertions in outline profile", async () => {
+    const db = setupReviewBundleTestDb();
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "bundle-outline-canonical-epigraph-pdf-"));
+    const scenePath = path.join(tempDir, "sc-outline-canonical-015.md");
+    fs.writeFileSync(scenePath, "Regular outline scene prose.\n", "utf8");
+
+    try {
+      const now = new Date().toISOString();
+      db.prepare(`
+        INSERT INTO chapters (
+          chapter_id, project_id, title, sort_index, logline, source_path, source_checksum, metadata_stale, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        "ch-15-semantic-drift",
+        "test-novel",
+        "Semantic Drift",
+        15,
+        null,
+        path.join(tempDir, "15-Semantic Drift"),
+        null,
+        0,
+        now
+      );
+      db.prepare(`
+        INSERT INTO epigraphs (
+          epigraph_id, project_id, chapter_id, body, file_path, prose_checksum, metadata_stale, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        "epi-015",
+        "test-novel",
+        "ch-15-semantic-drift",
+        "An epigraph line appears here.",
+        path.join(tempDir, "epigraph.md"),
+        "deadbeef",
+        0,
+        now
+      );
+      db.prepare(`
+        INSERT INTO scenes (
+          scene_id, project_id, chapter_id, title, part, chapter, chapter_title, timeline_position, word_count,
+          logline, file_path, prose_checksum, metadata_stale, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        "sc-outline-canonical-015",
+        "test-novel",
+        "ch-15-semantic-drift",
+        "Scene After Epigraph",
+        1,
+        15,
+        "Semantic Drift",
+        1,
+        140,
+        "A key outline summary.",
+        scenePath,
+        "deadbeef",
+        0,
+        now
+      );
+
+      const plan = buildReviewBundlePlan(db, {
+        project_id: "test-novel",
+        profile: "outline_discussion",
+        bundle_title: "The Lamb",
+        author_name: "Hanna",
+      });
+      const pdfBytes = await renderReviewBundlePdf(db, plan, {
+        generatedAt: "2026-01-01T00:00:00.000Z",
+        syncDir: fs.realpathSync.native(tempDir),
+      });
+      const inflatedStreamsText = extractPdfFlateText(pdfBytes);
+      const decodedPdfText = decodePdfHexText(inflatedStreamsText);
+
+      assert.match(decodedPdfText, /Chapter 15/);
+      assert.match(decodedPdfText, /An epigraph line appears here\./);
+      assert.match(decodedPdfText, /Scene After Epigraph/);
+      assert.match(decodedPdfText, /A key outline summary\./);
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true });
       db.close();

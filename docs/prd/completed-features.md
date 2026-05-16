@@ -94,6 +94,21 @@ Highlights:
 
 ## Recently Delivered
 
+### 📚 Chapter and Epigraph Indexing
+
+First-class chapters and epigraphs with canonical `chapter_id` targeting, chapter-aware retrieval, and chapter-linked rendering.
+
+Highlights:
+
+- Canonical `chapters` and `epigraphs` entities with project-scoped identifiers
+- `list_chapters` and `find_epigraphs` as dedicated discovery tools
+- `find_scenes`, `get_chapter_prose`, styleguide flows, and review bundles updated for `chapter_id`
+- Explicit chapter-folder and `epigraph.md` indexing path, with numeric chapter filters retained as compatibility aliases
+
+Implementation status:
+
+- [chapters-epigraphs-implementation.md](done/chapters-epigraphs-implementation.md) — delivered milestones vs remaining follow-up work
+
 ### 🪄 [Guideline Generation](done/guideline-generation.md)
 
 Reusable prose styleguide system with config resolution, skill generation, and edit-time enforcement behavior.

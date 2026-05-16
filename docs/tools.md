@@ -18,6 +18,8 @@
 - [`find_scenes`](#find_scenes)
 - [`get_scene_prose`](#get_scene_prose)
 - [`get_chapter_prose`](#get_chapter_prose)
+- [`list_chapters`](#list_chapters)
+- [`find_epigraphs`](#find_epigraphs)
 - [`get_arc`](#get_arc)
 - [`list_characters`](#list_characters)
 - [`get_character_sheet`](#get_character_sheet)
@@ -129,6 +131,7 @@ Start an asynchronous batch job that infers scene character mentions and updates
 | `scene_ids` | `string[]` | No | Optional allowlist of scene IDs to process before other filters are applied. |
 | `part` | `integer` | No | Optional part number filter. |
 | `chapter` | `integer` | No | Optional chapter number filter. |
+| `chapter_id` | `string` | No | Optional canonical chapter identifier. |
 | `only_stale` | `boolean` | No | If true, only process scenes currently marked metadata_stale. |
 | `dry_run` | `boolean` | No | If true (default), returns preview results without writing sidecars. |
 | `replace_mode` | `enum("merge","replace")` | No | merge (default): add inferred IDs; replace: overwrite characters with inferred IDs. |
@@ -182,7 +185,7 @@ Re-derive lightweight scene metadata from current prose (logline and character m
 
 ## find_scenes
 
-Find scenes by filtering on character, Save the Cat beat, tags, part, chapter, or POV. Returns ordered scene metadata only — no prose. All filters are optional and combinable. Supports pagination via page/page_size and auto-paginates large result sets with total_count. Warns if any matching scenes have stale metadata. Response shape note: always returns a structured envelope (`results`, `total_count`, with pagination fields when paging is active).
+Find scenes by filtering on character, Save the Cat beat, tags, chapter identity, numeric compatibility chapter, or POV. Returns ordered scene metadata only — no prose. Most filters are optional and combinable. `chapter_id` requires `project_id`, and mixed `chapter_id`/`chapter` filters must resolve to the same canonical chapter. Supports pagination via page/page_size and auto-paginates large result sets with total_count. Warns if any matching scenes have stale metadata. Response shape note: always returns a structured envelope (`results`, `total_count`, with pagination fields when paging is active).
 
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |
@@ -191,7 +194,8 @@ Find scenes by filtering on character, Save the Cat beat, tags, part, chapter, o
 | `beat` | `string` | No | Save the Cat beat name (e.g. 'Opening Image'). Exact match. |
 | `tag` | `string` | No | Scene tag to filter by. Exact match. |
 | `part` | `integer` | No | Part number (integer, e.g. 1). Chapters are numbered globally across the whole project. |
-| `chapter` | `integer` | No | Chapter number (integer, e.g. 3). Chapters are numbered globally across the whole project — do not reset per part. |
+| `chapter` | `integer` | No | Compatibility chapter number resolved from canonical chapter sort order. |
+| `chapter_id` | `string` | No | Canonical chapter identifier. Requires project_id. Use list_chapters to find valid values. |
 | `pov` | `string` | No | POV character_id. Use list_characters first to find valid IDs. |
 | `page` | `integer` | No | Optional page number for paginated responses (1-based). |
 | `page_size` | `integer` | No | Optional page size for paginated responses (default: 20, max: 200). |
@@ -212,13 +216,35 @@ Load the full prose text of a single scene. Use this for close reading, continui
 
 ## get_chapter_prose
 
-Load the full prose for every scene in a chapter, concatenated in order. Expensive — only use when you need to read an entire chapter. Capped at 10 scenes. Use find_scenes first to confirm the chapter exists.
+Load the full prose for every scene in a chapter, concatenated in order. Provide chapter_id or chapter, plus project_id. Canonical targeting uses chapter_id; numeric chapter remains available as a compatibility alias resolved from canonical sort order. Expensive — only use when you need to read an entire chapter. Capped at 10 scenes. Use find_scenes first to confirm the chapter exists.
 
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |
 | `project_id` | `string` | Yes | Project ID (e.g. 'the-lamb'). |
-| `part` | `integer` | Yes | Part number (integer). |
-| `chapter` | `integer` | Yes | Chapter number (integer, globally numbered across the whole project). |
+| `chapter_id` | `string` | No | Canonical chapter identifier. |
+| `chapter` | `integer` | No | Compatibility chapter number resolved from canonical sort order. |
+
+---
+
+## list_chapters
+
+List canonical chapters for a project. Returns chapter_id plus compatibility sort order so callers can migrate from numeric chapter targeting without losing orientation.
+
+| Parameter | Type | Required | Description |
+| --- | --- | :---: | --- |
+| `project_id` | `string` | Yes | Project ID. |
+
+---
+
+## find_epigraphs
+
+List canonical epigraphs for a project, optionally narrowed to a canonical chapter_id or compatibility chapter number.
+
+| Parameter | Type | Required | Description |
+| --- | --- | :---: | --- |
+| `project_id` | `string` | Yes | Project ID. |
+| `chapter_id` | `string` | No | Canonical chapter identifier. |
+| `chapter` | `integer` | No | Compatibility chapter number resolved from canonical sort order. |
 
 ---
 
@@ -486,8 +512,9 @@ Dry-run planning tool for review bundles. Resolves scene scope, deterministic or
 | `project_id` | `string` | Yes | Project ID to scope the review bundle (e.g. 'test-novel'). |
 | `profile` | `enum` | Yes | Bundle profile: outline_discussion, editor_detailed, or beta_reader_personalized. |
 | `part` | `integer` | No | Optional part filter. |
-| `chapter` | `integer` | No | Optional chapter filter. |
-| `chapters` | `number[]` | No | Optional chapter-set filter. Use this for one/few specific chapters. Do not combine with chapter. |
+| `chapter` | `integer` | No | Optional compatibility chapter filter. |
+| `chapter_id` | `string` | No | Optional canonical chapter identifier. |
+| `chapters` | `number[]` | No | Optional chapter-set filter. Use this for one/few specific chapters. Do not combine with chapter or chapter_id. |
 | `tag` | `string` | No | Optional tag filter (exact match). |
 | `scene_ids` | `string[]` | No | Optional explicit scene_id allowlist. Intersects with other filters. |
 | `strictness` | `enum` | No | Strictness mode: warn (default) or fail. |
@@ -513,8 +540,9 @@ Generate review bundle artifacts (PDF/markdown) from planned scene scope. Writes
 | `profile` | `enum` | Yes | Bundle profile: outline_discussion, editor_detailed, or beta_reader_personalized. |
 | `output_dir` | `string` | Yes | Directory path to write bundle artifacts into. |
 | `part` | `integer` | No | Optional part filter. |
-| `chapter` | `integer` | No | Optional chapter filter. |
-| `chapters` | `number[]` | No | Optional chapter-set filter. Use this for one/few specific chapters. Do not combine with chapter. |
+| `chapter` | `integer` | No | Optional compatibility chapter filter. |
+| `chapter_id` | `string` | No | Optional canonical chapter identifier. |
+| `chapters` | `number[]` | No | Optional chapter-set filter. Use this for one/few specific chapters. Do not combine with chapter or chapter_id. |
 | `tag` | `string` | No | Optional tag filter (exact match). |
 | `scene_ids` | `string[]` | No | Optional explicit scene_id allowlist. Intersects with other filters. |
 | `strictness` | `enum` | No | Strictness mode: warn (default) or fail. |
@@ -576,6 +604,7 @@ Detect dominant prose conventions from existing scenes and suggest initial prose
 | `scene_ids` | `string[]` | No | Optional scene_id allowlist to analyze. |
 | `part` | `integer` | No | Optional part filter. |
 | `chapter` | `integer` | No | Optional chapter filter. |
+| `chapter_id` | `string` | No | Optional canonical chapter identifier. |
 | `max_scenes` | `integer` | No | Maximum number of scenes to analyze (default: 50). |
 | `min_agreement` | `number` | No | Minimum agreement ratio for suggested fields (default: 0.6). |
 | `min_evidence` | `integer` | No | Minimum number of observed scenes per field before suggesting it (default: 3). |
@@ -617,6 +646,7 @@ Detect styleguide drift by comparing declared config conventions against observe
 | `scene_ids` | `string[]` | No | Optional scene_id allowlist to analyze. |
 | `part` | `integer` | No | Optional part filter. |
 | `chapter` | `integer` | No | Optional chapter filter. |
+| `chapter_id` | `string` | No | Optional canonical chapter identifier. |
 | `max_scenes` | `integer` | No | Maximum number of scenes to analyze (default: 50). |
 | `min_agreement` | `number` | No | Minimum agreement ratio for suggested updates (default: 0.6). |
 | `include_clean_scenes` | `boolean` | No | If true, include scenes with no detected drift in scene_results. |

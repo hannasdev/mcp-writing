@@ -334,6 +334,7 @@ export function registerSyncTools(s, {
       scene_ids: z.array(z.string()).optional().describe("Optional allowlist of scene IDs to process before other filters are applied."),
       part: z.number().int().optional().describe("Optional part number filter."),
       chapter: z.number().int().optional().describe("Optional chapter number filter."),
+      chapter_id: z.string().optional().describe("Optional canonical chapter identifier."),
       only_stale: z.boolean().optional().describe("If true, only process scenes currently marked metadata_stale."),
       dry_run: z.boolean().optional().describe("If true (default), returns preview results without writing sidecars."),
       replace_mode: z.enum(["merge", "replace"]).optional().describe("merge (default): add inferred IDs; replace: overwrite characters with inferred IDs."),
@@ -346,6 +347,7 @@ export function registerSyncTools(s, {
       scene_ids,
       part,
       chapter,
+      chapter_id,
       only_stale = false,
       dry_run = true,
       replace_mode = "merge",
@@ -386,6 +388,7 @@ export function registerSyncTools(s, {
         sceneIds: scene_ids,
         part,
         chapter,
+        chapterId: chapter_id,
         onlyStale: Boolean(only_stale),
       });
       if (!targetResolution.ok) {

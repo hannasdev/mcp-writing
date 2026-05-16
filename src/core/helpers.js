@@ -105,6 +105,7 @@ export function resolveBatchTargetScenes(dbHandle, {
   sceneIds,
   part,
   chapter,
+  chapterId,
   onlyStale,
 }) {
   const projectExists = Boolean(
@@ -139,6 +140,10 @@ export function resolveBatchTargetScenes(dbHandle, {
     conditions.push("chapter = ?");
     params.push(chapter);
   }
+  if (chapterId !== undefined) {
+    conditions.push("chapter_id = ?");
+    params.push(chapterId);
+  }
   if (onlyStale) {
     conditions.push("metadata_stale = 1");
   }
@@ -147,7 +152,7 @@ export function resolveBatchTargetScenes(dbHandle, {
     SELECT scene_id, project_id, file_path
     FROM scenes
     WHERE ${conditions.join(" AND ")}
-    ORDER BY part, chapter, timeline_position
+    ORDER BY part, chapter, timeline_position, scene_id
   `;
 
   return {

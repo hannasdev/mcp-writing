@@ -383,6 +383,7 @@ export function registerStyleguideTools(s, {
       scene_ids: z.array(z.string()).optional().describe("Optional scene_id allowlist to analyze."),
       part: z.number().int().optional().describe("Optional part filter."),
       chapter: z.number().int().optional().describe("Optional chapter filter."),
+      chapter_id: z.string().optional().describe("Optional canonical chapter identifier."),
       max_scenes: z.number().int().positive().optional().describe("Maximum number of scenes to analyze (default: 50)."),
       min_agreement: z.number().min(0).max(1).optional().describe("Minimum agreement ratio for suggested fields (default: 0.6)."),
       min_evidence: z.number().int().positive().optional().describe("Minimum number of observed scenes per field before suggesting it (default: 3)."),
@@ -393,6 +394,7 @@ export function registerStyleguideTools(s, {
       scene_ids,
       part,
       chapter,
+      chapter_id,
       max_scenes = 50,
       min_agreement = 0.6,
       min_evidence = 3,
@@ -408,6 +410,7 @@ export function registerStyleguideTools(s, {
         sceneIds: scene_ids,
         part,
         chapter,
+        chapterId: chapter_id,
         onlyStale: false,
       });
       if (!targetResolution.ok) {
@@ -419,7 +422,7 @@ export function registerStyleguideTools(s, {
         return errorResponse(
           "NOT_FOUND",
           `No scenes were found for project '${project_id}' with the requested filters.`,
-          { project_id, scene_ids: scene_ids ?? null, part: part ?? null, chapter: chapter ?? null }
+          { project_id, scene_ids: scene_ids ?? null, part: part ?? null, chapter: chapter ?? null, chapter_id: chapter_id ?? null }
         );
       }
 
@@ -630,6 +633,7 @@ export function registerStyleguideTools(s, {
       scene_ids: z.array(z.string()).optional().describe("Optional scene_id allowlist to analyze."),
       part: z.number().int().optional().describe("Optional part filter."),
       chapter: z.number().int().optional().describe("Optional chapter filter."),
+      chapter_id: z.string().optional().describe("Optional canonical chapter identifier."),
       max_scenes: z.number().int().positive().optional().describe("Maximum number of scenes to analyze (default: 50)."),
       min_agreement: z.number().min(0).max(1).optional().describe("Minimum agreement ratio for suggested updates (default: 0.6)."),
       include_clean_scenes: z.boolean().optional().describe("If true, include scenes with no detected drift in scene_results."),
@@ -639,6 +643,7 @@ export function registerStyleguideTools(s, {
       scene_ids,
       part,
       chapter,
+      chapter_id,
       max_scenes = 50,
       min_agreement = 0.6,
       include_clean_scenes = false,
@@ -675,6 +680,7 @@ export function registerStyleguideTools(s, {
         sceneIds: scene_ids,
         part,
         chapter,
+        chapterId: chapter_id,
         onlyStale: false,
       });
       if (!targetResolution.ok) {

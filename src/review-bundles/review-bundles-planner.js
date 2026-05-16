@@ -125,6 +125,7 @@ export function buildReviewBundlePlan(dbHandle, {
   profile,
   part,
   chapter,
+  chapter_id,
   chapters,
   tag,
   scene_ids,
@@ -167,11 +168,12 @@ export function buildReviewBundlePlan(dbHandle, {
   assertProfile(profile);
   assertStrictness(strictness);
   assertFormat(format);
-  if (chapter !== undefined && chapters !== undefined) {
+  const chapterFilterCount = [chapter !== undefined, chapter_id !== undefined, chapters !== undefined].filter(Boolean).length;
+  if (chapterFilterCount > 1) {
     throw new ReviewBundlePlanError(
       "INVALID_CHAPTER_FILTER",
-      "Use either chapter or chapters, not both.",
-      { chapter, chapters }
+      "Use one of chapter, chapter_id, or chapters.",
+      { chapter, chapter_id, chapters }
     );
   }
   let normalizedChapters;
@@ -222,6 +224,10 @@ export function buildReviewBundlePlan(dbHandle, {
     conditions.push("s.chapter = ?");
     conditionParams.push(chapter);
   }
+  if (chapter_id !== undefined) {
+    conditions.push("s.chapter_id = ?");
+    conditionParams.push(chapter_id);
+  }
   if (Array.isArray(normalizedChapters) && normalizedChapters.length > 0) {
     const placeholders = normalizedChapters.map(() => "?").join(",");
     conditions.push(`s.chapter IN (${placeholders})`);
@@ -259,6 +265,7 @@ export function buildReviewBundlePlan(dbHandle, {
         filters: {
           ...(part !== undefined ? { part } : {}),
           ...(chapter !== undefined ? { chapter } : {}),
+          ...(chapter_id !== undefined ? { chapter_id } : {}),
           ...(Array.isArray(normalizedChapters) ? { chapters: normalizedChapters } : {}),
           ...(tag ? { tag } : {}),
           ...(Array.isArray(scene_ids) ? { scene_ids } : {}),
@@ -345,6 +352,7 @@ export function buildReviewBundlePlan(dbHandle, {
   const appliedFilters = {
     ...(part !== undefined ? { part } : {}),
     ...(chapter !== undefined ? { chapter } : {}),
+    ...(chapter_id !== undefined ? { chapter_id } : {}),
     ...(Array.isArray(normalizedChapters) ? { chapters: normalizedChapters } : {}),
     ...(tag ? { tag } : {}),
     ...(Array.isArray(normalizedSceneIds) ? { scene_ids: normalizedSceneIds } : {}),
