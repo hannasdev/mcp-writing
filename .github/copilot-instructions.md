@@ -34,5 +34,5 @@ Use this decision order to choose tools quickly:
 
 For complete details, see:
 - [PRD.md](../PRD.md) — Product overview and roadmap
-- [docs/tools.md](../docs/tools.md) — Full tool reference
+- [docs/agents/tools.md](../docs/agents/tools.md) — Full tool reference
 - [AGENTS.md](../AGENTS.md) — Project-specific agent guidance (development workflow)

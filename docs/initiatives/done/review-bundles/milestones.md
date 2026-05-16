@@ -101,5 +101,5 @@ Output:
 ## Related
 
 - [review-bundles.md](review-bundles.md)
-- [editing.md](editing.md)
-- [search-analysis.md](search-analysis.md)
+- [prose editing](../prose-editing/prd.md)
+- [search analysis](../search-analysis/prd.md)

@@ -342,5 +342,5 @@ Behavioral guardrails:
 
 ## Related
 
-- [import-sync.md](../done/import-sync.md) — World folder structure
-- [search-analysis.md](../done/search-analysis.md) — Current search capabilities
+- [import sync](../import-sync/prd.md) — World folder structure
+- [search analysis](../search-analysis/prd.md) — Current search capabilities

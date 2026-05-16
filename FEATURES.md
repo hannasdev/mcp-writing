@@ -1,12 +1,13 @@
-# Completed Features
+# Writing MCP — Features
 
-This document indexes completed product areas that were previously summarized inline in [PRODUCT.md](../../PRODUCT.md).
+Shipped product capabilities and the initiative docs that explain them in more detail.
 
-Use this page when you want shipped capability summaries and links to the underlying done PRDs. Use `PRODUCT.md` for the high-level product overview, active development, backlog, and navigation.
+Use this page when you want to understand what the product can do today.
+Use [PRODUCT.md](PRODUCT.md) for the high-level product overview, active direction, backlog, and foundations.
 
 ## Core Platform
 
-### 🎯 [Metadata Architecture & Ownership](done/metadata.md)
+### 🎯 [Metadata Architecture & Ownership](docs/initiatives/done/metadata-architecture/prd.md)
 
 How metadata is stored, managed, and kept in sync with prose.
 
@@ -17,7 +18,7 @@ Highlights:
 - Auto-migration from legacy frontmatter
 - Staleness detection and `enrich_scene`
 
-### 📦 [Import & Sync Operations](done/import-sync.md)
+### 📦 [Import & Sync Operations](docs/initiatives/done/import-sync/prd.md)
 
 How manuscripts are imported from Scrivener and synced into the indexed workspace.
 
@@ -28,7 +29,7 @@ Highlights:
 - World folder structure for characters, places, and reference docs
 - Stale metadata warnings on sync
 
-### ✏️ [Prose Editing & Version Control](done/editing.md)
+### ✏️ [Prose Editing & Version Control](docs/initiatives/done/prose-editing/prd.md)
 
 Two-step editing workflow with git-backed history.
 
@@ -39,7 +40,7 @@ Highlights:
 - Manual snapshots for restore points
 - Git-backed version history rather than database snapshots
 
-### 🔍 [Search, Querying & Analysis](done/search-analysis.md)
+### 🔍 [Search, Querying & Analysis](docs/initiatives/done/search-analysis/prd.md)
 
 Fast metadata-first discovery with prose loaded on demand.
 
@@ -50,7 +51,7 @@ Highlights:
 - `search_metadata()` with FTS5
 - Staleness warnings before analysis
 
-### 🧾 [Review Bundles for Editorial Workflows](done/review-bundles.md)
+### 🧾 [Review Bundles for Editorial Workflows](docs/initiatives/done/review-bundles/prd.md)
 
 Deterministic bundle generation for outline discussion, detailed editing, and beta reading.
 
@@ -61,7 +62,7 @@ Highlights:
 - PDF export with manifest and review companion files
 - Strictness modes for stale or incomplete metadata
 
-### 🔐 [Beta Reader Accountability and Book-Like Layout](done/beta-reader-accountability-layout.md)
+### 🔐 [Beta Reader Accountability and Book-Like Layout](docs/initiatives/done/beta-reader-accountability-layout/prd.md)
 
 Chapter-scoped beta packets with per-page accountability and improved PDF reading ergonomics.
 
@@ -72,7 +73,7 @@ Highlights:
 - Manifest fingerprint metadata for provenance and traceability
 - 6x9 book-like PDF geometry for beta profile readability
 
-### 🗂️ [Scrivener Direct Extraction](done/scrivener-direct-extraction-beta.md)
+### 🗂️ [Scrivener Direct Extraction](docs/initiatives/done/scrivener-direct-extraction-beta/prd.md)
 
 Direct ingestion from `.scriv` and `.scrivx` internals for richer metadata extraction.
 
@@ -82,7 +83,7 @@ Highlights:
 - Richer metadata than External Folder Sync alone
 - Safeguards to avoid schema-coupled regressions
 
-### 📚 [Reference Document Querying](done/reference-docs.md)
+### 📚 [Reference Document Querying](docs/initiatives/done/reference-docs/prd.md)
 
 Reference note indexing and linkage for world-building, continuity, and research material.
 
@@ -107,21 +108,21 @@ Highlights:
 
 Implementation status:
 
-- [chapters-epigraphs-implementation.md](done/chapters-epigraphs-implementation.md) — delivered milestones vs remaining follow-up work
+- [milestones.md](docs/initiatives/backlog/chapter-structure/milestones.md) — delivered milestones vs remaining follow-up work
 
-### 🪄 [Guideline Generation](done/guideline-generation.md)
+### 🪄 [Guideline Generation](docs/initiatives/done/guideline-generation/prd.md)
 
 Reusable prose styleguide system with config resolution, skill generation, and edit-time enforcement behavior.
 
 Follow-up work:
 
-- [Client-Agnostic Setup Contract](todo/client-agnostic-setup.md)
+- [Client-Agnostic Setup Contract](docs/initiatives/backlog/client-agnostic-setup/prd.md)
 
-## Additional Completed PRDs
+## Additional Completed References
 
-- [Workflow Discovery](done/describe-workflows.md)
-- [Root Structure Reorganization](done/root-structure-reorganization.md)
-- [MCP Tooling Usability](done/mcp-tooling-usability.md)
-- [MCP Tooling Usability Milestones](done/mcp-tooling-usability-milestones.md)
-- [Refactoring](done/refactoring.md)
-- [Resolved Design Questions](done/resolved-design-questions.md)
+- [Workflow Discovery](docs/prd/done/describe-workflows.md)
+- [Root Structure Reorganization](docs/prd/done/root-structure-reorganization.md)
+- [MCP Tooling Usability](docs/prd/done/mcp-tooling-usability.md)
+- [MCP Tooling Usability Milestones](docs/prd/done/mcp-tooling-usability-milestones.md)
+- [Refactoring](docs/prd/done/refactoring.md)
+- [Resolved Design Questions](docs/prd/done/resolved-design-questions.md)

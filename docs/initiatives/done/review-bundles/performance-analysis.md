@@ -51,7 +51,7 @@ Industry standards typically recommend async for operations > 1-5 seconds. Curre
 - Maintenance burden of async infrastructure outweighs benefits
 
 **Alternative: Document Performance Characteristics**
-Instead of implementing M3 async, recommend documenting in PRD/tools.md:
+Instead of implementing M3 async, recommend documenting in `docs/agents/tools.md`:
 - Expected generation times for typical project sizes
 - Note that sync is appropriate for current use cases
 - Leave async as a future optimization if real-world usage patterns demand it

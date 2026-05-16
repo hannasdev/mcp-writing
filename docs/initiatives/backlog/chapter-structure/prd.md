@@ -11,7 +11,7 @@ The initial chapter/epigraph rollout is already implemented in the codebase:
 - chapter-aware search, prose retrieval, and review-bundle rendering are shipped
 - numeric chapter targeting remains as a compatibility layer in some tools
 
-This file now lives in `todo/` because the remaining chapter, epigraph, and division follow-up work is deferred while structural manuscript state boundaries are clarified.
+This initiative now lives in `docs/initiatives/backlog/chapter-structure/` because the remaining chapter, epigraph, and division follow-up work is deferred while structural manuscript state boundaries are clarified.
 
 It still captures follow-up work that is not fully settled or completed:
 
@@ -21,14 +21,14 @@ It still captures follow-up work that is not fully settled or completed:
 
 Read this document as a follow-up and consolidation plan for chapter structure, not as a statement that none of the chapter work has shipped yet.
 
-For milestone accounting of what is already delivered, use [chapters-epigraphs-implementation.md](../done/chapters-epigraphs-implementation.md).
+For milestone accounting of what is already delivered, use [milestones.md](milestones.md).
 
 ## Document Relationship
 
 This document is the canonical migration plan for structure changes in the manuscript domain.
 It defines the shared milestone gates and cross-cutting functional requirements for chapters, epigraphs, search, sync, rendering, and release readiness.
 
-Use [Managed Structure Contract](../managed-structure-contract.md) as the design arbiter for whether chapter, epigraph, and future division workflows should mutate canonical state through MCP tools, generated views, import workflows, or maintenance/repair paths.
+Use [Managed Structure Contract](../../../foundations/managed-structure-contract.md) as the design arbiter for whether chapter, epigraph, and future division workflows should mutate canonical state through MCP tools, generated views, import workflows, or maintenance/repair paths.
 
 Use this file when:
 
@@ -36,7 +36,7 @@ Use this file when:
 - Determining gate pass/fail criteria.
 - Resolving scope questions across multiple entities.
 
-Use `epigraphs.md` when:
+Use the epigraph companion doc (`architecture.md`) when:
 
 - Defining epigraph-specific behavior and constraints.
 - Verifying epigraph acceptance criteria and rendering expectations.
@@ -44,7 +44,7 @@ Use `epigraphs.md` when:
 Rule of precedence:
 
 - Shared migration sequencing and gate definitions live here.
-- Epigraph-specific requirements live in `epigraphs.md` and must align to the gates defined here.
+- Epigraph-specific requirements live in `architecture.md` and must align to the gates defined here.
 
 ## Problem
 

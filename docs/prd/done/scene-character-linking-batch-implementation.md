@@ -150,7 +150,7 @@ Use focused PRs with one concern each.
 
 ### Docs Tasks
 
-- [x] Add tool docs section in `docs/tools.md` (via docs generator)
+- [x] Add tool docs section in `docs/agents/tools.md` (via docs generator)
 - [x] Add usage examples for preview vs apply mode
 - [x] Document v1 limitation: canonical-name-only, aliases deferred
 
@@ -178,5 +178,5 @@ Use focused PRs with one concern each.
 
 - [scene-character-linking-batch.md](scene-character-linking-batch.md)
 - [scrivener-direct-extraction-beta-implementation.md](scrivener-direct-extraction-beta-implementation.md)
-- [../done/metadata.md](../done/metadata.md)
-- [../done/import-sync.md](../done/import-sync.md)
+- [metadata architecture](../../initiatives/done/metadata-architecture/prd.md)
+- [import sync](../../initiatives/done/import-sync/prd.md)

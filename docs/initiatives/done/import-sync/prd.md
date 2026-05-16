@@ -194,5 +194,5 @@ Characters and places belong to a project OR a universe (shared). Queries automa
 
 ## Related Sections
 
-- [metadata.md](../done/metadata.md) — Metadata ownership and sidecar design
-- [editing.md](../done/editing.md) — Version control during sync
+- [metadata architecture](../metadata-architecture/prd.md) — Metadata ownership and sidecar design
+- [prose editing](../prose-editing/prd.md) — Version control during sync

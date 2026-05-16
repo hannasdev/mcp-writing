@@ -89,7 +89,7 @@ After editing, the workflow is:
 2. For substantially changed scenes, optionally call `enrich_scene(scene_id)` to refresh derived fields
 3. Update relationship state via `update_scene_metadata` if character dynamics shifted
 
-See [metadata.md](../done/metadata.md) for staleness detection and re-enrichment details.
+See [metadata architecture](../metadata-architecture/prd.md) for staleness detection and re-enrichment details.
 
 ## Known Edge Cases
 
@@ -103,5 +103,5 @@ A large chapter (e.g. 30 scenes × 3000 words) produces ~90k words in a single t
 
 ## Related Sections
 
-- [metadata.md](../done/metadata.md) — Staleness detection and re-enrichment
-- [search-analysis.md](../done/search-analysis.md) — Querying before and after edits
+- [metadata architecture](../metadata-architecture/prd.md) — Staleness detection and re-enrichment
+- [search analysis](../search-analysis/prd.md) — Querying before and after edits

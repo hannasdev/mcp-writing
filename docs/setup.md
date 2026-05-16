@@ -8,7 +8,7 @@
 - [Direct Scrivener project merge](#direct-scrivener-project-merge)
 - [Compatibility notes and fallback](#compatibility-notes-and-fallback)
 - [Advanced: Native sync format](#advanced-native-sync-format)
-- [Data ownership model](data-ownership.md)
+- [Data ownership](foundations/data-ownership.md)
 
 ---
 
@@ -65,7 +65,7 @@ If you use VS Code, client-native setup flows are available via:
 Once this is working, you can come back to:
 
 - **Advanced: Native sync format** below for custom project layouts
-- **[docs/tools.md](tools.md)** for the full tool catalog
+- **[docs/agents/tools.md](agents/tools.md)** for the full tool catalog
 - **[README.md](../README.md#usage-scenarios)** for workflow ideas
 
 If you later want richer metadata from a full `.scriv` bundle, add the **Direct Scrivener project merge** step after the stable import has already created your scene sidecars.

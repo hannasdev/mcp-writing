@@ -195,7 +195,7 @@ Implications:
 ## Data Ownership and Safety
 
 1. Writes only to scene sidecars (`.meta.yaml`), never scene prose.
-2. Uses same ownership boundaries documented in `docs/data-ownership.md`.
+2. Uses same ownership boundaries documented in `docs/foundations/data-ownership.md`.
 3. Honors read-only sync dir behavior with `READ_ONLY` envelope.
 4. Default mode is `dry_run=true` to avoid accidental mass writes.
 5. Enforce `max_scenes` as a hard validation guardrail: if the resolved target set exceeds the limit, return `VALIDATION_ERROR` with the matched count and require the caller to rerun with a higher explicit limit.
@@ -258,7 +258,7 @@ Return structured envelopes for:
 ## Rollout Plan
 
 1. Phase A: implement tool with conservative matching + dry-run default.
-2. Phase B: add docs in `docs/tools.md` and usage examples.
+2. Phase B: add docs in `docs/agents/tools.md` and usage examples.
 3. Phase C: add optional alias enhancements if needed by real manuscripts.
 
 ## Open Questions
@@ -267,7 +267,7 @@ No open questions for v1.
 
 ## Related
 
-- [metadata.md](../done/metadata.md) - sidecar ownership, staleness, enrich behavior
-- [import-sync.md](../done/import-sync.md) - indexing and reconciliation model
-- [data-ownership.md](../../data-ownership.md) - importer-authoritative vs agent-authoritative fields
-- [search-analysis.md](../done/search-analysis.md) - current metadata reasoning tools
+- [metadata architecture](../../initiatives/done/metadata-architecture/prd.md) - sidecar ownership, staleness, enrich behavior
+- [import sync](../../initiatives/done/import-sync/prd.md) - indexing and reconciliation model
+- [Data ownership](../../foundations/data-ownership.md) - current ownership boundaries for import-managed fields, MCP-managed metadata, and authored prose
+- [search analysis](../../initiatives/done/search-analysis/prd.md) - current metadata reasoning tools

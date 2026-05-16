@@ -33,4 +33,4 @@ These require understanding meaning, not just keyword presence.
 
 ## Related
 
-- [search-analysis.md](../done/search-analysis.md) — Current FTS5 search
+- [search-analysis](../../done/search-analysis/prd.md) — Current FTS5 search

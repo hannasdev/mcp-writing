@@ -132,5 +132,5 @@ All metadata writes go to `.meta.yaml` sidecar files only. Scrivener-managed `.m
 
 ## Related Sections
 
-- [import-sync.md](../done/import-sync.md) — Syncing and indexing metadata
-- [editing.md](../done/editing.md) — Prose changes and staleness
+- [import sync](../import-sync/prd.md) — Syncing and indexing metadata
+- [prose editing](../prose-editing/prd.md) — Prose changes and staleness

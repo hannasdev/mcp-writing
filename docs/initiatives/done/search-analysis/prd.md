@@ -60,7 +60,7 @@ Paginated tools (`find_scenes`, `get_arc`, `list_threads`, `get_thread_arc`, `se
 
 Tools that reason against metadata (`find_scenes`, `get_arc`, `get_relationship_arc`) warn the caller if any returned scenes have `metadata_stale = true`. Reasoning against stale metadata produces unreliable results.
 
-Staleness occurs when prose has been edited since metadata was last updated. Call `enrich_scene()` to refresh derived fields (logline, character mentions) after edits. See [metadata.md](../done/metadata.md) for details.
+Staleness occurs when prose has been edited since metadata was last updated. Call `enrich_scene()` to refresh derived fields (logline, character mentions) after edits. See [metadata architecture](../metadata-architecture/prd.md) for details.
 
 ## Example Reasoning Flows
 
@@ -122,6 +122,6 @@ Passing invalid FTS5 expressions (e.g. unmatched `"`) to `search_metadata` previ
 
 ## Related Sections
 
-- [metadata.md](../done/metadata.md) — Staleness detection and re-enrichment
-- [editing.md](../done/editing.md) — Version control and prose edits
-- [import-sync.md](../done/import-sync.md) — Indexing and data structure
+- [metadata architecture](../metadata-architecture/prd.md) — Staleness detection and re-enrichment
+- [prose editing](../prose-editing/prd.md) — Version control and prose edits
+- [import sync](../import-sync/prd.md) — Indexing and data structure

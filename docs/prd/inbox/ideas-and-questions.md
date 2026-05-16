@@ -22,7 +22,7 @@ Unresolved design questions, feature ideas, and edge cases that haven't yet been
 
 If a user reorders 20 scenes in Scrivener, sync should reconcile them as moved, not deleted-and-recreated. Current importer logic may not handle this gracefully.
 
-**Tracking:** [import-sync.md](../done/import-sync.md#10--re-import-after-scrivener-reorder-creates-duplicates-must-fix) — Issue #10.
+**Tracking:** [import-sync](../../initiatives/done/import-sync/prd.md#10--re-import-after-scrivener-reorder-creates-duplicates-must-fix) — Issue #10.
 
 ### Scenario: Circular Character Relationships
 
@@ -102,7 +102,7 @@ Current behavior: `get_runtime_config` surfaces permission issues but doesn't he
 
 ## Related
 
-- [done/metadata.md](../done/metadata.md)
-- [done/import-sync.md](../done/import-sync.md)
-- [done/editing.md](../done/editing.md)
-- [done/search-analysis.md](../done/search-analysis.md)
+- [metadata architecture](../../initiatives/done/metadata-architecture/prd.md)
+- [import sync](../../initiatives/done/import-sync/prd.md)
+- [prose editing](../../initiatives/done/prose-editing/prd.md)
+- [search analysis](../../initiatives/done/search-analysis/prd.md)

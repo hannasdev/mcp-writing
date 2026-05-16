@@ -18,7 +18,7 @@ Remaining value in this document:
 - keep epigraph-specific constraints aligned with the remaining chapter follow-up gates
 - document what should happen if compatibility behavior is tightened later
 
-For milestone accounting of the shipped chapter/epigraph rollout, use [chapters-epigraphs-implementation.md](../done/chapters-epigraphs-implementation.md).
+For milestone accounting of the shipped chapter/epigraph rollout, use [milestones.md](milestones.md).
 
 ## Problem
 

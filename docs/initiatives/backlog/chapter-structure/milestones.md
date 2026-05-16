@@ -3,7 +3,7 @@
 **Status:** Partial delivery complete — M1-M5 delivered, M6-M8 remain follow-up work
 
 This document tracks the current delivery state for first-class chapters and epigraphs.
-It exists to separate shipped milestone accounting from the remaining deferred follow-up plan in `../todo/chapters.md` and `../todo/epigraphs.md`.
+It exists to separate shipped milestone accounting from the remaining deferred follow-up plan in [prd.md](prd.md) and [architecture.md](architecture.md).
 
 ## Delivered Milestones
 
@@ -106,7 +106,7 @@ Current boundary:
 
 Evidence:
 
-- [docs/tools.md](../../tools.md)
+- [docs/agents/tools.md](../../agents/tools.md)
 - [src/tools/search.js](../../../src/tools/search.js)
 - [src/tools/styleguide.js](../../../src/tools/styleguide.js)
 - [src/tools/review-bundles.js](../../../src/tools/review-bundles.js)
@@ -155,7 +155,7 @@ Remaining work:
 
 ## Related
 
-- [chapters.md](../todo/chapters.md)
-- [epigraphs.md](../todo/epigraphs.md)
-- [completed-features.md](../completed-features.md)
+- [prd.md](prd.md)
+- [architecture.md](architecture.md)
+- [FEATURES.md](../../../../FEATURES.md)
 - [release-log.md](../../release-log.md)

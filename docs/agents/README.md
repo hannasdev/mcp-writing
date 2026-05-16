@@ -15,5 +15,5 @@ This section collects documentation primarily intended for AI agents and agent m
 
 ## Related References
 
-- [docs/tools.md](../tools.md) - Auto-generated tool catalog and parameter contracts.
-- [docs/setup.md](../setup.md) - Setup and import flows agents frequently reference.
+- [docs/setup.md](../setup.md) - Shipped setup guide covering prerequisites, setup flows, import paths, and runtime ownership expectations.
+- [tools.md](tools.md) - Auto-generated tool catalog and parameter contracts.

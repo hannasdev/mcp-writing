@@ -90,15 +90,15 @@ This complements `CHANGELOG.md`:
 
 ### 2026-05-05 — Split PRD overview from completed-feature archive
 
-- What changed: Restructured the top-level product overview into a lighter navigation document, moved completed-feature summaries into a dedicated `docs/prd/completed-features.md` index, replaced the inlined tool summary with a pointer to auto-generated `docs/tools.md`, and added a now-deferred PRD (`docs/prd/todo/client-agnostic-setup.md`) that defines a client-agnostic setup contract with client-hosted UI flows.
+- What changed: Restructured the top-level product overview into a lighter navigation document, moved shipped capability summaries into a dedicated `FEATURES.md` index, replaced the inlined tool summary with a pointer to auto-generated `docs/agents/tools.md`, and added a now-deferred initiative PRD (`docs/initiatives/backlog/client-agnostic-setup/prd.md`) that defines a client-agnostic setup contract with client-hosted UI flows.
 - Why it matters: Maintainers and contributors can navigate roadmap status faster, while setup direction now favors reusable MCP capabilities plus client-native onboarding UX instead of growing the tool list for first-run-only workflows.
 - Who is affected: Maintainers and contributors updating PRDs, setup UX direction, or roadmap documentation.
-- Action needed: Optional. Use `docs/prd/completed-features.md` for shipped capability summaries and keep `PRODUCT.md` focused on active direction and navigation.
+- Action needed: Optional. Use `FEATURES.md` for shipped capability summaries and keep `PRODUCT.md` focused on active direction and navigation.
 - PR: [#175](https://github.com/hannasdev/mcp-writing/pull/175)
 
 ### 2026-05-03 — Prose styleguide skill with formal output contract
 
-- What changed: Enhanced `skills/prose-styleguide/SKILL.md` generation to include a formal "Review Mode Output Contract" section with structured critique categories (Structural Issues, Convention Drift, Prose Issues) and sample feedback templates. Updated prose styleguide PRD status from in-progress to completed (tracked at `docs/prd/done/guideline-generation.md`) and annotated success criteria.
+- What changed: Enhanced `skills/prose-styleguide/SKILL.md` generation to include a formal "Review Mode Output Contract" section with structured critique categories (Structural Issues, Convention Drift, Prose Issues) and sample feedback templates. Updated prose styleguide PRD status from in-progress to completed (tracked at `docs/initiatives/done/guideline-generation/prd.md`) and annotated success criteria.
 - Why it matters: Authors and AI agents now have an explicit, verifiable specification for how styleguide critique is delivered, reducing ambiguity in feedback quality and making output predictable across sessions.
 - Who is affected: Users invoking prose styleguide review mode, and developers integrating styleguide feedback into editorial workflows.
 - Action needed: Optional. Existing styleguide configs remain compatible. To receive the enhanced review output contract specification, regenerate with `setup_prose_styleguide_skill(overwrite=true)`.

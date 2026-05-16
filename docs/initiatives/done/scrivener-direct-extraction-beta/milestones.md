@@ -398,5 +398,5 @@ All must be true before proposing graduation from beta status.
 ## Related
 
 - [scrivener-direct-extraction-beta.md](scrivener-direct-extraction-beta.md)
-- [../done/import-sync.md](../done/import-sync.md)
-- [../done/metadata.md](../done/metadata.md)
+- [import sync](../import-sync/prd.md)
+- [metadata architecture](../metadata-architecture/prd.md)

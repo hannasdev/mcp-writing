@@ -195,6 +195,7 @@ Returns:
 
 ## Related
 
-- [editing.md](editing.md) — Prose editing and git-backed provenance
-- [search-analysis.md](search-analysis.md) — Metadata-first retrieval model
-- [review-bundles-implementation.md](review-bundles-implementation.md) — Phase 4A.1 implementation checklist and tool contracts
+- [prose editing](../prose-editing/prd.md) — Prose editing and git-backed provenance
+- [search analysis](../search-analysis/prd.md) — Metadata-first retrieval model
+- [milestones.md](milestones.md) — Phase 4A.1 implementation checklist and tool contracts
+- [performance-analysis.md](performance-analysis.md) — M3 async evaluation and benchmark results

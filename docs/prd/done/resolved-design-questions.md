@@ -30,6 +30,6 @@ Questions that were raised during development and have been settled. Kept for re
 
 ## Related
 
-- [done/metadata.md](metadata.md)
-- [done/import-sync.md](import-sync.md)
-- [done/editing.md](editing.md)
+- [metadata architecture](../../initiatives/done/metadata-architecture/prd.md)
+- [import sync](../../initiatives/done/import-sync/prd.md)
+- [prose editing](../../initiatives/done/prose-editing/prd.md)

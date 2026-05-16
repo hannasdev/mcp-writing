@@ -173,7 +173,7 @@ Planned change set:
 
 3. Generated reference docs alignment
 
-- files: `docs/tools.md` (generated)
+- files: `docs/agents/tools.md` (generated)
 - changes:
   - regenerate docs so tool descriptions and workflow messaging match the new surface framing.
 
