@@ -131,7 +131,7 @@ export function registerSearchTools(s, {
   // ---- find_scenes ---------------------------------------------------------
   s.tool(
     "find_scenes",
-    "Find scenes by filtering on character, Save the Cat beat, tags, chapter identity, numeric compatibility chapter, or POV. Returns ordered scene metadata only — no prose. All filters are optional and combinable. Supports pagination via page/page_size and auto-paginates large result sets with total_count. Warns if any matching scenes have stale metadata. Response shape note: always returns a structured envelope (`results`, `total_count`, with pagination fields when paging is active).",
+    "Find scenes by filtering on character, Save the Cat beat, tags, chapter identity, numeric compatibility chapter, or POV. Returns ordered scene metadata only — no prose. Most filters are optional and combinable. `chapter_id` requires `project_id`, and mixed `chapter_id`/`chapter` filters must resolve to the same canonical chapter. Supports pagination via page/page_size and auto-paginates large result sets with total_count. Warns if any matching scenes have stale metadata. Response shape note: always returns a structured envelope (`results`, `total_count`, with pagination fields when paging is active).",
     {
       project_id: z.string().optional().describe("Project ID (e.g. 'the-lamb'). Use to scope results to one project."),
       character:  z.string().optional().describe("A character_id (e.g. 'char-mira-nystrom'). Returns only scenes that character appears in. Use list_characters first to find valid IDs."),
@@ -139,7 +139,7 @@ export function registerSearchTools(s, {
       tag:        z.string().optional().describe("Scene tag to filter by. Exact match."),
       part:       z.number().int().optional().describe("Part number (integer, e.g. 1). Chapters are numbered globally across the whole project."),
       chapter:    z.number().int().optional().describe("Compatibility chapter number resolved from canonical chapter sort order."),
-      chapter_id: z.string().optional().describe("Canonical chapter identifier. Use list_chapters to find valid values."),
+      chapter_id: z.string().optional().describe("Canonical chapter identifier. Requires project_id. Use list_chapters to find valid values."),
       pov:        z.string().optional().describe("POV character_id. Use list_characters first to find valid IDs."),
       page:       z.number().int().min(1).optional().describe("Optional page number for paginated responses (1-based)."),
       page_size:  z.number().int().min(1).max(200).optional().describe("Optional page size for paginated responses (default: 20, max: 200)."),

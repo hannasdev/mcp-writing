@@ -1105,7 +1105,8 @@ function resolveCanonicalChapterRecord(db, {
       && existingTitleSourcePath
       && fs.existsSync(path.join(syncDir, existingTitleSourcePath))
     );
-    if (!existingTitleSourceExists || existingTitleSourcePath === normalizedSourcePath) {
+    const canReuseByTitle = allowSourcePathMatch || byTitle[0].sort_index === sortIndex;
+    if (canReuseByTitle && (!existingTitleSourceExists || existingTitleSourcePath === normalizedSourcePath)) {
       return {
         ...byTitle[0],
         chapter_id: byTitle[0].chapter_id,
@@ -1237,10 +1238,11 @@ export function indexSceneFile(db, syncDir, file, meta, prose) {
         chapterId,
         targetSortIndex: chapterSortIndex,
       });
-      const chapterChecksum = checksumProse(`${chapterSortIndex}:${chapterTitle}:${meta.chapter_logline ?? ""}`);
       const existingChapter = db.prepare(
-        `SELECT source_checksum, metadata_stale FROM chapters WHERE chapter_id = ? AND project_id = ?`
+        `SELECT logline, source_checksum, metadata_stale FROM chapters WHERE chapter_id = ? AND project_id = ?`
       ).get(chapterId, project_id);
+      const chapterLogline = meta.chapter_logline ?? existingChapter?.logline ?? null;
+      const chapterChecksum = checksumProse(`${chapterSortIndex}:${chapterTitle}:${chapterLogline ?? ""}`);
       db.prepare(`
         INSERT INTO chapters (
           chapter_id, project_id, title, sort_index, logline, source_path, source_checksum, metadata_stale, updated_at
@@ -1261,7 +1263,7 @@ export function indexSceneFile(db, syncDir, file, meta, prose) {
         project_id,
         chapterTitle,
         chapterSortIndex,
-        meta.chapter_logline ?? null,
+        chapterLogline,
         chapterSourcePath,
         chapterChecksum,
         existingChapter && existingChapter.source_checksum !== chapterChecksum ? 1 : 0,
@@ -1538,7 +1540,7 @@ const WARNING_PATTERNS = [
   { type: "no_scene_id",            re: /^Skipped \(no scene_id\):/  },
   { type: "duplicate_scene_id",     re: /^Duplicate scene_id/        },
   { type: "path_metadata_mismatch", re: /^Path\/metadata mismatch/   },
-  { type: "chapter_structure",      re: /^(Chapter structure warning|Epigraph requires explicit chapter linkage|Epigraph references unknown chapter_id|Ambiguous chapter linkage)/ },
+  { type: "chapter_structure",      re: /^(Chapter structure warning|Epigraph requires explicit chapter linkage|Epigraph references unknown chapter_id|Ambiguous chapter linkage|Epigraph identity conflict)/ },
   { type: "moved_scene",            re: /^Moved scene detected:/      },
   { type: "orphaned_sidecar",       re: /^Orphaned sidecar/          },
   { type: "nested_mirror",          re: /^Ignored nested mirror path:/ },
