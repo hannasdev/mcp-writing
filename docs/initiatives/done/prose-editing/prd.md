@@ -72,7 +72,7 @@ Shows how the relationship between two characters evolves across scenes with sta
 - [x] Implement `propose_edit`, `commit_edit`, `discard_edit` (git commit as pre-edit snapshot)
 - [x] Implement `snapshot_scene`, `list_snapshots`, `get_scene_prose(scene_id, commit?)`
 - [ ] Warn at startup if sync folder has no git remote configured
-- [ ] Decide on proposal persistence model (Open Question C)
+- [ ] Revisit proposal persistence only if restart-related proposal loss becomes a demonstrated workflow problem
 
 ## Metadata & Prose Interaction
 

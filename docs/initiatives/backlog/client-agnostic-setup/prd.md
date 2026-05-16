@@ -23,6 +23,8 @@ The current product has durable setup-related capabilities, but the user experie
 - first-run setup is structurally different from day-to-day usage
 - setup questions are better expressed as structured UI than as tool-parameter discovery
 - adding more onboarding-only tools creates long-term surface area for short-lived tasks
+- first-run project setup still expects too many manual steps such as git initialization, folder preparation, and Scrivener sync configuration
+- runtime permission problems are diagnosable today, but recovery guidance is still more operational than guided
 
 This is especially true for prose styleguide setup and related project conventions:
 - the resulting config matters continuously after setup
@@ -106,6 +108,17 @@ Client responsibilities:
 - surface validation errors clearly
 
 The client owns the presentation layer. It does not invent the rules.
+
+### Question model expectations
+
+The shared contract should preserve a few useful onboarding behaviors from the earlier styleguide-focused proposal:
+
+- ask writing language first when language meaningfully affects defaults
+- turn inferred defaults into explicit reviewable "keep or change" decisions rather than silent automation
+- reserve fully explicit questions for values that are not meaningfully inferable, such as tense, POV, number style, ellipsis style, and sentence-fragment tolerance
+- allow project-specific freeform notes where a client needs to capture voice or nuance that does not belong in enumerated convention fields
+
+For prose styleguide setup, language-aware defaults should reduce blank-form fatigue without pretending they are authoritative. Nested quotation behavior and related convention details may be inferred from the primary quotation choice, but should remain overridable.
 
 ### 3. Canonical project artifacts
 
@@ -199,7 +212,7 @@ The flow should cover:
 1. Choose scope and project path context where needed.
 2. Choose language.
 3. Apply language-aware defaults.
-4. Confirm or override high-impact conventions.
+4. Confirm or override high-impact conventions through structured "keep or change" review.
 5. Optionally bootstrap from existing prose.
 6. Preview the resulting config.
 7. Write canonical config artifacts.
@@ -230,6 +243,7 @@ Clients should be able to launch the setup flow from:
 - first-run detection
 - missing config during an editing workflow
 - invalid config or drift checks
+- permission or ownership diagnostics that indicate the runtime cannot safely write the expected project artifacts
 
 The key behavior distinction:
 - blocking setup should interrupt only when the runtime truly cannot proceed
@@ -246,6 +260,7 @@ For styleguide setup, default behavior remains advisory in `warn` mode and block
 - lets different clients provide native-feeling setup without forking the product model
 - keeps source of truth in real project files
 - makes setup easier to evolve without changing the core protocol each time
+- creates a clearer place to surface recovery guidance for permission/ownership problems instead of leaving users with raw diagnostics alone
 
 ### Costs
 
@@ -270,8 +285,6 @@ Near-term migration:
 - keep existing config artifacts
 - stop planning large onboarding-only additions to the MCP surface
 - move future setup guidance toward client-hosted flows backed by a shared contract
-
-The previous onboarding framework document can remain as historical design context, but this PRD should become the active direction for setup architecture.
 
 ## Open Questions
 

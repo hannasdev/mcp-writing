@@ -22,7 +22,7 @@ This is not documentation. It is a runtime affordance — a call the AI can make
 
 ## Non-goals
 
-- Composite tools that execute multi-step workflows automatically. That is a separate feature (see [ideas-and-questions.md](../inbox/ideas-and-questions.md)).
+- Composite tools that execute multi-step workflows automatically. That is a separate future direction and is not part of this initiative.
 - MCP Prompts (protocol-level). Client support in VS Code Copilot is incomplete. Tools work everywhere.
 - Replacing `get_runtime_config`. That tool is for path diagnostics. This one is for navigation.
 - Documenting every tool. The workflow map covers task-level flows, not individual tool parameters.

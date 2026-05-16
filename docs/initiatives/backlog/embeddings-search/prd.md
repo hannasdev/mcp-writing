@@ -11,6 +11,11 @@ SQLite FTS5 works well for keyword-based metadata search and title/logline match
 
 These require understanding meaning, not just keyword presence.
 
+This direction is also the most plausible home for future comparative reading tools such as:
+- compare two scenes for prose-style similarity
+- compare character behavior consistency across scenes
+- surface setting or atmosphere contrast without relying on exact shared keywords
+
 ## Design Questions
 
 - Should embeddings index prose only, or also metadata (loglines, character notes)?

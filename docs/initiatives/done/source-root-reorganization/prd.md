@@ -1,4 +1,4 @@
-# Root Structure Reorganization
+# Source-Root Reorganization
 
 **Status:** ✅ Done
 
@@ -309,6 +309,6 @@ Because phases are incremental and behavior-neutral, rollback should be low-cost
 
 ## Related
 
-- [./refactoring.md](./refactoring.md)
+- [Codebase Modularization](../codebase-modularization/prd.md)
 - [../../guides/development.md](../../guides/development.md)
 - [../../../AGENTS.md](../../../AGENTS.md)

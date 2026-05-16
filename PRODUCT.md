@@ -41,5 +41,4 @@ For structural manuscript state, use [Managed Structure Contract](docs/foundatio
 - [Features](FEATURES.md) — shipped product capabilities and links to completed initiative docs
 - [Backlog](BACKLOG.md) — deferred product work that is not currently active
 - [Managed Structure Contract](docs/foundations/managed-structure-contract.md) — design boundaries for structural mutation, generated transparency, import, and maintenance workflows
-- [Open Ideas](docs/prd/inbox/ideas-and-questions.md) — design questions, feature ideas
-- [Workflow Discovery](docs/prd/done/describe-workflows.md) — `describe_workflows` tool, entry-point for AI navigation
+- [Agent Tool Reference](docs/agents/tools.md) — generated tool catalog including `describe_workflows`, the main AI navigation entry-point

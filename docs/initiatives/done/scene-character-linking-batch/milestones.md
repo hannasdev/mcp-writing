@@ -176,7 +176,7 @@ Use focused PRs with one concern each.
 
 ## Related
 
-- [scene-character-linking-batch.md](scene-character-linking-batch.md)
+- [prd.md](prd.md)
 - [scrivener-direct-extraction-beta-implementation.md](scrivener-direct-extraction-beta-implementation.md)
 - [metadata architecture](../../initiatives/done/metadata-architecture/prd.md)
 - [import sync](../../initiatives/done/import-sync/prd.md)

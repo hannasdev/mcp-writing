@@ -354,6 +354,6 @@ Those questions matter, but they should follow from the usability model rather t
 
 ## Related Planning
 
-Implementation-oriented milestone planning for this PRD lives in [mcp-tooling-usability-milestones.md](./mcp-tooling-usability-milestones.md).
+Implementation-oriented milestone planning for this PRD lives in [milestones.md](./milestones.md).
 
 That companion document breaks the direction in this PRD into user-value milestones, related tools, and likely scopes of change so implementation planning can happen without reopening the full conceptual discussion each time.

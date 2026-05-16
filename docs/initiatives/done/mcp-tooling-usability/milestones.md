@@ -1,7 +1,7 @@
 # MCP Tooling Usability Milestones (mcp-writing)
 
 Date: 2026-05-01
-Companion to: [mcp-tooling-usability.md](./mcp-tooling-usability.md)
+Companion to: [prd.md](./prd.md)
 
 ## Purpose
 

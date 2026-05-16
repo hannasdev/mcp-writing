@@ -1,4 +1,4 @@
-# Targets for refactoring
+# Codebase Modularization
 
 **Status:** ✅ Done — All structural refactors complete. #10 (node:sqlite flag) is a passive monitoring note, not a work item.
 

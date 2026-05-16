@@ -120,9 +120,8 @@ Follow-up work:
 
 ## Additional Completed References
 
-- [Workflow Discovery](docs/prd/done/describe-workflows.md)
-- [Root Structure Reorganization](docs/prd/done/root-structure-reorganization.md)
-- [MCP Tooling Usability](docs/prd/done/mcp-tooling-usability.md)
-- [MCP Tooling Usability Milestones](docs/prd/done/mcp-tooling-usability-milestones.md)
-- [Refactoring](docs/prd/done/refactoring.md)
-- [Resolved Design Questions](docs/prd/done/resolved-design-questions.md)
+- [Agent Tool Reference](docs/agents/tools.md)
+- [Source-Root Reorganization](docs/initiatives/done/source-root-reorganization/prd.md)
+- [MCP Tooling Usability](docs/initiatives/done/mcp-tooling-usability/prd.md)
+- [MCP Tooling Usability Milestones](docs/initiatives/done/mcp-tooling-usability/milestones.md)
+- [Codebase Modularization](docs/initiatives/done/codebase-modularization/prd.md)
