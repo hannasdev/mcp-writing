@@ -316,7 +316,7 @@ export function registerSearchTools(s, {
   // ---- get_chapter_prose ---------------------------------------------------
   s.tool(
     "get_chapter_prose",
-    `Load the full prose for every scene in a chapter, concatenated in order. Canonical targeting uses chapter_id; numeric chapter remains available as a compatibility alias resolved from chapter sort order. Expensive — only use when you need to read an entire chapter. Capped at ${MAX_CHAPTER_SCENES} scenes. Use find_scenes first to confirm the chapter exists.`,
+    `Load the full prose for every scene in a chapter, concatenated in order. Provide chapter_id or chapter, plus project_id. Canonical targeting uses chapter_id; numeric chapter remains available as a compatibility alias resolved from canonical sort order. Expensive — only use when you need to read an entire chapter. Capped at ${MAX_CHAPTER_SCENES} scenes. Use find_scenes first to confirm the chapter exists.`,
     {
       project_id: z.string().describe("Project ID (e.g. 'the-lamb')."),
       chapter_id: z.string().optional().describe("Canonical chapter identifier."),

@@ -216,7 +216,7 @@ Load the full prose text of a single scene. Use this for close reading, continui
 
 ## get_chapter_prose
 
-Load the full prose for every scene in a chapter, concatenated in order. Canonical targeting uses chapter_id; numeric chapter remains available as a compatibility alias resolved from chapter sort order. Expensive — only use when you need to read an entire chapter. Capped at 10 scenes. Use find_scenes first to confirm the chapter exists.
+Load the full prose for every scene in a chapter, concatenated in order. Provide chapter_id or chapter, plus project_id. Canonical targeting uses chapter_id; numeric chapter remains available as a compatibility alias resolved from canonical sort order. Expensive — only use when you need to read an entire chapter. Capped at 10 scenes. Use find_scenes first to confirm the chapter exists.
 
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |

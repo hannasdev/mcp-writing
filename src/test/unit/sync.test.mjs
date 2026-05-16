@@ -2013,6 +2013,50 @@ describe("syncAll", () => {
     fs.rmSync(dir, { recursive: true });
   });
 
+  test("does not let legacy chapter fields overwrite an explicit canonical chapter_id target", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sync-"));
+    const db = openDb(":memory:");
+    const chapterDir = path.join(dir, "projects", "test-novel", "Draft", "01-Known chapter");
+    fs.mkdirSync(chapterDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(chapterDir, "seed.md"),
+      "---\nscene_id: sc-seed\ntitle: Seed\n---\nSeed prose."
+    );
+
+    syncAll(db, dir, { quiet: true });
+
+    const scenePath = path.join(dir, "projects", "test-novel", "scenes", "sc-001.md");
+    fs.mkdirSync(path.dirname(scenePath), { recursive: true });
+    fs.writeFileSync(
+      scenePath,
+      "---\nscene_id: sc-001\ntitle: Conflicting Legacy Fields\nchapter_id: ch-01-known-chapter\nchapter: 99\nchapter_title: Wrong Chapter\n---\nProse."
+    );
+
+    syncAll(db, dir, { quiet: true });
+
+    const chapter = db.prepare(`
+      SELECT chapter_id, sort_index, title
+      FROM chapters
+      WHERE chapter_id = 'ch-01-known-chapter' AND project_id = 'test-novel'
+    `).get();
+    const scene = db.prepare(`
+      SELECT scene_id, chapter_id, chapter, chapter_title
+      FROM scenes
+      WHERE scene_id = 'sc-001' AND project_id = 'test-novel'
+    `).get();
+
+    assert.equal(chapter.chapter_id, "ch-01-known-chapter");
+    assert.equal(chapter.sort_index, 1);
+    assert.equal(chapter.title, "Known Chapter");
+    assert.equal(scene.scene_id, "sc-001");
+    assert.equal(scene.chapter_id, "ch-01-known-chapter");
+    assert.equal(scene.chapter, 1);
+    assert.equal(scene.chapter_title, "Known Chapter");
+
+    db.close();
+    fs.rmSync(dir, { recursive: true });
+  });
+
   test("warns instead of reassigning an epigraph_id that already belongs to another chapter", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sync-"));
     const db = openDb(":memory:");

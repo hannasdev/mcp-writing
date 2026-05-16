@@ -1209,6 +1209,25 @@ export function indexSceneFile(db, syncDir, file, meta, prose) {
   const chapterSourcePath = chapterStructure.chapter?.folder_key ?? path.dirname(file);
   const allowChapterSourcePathMatch = chapterStructure.chapter?.source_kind === "chapter_folder";
   let chapterWarning = null;
+  const explicitSceneChapterId = !chapterStructure.isEpigraph ? meta.chapter_id ?? null : null;
+  let explicitSceneCanonicalChapter = null;
+
+  if (explicitSceneChapterId && !chapterStructure.chapter) {
+    explicitSceneCanonicalChapter = db.prepare(`
+      SELECT chapter_id, sort_index, title
+      FROM chapters
+      WHERE chapter_id = ? AND project_id = ?
+    `).get(explicitSceneChapterId, project_id);
+    if (explicitSceneCanonicalChapter) {
+      chapterId = explicitSceneCanonicalChapter.chapter_id;
+      chapterSortIndex = explicitSceneCanonicalChapter.sort_index ?? null;
+      chapterTitle = explicitSceneCanonicalChapter.title ?? null;
+    } else {
+      // Scene-level explicit chapter links must target an existing canonical chapter.
+      chapterSortIndex = null;
+      chapterTitle = null;
+    }
+  }
   const derivedChapterId = (
     chapterId
     ?? (chapterSortIndex != null && chapterTitle
@@ -1216,7 +1235,7 @@ export function indexSceneFile(db, syncDir, file, meta, prose) {
       : null)
   );
 
-  if (chapterSortIndex != null && chapterTitle) {
+  if (!explicitSceneCanonicalChapter && chapterSortIndex != null && chapterTitle) {
     const canonicalChapter = resolveCanonicalChapterRecord(db, {
       syncDir,
       projectId: project_id,

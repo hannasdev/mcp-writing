@@ -296,6 +296,15 @@ describe("canonical chapter and epigraph tools", () => {
     assert.equal(epigraphsParsed.error.code, "VALIDATION_ERROR");
   });
 
+  test("requires chapter_id or chapter for get_chapter_prose", async () => {
+    const chapterProseText = await callWriteTool("get_chapter_prose", {
+      project_id: "test-novel",
+    });
+    const chapterProseParsed = JSON.parse(chapterProseText);
+    assert.equal(chapterProseParsed.ok, false);
+    assert.equal(chapterProseParsed.error.code, "VALIDATION_ERROR");
+  });
+
   test("indexes explicit epigraph files and returns them through find_epigraphs", async () => {
     const chapterDir = path.join(writeSyncDir, "projects", "test-novel", "Draft", "03-A New Dawn");
     fs.mkdirSync(chapterDir, { recursive: true });
