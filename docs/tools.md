@@ -185,7 +185,7 @@ Re-derive lightweight scene metadata from current prose (logline and character m
 
 ## find_scenes
 
-Find scenes by filtering on character, Save the Cat beat, tags, chapter identity, numeric compatibility chapter, or POV. Returns ordered scene metadata only — no prose. All filters are optional and combinable. Supports pagination via page/page_size and auto-paginates large result sets with total_count. Warns if any matching scenes have stale metadata. Response shape note: always returns a structured envelope (`results`, `total_count`, with pagination fields when paging is active).
+Find scenes by filtering on character, Save the Cat beat, tags, chapter identity, numeric compatibility chapter, or POV. Returns ordered scene metadata only — no prose. Most filters are optional and combinable. `chapter_id` requires `project_id`, and mixed `chapter_id`/`chapter` filters must resolve to the same canonical chapter. Supports pagination via page/page_size and auto-paginates large result sets with total_count. Warns if any matching scenes have stale metadata. Response shape note: always returns a structured envelope (`results`, `total_count`, with pagination fields when paging is active).
 
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |
@@ -195,7 +195,7 @@ Find scenes by filtering on character, Save the Cat beat, tags, chapter identity
 | `tag` | `string` | No | Scene tag to filter by. Exact match. |
 | `part` | `integer` | No | Part number (integer, e.g. 1). Chapters are numbered globally across the whole project. |
 | `chapter` | `integer` | No | Compatibility chapter number resolved from canonical chapter sort order. |
-| `chapter_id` | `string` | No | Canonical chapter identifier. Use list_chapters to find valid values. |
+| `chapter_id` | `string` | No | Canonical chapter identifier. Requires project_id. Use list_chapters to find valid values. |
 | `pov` | `string` | No | POV character_id. Use list_characters first to find valid IDs. |
 | `page` | `integer` | No | Optional page number for paginated responses (1-based). |
 | `page_size` | `integer` | No | Optional page size for paginated responses (default: 20, max: 200). |
