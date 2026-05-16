@@ -33,6 +33,7 @@ Use this decision order to choose tools quickly:
 ## Documentation
 
 For complete details, see:
-- [PRD.md](../PRD.md) — Product overview and roadmap
+- [PRODUCT.md](../PRODUCT.md) — Product overview and active design direction
+- [BACKLOG.md](../BACKLOG.md) — Deferred roadmap work that is not currently active
 - [docs/agents/tools.md](../docs/agents/tools.md) — Full tool reference
 - [AGENTS.md](../AGENTS.md) — Project-specific agent guidance (development workflow)
