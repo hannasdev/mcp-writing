@@ -45,7 +45,7 @@ Instead of feeding an entire manuscript to an AI and hoping it fits in the conte
 | [docs/guides/setup.md](docs/guides/setup.md) | Prerequisites, first-time setup, Scrivener import, native sync format |
 | [mcp-writing-vscode](https://github.com/hannasdev/mcp-writing-vscode) | VS Code extension for client-native setup flows |
 | [docs/guides/docker.md](docs/guides/docker.md) | Docker Compose, OpenClaw integration, SSH hardening |
-| [docs/foundations/data-ownership.md](docs/foundations/data-ownership.md) | Ownership boundaries for prose, metadata, import-managed fields, and generated artifacts |
+| [docs/foundations/managed-structure-contract.md](docs/foundations/managed-structure-contract.md) | Design boundaries for structural mutation, generated views, import, and maintenance workflows |
 | [docs/agents/tools.md](docs/agents/tools.md) | Full tool reference — auto-generated from source |
 | [docs/agents/README.md](docs/agents/README.md) | Index of agent-focused guidance, examples, and boot files |
 | [docs/agents/use-cases.md](docs/agents/use-cases.md) | Agent-oriented transcripts and prompt/tooling examples |

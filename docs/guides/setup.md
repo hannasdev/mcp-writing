@@ -8,7 +8,7 @@
 - [Direct Scrivener project merge](#direct-scrivener-project-merge)
 - [Compatibility notes and fallback](#compatibility-notes-and-fallback)
 - [Advanced: Native sync format](#advanced-native-sync-format)
-- [Data ownership](foundations/data-ownership.md)
+- [Managed structure contract](../foundations/managed-structure-contract.md)
 
 ---
 

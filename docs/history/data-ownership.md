@@ -1,18 +1,21 @@
-# Data Ownership
+# Historical Data Ownership Map
 
-**Status:** Design reference
+**Status:** Historical implementation context
 
-This document applies the [Managed Structure Contract](./managed-structure-contract.md) to the repository's current file shapes and tool behaviors.
-Use it when you need a concrete answer to "who is allowed to write this artifact, and through what path?"
+This document records an earlier current-state ownership map for repository file shapes and tool behaviors.
+It is not authoritative for future structural design decisions.
+
+Use [Managed Structure Contract](../foundations/managed-structure-contract.md) as the governing design reference for structural manuscript state, trusted mutation paths, generated views, import boundaries, and AI/human workflow guardrails.
+If this document conflicts with the Managed Structure Contract, the Managed Structure Contract takes precedence.
 
 ## Purpose
 
-The goal is not to bless file editing as the primary interface.
-The goal is to clarify present-day ownership boundaries so humans, AI agents, import workflows, and maintenance workflows do not work against each other.
+The goal was not to bless file editing as the primary interface.
+The goal was to clarify ownership boundaries that existed when this map was written, so humans, AI agents, import workflows, and maintenance workflows did not work against each other.
 
-This document is intentionally operational:
-- the Managed Structure Contract defines the high-level doctrine
-- this document maps that doctrine onto today's prose files, sidecars, world docs, generated docs, and import flows
+This document is intentionally operational and historical:
+- the Managed Structure Contract defines the current high-level doctrine
+- this document preserves prior implementation context for prose files, sidecars, world docs, generated docs, and import flows
 
 ## Ownership Model
 
@@ -169,15 +172,15 @@ Not allowed:
 4. If an import owns a field, assume re-import may overwrite local edits to that field.
 5. If no sanctioned structural workflow exists, surface that gap instead of improvising a direct AI file edit.
 
-## Relationship to Existing Docs
+## Relationship to Current Docs
 
-- [Managed Structure Contract](./managed-structure-contract.md) is the governing doctrine.
-- [Setup Guide](../guides/setup.md) explains how these boundaries show up during first-time setup and Scrivener import.
-- Metadata and import initiative docs record how the current behavior evolved, but this document defines the present ownership interpretation.
+- [Managed Structure Contract](../foundations/managed-structure-contract.md) is the governing doctrine for future decisions.
+- [Setup Guide](../guides/setup.md) explains supported first-time setup and Scrivener import workflows.
+- Metadata and import initiative docs record how earlier behavior evolved; this document preserves historical implementation context and should not be treated as the present or future ownership contract.
 
 ## Related
 
-- [Managed Structure Contract](./managed-structure-contract.md)
+- [Managed Structure Contract](../foundations/managed-structure-contract.md)
 - [Setup Guide](../guides/setup.md)
 - [Product Overview](../../PRODUCT.md)
 - [Metadata Architecture & Ownership](../initiatives/done/metadata-architecture/prd.md)

@@ -195,7 +195,7 @@ Implications:
 ## Data Ownership and Safety
 
 1. Writes only to scene sidecars (`.meta.yaml`), never scene prose.
-2. Uses same ownership boundaries documented in `docs/foundations/data-ownership.md`.
+2. Uses the historical ownership boundaries documented in `docs/history/data-ownership.md` as implementation context for this completed work.
 3. Honors read-only sync dir behavior with `READ_ONLY` envelope.
 4. Default mode is `dry_run=true` to avoid accidental mass writes.
 5. Enforce `max_scenes` as a hard validation guardrail: if the resolved target set exceeds the limit, return `VALIDATION_ERROR` with the matched count and require the caller to rerun with a higher explicit limit.
@@ -269,5 +269,5 @@ No open questions for v1.
 
 - [metadata architecture](../../initiatives/done/metadata-architecture/prd.md) - sidecar ownership, staleness, enrich behavior
 - [import sync](../../initiatives/done/import-sync/prd.md) - indexing and reconciliation model
-- [Data ownership](../../foundations/data-ownership.md) - current ownership boundaries for import-managed fields, MCP-managed metadata, and authored prose
+- [Historical data ownership map](../../../history/data-ownership.md) - implementation context for the ownership boundaries used when this work was designed
 - [search analysis](../../initiatives/done/search-analysis/prd.md) - current metadata reasoning tools
