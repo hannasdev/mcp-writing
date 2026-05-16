@@ -14,7 +14,7 @@ This complements `CHANGELOG.md`:
 - Why it matters: Maintainers and contributors now have a cleaner map of what is current product direction, what is shipped, what is deferred, and which document governs future structural design decisions.
 - Who is affected: Maintainers and contributors updating roadmap docs, design references, setup guidance, or agent-facing documentation.
 - Action needed: Use `PRODUCT.md` for active direction, `FEATURES.md` for shipped capability summaries, `BACKLOG.md` for deferred work, and `docs/foundations/managed-structure-contract.md` for future structural design decisions.
-- PR: TBD
+- PR: [#194](https://github.com/hannasdev/mcp-writing/pull/194)
 
 ### 2026-05-15 — Add canonical chapter and epigraph indexing
 
