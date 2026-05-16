@@ -8,6 +8,14 @@ This complements `CHANGELOG.md`:
 
 ## Unreleased
 
+### 2026-05-16 — Align release-log skill guidance with the root log file
+
+- What changed: Updated the PR-description and release-log skills so maintainer-facing PR guidance points to `release-log.md` instead of the old `docs/release-log.md` path.
+- Why it matters: Future PRs and AI-assisted maintainer workflows now update the actual human release log instead of following stale instructions.
+- Who is affected: Maintainers and contributors preparing PR descriptions or release-log entries.
+- Action needed: None.
+- PR: TBD
+
 ### 2026-05-16 — Reorganize product docs around managed structure design
 
 - What changed: Reworked the product documentation set around `PRODUCT.md`, `FEATURES.md`, `BACKLOG.md`, and the new `docs/foundations/managed-structure-contract.md`; moved guides, agent docs, and initiative PRDs into clearer directories; and reclassified the old data-ownership writeup as historical context instead of an active design authority.

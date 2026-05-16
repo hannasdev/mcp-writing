@@ -28,7 +28,7 @@ Before writing the release log entry:
 2. Review the PR description (`Summary`, `Motivation`, `Implementation`, `Testing`, `Risks and tradeoffs`, `Follow-up`).
 3. Identify concrete user or maintainer value.
 4. Identify who is affected and whether any action is required.
-5. Add/update one entry in `docs/release-log.md` under `## Unreleased`.
+5. Add/update one entry in `release-log.md` under `## Unreleased`.
 
 ## Entry format
 
@@ -64,7 +64,7 @@ Bad:
 
 ## Final response after updating release log
 
-After updating `docs/release-log.md`, summarize:
+After updating `release-log.md`, summarize:
 - the new release-log entry title/date;
 - intended audience;
 - any required user action (or `None`).
