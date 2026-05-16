@@ -94,6 +94,11 @@ function slugifyChapterValue(value) {
     .replace(/^-+|-+$/g, "");
 }
 
+function isExplicitChapterContainer(parts, index) {
+  const parent = parts[index - 1]?.toLowerCase() ?? null;
+  return parent === "draft" || parent === "scenes";
+}
+
 export function inferChapterStructureFromPath(syncDir, filePath, meta = {}) {
   const rel = path.relative(syncDir, filePath);
   const parts = rel.split(path.sep);
@@ -120,7 +125,7 @@ export function inferChapterStructureFromPath(syncDir, filePath, meta = {}) {
     if (!match) {
       match = segment.match(/^chapter-(\d+)(?:-(.+))?$/i);
     }
-    if (!match) continue;
+    if (!match || !isExplicitChapterContainer(parts, index)) continue;
 
     chapterFolder = segment;
     chapterSortIndex = Number.parseInt(match[1], 10);
@@ -1094,13 +1099,25 @@ function resolveCanonicalChapterRecord(db, {
   `).all(projectId, title);
 
   if (byTitle.length === 1) {
-    return {
-      ...byTitle[0],
-      chapter_id: byTitle[0].chapter_id,
-      title,
-      sort_index: sortIndex,
-      source_path: normalizedSourcePath,
-    };
+    const existingTitleSourcePath = byTitle[0].source_path ?? null;
+    const existingTitleSourceExists = Boolean(
+      syncDir
+      && existingTitleSourcePath
+      && fs.existsSync(path.join(syncDir, existingTitleSourcePath))
+    );
+    if (!existingTitleSourceExists || existingTitleSourcePath === normalizedSourcePath) {
+      return {
+        ...byTitle[0],
+        chapter_id: byTitle[0].chapter_id,
+        title,
+        sort_index: sortIndex,
+        source_path: normalizedSourcePath,
+      };
+    }
+  }
+
+  if (byTitle.length > 1) {
+    return null;
   }
 
   const bySortIndex = db.prepare(`
@@ -1282,7 +1299,11 @@ export function indexSceneFile(db, syncDir, file, meta, prose) {
       WHERE chapter_id = ? AND project_id = ?
     `).get(chapterId, project_id);
 
-    if (epigraphById && epigraphByChapter && epigraphById.epigraph_id !== epigraphByChapter.epigraph_id) {
+    if (
+      epigraphById
+      && epigraphById.chapter_id !== chapterId
+      && (!epigraphByChapter || epigraphByChapter.epigraph_id !== epigraphById.epigraph_id)
+    ) {
       return {
         isStale: 0,
         skippedAsEpigraph: true,
@@ -1517,7 +1538,7 @@ const WARNING_PATTERNS = [
   { type: "no_scene_id",            re: /^Skipped \(no scene_id\):/  },
   { type: "duplicate_scene_id",     re: /^Duplicate scene_id/        },
   { type: "path_metadata_mismatch", re: /^Path\/metadata mismatch/   },
-  { type: "chapter_structure",      re: /^(Chapter structure warning|Epigraph requires explicit chapter linkage)/ },
+  { type: "chapter_structure",      re: /^(Chapter structure warning|Epigraph requires explicit chapter linkage|Epigraph references unknown chapter_id|Ambiguous chapter linkage)/ },
   { type: "moved_scene",            re: /^Moved scene detected:/      },
   { type: "orphaned_sidecar",       re: /^Orphaned sidecar/          },
   { type: "nested_mirror",          re: /^Ignored nested mirror path:/ },
