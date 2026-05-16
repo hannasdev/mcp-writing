@@ -2,25 +2,21 @@ import { test, describe, before, after } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import os from "node:os";
 import { createTestContext } from "../helpers/server.js";
 
 const ctx = createTestContext(3073, 3072);
-let writeSyncDir, readSyncDir;
+let writeSyncDir;
 
 before(async () => {
   await ctx.setup();
   writeSyncDir = ctx.writeSyncDir;
-  readSyncDir = ctx.readSyncDir;
 });
 
 after(async () => {
   await ctx.teardown();
 });
 
-const callTool = (n, a) => ctx.callTool(n, a);
 const callWriteTool = (n, a) => ctx.callWriteTool(n, a);
-const waitForAsyncJob = (id, t) => ctx.waitForAsyncJob(id, t);
 describe("update_scene_metadata tool", () => {
   test("updates logline and reflects in find_scenes", async () => {
     const newLogline = "Elena stands alone at the edge of the harbor, watching the ship leave.";
@@ -79,6 +75,27 @@ describe("update_scene_metadata tool", () => {
     });
     const parsed = JSON.parse(findText);
     assert.ok(parsed.results.some((row) => row.scene_id === "sc-unchaptered"));
+  });
+
+  test("rejects conflicting mixed chapter filters", async () => {
+    const chaptersText = await callWriteTool("list_chapters", { project_id: "test-novel" });
+    const chaptersParsed = JSON.parse(chaptersText);
+    const firstChapter = chaptersParsed.results.find((row) => row.sort_index === 1);
+    assert.ok(firstChapter);
+
+    const text = await callWriteTool("update_scene_metadata", {
+      scene_id: "sc-001",
+      project_id: "test-novel",
+      fields: {
+        chapter_id: firstChapter.chapter_id,
+        chapter: 2,
+      },
+    });
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.ok, false);
+    assert.equal(parsed.error.code, "VALIDATION_ERROR");
+    assert.match(parsed.error.message, /must refer to the same canonical chapter/);
   });
 });
 

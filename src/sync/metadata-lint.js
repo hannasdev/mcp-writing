@@ -76,7 +76,9 @@ const epigraphSchema = z.object({
   type: z.literal("epigraph").optional(),
   epigraph_id: z.string().min(1).optional(),
   scene_id: z.string().min(1).optional(),
+  chapter: z.number().int().positive().optional(),
   chapter_id: z.string().min(1).optional(),
+  chapter_title: z.string().min(1).optional(),
   characters: z.array(z.string().min(1)).optional(),
   tags: z.array(z.string().min(1)).optional(),
 });

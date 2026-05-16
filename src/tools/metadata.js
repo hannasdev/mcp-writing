@@ -3,7 +3,7 @@ import fs from "node:fs";
 import matter from "gray-matter";
 import { readMeta, writeMeta, indexSceneFile, normalizeSceneMetaForPath } from "../sync/sync.js";
 import { validateProjectId, validateUniverseId } from "../sync/importer.js";
-import { resolveChapterByCompatibilityKey } from "../core/chapter-resolution.js";
+import { resolveValidatedChapterFilter } from "../core/chapter-resolution.js";
 import {
   persistSceneReferenceLink,
   upsertExplicitReferenceLinkRow,
@@ -546,13 +546,41 @@ export function registerMetadataTools(s, {
         const { meta } = readMeta(scene.file_path, SYNC_DIR, { writable: true });
         const nextFields = { ...fields };
 
+        if (fields.chapter_id === null && fields.chapter !== undefined) {
+          return errorResponse(
+            "VALIDATION_ERROR",
+            "chapter_id cannot be null when chapter is also provided.",
+            {
+              project_id,
+              chapter_id: null,
+              chapter: fields.chapter,
+            }
+          );
+        }
+
         if (fields.chapter_id === null) {
           nextFields.chapter = null;
           nextFields.chapter_title = null;
         } else if (fields.chapter_id !== undefined || fields.chapter !== undefined) {
-          const resolvedChapter = fields.chapter_id
-            ? resolveChapterByCompatibilityKey(db, { projectId: project_id, chapterId: fields.chapter_id })
-            : resolveChapterByCompatibilityKey(db, { projectId: project_id, chapterNumber: fields.chapter });
+          const resolvedChapterFilter = resolveValidatedChapterFilter(db, {
+            projectId: project_id,
+            chapterNumber: fields.chapter,
+            chapterId: fields.chapter_id,
+          });
+
+          if (resolvedChapterFilter.error) {
+            return errorResponse(
+              resolvedChapterFilter.error.code,
+              resolvedChapterFilter.error.message,
+              {
+                project_id,
+                chapter_id: fields.chapter_id ?? null,
+                chapter: fields.chapter ?? null,
+              }
+            );
+          }
+
+          const resolvedChapter = resolvedChapterFilter.chapter;
 
           if (!resolvedChapter) {
             return errorResponse(

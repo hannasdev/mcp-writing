@@ -165,6 +165,20 @@ describe("metadata lint", () => {
     assert.equal(result.issues.length, 0);
   });
 
+  test("accepts epigraph compatibility chapter fields without unknown-key warnings", () => {
+    const result = validateMetadataObject({
+      kind: "epigraph",
+      epigraph_id: "epi-dawn",
+      chapter: 1,
+      chapter_title: "Dawn",
+      characters: ["char-elena"],
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.kind, "epigraph");
+    assert.ok(!result.issues.some(i => i.code === "UNKNOWN_KEY"));
+  });
+
   test("warns on mixed canonical and non-canonical epigraph character references", () => {
     const result = validateMetadataObject({
       kind: "epigraph",
