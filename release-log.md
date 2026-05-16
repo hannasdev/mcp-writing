@@ -8,6 +8,14 @@ This complements `CHANGELOG.md`:
 
 ## Unreleased
 
+### 2026-05-16 — Reorganize product docs around managed structure design
+
+- What changed: Reworked the product documentation set around `PRODUCT.md`, `FEATURES.md`, `BACKLOG.md`, and the new `docs/foundations/managed-structure-contract.md`; moved guides, agent docs, and initiative PRDs into clearer directories; and reclassified the old data-ownership writeup as historical context instead of an active design authority.
+- Why it matters: Maintainers and contributors now have a cleaner map of what is current product direction, what is shipped, what is deferred, and which document governs future structural design decisions.
+- Who is affected: Maintainers and contributors updating roadmap docs, design references, setup guidance, or agent-facing documentation.
+- Action needed: Use `PRODUCT.md` for active direction, `FEATURES.md` for shipped capability summaries, `BACKLOG.md` for deferred work, and `docs/foundations/managed-structure-contract.md` for future structural design decisions.
+- PR: TBD
+
 ### 2026-05-15 — Add canonical chapter and epigraph indexing
 
 - What changed: Writing MCP now indexes first-class chapters and epigraphs from ordered draft folders, adds canonical `chapter_id` targeting, and keeps numeric chapter filters as compatibility aliases. Review bundles also render explicit chapter-linked epigraph content before scenes.
