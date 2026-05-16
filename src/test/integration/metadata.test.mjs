@@ -43,6 +43,43 @@ describe("update_scene_metadata tool", () => {
     });
     assert.ok(text.toLowerCase().includes("not found"));
   });
+
+  test("persists canonical chapter_id for an unchaptered scene update", async () => {
+    const sceneDir = path.join(writeSyncDir, "projects", "test-novel", "scenes");
+    fs.mkdirSync(sceneDir, { recursive: true });
+    const scenePath = path.join(sceneDir, "sc-unchaptered.md");
+    fs.writeFileSync(
+      scenePath,
+      "---\nscene_id: sc-unchaptered\ntitle: Loose Scene\n---\nUnchaptered prose.",
+      "utf8"
+    );
+
+    await callWriteTool("sync");
+
+    const chaptersText = await callWriteTool("list_chapters", { project_id: "test-novel" });
+    const chaptersParsed = JSON.parse(chaptersText);
+    const firstChapter = chaptersParsed.results.find((row) => row.sort_index === 1);
+    assert.ok(firstChapter);
+
+    const updateText = await callWriteTool("update_scene_metadata", {
+      scene_id: "sc-unchaptered",
+      project_id: "test-novel",
+      fields: { chapter_id: firstChapter.chapter_id },
+    });
+    assert.ok(updateText.includes("Updated metadata"));
+
+    const sidecarFile = path.join(sceneDir, "sc-unchaptered.meta.yaml");
+    const raw = fs.readFileSync(sidecarFile, "utf8");
+    assert.ok(raw.includes(`chapter_id: ${firstChapter.chapter_id}`));
+    assert.ok(raw.includes("chapter: 1"));
+
+    const findText = await callWriteTool("find_scenes", {
+      project_id: "test-novel",
+      chapter_id: firstChapter.chapter_id,
+    });
+    const parsed = JSON.parse(findText);
+    assert.ok(parsed.results.some((row) => row.scene_id === "sc-unchaptered"));
+  });
 });
 
 describe("update_character_sheet tool", () => {

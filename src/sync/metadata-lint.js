@@ -16,7 +16,7 @@ import yaml from "js-yaml";
 
 const { load: parseYaml } = yaml;
 
-const metadataKindSchema = z.enum(["scene", "character", "place"]);
+const metadataKindSchema = z.enum(["scene", "character", "place", "epigraph"]);
 
 const threadLinkSchema = z.object({
   thread_id: z.string().min(1),
@@ -71,9 +71,20 @@ const placeSchema = z.object({
   tags: z.array(z.string().min(1)).optional(),
 });
 
+const epigraphSchema = z.object({
+  kind: z.literal("epigraph").optional(),
+  type: z.literal("epigraph").optional(),
+  epigraph_id: z.string().min(1).optional(),
+  scene_id: z.string().min(1).optional(),
+  chapter_id: z.string().min(1).optional(),
+  characters: z.array(z.string().min(1)).optional(),
+  tags: z.array(z.string().min(1)).optional(),
+});
+
 const sceneAllowedKeys = new Set(Object.keys(sceneSchema.shape));
 const characterAllowedKeys = new Set(Object.keys(characterSchema.shape));
 const placeAllowedKeys = new Set(Object.keys(placeSchema.shape));
+const epigraphAllowedKeys = new Set(Object.keys(epigraphSchema.shape));
 const sceneLegacyKeys = new Set(["synopsis", "save_the_cat", "change"]);
 
 function uniqueItems(items = []) {
@@ -82,6 +93,7 @@ function uniqueItems(items = []) {
 
 export function detectMetadataKind(meta) {
   if (meta && typeof meta === "object") {
+    if (meta.kind === "epigraph" || meta.type === "epigraph" || typeof meta.epigraph_id === "string") return "epigraph";
     if (typeof meta.character_id === "string") return "character";
     if (typeof meta.place_id === "string") return "place";
     return "scene";
@@ -92,18 +104,22 @@ export function detectMetadataKind(meta) {
 function allowedKeysFor(kind) {
   if (kind === "character") return characterAllowedKeys;
   if (kind === "place") return placeAllowedKeys;
+  if (kind === "epigraph") return epigraphAllowedKeys;
   return sceneAllowedKeys;
 }
 
 function schemaFor(kind) {
   if (kind === "character") return characterSchema;
   if (kind === "place") return placeSchema;
+  if (kind === "epigraph") return epigraphSchema;
   return sceneSchema;
 }
 
 function validateUniqueArrays(meta, kind, issues) {
   const fields = kind === "scene"
     ? ["characters", "places", "tags", "scene_functions", "versions"]
+    : kind === "epigraph"
+      ? ["characters", "tags"]
     : kind === "character"
       ? ["traits", "tags"]
       : ["associated_characters", "tags"];
@@ -119,7 +135,7 @@ function validateUniqueArrays(meta, kind, issues) {
   }
 }
 
-function validateSceneCharacterReferenceStyle(meta, issues) {
+function validateCanonicalCharacterReferenceStyle(meta, issues, { entityLabel }) {
   if (!Array.isArray(meta.characters) || meta.characters.length === 0) return;
 
   if (!meta.characters.every(value => typeof value === "string")) return;
@@ -132,7 +148,7 @@ function validateSceneCharacterReferenceStyle(meta, issues) {
   issues.push({
     level: "warning",
     code: "MIXED_CHARACTER_REFERENCE_STYLE",
-    message: "Scene characters contain mixed canonical and non-canonical references. Prefer canonical character_id values only.",
+    message: `${entityLabel} characters contain mixed canonical and non-canonical references. Prefer canonical character_id values only.`,
   });
 }
 
@@ -186,7 +202,11 @@ export function validateMetadataObject(meta, { sourcePath, kindHint } = {}) {
   validateUniqueArrays(meta, kind, issues);
 
   if (kind === "scene") {
-    validateSceneCharacterReferenceStyle(meta, issues);
+    validateCanonicalCharacterReferenceStyle(meta, issues, { entityLabel: "Scene" });
+  }
+
+  if (kind === "epigraph") {
+    validateCanonicalCharacterReferenceStyle(meta, issues, { entityLabel: "Epigraph" });
   }
 
   if (kind === "scene" && sourcePath) {

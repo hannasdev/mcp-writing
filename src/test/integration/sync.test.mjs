@@ -734,6 +734,25 @@ describe("enrich_scene_characters_batch tool", () => {
     assert.equal(parsed.error.details.max_scenes, 1);
   });
 
+  test("rejects conflicting mixed chapter filters", async () => {
+    const chaptersText = await callWriteTool("list_chapters", { project_id: "test-novel" });
+    const chaptersParsed = JSON.parse(chaptersText);
+    const firstChapter = chaptersParsed.results.find((row) => row.sort_index === 1);
+    assert.ok(firstChapter);
+
+    const text = await callWriteTool("enrich_scene_characters_batch", {
+      project_id: "test-novel",
+      chapter_id: firstChapter.chapter_id,
+      chapter: 2,
+      dry_run: true,
+    });
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.ok, false);
+    assert.equal(parsed.error.code, "VALIDATION_ERROR");
+    assert.match(parsed.error.message, /must refer to the same canonical chapter/);
+  });
+
   test("applies scene_ids allowlist before part/chapter/only_stale narrowing", async () => {
     await callWriteTool("sync");
 

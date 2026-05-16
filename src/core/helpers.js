@@ -3,6 +3,7 @@ import path from "node:path";
 import matter from "gray-matter";
 import yaml from "js-yaml";
 import { sidecarPath, syncAll } from "../sync/sync.js";
+import { resolveValidatedChapterFilter } from "./chapter-resolution.js";
 import {
   slugifyEntityName,
   renderCharacterSheetTemplate,
@@ -126,6 +127,22 @@ export function resolveBatchTargetScenes(dbHandle, {
 
   const conditions = ["project_id = ?"];
   const params = [projectId];
+  const resolvedChapterFilter = (chapter !== undefined || chapterId !== undefined)
+    ? resolveValidatedChapterFilter(dbHandle, { projectId, chapterNumber: chapter, chapterId })
+    : { chapter: null };
+
+  if (resolvedChapterFilter.error) {
+    return {
+      ok: false,
+      code: resolvedChapterFilter.error.code,
+      message: resolvedChapterFilter.error.message,
+      details: {
+        project_id: projectId,
+        chapter: chapter ?? null,
+        chapter_id: chapterId ?? null,
+      },
+    };
+  }
 
   if (sceneIds?.length) {
     const placeholders = sceneIds.map(() => "?").join(",");
@@ -136,13 +153,15 @@ export function resolveBatchTargetScenes(dbHandle, {
     conditions.push("part = ?");
     params.push(part);
   }
-  if (chapter !== undefined) {
-    conditions.push("chapter = ?");
-    params.push(chapter);
-  }
-  if (chapterId !== undefined) {
+  if (resolvedChapterFilter.chapter) {
+    conditions.push("chapter_id = ?");
+    params.push(resolvedChapterFilter.chapter.chapter_id);
+  } else if (chapterId !== undefined) {
     conditions.push("chapter_id = ?");
     params.push(chapterId);
+  } else if (chapter !== undefined) {
+    conditions.push("chapter = ?");
+    params.push(chapter);
   }
   if (onlyStale) {
     conditions.push("metadata_stale = 1");
