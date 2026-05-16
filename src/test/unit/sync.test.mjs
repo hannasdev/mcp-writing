@@ -1977,6 +1977,42 @@ describe("syncAll", () => {
     fs.rmSync(dir, { recursive: true });
   });
 
+  test("hydrates compatibility chapter fields from a valid explicit chapter_id", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sync-"));
+    const db = openDb(":memory:");
+    const chapterDir = path.join(dir, "projects", "test-novel", "Draft", "01-Known chapter");
+    fs.mkdirSync(chapterDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(chapterDir, "seed.md"),
+      "---\nscene_id: sc-seed\ntitle: Seed\n---\nSeed prose."
+    );
+
+    syncAll(db, dir, { quiet: true });
+
+    const scenePath = path.join(dir, "projects", "test-novel", "scenes", "sc-001.md");
+    fs.mkdirSync(path.dirname(scenePath), { recursive: true });
+    fs.writeFileSync(
+      scenePath,
+      "---\nscene_id: sc-001\ntitle: Chapter Id Only\nchapter_id: ch-01-known-chapter\n---\nProse."
+    );
+
+    syncAll(db, dir, { quiet: true });
+
+    const scene = db.prepare(`
+      SELECT scene_id, chapter_id, chapter, chapter_title
+      FROM scenes
+      WHERE scene_id = 'sc-001' AND project_id = 'test-novel'
+    `).get();
+
+    assert.equal(scene.scene_id, "sc-001");
+    assert.equal(scene.chapter_id, "ch-01-known-chapter");
+    assert.equal(scene.chapter, 1);
+    assert.equal(scene.chapter_title, "Known Chapter");
+
+    db.close();
+    fs.rmSync(dir, { recursive: true });
+  });
+
   test("warns instead of reassigning an epigraph_id that already belongs to another chapter", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sync-"));
     const db = openDb(":memory:");
@@ -2051,6 +2087,28 @@ describe("syncAll", () => {
     assert.equal(
       result.warningSummary.chapter_structure.examples[0],
       "Epigraph identity conflict for chapter 'ch-02-second-chapter': requested epigraph_id 'epi-shared' already belongs to another chapter in project 'test-novel'."
+    );
+
+    db.close();
+    fs.rmSync(dir, { recursive: true });
+  });
+
+  test("classifies unknown scene chapter_id warnings as chapter structure warnings", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sync-"));
+    const db = openDb(":memory:");
+    const scenePath = path.join(dir, "projects", "test-novel", "scenes", "sc-001.md");
+    fs.mkdirSync(path.dirname(scenePath), { recursive: true });
+    fs.writeFileSync(
+      scenePath,
+      "---\nscene_id: sc-001\ntitle: Dangling Chapter Link\nchapter_id: ch-99-missing\n---\nProse."
+    );
+
+    const result = syncAll(db, dir, { quiet: true });
+
+    assert.equal(result.warningSummary.chapter_structure.count, 1);
+    assert.equal(
+      result.warningSummary.chapter_structure.examples[0],
+      "Scene references unknown chapter_id 'ch-99-missing': projects/test-novel/scenes/sc-001.md"
     );
 
     db.close();

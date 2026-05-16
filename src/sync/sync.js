@@ -1204,8 +1204,8 @@ export function indexSceneFile(db, syncDir, file, meta, prose) {
   );
 
   let chapterId = meta.chapter_id ?? chapterStructure.chapter?.chapter_id ?? null;
-  const chapterSortIndex = chapterStructure.chapter?.sort_index ?? meta.chapter ?? null;
-  const chapterTitle = chapterStructure.chapter?.title ?? meta.chapter_title ?? (chapterSortIndex != null ? `Chapter ${chapterSortIndex}` : null);
+  let chapterSortIndex = chapterStructure.chapter?.sort_index ?? meta.chapter ?? null;
+  let chapterTitle = chapterStructure.chapter?.title ?? meta.chapter_title ?? (chapterSortIndex != null ? `Chapter ${chapterSortIndex}` : null);
   const chapterSourcePath = chapterStructure.chapter?.folder_key ?? path.dirname(file);
   const allowChapterSourcePathMatch = chapterStructure.chapter?.source_kind === "chapter_folder";
   let chapterWarning = null;
@@ -1274,13 +1274,16 @@ export function indexSceneFile(db, syncDir, file, meta, prose) {
 
   if (!chapterStructure.isEpigraph && chapterId && (chapterSortIndex == null || !chapterTitle)) {
     const canonicalChapter = db.prepare(`
-      SELECT chapter_id
+      SELECT chapter_id, sort_index, title
       FROM chapters
       WHERE chapter_id = ? AND project_id = ?
     `).get(chapterId, project_id);
     if (!canonicalChapter) {
       chapterWarning = `Scene references unknown chapter_id '${chapterId}': ${path.relative(syncDir, file)}`;
       chapterId = null;
+    } else {
+      chapterSortIndex = chapterSortIndex ?? canonicalChapter.sort_index ?? null;
+      chapterTitle = chapterTitle ?? canonicalChapter.title ?? null;
     }
   }
 
@@ -1552,7 +1555,7 @@ const WARNING_PATTERNS = [
   { type: "no_scene_id",            re: /^Skipped \(no scene_id\):/  },
   { type: "duplicate_scene_id",     re: /^Duplicate scene_id/        },
   { type: "path_metadata_mismatch", re: /^Path\/metadata mismatch/   },
-  { type: "chapter_structure",      re: /^(Chapter structure warning|Epigraph requires explicit chapter linkage|Epigraph references unknown chapter_id|Ambiguous chapter linkage|Epigraph identity conflict)/ },
+  { type: "chapter_structure",      re: /^(Chapter structure warning|Epigraph requires explicit chapter linkage|Epigraph references unknown chapter_id|Scene references unknown chapter_id|Ambiguous chapter linkage|Epigraph identity conflict)/ },
   { type: "moved_scene",            re: /^Moved scene detected:/      },
   { type: "orphaned_sidecar",       re: /^Orphaned sidecar/          },
   { type: "nested_mirror",          re: /^Ignored nested mirror path:/ },
