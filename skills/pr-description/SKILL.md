@@ -14,12 +14,12 @@ Write pull request descriptions that help reviewers understand the change quickl
 Before writing the PR description:
 
 1. Review the branch diff against `main`.
-2. Review relevant notes in `PRD.md`.
+2. Review relevant notes in `PRODUCT.md`.
 3. Identify the user-facing or maintainer-facing purpose of the change.
 4. Identify test coverage and validation performed.
 5. Identify risks, tradeoffs, and follow-up work.
 6. Ensure the PR is scoped to one concern.
-7. If user-facing or maintainer-facing behavior changed, update `docs/release-log.md` using `skills/release-log/SKILL.md`.
+7. If user-facing or maintainer-facing behavior changed, update `release-log.md` using `skills/release-log/SKILL.md`.
 
 ## PR title
 
@@ -90,7 +90,7 @@ Before marking a PR ready, verify these common failure points:
 1. Contract text and sample output match exactly. If a section is named one way in docs or generated output, examples should use the same label verbatim.
 2. Tests cover behavior, not only headings or presence checks. Assert representative bullets, examples, and failure paths where relevant.
 3. Validation is based on explicit user intent, not just parsed values. If flags or inputs can be malformed, fail fast with a clear error.
-4. Detailed roadmap state lives in `PRD.md`; keep `README.md` high-level unless a top-level status snapshot truly needs updating.
+4. Detailed roadmap state lives in `PRODUCT.md`; keep `README.md` high-level unless a top-level status snapshot truly needs updating.
 5. Keep the PR scoped to one concern. If review uncovers a second feature or workflow, split it into a separate PR.
 
 Use this checklist to tighten the implementation before review and to keep the PR description honest about scope, validation, and follow-up.

@@ -8,7 +8,7 @@ Canonical release setup and maintainer operations live in `MAINTAINERS.md`.
 
 ## Ways of working
 
-- Always review `PRD.md` before proposing or implementing changes.
+- Always review `PRODUCT.md` before proposing or implementing changes.
 - Do not implement immediately. First:
   - Identify tradeoffs
   - Validate alignment with design principles
@@ -27,7 +27,7 @@ All changes MUST follow this sequence:
 
 ### 1. Discussion phase
 
-- MUST review `PRD.md` before proceeding
+- MUST review `PRODUCT.md` before proceeding
 - No code changes before tradeoffs are discussed and approved
 - If approval is unclear, do not proceed
 

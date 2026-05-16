@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Generates docs/tools.md from tool definitions in the runtime entrypoint
+ * Generates docs/agents/tools.md from tool definitions in the runtime entrypoint
  * (src/index.js when present, otherwise index.js) and src/tools/*.js.
  *
  * Run:  node src/scripts/generate-tool-docs.mjs
@@ -15,7 +15,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
-const OUT  = path.join(ROOT, 'docs', 'tools.md');
+const OUT  = path.join(ROOT, 'docs', 'agents', 'tools.md');
 
 // Build a map from each registration function name to its module source.
 // e.g. "registerSyncTools" -> contents of src/tools/sync.js
