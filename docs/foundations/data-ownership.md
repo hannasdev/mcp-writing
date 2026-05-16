@@ -172,13 +172,13 @@ Not allowed:
 ## Relationship to Existing Docs
 
 - [Managed Structure Contract](./managed-structure-contract.md) is the governing doctrine.
-- [Setup Guide](../setup.md) explains how these boundaries show up during first-time setup and Scrivener import.
+- [Setup Guide](../guides/setup.md) explains how these boundaries show up during first-time setup and Scrivener import.
 - Metadata and import initiative docs record how the current behavior evolved, but this document defines the present ownership interpretation.
 
 ## Related
 
 - [Managed Structure Contract](./managed-structure-contract.md)
-- [Setup Guide](../setup.md)
+- [Setup Guide](../guides/setup.md)
 - [Product Overview](../../PRODUCT.md)
 - [Metadata Architecture & Ownership](../initiatives/done/metadata-architecture/prd.md)
 - [Import & Sync Operations](../initiatives/done/import-sync/prd.md)

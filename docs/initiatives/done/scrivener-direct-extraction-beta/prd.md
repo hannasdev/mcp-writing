@@ -123,8 +123,8 @@ Direct extraction should unlock metadata quality improvements not available from
 
 ### Current Status
 
-- Stable-vs-beta setup guidance is documented in `docs/setup.md`.
-- Beta parser/schema mismatch troubleshooting and fallback guidance is documented in `docs/development.md`.
+- Stable-vs-beta setup guidance is documented in `docs/guides/setup.md`.
+- Beta parser/schema mismatch troubleshooting and fallback guidance is documented in `docs/guides/development.md`.
 - Tool reference labels stable and beta tiers for Scrivener import/merge tools.
 - Beta merge responses provide structured warning payloads and warning summaries for skipped or normalized inputs.
 

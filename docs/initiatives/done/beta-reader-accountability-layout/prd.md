@@ -10,7 +10,7 @@ Implemented across planner, renderer, writer, tool schemas, and tests.
 - Beta PDF output includes per-page visible accountability footer and per-page fingerprint tokens.
 - Manifest includes fingerprint metadata for accountable beta PDF bundles.
 - Beta PDF layout uses book-like defaults (6x9 page geometry).
-- Release entry: [Release Log](../../release-log.md)
+- Release entry: [Release Log](../../../release-log.md)
 
 ## Problem
 

@@ -310,5 +310,5 @@ Because phases are incremental and behavior-neutral, rollback should be low-cost
 ## Related
 
 - [./refactoring.md](./refactoring.md)
-- [../../development.md](../../development.md)
+- [../../guides/development.md](../../guides/development.md)
 - [../../../AGENTS.md](../../../AGENTS.md)

@@ -87,7 +87,7 @@ Current boundary:
 Evidence:
 
 - [src/tools/search.js](../../../src/tools/search.js)
-- [docs/release-log.md](../../release-log.md)
+- [release-log.md](../../../release-log.md)
 
 ### M4: Chapter-Aware Query Surface ✅
 
@@ -158,4 +158,4 @@ Remaining work:
 - [prd.md](prd.md)
 - [architecture.md](architecture.md)
 - [FEATURES.md](../../../../FEATURES.md)
-- [release-log.md](../../release-log.md)
+- [release-log.md](../../../release-log.md)

@@ -385,5 +385,5 @@ Risk:
 ## Related
 
 - [PRODUCT.md](../../../../PRODUCT.md) — product-level design principles and feature map
-- [docs/setup.md](../../../setup.md) — runtime setup and prerequisites
-- [docs/docker.md](../../../docker.md) — OpenClaw and container integration notes
+- [docs/guides/setup.md](../../../guides/setup.md) — runtime setup and prerequisites
+- [docs/guides/docker.md](../../../guides/docker.md) — OpenClaw and container integration notes
