@@ -6,12 +6,10 @@ This complements `CHANGELOG.md`:
 - `CHANGELOG.md` is technical and release-oriented.
 - This log is plain-language and outcome-oriented.
 
-## Unreleased
+### 2026-05-16 — Align release-log guidance with PR-time updates
 
-### 2026-05-16 — Align release-log skill guidance with the root log file
-
-- What changed: Updated the PR-description and release-log skills so maintainer-facing PR guidance points to `release-log.md` instead of the old `docs/release-log.md` path.
-- Why it matters: Future PRs and AI-assisted maintainer workflows now update the actual human release log instead of following stale instructions.
+- What changed: Updated the PR-description and release-log skills so maintainer-facing PR guidance points to the root `release-log.md` file, and removed the stale staging section from the human release log.
+- Why it matters: Future PRs and AI-assisted maintainer workflows now update the actual human release log directly, matching the PR-time update model without implying a separate release-time cleanup step.
 - Who is affected: Maintainers and contributors preparing PR descriptions or release-log entries.
 - Action needed: None.
 - PR: [#195](https://github.com/hannasdev/mcp-writing/pull/195)
