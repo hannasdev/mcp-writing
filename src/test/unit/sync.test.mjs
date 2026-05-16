@@ -1821,6 +1821,53 @@ describe("syncAll", () => {
     fs.rmSync(dir, { recursive: true });
   });
 
+  test("drops legacy scene rows when a scene file is converted into a canonical epigraph", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sync-"));
+    const db = openDb(":memory:");
+    const chapterDir = path.join(dir, "projects", "test-novel", "Draft", "01-The perfect chapter");
+    fs.mkdirSync(chapterDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(chapterDir, "sc-001.md"),
+      "---\nscene_id: sc-001\ntitle: Arrival\n---\nScene prose."
+    );
+    const legacyScenePath = path.join(chapterDir, "quote.md");
+    fs.writeFileSync(
+      legacyScenePath,
+      "---\nscene_id: sc-epi\ntitle: Legacy Epigraph Scene\n---\nLegacy prose."
+    );
+
+    syncAll(db, dir, { quiet: true });
+
+    fs.rmSync(legacyScenePath);
+    fs.writeFileSync(
+      path.join(chapterDir, "epigraph.md"),
+      "---\nscene_id: sc-epi\nkind: epigraph\n---\nCanonical epigraph prose."
+    );
+
+    syncAll(db, dir, { quiet: true });
+
+    const scenes = db.prepare(`
+      SELECT scene_id
+      FROM scenes
+      WHERE project_id = 'test-novel'
+      ORDER BY scene_id
+    `).all();
+    const epigraphs = db.prepare(`
+      SELECT chapter_id, body
+      FROM epigraphs
+      WHERE project_id = 'test-novel'
+    `).all();
+
+    assert.deepEqual(scenes.map((row) => row.scene_id), ["sc-001"]);
+    assert.deepEqual(
+      epigraphs.map((row) => [row.chapter_id, row.body]),
+      [["ch-01-the-perfect-chapter", "Canonical epigraph prose."]]
+    );
+
+    db.close();
+    fs.rmSync(dir, { recursive: true });
+  });
+
   test("updates an existing chapter epigraph when its explicit epigraph_id changes", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sync-"));
     const db = openDb(":memory:");
@@ -1895,6 +1942,36 @@ describe("syncAll", () => {
     assert.equal(chapter.sort_index, 1);
     assert.equal(chapter.logline, "Stable chapter note");
     assert.equal(chapter.metadata_stale, 0);
+
+    db.close();
+    fs.rmSync(dir, { recursive: true });
+  });
+
+  test("clears unresolved explicit scene chapter_id links instead of persisting dangling references", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sync-"));
+    const db = openDb(":memory:");
+    const scenePath = path.join(dir, "projects", "test-novel", "scenes", "sc-001.md");
+    fs.mkdirSync(path.dirname(scenePath), { recursive: true });
+    fs.writeFileSync(
+      scenePath,
+      "---\nscene_id: sc-001\ntitle: Dangling Chapter Link\nchapter_id: ch-99-missing\n---\nProse."
+    );
+
+    const result = syncAll(db, dir, { quiet: true });
+    const scene = db.prepare(`
+      SELECT scene_id, chapter_id, chapter, chapter_title
+      FROM scenes
+      WHERE project_id = 'test-novel'
+    `).get();
+
+    assert.equal(scene.scene_id, "sc-001");
+    assert.equal(scene.chapter_id, null);
+    assert.equal(scene.chapter, null);
+    assert.equal(scene.chapter_title, null);
+    assert.equal(
+      result.warnings.some((warning) => warning.includes("Scene references unknown chapter_id 'ch-99-missing'")),
+      true
+    );
 
     db.close();
     fs.rmSync(dir, { recursive: true });

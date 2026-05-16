@@ -1272,6 +1272,18 @@ export function indexSceneFile(db, syncDir, file, meta, prose) {
     }
   }
 
+  if (!chapterStructure.isEpigraph && chapterId && (chapterSortIndex == null || !chapterTitle)) {
+    const canonicalChapter = db.prepare(`
+      SELECT chapter_id
+      FROM chapters
+      WHERE chapter_id = ? AND project_id = ?
+    `).get(chapterId, project_id);
+    if (!canonicalChapter) {
+      chapterWarning = `Scene references unknown chapter_id '${chapterId}': ${path.relative(syncDir, file)}`;
+      chapterId = null;
+    }
+  }
+
   if (chapterStructure.isEpigraph) {
     const canonicalChapter = chapterId
       ? db.prepare(`SELECT chapter_id FROM chapters WHERE chapter_id = ? AND project_id = ?`).get(chapterId, project_id)
@@ -1653,8 +1665,6 @@ export function syncAll(db, syncDir, { quiet = false, writable = false } = {}) {
       } else if (meta.scene_id) {
         seenSceneIds.set(key, file);
       }
-      if (meta.scene_id) seenSceneKeys.add(key);
-
       if (chapterStructure.role) {
         const roleKey = `${project_id}::${chapterStructure.role}`;
         const existingRoleFolder = roleFoldersByProject.get(roleKey);
@@ -1711,6 +1721,7 @@ export function syncAll(db, syncDir, { quiet = false, writable = false } = {}) {
         continue;
       }
       const { isStale } = result;
+      if (meta.scene_id) seenSceneKeys.add(key);
       indexedSceneIds.add(meta.scene_id);
       if (isStale) staleMarked++;
       indexed++;
