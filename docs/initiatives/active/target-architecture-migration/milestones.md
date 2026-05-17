@@ -1,6 +1,7 @@
 # Target Architecture Migration — Milestones
 
 Status: Active  
+Current milestone: M3 — Split Sync Observation From Canonical Mutation Internals  
 Owner: MCP Writing  
 Date: 2026-05-17
 
@@ -58,6 +59,8 @@ Out of scope:
 
 ## M2 — Centralize Structural Sidecar Writes
 
+Status: Complete.
+
 Goal: stop structural sidecar patches from being spread through generic metadata update paths.
 
 Deliverables:
@@ -96,6 +99,8 @@ Out of scope:
 - Changing sidecar schema.
 
 ## M3 — Split Sync Observation From Canonical Mutation Internals
+
+Status: Active.
 
 Goal: create internal seams so sync can later observe broadly without always mutating canonical structure.
 
