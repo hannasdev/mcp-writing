@@ -252,5 +252,5 @@ In practical terms, it supports:
 
 - [Product Overview](../../PRODUCT.md)
 - [Managed Structure Contract](./managed-structure-contract.md)
-- [Data Ownership](./data-ownership.md)
+- [Data Ownership](../history/data-ownership.md)
 - [Chapter Structure Follow-up](../initiatives/backlog/chapter-structure/prd.md)
