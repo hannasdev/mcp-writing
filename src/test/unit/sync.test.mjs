@@ -13,6 +13,16 @@ import {
   isWorldFile, readMeta, isSyncDirWritable, sidecarPath, syncAll,
   walkFiles, walkSidecars, worldEntityFolderKey, worldEntityKindForPath,
 } from "../../sync/sync.js";
+import {
+  inferChapterStructureFromPath as inferChapterStructureFromStructureModule,
+  normalizeSceneMetaForPath as normalizeSceneMetaForPathFromStructureModule,
+} from "../../structure/structure-inference.js";
+import {
+  resolveCanonicalChapterRecord,
+  resolveIndexedChapterForFile,
+  upsertCanonicalChapterRecord,
+} from "../../structure/chapter-indexing.js";
+import { indexCanonicalEpigraph } from "../../structure/epigraph-indexing.js";
 import { openDb } from "../../core/db.js";
 
 describe("checksumProse", () => {
@@ -277,6 +287,231 @@ describe("inferChapterStructureFromPath", () => {
   test("does not treat non-draft numeric slug ancestors as chapter folders", () => {
     const result = inferChapterStructureFromPath(syncDir, "/sync/projects/novel/2026-novel/scenes/sc-001.md");
     assert.equal(result.chapter, null);
+  });
+
+  test("structure module preserves legacy layout chapter fallback", () => {
+    const result = inferChapterStructureFromStructureModule(
+      syncDir,
+      "/sync/projects/novel/scenes/part-1/chapter-2/sc-002.md",
+      { scene_id: "sc-002", chapter_title: "The Old Road" }
+    );
+    assert.deepEqual(result.chapter, {
+      chapter_id: "ch-02-the-old-road",
+      sort_index: 2,
+      title: "The Old Road",
+      folder_name: "chapter-2",
+      folder_key: "projects/novel/scenes/part-1/chapter-2",
+      source_kind: "legacy_layout",
+    });
+  });
+
+  test("structure module normalizes explicit folder metadata without changing mismatch reporting", () => {
+    const result = normalizeSceneMetaForPathFromStructureModule(
+      syncDir,
+      "/sync/projects/novel/Draft/03-The signal/sc-003.md",
+      { scene_id: "sc-003", chapter: 2 }
+    );
+    assert.equal(result.meta.chapter_id, "ch-03-the-signal");
+    assert.equal(result.meta.chapter, 3);
+    assert.equal(result.meta.chapter_title, "The Signal");
+    assert.equal(result.mismatches.chapter, false);
+  });
+
+  test("structure module detects epigraphs from filename and metadata", () => {
+    const byFilename = inferChapterStructureFromStructureModule(
+      syncDir,
+      "/sync/projects/novel/Draft/01-Arrival/epigraph.md"
+    );
+    const byMetadata = inferChapterStructureFromStructureModule(
+      syncDir,
+      "/sync/projects/novel/Draft/01-Arrival/opening-note.md",
+      { kind: "epigraph" }
+    );
+
+    assert.equal(byFilename.isEpigraph, true);
+    assert.equal(byMetadata.isEpigraph, true);
+    assert.equal(byFilename.chapter.chapter_id, "ch-01-arrival");
+    assert.equal(byMetadata.chapter.chapter_id, "ch-01-arrival");
+  });
+});
+
+describe("resolveCanonicalChapterRecord", () => {
+  test("reuses an existing canonical chapter by sort index", () => {
+    const db = openDb(":memory:");
+    db.prepare(`
+      INSERT INTO projects (project_id, name)
+      VALUES ('test-novel', 'test-novel')
+    `).run();
+    db.prepare(`
+      INSERT INTO chapters (
+        chapter_id, project_id, title, sort_index, source_path, source_checksum, updated_at
+      ) VALUES (
+        'ch-01-arrival', 'test-novel', 'Arrival', 1, 'projects/test-novel/scenes/chapter-1', 'abc', '2026-05-17T00:00:00.000Z'
+      )
+    `).run();
+
+    const result = resolveCanonicalChapterRecord(db, {
+      projectId: "test-novel",
+      derivedChapterId: "ch-01-arrival-new",
+      sortIndex: 1,
+      title: "Arrival",
+      sourcePath: "projects/test-novel/scenes/chapter-1-renamed",
+    });
+
+    assert.equal(result.chapter_id, "ch-01-arrival");
+    assert.equal(result.sort_index, 1);
+    assert.equal(result.title, "Arrival");
+    assert.equal(result.source_path, "projects/test-novel/scenes/chapter-1-renamed");
+
+    db.close();
+  });
+
+  test("upsert preserves existing chapter logline when the current file omits it", () => {
+    const db = openDb(":memory:");
+    db.prepare(`
+      INSERT INTO projects (project_id, name)
+      VALUES ('test-novel', 'test-novel')
+    `).run();
+    db.prepare(`
+      INSERT INTO chapters (
+        chapter_id, project_id, title, sort_index, logline, source_path, source_checksum, updated_at
+      ) VALUES (
+        'ch-01-arrival', 'test-novel', 'Arrival', 1, 'Existing chapter logline', 'projects/test-novel/scenes/chapter-1', 'old', '2026-05-17T00:00:00.000Z'
+      )
+    `).run();
+
+    const result = upsertCanonicalChapterRecord(db, {
+      projectId: "test-novel",
+      chapterId: "ch-01-arrival",
+      sortIndex: 1,
+      title: "Arrival",
+      sourcePath: "projects/test-novel/scenes/chapter-1",
+      logline: undefined,
+      updatedAt: "2026-05-17T01:00:00.000Z",
+      buildSourceChecksum: ({ sortIndex, title, logline }) => checksumProse(`${sortIndex}:${title}:${logline ?? ""}`),
+    });
+
+    assert.equal(result.logline, "Existing chapter logline");
+
+    const chapter = db.prepare(`
+      SELECT logline, source_checksum, metadata_stale
+      FROM chapters
+      WHERE chapter_id = 'ch-01-arrival' AND project_id = 'test-novel'
+    `).get();
+    assert.equal(chapter.logline, "Existing chapter logline");
+    assert.equal(chapter.source_checksum, checksumProse("1:Arrival:Existing chapter logline"));
+    assert.equal(chapter.metadata_stale, 1);
+
+    db.close();
+  });
+
+  test("resolver hydrates compatibility fields from an explicit scene chapter id", () => {
+    const db = openDb(":memory:");
+    db.prepare(`
+      INSERT INTO projects (project_id, name)
+      VALUES ('test-novel', 'test-novel')
+    `).run();
+    db.prepare(`
+      INSERT INTO chapters (
+        chapter_id, project_id, title, sort_index, source_checksum, updated_at
+      ) VALUES (
+        'ch-02-departure', 'test-novel', 'Departure', 2, 'abc', '2026-05-17T00:00:00.000Z'
+      )
+    `).run();
+
+    const result = resolveIndexedChapterForFile(db, {
+      syncDir: "/sync",
+      projectId: "test-novel",
+      filePath: "/sync/projects/test-novel/scenes/sc-001.md",
+      relativePath: "projects/test-novel/scenes/sc-001.md",
+      meta: { scene_id: "sc-001", chapter_id: "ch-02-departure" },
+      chapterStructure: { role: null, isEpigraph: false, chapter: null },
+    });
+
+    assert.equal(result.chapterId, "ch-02-departure");
+    assert.equal(result.chapterSortIndex, 2);
+    assert.equal(result.chapterTitle, "Departure");
+    assert.equal(result.chapterWarning, null);
+    assert.equal(result.upsertChapter, null);
+
+    db.close();
+  });
+
+  test("resolver warns and clears unknown explicit scene chapter ids", () => {
+    const db = openDb(":memory:");
+    db.prepare(`
+      INSERT INTO projects (project_id, name)
+      VALUES ('test-novel', 'test-novel')
+    `).run();
+
+    const result = resolveIndexedChapterForFile(db, {
+      syncDir: "/sync",
+      projectId: "test-novel",
+      filePath: "/sync/projects/test-novel/scenes/sc-001.md",
+      relativePath: "projects/test-novel/scenes/sc-001.md",
+      meta: { scene_id: "sc-001", chapter_id: "ch-missing" },
+      chapterStructure: { role: null, isEpigraph: false, chapter: null },
+    });
+
+    assert.equal(result.chapterId, null);
+    assert.equal(result.chapterSortIndex, null);
+    assert.equal(result.chapterTitle, null);
+    assert.match(result.chapterWarning, /Scene references unknown chapter_id 'ch-missing'/);
+    assert.equal(result.upsertChapter, null);
+
+    db.close();
+  });
+});
+
+describe("indexCanonicalEpigraph", () => {
+  test("warns instead of reassigning an epigraph id owned by another chapter", () => {
+    const db = openDb(":memory:");
+    db.prepare(`
+      INSERT INTO projects (project_id, name)
+      VALUES ('test-novel', 'test-novel')
+    `).run();
+    db.prepare(`
+      INSERT INTO chapters (
+        chapter_id, project_id, title, sort_index, source_checksum, updated_at
+      ) VALUES
+        ('ch-01-arrival', 'test-novel', 'Arrival', 1, 'ch1', '2026-05-17T00:00:00.000Z'),
+        ('ch-02-departure', 'test-novel', 'Departure', 2, 'ch2', '2026-05-17T00:00:00.000Z')
+    `).run();
+    db.prepare(`
+      INSERT INTO epigraphs (
+        epigraph_id, project_id, chapter_id, body, file_path, prose_checksum, updated_at
+      ) VALUES (
+        'epi-shared', 'test-novel', 'ch-02-departure', 'Existing epigraph.', '/sync/epigraph.md', 'old', '2026-05-17T00:00:00.000Z'
+      )
+    `).run();
+
+    const result = indexCanonicalEpigraph(db, {
+      projectId: "test-novel",
+      chapterId: "ch-01-arrival",
+      chapterSortIndex: 1,
+      chapterStructure: { chapter: { sort_index: 1 } },
+      meta: { epigraph_id: "epi-shared" },
+      prose: "New epigraph.",
+      file: "/sync/projects/test-novel/Draft/01-Arrival/epigraph.md",
+      relativePath: "projects/test-novel/Draft/01-Arrival/epigraph.md",
+      buildProseChecksum: checksumProse,
+      buildDefaultEpigraphId: ({ projectId, chapterId }) => `epi-${projectId}-${chapterId}`,
+    });
+
+    assert.equal(result.skippedAsEpigraph, true);
+    assert.match(result.warning, /already belongs to another chapter/);
+
+    const epigraph = db.prepare(`
+      SELECT chapter_id, body
+      FROM epigraphs
+      WHERE epigraph_id = 'epi-shared' AND project_id = 'test-novel'
+    `).get();
+    assert.deepEqual({ ...epigraph }, {
+      chapter_id: "ch-02-departure",
+      body: "Existing epigraph.",
+    });
+
+    db.close();
   });
 });
 

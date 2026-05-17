@@ -26,7 +26,7 @@ Track the remaining follow-up work around first-class chapters, deferred divisio
 
 Preparatory refactoring and staged migration work that moves structural manuscript workflows toward the conceptual target architecture without committing too early to storage or public API changes.
 
-**Status:** Deferred backlog (not active). Early milestones focus on behavior-preserving refactors, characterization tests, and explicit structure boundaries before later compatibility tightening or storage-model decisions.
+**Status:** Active. Early milestones focus on behavior-preserving refactors, characterization tests, and explicit structure boundaries before later compatibility tightening or storage-model decisions.
 
 ### 📊 [Embedding-Based Search](docs/initiatives/backlog/embeddings-search/prd.md) 📋
 

@@ -2,7 +2,24 @@ import fs from "node:fs";
 import path from "node:path";
 import matter from "gray-matter";
 import yaml from "js-yaml";
+import {
+  inferChapterStructureFromPath,
+  inferScenePositionFromPath,
+  normalizeSceneMetaForPath,
+  slugifyChapterValue,
+} from "../structure/structure-inference.js";
+import {
+  resolveIndexedChapterForFile,
+  upsertCanonicalChapterRecord,
+} from "../structure/chapter-indexing.js";
+import { indexCanonicalEpigraph } from "../structure/epigraph-indexing.js";
 const { load: parseYaml, dump: stringifyYaml } = yaml;
+
+export {
+  inferChapterStructureFromPath,
+  inferScenePositionFromPath,
+  normalizeSceneMetaForPath,
+};
 
 // ---------------------------------------------------------------------------
 // Pure utilities (no DB dependency — easy to unit test)
@@ -60,142 +77,6 @@ function isNestedMirrorPath(syncDir, filePath) {
 
 export function sidecarPath(filePath) {
   return filePath.replace(/\.(md|txt)$/, ".meta.yaml");
-}
-
-export function inferScenePositionFromPath(syncDir, filePath) {
-  const rel = path.relative(syncDir, filePath);
-  const parts = rel.split(path.sep);
-  let part = null;
-  let chapter = null;
-
-  for (const segment of parts) {
-    const partMatch = segment.match(/^part-(\d+)(?:-.+)?$/i);
-    if (partMatch) part = parseInt(partMatch[1], 10);
-
-    const chapterMatch = segment.match(/^chapter-(\d+)(?:-.+)?$/i);
-    if (chapterMatch) chapter = parseInt(chapterMatch[1], 10);
-  }
-
-  return { part, chapter };
-}
-
-function titleCaseFolderLabel(value) {
-  return String(value ?? "")
-    .replace(/[-_]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .replace(/\b\w/g, char => char.toUpperCase());
-}
-
-function slugifyChapterValue(value) {
-  return String(value ?? "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-}
-
-function isExplicitChapterContainer(parts, index) {
-  const parent = parts[index - 1]?.toLowerCase() ?? null;
-  return parent === "draft" || parent === "scenes";
-}
-
-export function inferChapterStructureFromPath(syncDir, filePath, meta = {}) {
-  const rel = path.relative(syncDir, filePath);
-  const parts = rel.split(path.sep);
-  let role = null;
-  let chapterFolder = null;
-  let chapterSortIndex = null;
-  let chapterTitle = null;
-  let chapterFolderKey = null;
-
-  for (let index = 0; index < parts.length - 1; index += 1) {
-    const segment = parts[index];
-    const normalized = segment.toLowerCase();
-
-    if (normalized === "prologue" || normalized === "00-prologue") {
-      role = "prologue";
-      continue;
-    }
-    if (normalized === "epilogue" || normalized === "99-epilogue") {
-      role = "epilogue";
-      continue;
-    }
-
-    let match = segment.match(/^(\d+)-(.+)$/);
-    if (!match) {
-      match = segment.match(/^chapter-(\d+)(?:-(.+))?$/i);
-    }
-    if (!match || !isExplicitChapterContainer(parts, index)) continue;
-
-    chapterFolder = segment;
-    chapterSortIndex = Number.parseInt(match[1], 10);
-    chapterTitle = titleCaseFolderLabel(match[2] ?? `Chapter ${chapterSortIndex}`);
-    chapterFolderKey = parts.slice(0, index + 1).join(path.sep);
-  }
-
-  const baseName = path.basename(filePath, path.extname(filePath)).toLowerCase();
-  const explicitEpigraph = meta.kind === "epigraph"
-    || meta.type === "epigraph"
-    || typeof meta.epigraph_id === "string"
-    || baseName === "epigraph";
-
-  if (chapterSortIndex == null) {
-    const fallback = inferScenePositionFromPath(syncDir, filePath);
-    if (fallback.chapter != null) {
-      chapterSortIndex = fallback.chapter;
-      chapterTitle = titleCaseFolderLabel(meta.chapter_title ?? `Chapter ${fallback.chapter}`);
-      chapterFolderKey = chapterFolderKey ?? parts.slice(0, Math.max(0, parts.length - 1)).join(path.sep);
-    }
-  }
-
-  if (chapterSortIndex == null) {
-    return {
-      role,
-      isEpigraph: explicitEpigraph,
-      chapter: null,
-    };
-  }
-
-  const chapterSlug = slugifyChapterValue(chapterTitle) || `chapter-${chapterSortIndex}`;
-  return {
-    role,
-    isEpigraph: explicitEpigraph,
-    chapter: {
-      chapter_id: `ch-${String(chapterSortIndex).padStart(2, "0")}-${chapterSlug}`,
-      sort_index: chapterSortIndex,
-      title: chapterTitle,
-      folder_name: chapterFolder ?? `chapter-${chapterSortIndex}`,
-      folder_key: chapterFolderKey ?? parts.slice(0, Math.max(0, parts.length - 1)).join(path.sep),
-      source_kind: chapterFolder ? "chapter_folder" : "legacy_layout",
-    },
-  };
-}
-
-export function normalizeSceneMetaForPath(syncDir, filePath, meta = {}) {
-  const derived = inferScenePositionFromPath(syncDir, filePath);
-  const chapterStructure = inferChapterStructureFromPath(syncDir, filePath, meta);
-  const normalized = { ...meta };
-
-  if (derived.part !== null) normalized.part = derived.part;
-  if (derived.chapter !== null) normalized.chapter = derived.chapter;
-  if (chapterStructure.chapter?.chapter_id) {
-    normalized.chapter_id = chapterStructure.chapter.chapter_id;
-    normalized.chapter = chapterStructure.chapter.sort_index;
-    normalized.chapter_title = chapterStructure.chapter.title;
-  }
-  if (chapterStructure.role) {
-    normalized.scene_role = chapterStructure.role;
-  }
-
-  return {
-    meta: normalized,
-    derived,
-    chapterStructure,
-    mismatches: {
-      part: derived.part !== null && meta.part != null && meta.part !== derived.part,
-      chapter: derived.chapter !== null && meta.chapter != null && meta.chapter !== derived.chapter,
-    },
-  };
 }
 
 // Structural directory names that are never project slugs under projects/<id>/.
@@ -1061,129 +942,6 @@ function pruneMissingEpigraphs(db, seenEpigraphKeys, syncDir) {
   }
 }
 
-function resolveCanonicalChapterRecord(db, {
-  syncDir,
-  projectId,
-  derivedChapterId,
-  sortIndex,
-  title,
-  sourcePath,
-  allowSourcePathMatch = false,
-}) {
-  if (!projectId || sortIndex == null || !title) return null;
-
-  const normalizedSourcePath = sourcePath ?? null;
-  const bySourcePath = allowSourcePathMatch && normalizedSourcePath
-    ? db.prepare(`
-        SELECT chapter_id, title, sort_index, logline, source_checksum, metadata_stale
-        FROM chapters
-        WHERE project_id = ? AND source_path = ?
-      `).get(projectId, normalizedSourcePath)
-    : null;
-
-  if (bySourcePath) {
-    return {
-      ...bySourcePath,
-      chapter_id: bySourcePath.chapter_id,
-      title,
-      sort_index: sortIndex,
-      source_path: normalizedSourcePath,
-    };
-  }
-
-  const byTitle = db.prepare(`
-    SELECT chapter_id, title, sort_index, logline, source_path, source_checksum, metadata_stale
-    FROM chapters
-    WHERE project_id = ? AND title = ?
-    ORDER BY chapter_id
-  `).all(projectId, title);
-
-  if (byTitle.length === 1) {
-    const existingTitleSourcePath = byTitle[0].source_path ?? null;
-    const existingTitleSourceExists = Boolean(
-      syncDir
-      && existingTitleSourcePath
-      && fs.existsSync(path.join(syncDir, existingTitleSourcePath))
-    );
-    const canReuseByTitle = allowSourcePathMatch || byTitle[0].sort_index === sortIndex;
-    if (canReuseByTitle && (!existingTitleSourceExists || existingTitleSourcePath === normalizedSourcePath)) {
-      return {
-        ...byTitle[0],
-        chapter_id: byTitle[0].chapter_id,
-        title,
-        sort_index: sortIndex,
-        source_path: normalizedSourcePath,
-      };
-    }
-  }
-
-  if (byTitle.length > 1) {
-    return null;
-  }
-
-  const bySortIndex = db.prepare(`
-    SELECT chapter_id, title, sort_index, logline, source_path, source_checksum, metadata_stale
-    FROM chapters
-    WHERE project_id = ? AND sort_index = ?
-  `).get(projectId, sortIndex);
-
-  if (bySortIndex) {
-    const existingSourceExists = Boolean(
-      syncDir
-      && bySortIndex.source_path
-      && fs.existsSync(path.join(syncDir, bySortIndex.source_path))
-    );
-    if (
-      normalizedSourcePath
-      && bySortIndex.source_path
-      && bySortIndex.source_path !== normalizedSourcePath
-      && existingSourceExists
-    ) {
-      return {
-        ambiguous: true,
-        existingSourcePath: bySortIndex.source_path,
-        conflictingSourcePath: normalizedSourcePath,
-        sort_index: sortIndex,
-      };
-    }
-    return {
-      ...bySortIndex,
-      chapter_id: bySortIndex.chapter_id,
-      title,
-      sort_index: sortIndex,
-      source_path: normalizedSourcePath,
-    };
-  }
-
-  return {
-    chapter_id: derivedChapterId,
-    title,
-    sort_index: sortIndex,
-    source_path: normalizedSourcePath,
-    logline: null,
-    source_checksum: null,
-    metadata_stale: 0,
-  };
-}
-
-function parkConflictingChapterSortIndex(db, { projectId, chapterId, targetSortIndex }) {
-  if (!projectId || !chapterId || targetSortIndex == null) return;
-
-  const conflictingChapter = db.prepare(`
-    SELECT chapter_id, sort_index
-    FROM chapters
-    WHERE project_id = ? AND sort_index = ? AND chapter_id != ?
-  `).get(projectId, targetSortIndex, chapterId);
-
-  if (!conflictingChapter) return;
-
-  db.prepare(`
-    UPDATE chapters
-    SET sort_index = ?
-    WHERE project_id = ? AND chapter_id = ?
-  `).run(-1000000 - Number(conflictingChapter.sort_index), projectId, conflictingChapter.chapter_id);
-}
-
 export function indexSceneFile(db, syncDir, file, meta, prose) {
   const { universe_id, project_id } = inferProjectAndUniverse(syncDir, file);
   const chapterStructure = inferChapterStructureFromPath(syncDir, file, meta);
@@ -1203,223 +961,45 @@ export function indexSceneFile(db, syncDir, file, meta, prose) {
     project_id, universe_id ?? null, project_id
   );
 
-  let chapterId = meta.chapter_id ?? chapterStructure.chapter?.chapter_id ?? null;
-  let chapterSortIndex = chapterStructure.chapter?.sort_index ?? meta.chapter ?? null;
-  let chapterTitle = chapterStructure.chapter?.title ?? meta.chapter_title ?? (chapterSortIndex != null ? `Chapter ${chapterSortIndex}` : null);
-  const chapterSourcePath = chapterStructure.chapter?.folder_key ?? path.dirname(file);
-  const allowChapterSourcePathMatch = chapterStructure.chapter?.source_kind === "chapter_folder";
-  let chapterWarning = null;
-  const explicitSceneChapterId = !chapterStructure.isEpigraph ? meta.chapter_id ?? null : null;
-  let explicitSceneCanonicalChapter = null;
+  const relativePath = path.relative(syncDir, file);
+  const chapterResolution = resolveIndexedChapterForFile(db, {
+    syncDir,
+    projectId: project_id,
+    filePath: file,
+    relativePath,
+    meta,
+    chapterStructure,
+  });
+  const {
+    chapterId,
+    chapterSortIndex,
+    chapterTitle,
+    chapterWarning,
+    upsertChapter,
+  } = chapterResolution;
 
-  if (explicitSceneChapterId && !chapterStructure.chapter) {
-    explicitSceneCanonicalChapter = db.prepare(`
-      SELECT chapter_id, sort_index, title
-      FROM chapters
-      WHERE chapter_id = ? AND project_id = ?
-    `).get(explicitSceneChapterId, project_id);
-    if (explicitSceneCanonicalChapter) {
-      chapterId = explicitSceneCanonicalChapter.chapter_id;
-      chapterSortIndex = explicitSceneCanonicalChapter.sort_index ?? null;
-      chapterTitle = explicitSceneCanonicalChapter.title ?? null;
-    } else {
-      // Scene-level explicit chapter links must target an existing canonical chapter.
-      chapterSortIndex = null;
-      chapterTitle = null;
-    }
-  }
-  const derivedChapterId = (
-    chapterId
-    ?? (chapterSortIndex != null && chapterTitle
-      ? `ch-${String(chapterSortIndex).padStart(2, "0")}-${slugifyChapterValue(chapterTitle) || `chapter-${chapterSortIndex}`}`
-      : null)
-  );
-
-  if (!explicitSceneCanonicalChapter && chapterSortIndex != null && chapterTitle) {
-    const canonicalChapter = resolveCanonicalChapterRecord(db, {
-      syncDir,
+  if (upsertChapter) {
+    upsertCanonicalChapterRecord(db, {
       projectId: project_id,
-      derivedChapterId,
-      sortIndex: chapterSortIndex,
-      title: chapterTitle,
-      sourcePath: chapterSourcePath,
-      allowSourcePathMatch: allowChapterSourcePathMatch,
+      ...upsertChapter,
+      buildSourceChecksum: ({ sortIndex, title, logline }) => checksumProse(`${sortIndex}:${title}:${logline ?? ""}`),
     });
-    if (canonicalChapter?.ambiguous) {
-      chapterWarning = `Chapter structure warning: duplicate chapter order ${chapterSortIndex} in project "${project_id}" for ${canonicalChapter.existingSourcePath} and ${canonicalChapter.conflictingSourcePath}.`;
-      chapterId = null;
-    } else {
-      chapterId = canonicalChapter?.chapter_id ?? chapterId;
-    }
-    if (chapterId) {
-      parkConflictingChapterSortIndex(db, {
-        projectId: project_id,
-        chapterId,
-        targetSortIndex: chapterSortIndex,
-      });
-      const existingChapter = db.prepare(
-        `SELECT logline, source_checksum, metadata_stale FROM chapters WHERE chapter_id = ? AND project_id = ?`
-      ).get(chapterId, project_id);
-      const chapterLogline = meta.chapter_logline ?? existingChapter?.logline ?? null;
-      const chapterChecksum = checksumProse(`${chapterSortIndex}:${chapterTitle}:${chapterLogline ?? ""}`);
-      db.prepare(`
-        INSERT INTO chapters (
-          chapter_id, project_id, title, sort_index, logline, source_path, source_checksum, metadata_stale, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT (chapter_id, project_id) DO UPDATE SET
-          title = excluded.title,
-          sort_index = excluded.sort_index,
-          logline = excluded.logline,
-          source_path = excluded.source_path,
-          source_checksum = excluded.source_checksum,
-          metadata_stale = CASE
-            WHEN excluded.source_checksum != chapters.source_checksum THEN 1
-            ELSE chapters.metadata_stale
-          END,
-          updated_at = excluded.updated_at
-      `).run(
-        chapterId,
-        project_id,
-        chapterTitle,
-        chapterSortIndex,
-        chapterLogline,
-        chapterSourcePath,
-        chapterChecksum,
-        existingChapter && existingChapter.source_checksum !== chapterChecksum ? 1 : 0,
-        new Date().toISOString()
-      );
-    }
-  }
-
-  if (!chapterStructure.isEpigraph && chapterId && (chapterSortIndex == null || !chapterTitle)) {
-    const canonicalChapter = db.prepare(`
-      SELECT chapter_id, sort_index, title
-      FROM chapters
-      WHERE chapter_id = ? AND project_id = ?
-    `).get(chapterId, project_id);
-    if (!canonicalChapter) {
-      chapterWarning = `Scene references unknown chapter_id '${chapterId}': ${path.relative(syncDir, file)}`;
-      chapterId = null;
-    } else {
-      chapterSortIndex = chapterSortIndex ?? canonicalChapter.sort_index ?? null;
-      chapterTitle = chapterTitle ?? canonicalChapter.title ?? null;
-    }
   }
 
   if (chapterStructure.isEpigraph) {
-    const canonicalChapter = chapterId
-      ? db.prepare(`SELECT chapter_id FROM chapters WHERE chapter_id = ? AND project_id = ?`).get(chapterId, project_id)
-      : null;
-    if (!chapterId || !canonicalChapter) {
-      const reason = chapterWarning
-        ?? (chapterId
-          ? `Epigraph references unknown chapter_id '${chapterId}': ${path.relative(syncDir, file)}`
-          : null)
-        ?? (chapterStructure.chapter && chapterSortIndex != null
-          ? `Ambiguous chapter linkage from duplicate chapter order ${chapterSortIndex}: ${path.relative(syncDir, file)}`
-          : `Epigraph requires explicit chapter linkage: ${path.relative(syncDir, file)}`);
-      return { isStale: 0, skippedAsEpigraph: true, warning: reason };
-    }
-
-    const defaultEpigraphId = `epi-${slugifyChapterValue(`${project_id}-${chapterId}`)}`;
-    const requestedEpigraphId = meta.epigraph_id ?? defaultEpigraphId;
-    const epigraphChecksum = checksumProse(prose);
-    const epigraphById = db.prepare(`
-      SELECT epigraph_id, chapter_id, prose_checksum
-      FROM epigraphs
-      WHERE epigraph_id = ? AND project_id = ?
-    `).get(requestedEpigraphId, project_id);
-    const epigraphByChapter = db.prepare(`
-      SELECT epigraph_id, chapter_id, prose_checksum
-      FROM epigraphs
-      WHERE chapter_id = ? AND project_id = ?
-    `).get(chapterId, project_id);
-
-    if (
-      epigraphById
-      && epigraphById.chapter_id !== chapterId
-      && (!epigraphByChapter || epigraphByChapter.epigraph_id !== epigraphById.epigraph_id)
-    ) {
-      return {
-        isStale: 0,
-        skippedAsEpigraph: true,
-        warning: `Epigraph identity conflict for chapter '${chapterId}': requested epigraph_id '${requestedEpigraphId}' already belongs to another chapter in project '${project_id}'.`,
-      };
-    }
-
-    const existingEpigraph = epigraphByChapter ?? epigraphById ?? null;
-    const epigraphId = meta.epigraph_id
-      ? requestedEpigraphId
-      : (epigraphByChapter?.epigraph_id ?? requestedEpigraphId);
-    const previousEpigraphId = existingEpigraph?.epigraph_id ?? epigraphId;
-    const existingChecksum = existingEpigraph?.prose_checksum ?? null;
-    const epigraphIsStale = existingChecksum !== null && existingChecksum !== epigraphChecksum ? 1 : 0;
-    const timestamp = new Date().toISOString();
-
-    if (existingEpigraph) {
-      db.prepare(`
-        UPDATE epigraphs
-        SET epigraph_id = ?,
-            chapter_id = ?,
-            body = ?,
-            file_path = ?,
-            prose_checksum = ?,
-            metadata_stale = CASE
-              WHEN ? != prose_checksum THEN 1
-              ELSE metadata_stale
-            END,
-            updated_at = ?
-        WHERE epigraph_id = ? AND project_id = ?
-      `).run(
-        epigraphId,
-        chapterId,
-        prose,
-        file,
-        epigraphChecksum,
-        epigraphChecksum,
-        timestamp,
-        previousEpigraphId,
-        project_id
-      );
-    } else {
-      db.prepare(`
-        INSERT INTO epigraphs (
-          epigraph_id, project_id, chapter_id, body, file_path, prose_checksum, metadata_stale, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
-        epigraphId,
-        project_id,
-        chapterId,
-        prose,
-        file,
-        epigraphChecksum,
-        0,
-        timestamp
-      );
-    }
-
-    db.prepare(`DELETE FROM epigraph_characters WHERE epigraph_id = ? AND project_id = ?`).run(previousEpigraphId, project_id);
-    db.prepare(`DELETE FROM epigraph_tags WHERE epigraph_id = ? AND project_id = ?`).run(previousEpigraphId, project_id);
-    if (previousEpigraphId !== epigraphId) {
-      db.prepare(`DELETE FROM epigraph_characters WHERE epigraph_id = ? AND project_id = ?`).run(epigraphId, project_id);
-      db.prepare(`DELETE FROM epigraph_tags WHERE epigraph_id = ? AND project_id = ?`).run(epigraphId, project_id);
-    }
-    for (const characterId of (meta.characters ?? [])) {
-      db.prepare(`INSERT OR IGNORE INTO epigraph_characters (epigraph_id, project_id, character_id) VALUES (?, ?, ?)`)
-        .run(epigraphId, project_id, characterId);
-    }
-    for (const tag of (meta.tags ?? [])) {
-      db.prepare(`INSERT OR IGNORE INTO epigraph_tags (epigraph_id, project_id, tag) VALUES (?, ?, ?)`)
-        .run(epigraphId, project_id, tag);
-    }
-
-    return {
-      isStale: epigraphIsStale,
-      skippedAsEpigraph: true,
-      epigraphIndexed: true,
+    return indexCanonicalEpigraph(db, {
+      projectId: project_id,
       chapterId,
-      epigraphId,
-    };
+      chapterSortIndex,
+      chapterStructure,
+      meta,
+      prose,
+      file,
+      relativePath,
+      chapterWarning,
+      buildProseChecksum: checksumProse,
+      buildDefaultEpigraphId: ({ projectId, chapterId }) => `epi-${slugifyChapterValue(`${projectId}-${chapterId}`)}`,
+    });
   }
 
   const newChecksum = checksumProse(prose);
