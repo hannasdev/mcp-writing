@@ -9,7 +9,7 @@ import {
   slugifyChapterValue,
 } from "../structure/structure-inference.js";
 import {
-  resolveCanonicalChapterRecord,
+  resolveIndexedChapterForFile,
   upsertCanonicalChapterRecord,
 } from "../structure/chapter-indexing.js";
 import { indexCanonicalEpigraph } from "../structure/epigraph-indexing.js";
@@ -961,80 +961,29 @@ export function indexSceneFile(db, syncDir, file, meta, prose) {
     project_id, universe_id ?? null, project_id
   );
 
-  let chapterId = meta.chapter_id ?? chapterStructure.chapter?.chapter_id ?? null;
-  let chapterSortIndex = chapterStructure.chapter?.sort_index ?? meta.chapter ?? null;
-  let chapterTitle = chapterStructure.chapter?.title ?? meta.chapter_title ?? (chapterSortIndex != null ? `Chapter ${chapterSortIndex}` : null);
-  const chapterSourcePath = chapterStructure.chapter?.folder_key ?? path.dirname(file);
-  const allowChapterSourcePathMatch = chapterStructure.chapter?.source_kind === "chapter_folder";
-  let chapterWarning = null;
-  const explicitSceneChapterId = !chapterStructure.isEpigraph ? meta.chapter_id ?? null : null;
-  let explicitSceneCanonicalChapter = null;
+  const relativePath = path.relative(syncDir, file);
+  const chapterResolution = resolveIndexedChapterForFile(db, {
+    syncDir,
+    projectId: project_id,
+    filePath: file,
+    relativePath,
+    meta,
+    chapterStructure,
+  });
+  const {
+    chapterId,
+    chapterSortIndex,
+    chapterTitle,
+    chapterWarning,
+    upsertChapter,
+  } = chapterResolution;
 
-  if (explicitSceneChapterId && !chapterStructure.chapter) {
-    explicitSceneCanonicalChapter = db.prepare(`
-      SELECT chapter_id, sort_index, title
-      FROM chapters
-      WHERE chapter_id = ? AND project_id = ?
-    `).get(explicitSceneChapterId, project_id);
-    if (explicitSceneCanonicalChapter) {
-      chapterId = explicitSceneCanonicalChapter.chapter_id;
-      chapterSortIndex = explicitSceneCanonicalChapter.sort_index ?? null;
-      chapterTitle = explicitSceneCanonicalChapter.title ?? null;
-    } else {
-      // Scene-level explicit chapter links must target an existing canonical chapter.
-      chapterSortIndex = null;
-      chapterTitle = null;
-    }
-  }
-  const derivedChapterId = (
-    chapterId
-    ?? (chapterSortIndex != null && chapterTitle
-      ? `ch-${String(chapterSortIndex).padStart(2, "0")}-${slugifyChapterValue(chapterTitle) || `chapter-${chapterSortIndex}`}`
-      : null)
-  );
-
-  if (!explicitSceneCanonicalChapter && chapterSortIndex != null && chapterTitle) {
-    const canonicalChapter = resolveCanonicalChapterRecord(db, {
-      syncDir,
+  if (upsertChapter) {
+    upsertCanonicalChapterRecord(db, {
       projectId: project_id,
-      derivedChapterId,
-      sortIndex: chapterSortIndex,
-      title: chapterTitle,
-      sourcePath: chapterSourcePath,
-      allowSourcePathMatch: allowChapterSourcePathMatch,
+      ...upsertChapter,
+      buildSourceChecksum: ({ sortIndex, title, logline }) => checksumProse(`${sortIndex}:${title}:${logline ?? ""}`),
     });
-    if (canonicalChapter?.ambiguous) {
-      chapterWarning = `Chapter structure warning: duplicate chapter order ${chapterSortIndex} in project "${project_id}" for ${canonicalChapter.existingSourcePath} and ${canonicalChapter.conflictingSourcePath}.`;
-      chapterId = null;
-    } else {
-      chapterId = canonicalChapter?.chapter_id ?? chapterId;
-    }
-    if (chapterId) {
-      upsertCanonicalChapterRecord(db, {
-        projectId: project_id,
-        chapterId,
-        sortIndex: chapterSortIndex,
-        title: chapterTitle,
-        sourcePath: chapterSourcePath,
-        logline: meta.chapter_logline,
-        buildSourceChecksum: ({ sortIndex, title, logline }) => checksumProse(`${sortIndex}:${title}:${logline ?? ""}`),
-      });
-    }
-  }
-
-  if (!chapterStructure.isEpigraph && chapterId && (chapterSortIndex == null || !chapterTitle)) {
-    const canonicalChapter = db.prepare(`
-      SELECT chapter_id, sort_index, title
-      FROM chapters
-      WHERE chapter_id = ? AND project_id = ?
-    `).get(chapterId, project_id);
-    if (!canonicalChapter) {
-      chapterWarning = `Scene references unknown chapter_id '${chapterId}': ${path.relative(syncDir, file)}`;
-      chapterId = null;
-    } else {
-      chapterSortIndex = chapterSortIndex ?? canonicalChapter.sort_index ?? null;
-      chapterTitle = chapterTitle ?? canonicalChapter.title ?? null;
-    }
   }
 
   if (chapterStructure.isEpigraph) {
@@ -1046,7 +995,7 @@ export function indexSceneFile(db, syncDir, file, meta, prose) {
       meta,
       prose,
       file,
-      relativePath: path.relative(syncDir, file),
+      relativePath,
       chapterWarning,
       buildProseChecksum: checksumProse,
       buildDefaultEpigraphId: ({ projectId, chapterId }) => `epi-${slugifyChapterValue(`${projectId}-${chapterId}`)}`,

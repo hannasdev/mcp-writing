@@ -17,7 +17,11 @@ import {
   inferChapterStructureFromPath as inferChapterStructureFromStructureModule,
   normalizeSceneMetaForPath as normalizeSceneMetaForPathFromStructureModule,
 } from "../../structure/structure-inference.js";
-import { resolveCanonicalChapterRecord, upsertCanonicalChapterRecord } from "../../structure/chapter-indexing.js";
+import {
+  resolveCanonicalChapterRecord,
+  resolveIndexedChapterForFile,
+  upsertCanonicalChapterRecord,
+} from "../../structure/chapter-indexing.js";
 import { indexCanonicalEpigraph } from "../../structure/epigraph-indexing.js";
 import { openDb } from "../../core/db.js";
 
@@ -397,6 +401,63 @@ describe("resolveCanonicalChapterRecord", () => {
     assert.equal(chapter.logline, "Existing chapter logline");
     assert.equal(chapter.source_checksum, checksumProse("1:Arrival:Existing chapter logline"));
     assert.equal(chapter.metadata_stale, 1);
+
+    db.close();
+  });
+
+  test("resolver hydrates compatibility fields from an explicit scene chapter id", () => {
+    const db = openDb(":memory:");
+    db.prepare(`
+      INSERT INTO projects (project_id, name)
+      VALUES ('test-novel', 'test-novel')
+    `).run();
+    db.prepare(`
+      INSERT INTO chapters (
+        chapter_id, project_id, title, sort_index, source_checksum, updated_at
+      ) VALUES (
+        'ch-02-departure', 'test-novel', 'Departure', 2, 'abc', '2026-05-17T00:00:00.000Z'
+      )
+    `).run();
+
+    const result = resolveIndexedChapterForFile(db, {
+      syncDir: "/sync",
+      projectId: "test-novel",
+      filePath: "/sync/projects/test-novel/scenes/sc-001.md",
+      relativePath: "projects/test-novel/scenes/sc-001.md",
+      meta: { scene_id: "sc-001", chapter_id: "ch-02-departure" },
+      chapterStructure: { role: null, isEpigraph: false, chapter: null },
+    });
+
+    assert.equal(result.chapterId, "ch-02-departure");
+    assert.equal(result.chapterSortIndex, 2);
+    assert.equal(result.chapterTitle, "Departure");
+    assert.equal(result.chapterWarning, null);
+    assert.equal(result.upsertChapter, null);
+
+    db.close();
+  });
+
+  test("resolver warns and clears unknown explicit scene chapter ids", () => {
+    const db = openDb(":memory:");
+    db.prepare(`
+      INSERT INTO projects (project_id, name)
+      VALUES ('test-novel', 'test-novel')
+    `).run();
+
+    const result = resolveIndexedChapterForFile(db, {
+      syncDir: "/sync",
+      projectId: "test-novel",
+      filePath: "/sync/projects/test-novel/scenes/sc-001.md",
+      relativePath: "projects/test-novel/scenes/sc-001.md",
+      meta: { scene_id: "sc-001", chapter_id: "ch-missing" },
+      chapterStructure: { role: null, isEpigraph: false, chapter: null },
+    });
+
+    assert.equal(result.chapterId, null);
+    assert.equal(result.chapterSortIndex, null);
+    assert.equal(result.chapterTitle, null);
+    assert.match(result.chapterWarning, /Scene references unknown chapter_id 'ch-missing'/);
+    assert.equal(result.upsertChapter, null);
 
     db.close();
   });
