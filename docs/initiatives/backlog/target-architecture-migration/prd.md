@@ -1,6 +1,6 @@
 # PRD: Target Architecture Migration
 
-**Status:** 📋 Deferred backlog (not active)
+**Status:** Active
 
 This initiative captures preparatory refactoring and staged migration work needed to move Writing MCP toward the [Conceptual Target Architecture](../../../foundations/target-architecture.md) without forcing an early storage rewrite or behavior change.
 

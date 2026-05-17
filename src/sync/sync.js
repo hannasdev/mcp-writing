@@ -2,7 +2,23 @@ import fs from "node:fs";
 import path from "node:path";
 import matter from "gray-matter";
 import yaml from "js-yaml";
+import {
+  inferChapterStructureFromPath,
+  inferScenePositionFromPath,
+  normalizeSceneMetaForPath,
+  slugifyChapterValue,
+} from "../structure/structure-inference.js";
+import {
+  parkConflictingChapterSortIndex,
+  resolveCanonicalChapterRecord,
+} from "../structure/chapter-indexing.js";
 const { load: parseYaml, dump: stringifyYaml } = yaml;
+
+export {
+  inferChapterStructureFromPath,
+  inferScenePositionFromPath,
+  normalizeSceneMetaForPath,
+};
 
 // ---------------------------------------------------------------------------
 // Pure utilities (no DB dependency — easy to unit test)
@@ -60,142 +76,6 @@ function isNestedMirrorPath(syncDir, filePath) {
 
 export function sidecarPath(filePath) {
   return filePath.replace(/\.(md|txt)$/, ".meta.yaml");
-}
-
-export function inferScenePositionFromPath(syncDir, filePath) {
-  const rel = path.relative(syncDir, filePath);
-  const parts = rel.split(path.sep);
-  let part = null;
-  let chapter = null;
-
-  for (const segment of parts) {
-    const partMatch = segment.match(/^part-(\d+)(?:-.+)?$/i);
-    if (partMatch) part = parseInt(partMatch[1], 10);
-
-    const chapterMatch = segment.match(/^chapter-(\d+)(?:-.+)?$/i);
-    if (chapterMatch) chapter = parseInt(chapterMatch[1], 10);
-  }
-
-  return { part, chapter };
-}
-
-function titleCaseFolderLabel(value) {
-  return String(value ?? "")
-    .replace(/[-_]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .replace(/\b\w/g, char => char.toUpperCase());
-}
-
-function slugifyChapterValue(value) {
-  return String(value ?? "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-}
-
-function isExplicitChapterContainer(parts, index) {
-  const parent = parts[index - 1]?.toLowerCase() ?? null;
-  return parent === "draft" || parent === "scenes";
-}
-
-export function inferChapterStructureFromPath(syncDir, filePath, meta = {}) {
-  const rel = path.relative(syncDir, filePath);
-  const parts = rel.split(path.sep);
-  let role = null;
-  let chapterFolder = null;
-  let chapterSortIndex = null;
-  let chapterTitle = null;
-  let chapterFolderKey = null;
-
-  for (let index = 0; index < parts.length - 1; index += 1) {
-    const segment = parts[index];
-    const normalized = segment.toLowerCase();
-
-    if (normalized === "prologue" || normalized === "00-prologue") {
-      role = "prologue";
-      continue;
-    }
-    if (normalized === "epilogue" || normalized === "99-epilogue") {
-      role = "epilogue";
-      continue;
-    }
-
-    let match = segment.match(/^(\d+)-(.+)$/);
-    if (!match) {
-      match = segment.match(/^chapter-(\d+)(?:-(.+))?$/i);
-    }
-    if (!match || !isExplicitChapterContainer(parts, index)) continue;
-
-    chapterFolder = segment;
-    chapterSortIndex = Number.parseInt(match[1], 10);
-    chapterTitle = titleCaseFolderLabel(match[2] ?? `Chapter ${chapterSortIndex}`);
-    chapterFolderKey = parts.slice(0, index + 1).join(path.sep);
-  }
-
-  const baseName = path.basename(filePath, path.extname(filePath)).toLowerCase();
-  const explicitEpigraph = meta.kind === "epigraph"
-    || meta.type === "epigraph"
-    || typeof meta.epigraph_id === "string"
-    || baseName === "epigraph";
-
-  if (chapterSortIndex == null) {
-    const fallback = inferScenePositionFromPath(syncDir, filePath);
-    if (fallback.chapter != null) {
-      chapterSortIndex = fallback.chapter;
-      chapterTitle = titleCaseFolderLabel(meta.chapter_title ?? `Chapter ${fallback.chapter}`);
-      chapterFolderKey = chapterFolderKey ?? parts.slice(0, Math.max(0, parts.length - 1)).join(path.sep);
-    }
-  }
-
-  if (chapterSortIndex == null) {
-    return {
-      role,
-      isEpigraph: explicitEpigraph,
-      chapter: null,
-    };
-  }
-
-  const chapterSlug = slugifyChapterValue(chapterTitle) || `chapter-${chapterSortIndex}`;
-  return {
-    role,
-    isEpigraph: explicitEpigraph,
-    chapter: {
-      chapter_id: `ch-${String(chapterSortIndex).padStart(2, "0")}-${chapterSlug}`,
-      sort_index: chapterSortIndex,
-      title: chapterTitle,
-      folder_name: chapterFolder ?? `chapter-${chapterSortIndex}`,
-      folder_key: chapterFolderKey ?? parts.slice(0, Math.max(0, parts.length - 1)).join(path.sep),
-      source_kind: chapterFolder ? "chapter_folder" : "legacy_layout",
-    },
-  };
-}
-
-export function normalizeSceneMetaForPath(syncDir, filePath, meta = {}) {
-  const derived = inferScenePositionFromPath(syncDir, filePath);
-  const chapterStructure = inferChapterStructureFromPath(syncDir, filePath, meta);
-  const normalized = { ...meta };
-
-  if (derived.part !== null) normalized.part = derived.part;
-  if (derived.chapter !== null) normalized.chapter = derived.chapter;
-  if (chapterStructure.chapter?.chapter_id) {
-    normalized.chapter_id = chapterStructure.chapter.chapter_id;
-    normalized.chapter = chapterStructure.chapter.sort_index;
-    normalized.chapter_title = chapterStructure.chapter.title;
-  }
-  if (chapterStructure.role) {
-    normalized.scene_role = chapterStructure.role;
-  }
-
-  return {
-    meta: normalized,
-    derived,
-    chapterStructure,
-    mismatches: {
-      part: derived.part !== null && meta.part != null && meta.part !== derived.part,
-      chapter: derived.chapter !== null && meta.chapter != null && meta.chapter !== derived.chapter,
-    },
-  };
 }
 
 // Structural directory names that are never project slugs under projects/<id>/.
@@ -1059,129 +939,6 @@ function pruneMissingEpigraphs(db, seenEpigraphKeys, syncDir) {
     db.prepare(`DELETE FROM epigraph_tags WHERE epigraph_id = ? AND project_id = ?`).run(row.epigraph_id, row.project_id);
     db.prepare(`DELETE FROM epigraphs WHERE epigraph_id = ? AND project_id = ?`).run(row.epigraph_id, row.project_id);
   }
-}
-
-function resolveCanonicalChapterRecord(db, {
-  syncDir,
-  projectId,
-  derivedChapterId,
-  sortIndex,
-  title,
-  sourcePath,
-  allowSourcePathMatch = false,
-}) {
-  if (!projectId || sortIndex == null || !title) return null;
-
-  const normalizedSourcePath = sourcePath ?? null;
-  const bySourcePath = allowSourcePathMatch && normalizedSourcePath
-    ? db.prepare(`
-        SELECT chapter_id, title, sort_index, logline, source_checksum, metadata_stale
-        FROM chapters
-        WHERE project_id = ? AND source_path = ?
-      `).get(projectId, normalizedSourcePath)
-    : null;
-
-  if (bySourcePath) {
-    return {
-      ...bySourcePath,
-      chapter_id: bySourcePath.chapter_id,
-      title,
-      sort_index: sortIndex,
-      source_path: normalizedSourcePath,
-    };
-  }
-
-  const byTitle = db.prepare(`
-    SELECT chapter_id, title, sort_index, logline, source_path, source_checksum, metadata_stale
-    FROM chapters
-    WHERE project_id = ? AND title = ?
-    ORDER BY chapter_id
-  `).all(projectId, title);
-
-  if (byTitle.length === 1) {
-    const existingTitleSourcePath = byTitle[0].source_path ?? null;
-    const existingTitleSourceExists = Boolean(
-      syncDir
-      && existingTitleSourcePath
-      && fs.existsSync(path.join(syncDir, existingTitleSourcePath))
-    );
-    const canReuseByTitle = allowSourcePathMatch || byTitle[0].sort_index === sortIndex;
-    if (canReuseByTitle && (!existingTitleSourceExists || existingTitleSourcePath === normalizedSourcePath)) {
-      return {
-        ...byTitle[0],
-        chapter_id: byTitle[0].chapter_id,
-        title,
-        sort_index: sortIndex,
-        source_path: normalizedSourcePath,
-      };
-    }
-  }
-
-  if (byTitle.length > 1) {
-    return null;
-  }
-
-  const bySortIndex = db.prepare(`
-    SELECT chapter_id, title, sort_index, logline, source_path, source_checksum, metadata_stale
-    FROM chapters
-    WHERE project_id = ? AND sort_index = ?
-  `).get(projectId, sortIndex);
-
-  if (bySortIndex) {
-    const existingSourceExists = Boolean(
-      syncDir
-      && bySortIndex.source_path
-      && fs.existsSync(path.join(syncDir, bySortIndex.source_path))
-    );
-    if (
-      normalizedSourcePath
-      && bySortIndex.source_path
-      && bySortIndex.source_path !== normalizedSourcePath
-      && existingSourceExists
-    ) {
-      return {
-        ambiguous: true,
-        existingSourcePath: bySortIndex.source_path,
-        conflictingSourcePath: normalizedSourcePath,
-        sort_index: sortIndex,
-      };
-    }
-    return {
-      ...bySortIndex,
-      chapter_id: bySortIndex.chapter_id,
-      title,
-      sort_index: sortIndex,
-      source_path: normalizedSourcePath,
-    };
-  }
-
-  return {
-    chapter_id: derivedChapterId,
-    title,
-    sort_index: sortIndex,
-    source_path: normalizedSourcePath,
-    logline: null,
-    source_checksum: null,
-    metadata_stale: 0,
-  };
-}
-
-function parkConflictingChapterSortIndex(db, { projectId, chapterId, targetSortIndex }) {
-  if (!projectId || !chapterId || targetSortIndex == null) return;
-
-  const conflictingChapter = db.prepare(`
-    SELECT chapter_id, sort_index
-    FROM chapters
-    WHERE project_id = ? AND sort_index = ? AND chapter_id != ?
-  `).get(projectId, targetSortIndex, chapterId);
-
-  if (!conflictingChapter) return;
-
-  db.prepare(`
-    UPDATE chapters
-    SET sort_index = ?
-    WHERE project_id = ? AND chapter_id = ?
-  `).run(-1000000 - Number(conflictingChapter.sort_index), projectId, conflictingChapter.chapter_id);
 }
 
 export function indexSceneFile(db, syncDir, file, meta, prose) {

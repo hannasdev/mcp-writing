@@ -13,6 +13,11 @@ import {
   isWorldFile, readMeta, isSyncDirWritable, sidecarPath, syncAll,
   walkFiles, walkSidecars, worldEntityFolderKey, worldEntityKindForPath,
 } from "../../sync/sync.js";
+import {
+  inferChapterStructureFromPath as inferChapterStructureFromStructureModule,
+  normalizeSceneMetaForPath as normalizeSceneMetaForPathFromStructureModule,
+} from "../../structure/structure-inference.js";
+import { resolveCanonicalChapterRecord } from "../../structure/chapter-indexing.js";
 import { openDb } from "../../core/db.js";
 
 describe("checksumProse", () => {
@@ -277,6 +282,66 @@ describe("inferChapterStructureFromPath", () => {
   test("does not treat non-draft numeric slug ancestors as chapter folders", () => {
     const result = inferChapterStructureFromPath(syncDir, "/sync/projects/novel/2026-novel/scenes/sc-001.md");
     assert.equal(result.chapter, null);
+  });
+
+  test("structure module preserves legacy layout chapter fallback", () => {
+    const result = inferChapterStructureFromStructureModule(
+      syncDir,
+      "/sync/projects/novel/scenes/part-1/chapter-2/sc-002.md",
+      { scene_id: "sc-002", chapter_title: "The Old Road" }
+    );
+    assert.deepEqual(result.chapter, {
+      chapter_id: "ch-02-the-old-road",
+      sort_index: 2,
+      title: "The Old Road",
+      folder_name: "chapter-2",
+      folder_key: "projects/novel/scenes/part-1/chapter-2",
+      source_kind: "legacy_layout",
+    });
+  });
+
+  test("structure module normalizes explicit folder metadata without changing mismatch reporting", () => {
+    const result = normalizeSceneMetaForPathFromStructureModule(
+      syncDir,
+      "/sync/projects/novel/Draft/03-The signal/sc-003.md",
+      { scene_id: "sc-003", chapter: 2 }
+    );
+    assert.equal(result.meta.chapter_id, "ch-03-the-signal");
+    assert.equal(result.meta.chapter, 3);
+    assert.equal(result.meta.chapter_title, "The Signal");
+    assert.equal(result.mismatches.chapter, false);
+  });
+});
+
+describe("resolveCanonicalChapterRecord", () => {
+  test("reuses an existing canonical chapter by sort index", () => {
+    const db = openDb(":memory:");
+    db.prepare(`
+      INSERT INTO projects (project_id, name)
+      VALUES ('test-novel', 'test-novel')
+    `).run();
+    db.prepare(`
+      INSERT INTO chapters (
+        chapter_id, project_id, title, sort_index, source_path, source_checksum, updated_at
+      ) VALUES (
+        'ch-01-arrival', 'test-novel', 'Arrival', 1, 'projects/test-novel/scenes/chapter-1', 'abc', '2026-05-17T00:00:00.000Z'
+      )
+    `).run();
+
+    const result = resolveCanonicalChapterRecord(db, {
+      projectId: "test-novel",
+      derivedChapterId: "ch-01-arrival-new",
+      sortIndex: 1,
+      title: "Arrival",
+      sourcePath: "projects/test-novel/scenes/chapter-1-renamed",
+    });
+
+    assert.equal(result.chapter_id, "ch-01-arrival");
+    assert.equal(result.sort_index, 1);
+    assert.equal(result.title, "Arrival");
+    assert.equal(result.source_path, "projects/test-novel/scenes/chapter-1-renamed");
+
+    db.close();
   });
 });
 

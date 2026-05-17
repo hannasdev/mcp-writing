@@ -1,6 +1,6 @@
 # Target Architecture Migration — Milestones
 
-Status: Deferred backlog (not active)  
+Status: Active  
 Owner: MCP Writing  
 Date: 2026-05-17
 
