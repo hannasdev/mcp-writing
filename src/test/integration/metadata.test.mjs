@@ -68,6 +68,7 @@ describe("update_scene_metadata tool", () => {
     const raw = fs.readFileSync(sidecarFile, "utf8");
     assert.ok(raw.includes(`chapter_id: ${firstChapter.chapter_id}`));
     assert.ok(raw.includes("chapter: 1"));
+    assert.ok(raw.includes(`chapter_title: ${firstChapter.title}`));
 
     const findText = await callWriteTool("find_scenes", {
       project_id: "test-novel",

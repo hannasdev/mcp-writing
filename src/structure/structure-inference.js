@@ -109,24 +109,36 @@ export function inferChapterStructureFromPath(syncDir, filePath, meta = {}) {
   };
 }
 
-export function normalizeSceneMetaForPath(syncDir, filePath, meta = {}) {
+export function buildSceneStructurePatch(syncDir, filePath, meta = {}, { chapter } = {}) {
   const derived = inferScenePositionFromPath(syncDir, filePath);
   const chapterStructure = inferChapterStructureFromPath(syncDir, filePath, meta);
-  const normalized = { ...meta };
+  const patch = {};
 
-  if (derived.part !== null) normalized.part = derived.part;
-  if (derived.chapter !== null) normalized.chapter = derived.chapter;
+  if (chapter !== undefined) {
+    if (chapter === null) {
+      patch.chapter_id = null;
+      patch.chapter = null;
+      patch.chapter_title = null;
+    } else {
+      patch.chapter_id = chapter.chapter_id;
+      patch.chapter = chapter.sort_index;
+      patch.chapter_title = chapter.title ?? null;
+    }
+  }
+
+  if (derived.part !== null) patch.part = derived.part;
+  if (derived.chapter !== null) patch.chapter = derived.chapter;
   if (chapterStructure.chapter?.chapter_id) {
-    normalized.chapter_id = chapterStructure.chapter.chapter_id;
-    normalized.chapter = chapterStructure.chapter.sort_index;
-    normalized.chapter_title = chapterStructure.chapter.title;
+    patch.chapter_id = chapterStructure.chapter.chapter_id;
+    patch.chapter = chapterStructure.chapter.sort_index;
+    patch.chapter_title = chapterStructure.chapter.title;
   }
   if (chapterStructure.role) {
-    normalized.scene_role = chapterStructure.role;
+    patch.scene_role = chapterStructure.role;
   }
 
   return {
-    meta: normalized,
+    patch,
     derived,
     chapterStructure,
     mismatches: {
@@ -134,4 +146,16 @@ export function normalizeSceneMetaForPath(syncDir, filePath, meta = {}) {
       chapter: derived.chapter !== null && meta.chapter != null && meta.chapter !== derived.chapter,
     },
   };
+}
+
+export function applySceneStructurePatch(syncDir, filePath, meta = {}, options = {}) {
+  const plan = buildSceneStructurePatch(syncDir, filePath, meta, options);
+  return {
+    ...plan,
+    meta: { ...meta, ...plan.patch },
+  };
+}
+
+export function normalizeSceneMetaForPath(syncDir, filePath, meta = {}) {
+  return applySceneStructurePatch(syncDir, filePath, meta);
 }
