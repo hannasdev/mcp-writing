@@ -12,7 +12,8 @@ import {
   isCanonicalWorldEntityFile, getSyncOwnershipDiagnostics, getFileWriteDiagnostics,
   isWorldFile, readMeta, isSyncDirWritable, sidecarPath, syncAll,
   walkFiles, walkSidecars, worldEntityFolderKey, worldEntityKindForPath,
-  buildCanonicalIndexPlan, observeStructureForFile,
+  buildCanonicalIndexPlan, buildWarningSummary, observeOrphanedSidecars,
+  observeStructureForFile, readSceneFileForSync, scanSyncFiles,
 } from "../../sync/sync.js";
 import {
   buildSceneStructurePatch,
@@ -66,6 +67,31 @@ describe("walkFiles", () => {
     const files = walkFiles(dir);
     assert.equal(files.length, 1);
     assert.ok(files[0].endsWith("notes.txt"));
+    fs.rmSync(dir, { recursive: true });
+  });
+});
+
+describe("scanSyncFiles", () => {
+  test("returns scan files and diagnostics for ignored nested mirrors", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "scan-"));
+    const realScenePath = path.join(dir, "projects", "test-novel", "scenes", "sc-001.md");
+    const mirrorScenePath = path.join(dir, "projects", "test-novel", "scenes", "projects", "test-novel", "scenes", "sc-001.md");
+    fs.mkdirSync(path.dirname(realScenePath), { recursive: true });
+    fs.mkdirSync(path.dirname(mirrorScenePath), { recursive: true });
+    fs.writeFileSync(realScenePath, "");
+    fs.writeFileSync(mirrorScenePath, "");
+
+    const result = scanSyncFiles(dir);
+
+    assert.deepEqual(result.files.map((file) => path.relative(dir, file)), [
+      path.join("projects", "test-novel", "scenes", "sc-001.md"),
+    ]);
+    assert.deepEqual(result.diagnostics, [{
+      type: "nested_mirror",
+      message: `Ignored nested mirror path: ${path.join("projects", "test-novel", "scenes", "projects", "test-novel", "scenes", "sc-001.md")}`,
+      relativePath: path.join("projects", "test-novel", "scenes", "projects", "test-novel", "scenes", "sc-001.md"),
+    }]);
+
     fs.rmSync(dir, { recursive: true });
   });
 });
@@ -141,6 +167,27 @@ describe("readMeta", () => {
     fs.writeFileSync(path.join(dir, "sc-001.meta.yaml"), "scene_id: new-id\n");
     const { meta } = readMeta(path.join(dir, "sc-001.md"), dir);
     assert.equal(meta.scene_id, "new-id");
+    fs.rmSync(dir, { recursive: true });
+  });
+});
+
+describe("readSceneFileForSync", () => {
+  test("returns normalized metadata and prose for scene indexing", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "scene-read-"));
+    const scenePath = path.join(dir, "projects", "test-novel", "scenes", "part-1", "chapter-2", "sc-001.md");
+    fs.mkdirSync(path.dirname(scenePath), { recursive: true });
+    fs.writeFileSync(scenePath, "---\nscene_id: sc-001\ntitle: Read Phase\nchapter: 9\n---\nScene prose.");
+
+    const result = readSceneFileForSync(dir, scenePath);
+
+    assert.equal(result.meta.scene_id, "sc-001");
+    assert.equal(result.meta.chapter, 2);
+    assert.equal(result.sourceMeta.chapter, 9);
+    assert.equal(result.derived.chapter, 2);
+    assert.equal(result.mismatches.chapter, true);
+    assert.equal(result.prose, "Scene prose.");
+    assert.equal(result.frontmatter.title, "Read Phase");
+
     fs.rmSync(dir, { recursive: true });
   });
 });
@@ -447,6 +494,71 @@ describe("structure observation", () => {
     assert.equal(db.prepare("SELECT count(*) AS count FROM chapters").get().count, 0);
 
     db.close();
+  });
+});
+
+describe("warning summary", () => {
+  test("summarizes diagnostic warnings by taxonomy", () => {
+    const summary = buildWarningSummary([
+      "Ignored nested mirror path: projects/test-novel/scenes/projects/test-novel/scenes/sc-001.md",
+      "Scene references unknown chapter_id 'ch-99-missing': projects/test-novel/scenes/sc-001.md",
+      "Something uncategorized happened",
+    ]);
+
+    assert.deepEqual(summary, {
+      nested_mirror: {
+        count: 1,
+        examples: ["Ignored nested mirror path: projects/test-novel/scenes/projects/test-novel/scenes/sc-001.md"],
+      },
+      chapter_structure: {
+        count: 1,
+        examples: ["Scene references unknown chapter_id 'ch-99-missing': projects/test-novel/scenes/sc-001.md"],
+      },
+      other: {
+        count: 1,
+        examples: ["Something uncategorized happened"],
+      },
+    });
+  });
+});
+
+describe("orphaned sidecar observation", () => {
+  test("returns diagnostics for orphaned and moved sidecars", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sidecar-observe-"));
+    const orphanedSidecar = path.join(dir, "projects", "test-novel", "scenes", "sc-deleted.meta.yaml");
+    const movedSidecar = path.join(dir, "projects", "test-novel", "scenes", "old", "sc-moved.meta.yaml");
+    fs.mkdirSync(path.dirname(orphanedSidecar), { recursive: true });
+    fs.mkdirSync(path.dirname(movedSidecar), { recursive: true });
+    fs.writeFileSync(orphanedSidecar, "scene_id: sc-deleted\n");
+    fs.writeFileSync(movedSidecar, "scene_id: sc-moved\n");
+
+    const diagnostics = observeOrphanedSidecars(dir, {
+      indexedSceneIds: new Set(["sc-moved"]),
+    });
+
+    assert.deepEqual(
+      diagnostics.map((diagnostic) => ({
+        type: diagnostic.type,
+        sceneId: diagnostic.sceneId,
+        relativePath: diagnostic.relativePath,
+      })).sort((a, b) => a.sceneId.localeCompare(b.sceneId)),
+      [
+        {
+          type: "orphaned_sidecar",
+          sceneId: "sc-deleted",
+          relativePath: path.join("projects", "test-novel", "scenes", "sc-deleted.meta.yaml"),
+        },
+        {
+          type: "moved_scene",
+          sceneId: "sc-moved",
+          relativePath: path.join("projects", "test-novel", "scenes", "old", "sc-moved.meta.yaml"),
+        },
+      ]
+    );
+    assert.ok(diagnostics.find((diagnostic) => diagnostic.type === "orphaned_sidecar").message.includes("Orphaned sidecar"));
+    assert.ok(diagnostics.find((diagnostic) => diagnostic.type === "moved_scene").message.includes("Moved scene detected"));
+
+    fs.rmSync(dir, { recursive: true });
   });
 });
 
