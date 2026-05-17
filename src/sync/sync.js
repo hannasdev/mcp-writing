@@ -3,6 +3,8 @@ import path from "node:path";
 import matter from "gray-matter";
 import yaml from "js-yaml";
 import {
+  applySceneStructurePatch,
+  buildSceneStructurePatch,
   inferChapterStructureFromPath,
   inferScenePositionFromPath,
   normalizeSceneMetaForPath,
@@ -16,6 +18,8 @@ import { indexCanonicalEpigraph } from "../structure/epigraph-indexing.js";
 const { load: parseYaml, dump: stringifyYaml } = yaml;
 
 export {
+  applySceneStructurePatch,
+  buildSceneStructurePatch,
   inferChapterStructureFromPath,
   inferScenePositionFromPath,
   normalizeSceneMetaForPath,

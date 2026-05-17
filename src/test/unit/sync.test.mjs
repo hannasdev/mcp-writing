@@ -14,6 +14,7 @@ import {
   walkFiles, walkSidecars, worldEntityFolderKey, worldEntityKindForPath,
 } from "../../sync/sync.js";
 import {
+  buildSceneStructurePatch,
   inferChapterStructureFromPath as inferChapterStructureFromStructureModule,
   normalizeSceneMetaForPath as normalizeSceneMetaForPathFromStructureModule,
 } from "../../structure/structure-inference.js";
@@ -315,6 +316,64 @@ describe("inferChapterStructureFromPath", () => {
     assert.equal(result.meta.chapter, 3);
     assert.equal(result.meta.chapter_title, "The Signal");
     assert.equal(result.mismatches.chapter, false);
+  });
+
+  test("structure module builds explicit chapter sidecar patches", () => {
+    const result = buildSceneStructurePatch(
+      syncDir,
+      "/sync/projects/novel/scenes/sc-004.md",
+      { scene_id: "sc-004" },
+      {
+        chapter: {
+          chapter_id: "ch-02-the-crossing",
+          sort_index: 2,
+          title: "The Crossing",
+        },
+      }
+    );
+
+    assert.deepEqual(result.patch, {
+      chapter_id: "ch-02-the-crossing",
+      chapter: 2,
+      chapter_title: "The Crossing",
+    });
+  });
+
+  test("structure module clears explicit chapter sidecar patches", () => {
+    const result = buildSceneStructurePatch(
+      syncDir,
+      "/sync/projects/novel/scenes/sc-005.md",
+      { scene_id: "sc-005", chapter_id: "ch-01-old", chapter: 1, chapter_title: "Old" },
+      { chapter: null }
+    );
+
+    assert.deepEqual(result.patch, {
+      chapter_id: null,
+      chapter: null,
+      chapter_title: null,
+    });
+  });
+
+  test("structure module lets explicit chapter patches override path-derived chapter fields", () => {
+    const result = buildSceneStructurePatch(
+      syncDir,
+      "/sync/projects/novel/scenes/part-1/chapter-1/sc-006.md",
+      { scene_id: "sc-006", chapter_title: "Path Chapter" },
+      {
+        chapter: {
+          chapter_id: "ch-02-explicit",
+          sort_index: 2,
+          title: "Explicit Chapter",
+        },
+      }
+    );
+
+    assert.deepEqual(result.patch, {
+      part: 1,
+      chapter_id: "ch-02-explicit",
+      chapter: 2,
+      chapter_title: "Explicit Chapter",
+    });
   });
 
   test("structure module detects epigraphs from filename and metadata", () => {

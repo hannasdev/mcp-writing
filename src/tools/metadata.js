@@ -1,7 +1,7 @@
 import { z } from "zod";
 import fs from "node:fs";
 import matter from "gray-matter";
-import { readMeta, writeMeta, indexSceneFile, normalizeSceneMetaForPath } from "../sync/sync.js";
+import { readMeta, writeMeta, indexSceneFile, applySceneStructurePatch } from "../sync/sync.js";
 import { validateProjectId, validateUniverseId } from "../sync/importer.js";
 import { resolveValidatedChapterFilter } from "../core/chapter-resolution.js";
 import {
@@ -545,6 +545,7 @@ export function registerMetadataTools(s, {
       try {
         const { meta } = readMeta(scene.file_path, SYNC_DIR, { writable: true });
         const nextFields = { ...fields };
+        let chapter = undefined;
 
         if (fields.chapter_id === null && fields.chapter !== undefined) {
           return errorResponse(
@@ -559,8 +560,20 @@ export function registerMetadataTools(s, {
         }
 
         if (fields.chapter_id === null) {
-          nextFields.chapter = null;
-          nextFields.chapter_title = null;
+          const structurePlan = applySceneStructurePatch(SYNC_DIR, scene.file_path, meta);
+          if (structurePlan.derived.chapter !== null || structurePlan.chapterStructure.chapter?.chapter_id) {
+            return errorResponse(
+              "VALIDATION_ERROR",
+              "chapter_id cannot be cleared for a scene whose file path implies a chapter.",
+              {
+                project_id,
+                scene_id,
+                chapter_id: null,
+                path_chapter: structurePlan.chapterStructure.chapter?.chapter_id ?? structurePlan.derived.chapter,
+              }
+            );
+          }
+          chapter = null;
         } else if (fields.chapter_id !== undefined || fields.chapter !== undefined) {
           const resolvedChapterFilter = resolveValidatedChapterFilter(db, {
             projectId: project_id,
@@ -594,12 +607,10 @@ export function registerMetadataTools(s, {
             );
           }
 
-          nextFields.chapter_id = resolvedChapter.chapter_id;
-          nextFields.chapter = resolvedChapter.sort_index;
-          nextFields.chapter_title = resolvedChapter.title ?? null;
+          chapter = resolvedChapter;
         }
 
-        const updated = normalizeSceneMetaForPath(SYNC_DIR, scene.file_path, { ...meta, ...nextFields }).meta;
+        const updated = applySceneStructurePatch(SYNC_DIR, scene.file_path, { ...meta, ...nextFields }, { chapter }).meta;
         writeMeta(scene.file_path, updated);
 
         const { content: prose } = matter(fs.readFileSync(scene.file_path, "utf8"));
