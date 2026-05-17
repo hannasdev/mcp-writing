@@ -18,6 +18,7 @@ import {
   normalizeSceneMetaForPath as normalizeSceneMetaForPathFromStructureModule,
 } from "../../structure/structure-inference.js";
 import { resolveCanonicalChapterRecord, upsertCanonicalChapterRecord } from "../../structure/chapter-indexing.js";
+import { indexCanonicalEpigraph } from "../../structure/epigraph-indexing.js";
 import { openDb } from "../../core/db.js";
 
 describe("checksumProse", () => {
@@ -396,6 +397,58 @@ describe("resolveCanonicalChapterRecord", () => {
     assert.equal(chapter.logline, "Existing chapter logline");
     assert.equal(chapter.source_checksum, checksumProse("1:Arrival:Existing chapter logline"));
     assert.equal(chapter.metadata_stale, 1);
+
+    db.close();
+  });
+});
+
+describe("indexCanonicalEpigraph", () => {
+  test("warns instead of reassigning an epigraph id owned by another chapter", () => {
+    const db = openDb(":memory:");
+    db.prepare(`
+      INSERT INTO projects (project_id, name)
+      VALUES ('test-novel', 'test-novel')
+    `).run();
+    db.prepare(`
+      INSERT INTO chapters (
+        chapter_id, project_id, title, sort_index, source_checksum, updated_at
+      ) VALUES
+        ('ch-01-arrival', 'test-novel', 'Arrival', 1, 'ch1', '2026-05-17T00:00:00.000Z'),
+        ('ch-02-departure', 'test-novel', 'Departure', 2, 'ch2', '2026-05-17T00:00:00.000Z')
+    `).run();
+    db.prepare(`
+      INSERT INTO epigraphs (
+        epigraph_id, project_id, chapter_id, body, file_path, prose_checksum, updated_at
+      ) VALUES (
+        'epi-shared', 'test-novel', 'ch-02-departure', 'Existing epigraph.', '/sync/epigraph.md', 'old', '2026-05-17T00:00:00.000Z'
+      )
+    `).run();
+
+    const result = indexCanonicalEpigraph(db, {
+      projectId: "test-novel",
+      chapterId: "ch-01-arrival",
+      chapterSortIndex: 1,
+      chapterStructure: { chapter: { sort_index: 1 } },
+      meta: { epigraph_id: "epi-shared" },
+      prose: "New epigraph.",
+      file: "/sync/projects/test-novel/Draft/01-Arrival/epigraph.md",
+      relativePath: "projects/test-novel/Draft/01-Arrival/epigraph.md",
+      buildProseChecksum: checksumProse,
+      buildDefaultEpigraphId: ({ projectId, chapterId }) => `epi-${projectId}-${chapterId}`,
+    });
+
+    assert.equal(result.skippedAsEpigraph, true);
+    assert.match(result.warning, /already belongs to another chapter/);
+
+    const epigraph = db.prepare(`
+      SELECT chapter_id, body
+      FROM epigraphs
+      WHERE epigraph_id = 'epi-shared' AND project_id = 'test-novel'
+    `).get();
+    assert.deepEqual({ ...epigraph }, {
+      chapter_id: "ch-02-departure",
+      body: "Existing epigraph.",
+    });
 
     db.close();
   });
