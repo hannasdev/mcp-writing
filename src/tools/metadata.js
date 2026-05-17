@@ -560,6 +560,19 @@ export function registerMetadataTools(s, {
         }
 
         if (fields.chapter_id === null) {
+          const structurePlan = applySceneStructurePatch(SYNC_DIR, scene.file_path, meta);
+          if (structurePlan.derived.chapter !== null || structurePlan.chapterStructure.chapter?.chapter_id) {
+            return errorResponse(
+              "VALIDATION_ERROR",
+              "chapter_id cannot be cleared for a scene whose file path implies a chapter.",
+              {
+                project_id,
+                scene_id,
+                chapter_id: null,
+                path_chapter: structurePlan.chapterStructure.chapter?.chapter_id ?? structurePlan.derived.chapter,
+              }
+            );
+          }
           chapter = null;
         } else if (fields.chapter_id !== undefined || fields.chapter !== undefined) {
           const resolvedChapterFilter = resolveValidatedChapterFilter(db, {

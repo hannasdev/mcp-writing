@@ -99,6 +99,21 @@ describe("update_scene_metadata tool", () => {
     assert.equal(parsed.error.code, "VALIDATION_ERROR");
     assert.match(parsed.error.message, /must refer to the same canonical chapter/);
   });
+
+  test("rejects clearing chapter_id for a path-chaptered scene", async () => {
+    const text = await callWriteTool("update_scene_metadata", {
+      scene_id: "sc-001",
+      project_id: "test-novel",
+      fields: { chapter_id: null },
+    });
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.ok, false);
+    assert.equal(parsed.error.code, "VALIDATION_ERROR");
+    assert.match(parsed.error.message, /file path implies a chapter/);
+    assert.equal(parsed.error.details.scene_id, "sc-001");
+    assert.notEqual(parsed.error.details.path_chapter, null);
+  });
 });
 
 describe("update_character_sheet tool", () => {
