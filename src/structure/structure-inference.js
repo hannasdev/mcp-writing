@@ -114,6 +114,16 @@ export function buildSceneStructurePatch(syncDir, filePath, meta = {}, { chapter
   const chapterStructure = inferChapterStructureFromPath(syncDir, filePath, meta);
   const patch = {};
 
+  if (derived.part !== null) patch.part = derived.part;
+  if (derived.chapter !== null) patch.chapter = derived.chapter;
+  if (chapterStructure.chapter?.chapter_id) {
+    patch.chapter_id = chapterStructure.chapter.chapter_id;
+    patch.chapter = chapterStructure.chapter.sort_index;
+    patch.chapter_title = chapterStructure.chapter.title;
+  }
+  if (chapterStructure.role) {
+    patch.scene_role = chapterStructure.role;
+  }
   if (chapter !== undefined) {
     if (chapter === null) {
       patch.chapter_id = null;
@@ -124,17 +134,6 @@ export function buildSceneStructurePatch(syncDir, filePath, meta = {}, { chapter
       patch.chapter = chapter.sort_index;
       patch.chapter_title = chapter.title ?? null;
     }
-  }
-
-  if (derived.part !== null) patch.part = derived.part;
-  if (derived.chapter !== null) patch.chapter = derived.chapter;
-  if (chapterStructure.chapter?.chapter_id) {
-    patch.chapter_id = chapterStructure.chapter.chapter_id;
-    patch.chapter = chapterStructure.chapter.sort_index;
-    patch.chapter_title = chapterStructure.chapter.title;
-  }
-  if (chapterStructure.role) {
-    patch.scene_role = chapterStructure.role;
   }
 
   return {

@@ -354,6 +354,28 @@ describe("inferChapterStructureFromPath", () => {
     });
   });
 
+  test("structure module lets explicit chapter patches override path-derived chapter fields", () => {
+    const result = buildSceneStructurePatch(
+      syncDir,
+      "/sync/projects/novel/scenes/part-1/chapter-1/sc-006.md",
+      { scene_id: "sc-006", chapter_title: "Path Chapter" },
+      {
+        chapter: {
+          chapter_id: "ch-02-explicit",
+          sort_index: 2,
+          title: "Explicit Chapter",
+        },
+      }
+    );
+
+    assert.deepEqual(result.patch, {
+      part: 1,
+      chapter_id: "ch-02-explicit",
+      chapter: 2,
+      chapter_title: "Explicit Chapter",
+    });
+  });
+
   test("structure module detects epigraphs from filename and metadata", () => {
     const byFilename = inferChapterStructureFromStructureModule(
       syncDir,

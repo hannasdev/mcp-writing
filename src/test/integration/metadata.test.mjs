@@ -2,6 +2,7 @@ import { test, describe, before, after } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
+import yaml from "js-yaml";
 import { createTestContext } from "../helpers/server.js";
 
 const ctx = createTestContext(3073, 3072);
@@ -65,10 +66,10 @@ describe("update_scene_metadata tool", () => {
     assert.ok(updateText.includes("Updated metadata"));
 
     const sidecarFile = path.join(sceneDir, "sc-unchaptered.meta.yaml");
-    const raw = fs.readFileSync(sidecarFile, "utf8");
-    assert.ok(raw.includes(`chapter_id: ${firstChapter.chapter_id}`));
-    assert.ok(raw.includes("chapter: 1"));
-    assert.ok(raw.includes(`chapter_title: ${firstChapter.title}`));
+    const sidecar = yaml.load(fs.readFileSync(sidecarFile, "utf8"));
+    assert.equal(sidecar.chapter_id, firstChapter.chapter_id);
+    assert.equal(sidecar.chapter, 1);
+    assert.equal(sidecar.chapter_title, firstChapter.title);
 
     const findText = await callWriteTool("find_scenes", {
       project_id: "test-novel",
