@@ -946,9 +946,86 @@ function pruneMissingEpigraphs(db, seenEpigraphKeys, syncDir) {
   }
 }
 
-export function indexSceneFile(db, syncDir, file, meta, prose) {
+export function buildStructureDiagnostic(message, { type = "chapter_structure", ...details } = {}) {
+  return { type, message, ...details };
+}
+
+export function observeStructureForFile(syncDir, file, {
+  meta = {},
+  sourceMeta = {},
+  derived = {},
+  mismatches = {},
+} = {}) {
   const { universe_id, project_id } = inferProjectAndUniverse(syncDir, file);
+  const relativePath = path.relative(syncDir, file);
   const chapterStructure = inferChapterStructureFromPath(syncDir, file, meta);
+  const diagnostics = [];
+
+  if (mismatches.part || mismatches.chapter) {
+    const details = [];
+    if (mismatches.part) details.push(`part metadata ${sourceMeta.part} != path part ${derived.part}`);
+    if (mismatches.chapter) details.push(`chapter metadata ${sourceMeta.chapter} != path chapter ${derived.chapter}`);
+    diagnostics.push(buildStructureDiagnostic(
+      `Path/metadata mismatch for scene "${meta.scene_id}": ${relativePath} (${details.join(", ")}). Using path-derived values.`,
+      {
+        type: "path_metadata_mismatch",
+        sceneId: meta.scene_id ?? null,
+        relativePath,
+      }
+    ));
+  }
+
+  return {
+    universeId: universe_id,
+    projectId: project_id,
+    relativePath,
+    chapterStructure,
+    observedChapter: chapterStructure.chapter
+      ? {
+        chapterId: chapterStructure.chapter.chapter_id,
+        sortIndex: chapterStructure.chapter.sort_index,
+        title: chapterStructure.chapter.title,
+        folderKey: chapterStructure.chapter.folder_key,
+        sourceKind: chapterStructure.chapter.source_kind,
+      }
+      : null,
+    observedEpigraph: chapterStructure.isEpigraph
+      ? {
+        epigraphId: meta.epigraph_id ?? null,
+        chapterId: meta.chapter_id ?? chapterStructure.chapter?.chapter_id ?? null,
+        relativePath,
+      }
+      : null,
+    diagnostics,
+  };
+}
+
+export function buildCanonicalIndexPlan(db, syncDir, file, meta, observedStructure = observeStructureForFile(syncDir, file, { meta })) {
+  const chapterResolution = resolveIndexedChapterForFile(db, {
+    syncDir,
+    projectId: observedStructure.projectId,
+    filePath: file,
+    relativePath: observedStructure.relativePath,
+    meta,
+    chapterStructure: observedStructure.chapterStructure,
+  });
+
+  return {
+    universeId: observedStructure.universeId,
+    projectId: observedStructure.projectId,
+    observedStructure,
+    chapterResolution,
+    canonicalChapter: chapterResolution.upsertChapter,
+    diagnostics: chapterResolution.chapterWarning
+      ? [buildStructureDiagnostic(chapterResolution.chapterWarning)]
+      : [],
+  };
+}
+
+export function indexSceneFile(db, syncDir, file, meta, prose, { observedStructure } = {}) {
+  const canonicalIndexPlan = buildCanonicalIndexPlan(db, syncDir, file, meta, observedStructure);
+  const { universeId: universe_id, projectId: project_id } = canonicalIndexPlan;
+  const { chapterStructure } = canonicalIndexPlan.observedStructure;
   const referenceIds = normalizeReferenceIdList(meta.reference_ids ?? meta.references);
   const explicitSceneLinks = collectExplicitReferenceLinks(
     meta,
@@ -965,22 +1042,13 @@ export function indexSceneFile(db, syncDir, file, meta, prose) {
     project_id, universe_id ?? null, project_id
   );
 
-  const relativePath = path.relative(syncDir, file);
-  const chapterResolution = resolveIndexedChapterForFile(db, {
-    syncDir,
-    projectId: project_id,
-    filePath: file,
-    relativePath,
-    meta,
-    chapterStructure,
-  });
   const {
     chapterId,
     chapterSortIndex,
     chapterTitle,
     chapterWarning,
     upsertChapter,
-  } = chapterResolution;
+  } = canonicalIndexPlan.chapterResolution;
 
   if (upsertChapter) {
     upsertCanonicalChapterRecord(db, {
@@ -991,7 +1059,7 @@ export function indexSceneFile(db, syncDir, file, meta, prose) {
   }
 
   if (chapterStructure.isEpigraph) {
-    return indexCanonicalEpigraph(db, {
+    const result = indexCanonicalEpigraph(db, {
       projectId: project_id,
       chapterId,
       chapterSortIndex,
@@ -999,11 +1067,12 @@ export function indexSceneFile(db, syncDir, file, meta, prose) {
       meta,
       prose,
       file,
-      relativePath,
+      relativePath: canonicalIndexPlan.observedStructure.relativePath,
       chapterWarning,
       buildProseChecksum: checksumProse,
       buildDefaultEpigraphId: ({ projectId, chapterId }) => `epi-${slugifyChapterValue(`${projectId}-${chapterId}`)}`,
     });
+    return { ...result, canonicalIndexPlan };
   }
 
   const newChecksum = checksumProse(prose);
@@ -1141,7 +1210,7 @@ export function indexSceneFile(db, syncDir, file, meta, prose) {
     relation: "informs",
   });
 
-  return { isStale, chapterId, warning: chapterWarning };
+  return { isStale, chapterId, warning: chapterWarning, canonicalIndexPlan };
 }
 
 const WARNING_TYPE_LABELS = {
@@ -1251,16 +1320,22 @@ export function syncAll(db, syncDir, { quiet = false, writable = false } = {}) {
     try {
       const { meta, sourceMeta, sidecarGenerated, derived, mismatches } = readMeta(file, syncDir, { writable });
       if (sidecarGenerated) sidecarsMigrated++;
-      const chapterStructure = inferChapterStructureFromPath(syncDir, file, meta);
+      const structureObservation = observeStructureForFile(syncDir, file, {
+        meta,
+        sourceMeta,
+        derived,
+        mismatches,
+      });
+      const { chapterStructure } = structureObservation;
 
       if (!meta.scene_id && !chapterStructure.isEpigraph) {
         skipped++;
-        if (!quiet) warnings.push(`Skipped (no scene_id): ${path.relative(syncDir, file)}`);
+        if (!quiet) warnings.push(`Skipped (no scene_id): ${structureObservation.relativePath}`);
         continue;
       }
 
       // Duplicate scene_id detection
-      const { project_id } = inferProjectAndUniverse(syncDir, file);
+      const project_id = structureObservation.projectId;
       const key = `${meta.scene_id}::${project_id}`;
       if (meta.scene_id && seenSceneIds.has(key)) {
         warnings.push(
@@ -1284,18 +1359,16 @@ export function syncAll(db, syncDir, { quiet = false, writable = false } = {}) {
         }
       }
 
-      if (mismatches.part || mismatches.chapter) {
-        const details = [];
-        if (mismatches.part) details.push(`part metadata ${sourceMeta.part} != path part ${derived.part}`);
-        if (mismatches.chapter) details.push(`chapter metadata ${sourceMeta.chapter} != path chapter ${derived.chapter}`);
-        warnings.push(
-          `Path/metadata mismatch for scene "${meta.scene_id}": ${path.relative(syncDir, file)} (${details.join(", ")}). Using path-derived values.`
-        );
+      for (const diagnostic of structureObservation.diagnostics) {
+        warnings.push(diagnostic.message);
       }
 
       const { data: _frontmatter, content: prose } = parseFile(file);
-      const result = indexSceneFile(db, syncDir, file, meta, prose);
-      if (result.warning) {
+      const result = indexSceneFile(db, syncDir, file, meta, prose, { observedStructure: structureObservation });
+      const canonicalDiagnostics = result.canonicalIndexPlan?.diagnostics ?? [];
+      if (canonicalDiagnostics.length) {
+        for (const diagnostic of canonicalDiagnostics) warnings.push(diagnostic.message);
+      } else if (result.warning) {
         warnings.push(result.warning);
       }
       if (result.chapterId) {

@@ -12,6 +12,7 @@ import {
   isCanonicalWorldEntityFile, getSyncOwnershipDiagnostics, getFileWriteDiagnostics,
   isWorldFile, readMeta, isSyncDirWritable, sidecarPath, syncAll,
   walkFiles, walkSidecars, worldEntityFolderKey, worldEntityKindForPath,
+  buildCanonicalIndexPlan, observeStructureForFile,
 } from "../../sync/sync.js";
 import {
   buildSceneStructurePatch,
@@ -391,6 +392,61 @@ describe("inferChapterStructureFromPath", () => {
     assert.equal(byMetadata.isEpigraph, true);
     assert.equal(byFilename.chapter.chapter_id, "ch-01-arrival");
     assert.equal(byMetadata.chapter.chapter_id, "ch-01-arrival");
+  });
+});
+
+describe("structure observation", () => {
+  test("captures observed chapter state and path metadata diagnostics", () => {
+    const syncDir = "/tmp/sync";
+    const filePath = path.join(syncDir, "projects", "test-novel", "Draft", "01-Arrival", "sc-001.md");
+
+    const result = observeStructureForFile(syncDir, filePath, {
+      meta: { scene_id: "sc-001", part: 1, chapter: 1 },
+      sourceMeta: { part: 2, chapter: 9 },
+      derived: { part: 1, chapter: 1 },
+      mismatches: { part: true, chapter: true },
+    });
+
+    assert.equal(result.projectId, "test-novel");
+    assert.deepEqual(result.observedChapter, {
+      chapterId: "ch-01-arrival",
+      sortIndex: 1,
+      title: "Arrival",
+      folderKey: path.join("projects", "test-novel", "Draft", "01-Arrival"),
+      sourceKind: "chapter_folder",
+    });
+    assert.equal(result.diagnostics.length, 1);
+    assert.equal(result.diagnostics[0].type, "path_metadata_mismatch");
+    assert.equal(
+      result.diagnostics[0].message,
+      'Path/metadata mismatch for scene "sc-001": projects/test-novel/Draft/01-Arrival/sc-001.md (part metadata 2 != path part 1, chapter metadata 9 != path chapter 1). Using path-derived values.'
+    );
+  });
+
+  test("builds canonical indexing diagnostics without mutating canonical chapters", () => {
+    const syncDir = "/tmp/sync";
+    const filePath = path.join(syncDir, "projects", "test-novel", "scenes", "sc-001.md");
+    const db = openDb(":memory:");
+
+    const observation = observeStructureForFile(syncDir, filePath, {
+      meta: { scene_id: "sc-001", chapter_id: "ch-99-missing" },
+    });
+    const plan = buildCanonicalIndexPlan(db, syncDir, filePath, {
+      scene_id: "sc-001",
+      chapter_id: "ch-99-missing",
+    }, observation);
+
+    assert.equal(plan.projectId, "test-novel");
+    assert.equal(plan.observedStructure, observation);
+    assert.equal(plan.canonicalChapter, null);
+    assert.equal(plan.chapterResolution.chapterId, null);
+    assert.deepEqual(
+      plan.diagnostics.map((diagnostic) => diagnostic.message),
+      ["Scene references unknown chapter_id 'ch-99-missing': projects/test-novel/scenes/sc-001.md"]
+    );
+    assert.equal(db.prepare("SELECT count(*) AS count FROM chapters").get().count, 0);
+
+    db.close();
   });
 });
 
