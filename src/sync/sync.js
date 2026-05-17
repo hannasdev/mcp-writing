@@ -9,8 +9,8 @@ import {
   slugifyChapterValue,
 } from "../structure/structure-inference.js";
 import {
-  parkConflictingChapterSortIndex,
   resolveCanonicalChapterRecord,
+  upsertCanonicalChapterRecord,
 } from "../structure/chapter-indexing.js";
 const { load: parseYaml, dump: stringifyYaml } = yaml;
 
@@ -1009,42 +1009,15 @@ export function indexSceneFile(db, syncDir, file, meta, prose) {
       chapterId = canonicalChapter?.chapter_id ?? chapterId;
     }
     if (chapterId) {
-      parkConflictingChapterSortIndex(db, {
+      upsertCanonicalChapterRecord(db, {
         projectId: project_id,
         chapterId,
-        targetSortIndex: chapterSortIndex,
+        sortIndex: chapterSortIndex,
+        title: chapterTitle,
+        sourcePath: chapterSourcePath,
+        logline: meta.chapter_logline,
+        buildSourceChecksum: ({ sortIndex, title, logline }) => checksumProse(`${sortIndex}:${title}:${logline ?? ""}`),
       });
-      const existingChapter = db.prepare(
-        `SELECT logline, source_checksum, metadata_stale FROM chapters WHERE chapter_id = ? AND project_id = ?`
-      ).get(chapterId, project_id);
-      const chapterLogline = meta.chapter_logline ?? existingChapter?.logline ?? null;
-      const chapterChecksum = checksumProse(`${chapterSortIndex}:${chapterTitle}:${chapterLogline ?? ""}`);
-      db.prepare(`
-        INSERT INTO chapters (
-          chapter_id, project_id, title, sort_index, logline, source_path, source_checksum, metadata_stale, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT (chapter_id, project_id) DO UPDATE SET
-          title = excluded.title,
-          sort_index = excluded.sort_index,
-          logline = excluded.logline,
-          source_path = excluded.source_path,
-          source_checksum = excluded.source_checksum,
-          metadata_stale = CASE
-            WHEN excluded.source_checksum != chapters.source_checksum THEN 1
-            ELSE chapters.metadata_stale
-          END,
-          updated_at = excluded.updated_at
-      `).run(
-        chapterId,
-        project_id,
-        chapterTitle,
-        chapterSortIndex,
-        chapterLogline,
-        chapterSourcePath,
-        chapterChecksum,
-        existingChapter && existingChapter.source_checksum !== chapterChecksum ? 1 : 0,
-        new Date().toISOString()
-      );
     }
   }
 

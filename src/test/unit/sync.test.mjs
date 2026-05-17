@@ -17,7 +17,7 @@ import {
   inferChapterStructureFromPath as inferChapterStructureFromStructureModule,
   normalizeSceneMetaForPath as normalizeSceneMetaForPathFromStructureModule,
 } from "../../structure/structure-inference.js";
-import { resolveCanonicalChapterRecord } from "../../structure/chapter-indexing.js";
+import { resolveCanonicalChapterRecord, upsertCanonicalChapterRecord } from "../../structure/chapter-indexing.js";
 import { openDb } from "../../core/db.js";
 
 describe("checksumProse", () => {
@@ -311,6 +311,23 @@ describe("inferChapterStructureFromPath", () => {
     assert.equal(result.meta.chapter_title, "The Signal");
     assert.equal(result.mismatches.chapter, false);
   });
+
+  test("structure module detects epigraphs from filename and metadata", () => {
+    const byFilename = inferChapterStructureFromStructureModule(
+      syncDir,
+      "/sync/projects/novel/Draft/01-Arrival/epigraph.md"
+    );
+    const byMetadata = inferChapterStructureFromStructureModule(
+      syncDir,
+      "/sync/projects/novel/Draft/01-Arrival/opening-note.md",
+      { kind: "epigraph" }
+    );
+
+    assert.equal(byFilename.isEpigraph, true);
+    assert.equal(byMetadata.isEpigraph, true);
+    assert.equal(byFilename.chapter.chapter_id, "ch-01-arrival");
+    assert.equal(byMetadata.chapter.chapter_id, "ch-01-arrival");
+  });
 });
 
 describe("resolveCanonicalChapterRecord", () => {
@@ -340,6 +357,45 @@ describe("resolveCanonicalChapterRecord", () => {
     assert.equal(result.sort_index, 1);
     assert.equal(result.title, "Arrival");
     assert.equal(result.source_path, "projects/test-novel/scenes/chapter-1-renamed");
+
+    db.close();
+  });
+
+  test("upsert preserves existing chapter logline when the current file omits it", () => {
+    const db = openDb(":memory:");
+    db.prepare(`
+      INSERT INTO projects (project_id, name)
+      VALUES ('test-novel', 'test-novel')
+    `).run();
+    db.prepare(`
+      INSERT INTO chapters (
+        chapter_id, project_id, title, sort_index, logline, source_path, source_checksum, updated_at
+      ) VALUES (
+        'ch-01-arrival', 'test-novel', 'Arrival', 1, 'Existing chapter logline', 'projects/test-novel/scenes/chapter-1', 'old', '2026-05-17T00:00:00.000Z'
+      )
+    `).run();
+
+    const result = upsertCanonicalChapterRecord(db, {
+      projectId: "test-novel",
+      chapterId: "ch-01-arrival",
+      sortIndex: 1,
+      title: "Arrival",
+      sourcePath: "projects/test-novel/scenes/chapter-1",
+      logline: undefined,
+      updatedAt: "2026-05-17T01:00:00.000Z",
+      buildSourceChecksum: ({ sortIndex, title, logline }) => checksumProse(`${sortIndex}:${title}:${logline ?? ""}`),
+    });
+
+    assert.equal(result.logline, "Existing chapter logline");
+
+    const chapter = db.prepare(`
+      SELECT logline, source_checksum, metadata_stale
+      FROM chapters
+      WHERE chapter_id = 'ch-01-arrival' AND project_id = 'test-novel'
+    `).get();
+    assert.equal(chapter.logline, "Existing chapter logline");
+    assert.equal(chapter.source_checksum, checksumProse("1:Arrival:Existing chapter logline"));
+    assert.equal(chapter.metadata_stale, 1);
 
     db.close();
   });

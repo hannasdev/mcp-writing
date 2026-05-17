@@ -123,3 +123,66 @@ export function parkConflictingChapterSortIndex(db, { projectId, chapterId, targ
     WHERE project_id = ? AND chapter_id = ?
   `).run(-1000000 - Number(conflictingChapter.sort_index), projectId, conflictingChapter.chapter_id);
 }
+
+export function upsertCanonicalChapterRecord(db, {
+  projectId,
+  chapterId,
+  sortIndex,
+  title,
+  sourcePath,
+  logline,
+  buildSourceChecksum,
+  updatedAt = new Date().toISOString(),
+}) {
+  if (!projectId || !chapterId || sortIndex == null || !title) return null;
+
+  parkConflictingChapterSortIndex(db, {
+    projectId,
+    chapterId,
+    targetSortIndex: sortIndex,
+  });
+
+  const existingChapter = db.prepare(
+    `SELECT logline, source_checksum, metadata_stale FROM chapters WHERE chapter_id = ? AND project_id = ?`
+  ).get(chapterId, projectId);
+  const chapterLogline = logline ?? existingChapter?.logline ?? null;
+  const chapterChecksum = buildSourceChecksum({
+    sortIndex,
+    title,
+    logline: chapterLogline,
+  });
+
+  db.prepare(`
+    INSERT INTO chapters (
+      chapter_id, project_id, title, sort_index, logline, source_path, source_checksum, metadata_stale, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT (chapter_id, project_id) DO UPDATE SET
+      title = excluded.title,
+      sort_index = excluded.sort_index,
+      logline = excluded.logline,
+      source_path = excluded.source_path,
+      source_checksum = excluded.source_checksum,
+      metadata_stale = CASE
+        WHEN excluded.source_checksum != chapters.source_checksum THEN 1
+        ELSE chapters.metadata_stale
+      END,
+      updated_at = excluded.updated_at
+  `).run(
+    chapterId,
+    projectId,
+    title,
+    sortIndex,
+    chapterLogline,
+    sourcePath,
+    chapterChecksum,
+    existingChapter && existingChapter.source_checksum !== chapterChecksum ? 1 : 0,
+    updatedAt
+  );
+
+  return {
+    chapterId,
+    logline: chapterLogline,
+    sourceChecksum: chapterChecksum,
+    metadataStale: existingChapter && existingChapter.source_checksum !== chapterChecksum ? 1 : 0,
+  };
+}
