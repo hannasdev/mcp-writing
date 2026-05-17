@@ -1,7 +1,4 @@
-# Claude Code Skills
+# Claude Code Guidance
 
-@skills/code-review/SKILL.md
-@skills/review-comment-resolution/SKILL.md
-@skills/commit-writing/SKILL.md
-@skills/pr-description/SKILL.md
-@skills/post-merge-cleanup/SKILL.md
+Project-specific agent guidance lives in `AGENTS.md`. General Codex skills live
+outside this repository in the user's Codex configuration.

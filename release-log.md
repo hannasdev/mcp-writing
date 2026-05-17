@@ -6,6 +6,14 @@ This complements `CHANGELOG.md`:
 - `CHANGELOG.md` is technical and release-oriented.
 - This log is plain-language and outcome-oriented.
 
+### 2026-05-17 — Move repo guidance away from local skills
+
+- What changed: Removed the repo-local maintainer skill files and helper scripts, updated agent guidance to treat `PRODUCT.md` as the product-work entry point, and clarified that general Codex skills now live outside this repository.
+- Why it matters: Future AI-assisted sessions no longer follow stale paths for deleted repo-local skills, and contributors get a clearer split between user-facing README content and product/development planning docs.
+- Who is affected: Maintainers and contributors using AI-assisted workflows in this repository.
+- Action needed: Use `AGENTS.md` for repo-specific guidance and the user's external Codex skills for commit, PR, review, and cleanup workflows.
+- PR: [#198](https://github.com/hannasdev/mcp-writing/pull/198)
+
 ### 2026-05-16 — Align release-log guidance with PR-time updates
 
 - What changed: Updated the PR-description and release-log skills so maintainer-facing PR guidance points to the root `release-log.md` file, and removed the stale staging section from the human release log.

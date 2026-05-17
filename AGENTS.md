@@ -1,103 +1,75 @@
 # AGENTS.md
 
-Purpose: Persist project-specific operating context for future AI sessions.
+Purpose: persist project-specific operating context for future AI sessions.
 
-Canonical release setup and maintainer operations live in `MAINTAINERS.md`.
+This file is guidance for agents working in the repository. It is not the
+product source of truth.
+
+---
+
+## Documentation map
+
+- `README.md` is for users of the app: what the package does, how to install
+  it, how to configure it, and how to use the exposed MCP tools.
+- `PRODUCT.md` is the source of truth and starting point for product work,
+  including active focus, initiative tracking, design principles, foundations,
+  and links to the relevant product and architecture documents.
+- `MAINTAINERS.md` is the source of truth for release setup and maintainer
+  operations.
+- `.github/instructions/` contains specialized GitHub and release-debugging
+  procedures.
+
+When product intent, development details, and user-facing docs appear to
+overlap, start from `PRODUCT.md` and only update `README.md` when the change
+affects app users.
 
 ---
 
 ## Ways of working
 
 - Always review `PRODUCT.md` before proposing or implementing changes.
-- Do not implement immediately. First:
+- Before substantial product or code changes:
   - Identify tradeoffs
   - Validate alignment with design principles
   - Evaluate scope vs value
   - Consider impact on existing features
-- Always include test strategy (unit + integration) in proposals.
+- Include a test strategy appropriate to the risk, usually covering unit and
+  integration impact when behavior changes.
 - If required context is missing or unclear, STOP and ask before proceeding.
 
 ---
 
-## Development workflow (strict)
+## Development workflow
 
-All changes MUST follow this sequence:
+- Keep changes scoped to a single concern.
+- Write or update tests alongside behavior changes.
+- Do not include unrelated changes.
+- Use a branch for implementation work; branch naming should follow
+  `.github/instructions/contribution-workflow.instructions.md` when creating a
+  new branch.
+- Open a PR for repository changes that should be reviewed or merged. Do not
+  push directly to `main`.
+- PR descriptions should accurately reflect the final implementation.
+- For user-facing or maintainer-facing behavior changes, include a
+  human-readable release note or release-log entry when appropriate.
+- Apply follow-up fixes in new commits unless history rewriting is explicitly
+  requested.
 
-- Do not skip, reorder, or parallelize workflow steps.
+General Codex skills live outside this repository, under the user's Codex
+configuration. Use those general skills when their triggers apply or when the
+user explicitly asks for them; do not expect repo-local skill files to exist.
 
-### 1. Discussion phase
+---
 
-- MUST review `PRODUCT.md` before proceeding
-- No code changes before tradeoffs are discussed and approved
-- If approval is unclear, do not proceed
+## Review handling
 
-### 2. Branch creation
-
-- Create a new branch from `main`
-- Naming: follow `.github/instructions/contribution-workflow.instructions.md`
-  - `feat/<short-description>`
-  - `fix/<short-description>`
-  - `docs/<short-description>`
-  - `chore/<short-description>`
-  - `refactor/<short-description>`
-
-### 3. Implementation
-
-- Keep changes scoped to a single concern
-- Write tests alongside implementation
-- Do not include unrelated changes
-
-### 4. Commit
-
-- MUST use `skills/commit-writing/SKILL.md`
-- Do not proceed to PR until commits are clean and scoped
-
-### 5. Pull Request (required)
-
-- ALWAYS open a PR after implementation and commit preparation (no direct merges)
-- MUST use `skills/pr-description/SKILL.md`
-- For user-facing or maintainer-facing behavior changes, use `skills/release-log/SKILL.md`
-- PR must accurately reflect the actual implementation
-
-### 6. Review handling
-
-- MUST use `skills/code-review/SKILL.md`
-- For PR feedback triage and resolution loops, use `skills/review-comment-resolution/SKILL.md`
-- Do not blindly apply all feedback
+- Do not blindly apply all feedback.
 - Group feedback into:
   - correctness issues
   - improvements
   - opinions
-- Ask for clarification if feedback is ambiguous or conflicting
-- Do not consider the PR complete or merged unless explicitly instructed
-
-### 7. Completion
-
-A change is considered complete when:
-
-- All blocking issues are resolved
-- Tests are passing or explicitly not run with a valid reason
-- PR description matches final implementation
-
-### 8. Follow-up changes
-
-- Apply fixes in new commits (do not rewrite history unless explicitly requested)
-- Update PR description if behavior or scope changes
-
----
-
-## Skills
-
-Use these specialized skills:
-
-- `skills/commit-writing/SKILL.md` (used during Commit step)
-- `skills/pr-description/SKILL.md` (used during Pull Request step)
-- `skills/release-log/SKILL.md` (used during Pull Request step for human-readable value notes)
-- `skills/code-review/SKILL.md` (used during Review handling step)
-- `skills/review-comment-resolution/SKILL.md` (used when processing review comments end-to-end)
-- `skills/post-merge-cleanup/SKILL.md` (used after merge to run consistent branch/worktree cleanup)
-
-These define execution details. This file defines workflow and constraints.
+- Ask for clarification if feedback is ambiguous or conflicting.
+- Do not consider a PR complete or merged unless explicitly instructed.
 
 ---
 

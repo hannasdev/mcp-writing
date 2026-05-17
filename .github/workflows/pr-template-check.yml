@@ -65,7 +65,7 @@ jobs:
                   "Expected sections (in this style):",
                   ...requiredSections.map((section) => `- ${section}`),
                   "",
-                  "Source of truth: skills/pr-description/SKILL.md",
+                  "Source of truth: this workflow's requiredSections list and the user's external Codex PR-description skill.",
                 ].join("\n")
               );
             }
