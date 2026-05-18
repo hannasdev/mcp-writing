@@ -116,6 +116,179 @@ describe("update_scene_metadata tool", () => {
   });
 });
 
+describe("assign_scene_to_chapter tool", () => {
+  test("assigns an unchaptered scene and reflects it in chapter-aware reads", async () => {
+    const sceneDir = path.join(writeSyncDir, "projects", "test-novel", "scenes");
+    fs.mkdirSync(sceneDir, { recursive: true });
+    const scenePath = path.join(sceneDir, "sc-m5-assigned.md");
+    fs.writeFileSync(
+      scenePath,
+      "---\nscene_id: sc-m5-assigned\ntitle: Assigned M5 Scene\ntimeline_position: 42\n---\nM5 assignment prose.",
+      "utf8"
+    );
+
+    await callWriteTool("sync");
+
+    const chaptersText = await callWriteTool("list_chapters", { project_id: "test-novel" });
+    const chaptersParsed = JSON.parse(chaptersText);
+    const secondChapter = chaptersParsed.results.find((row) => row.sort_index === 2);
+    assert.ok(secondChapter);
+
+    const assignText = await callWriteTool("assign_scene_to_chapter", {
+      scene_id: "sc-m5-assigned",
+      project_id: "test-novel",
+      chapter_id: secondChapter.chapter_id,
+    });
+    const assignParsed = JSON.parse(assignText);
+    assert.equal(assignParsed.ok, true);
+    assert.equal(assignParsed.action, "assigned");
+    assert.equal(assignParsed.chapter.chapter_id, secondChapter.chapter_id);
+
+    const sidecarFile = path.join(sceneDir, "sc-m5-assigned.meta.yaml");
+    const sidecar = yaml.load(fs.readFileSync(sidecarFile, "utf8"));
+    assert.equal(sidecar.chapter_id, secondChapter.chapter_id);
+    assert.equal(sidecar.chapter, 2);
+    assert.equal(sidecar.chapter_title, secondChapter.title);
+
+    const findText = await callWriteTool("find_scenes", {
+      project_id: "test-novel",
+      chapter_id: secondChapter.chapter_id,
+    });
+    const findParsed = JSON.parse(findText);
+    assert.ok(findParsed.results.some((row) => row.scene_id === "sc-m5-assigned"));
+
+    const chapterProseText = await callWriteTool("get_chapter_prose", {
+      project_id: "test-novel",
+      chapter_id: secondChapter.chapter_id,
+    });
+    assert.ok(chapterProseText.includes("M5 assignment prose."));
+
+    const previewText = await callWriteTool("preview_review_bundle", {
+      project_id: "test-novel",
+      profile: "editor_detailed",
+      chapter_id: secondChapter.chapter_id,
+    });
+    const previewParsed = JSON.parse(previewText);
+    assert.ok(previewParsed.ordering.some((row) => row.scene_id === "sc-m5-assigned"));
+  });
+
+  test("clears an explicit chapter link for an unchaptered scene", async () => {
+    const sceneDir = path.join(writeSyncDir, "projects", "test-novel", "scenes");
+    fs.mkdirSync(sceneDir, { recursive: true });
+    const scenePath = path.join(sceneDir, "sc-m5-clear.md");
+    fs.writeFileSync(
+      scenePath,
+      "---\nscene_id: sc-m5-clear\ntitle: Clear M5 Scene\n---\nM5 clear prose.",
+      "utf8"
+    );
+
+    await callWriteTool("sync");
+
+    const chaptersText = await callWriteTool("list_chapters", { project_id: "test-novel" });
+    const chaptersParsed = JSON.parse(chaptersText);
+    const firstChapter = chaptersParsed.results.find((row) => row.sort_index === 1);
+    assert.ok(firstChapter);
+
+    await callWriteTool("assign_scene_to_chapter", {
+      scene_id: "sc-m5-clear",
+      project_id: "test-novel",
+      chapter_id: firstChapter.chapter_id,
+    });
+
+    const clearText = await callWriteTool("assign_scene_to_chapter", {
+      scene_id: "sc-m5-clear",
+      project_id: "test-novel",
+      chapter_id: null,
+    });
+    const clearParsed = JSON.parse(clearText);
+    assert.equal(clearParsed.ok, true);
+    assert.equal(clearParsed.action, "cleared");
+    assert.equal(clearParsed.chapter, null);
+
+    const sidecarFile = path.join(sceneDir, "sc-m5-clear.meta.yaml");
+    const sidecar = yaml.load(fs.readFileSync(sidecarFile, "utf8"));
+    assert.equal(sidecar.chapter_id, null);
+    assert.equal(sidecar.chapter, null);
+    assert.equal(sidecar.chapter_title, null);
+
+    const findText = await callWriteTool("find_scenes", {
+      project_id: "test-novel",
+      chapter_id: firstChapter.chapter_id,
+    });
+    const findParsed = JSON.parse(findText);
+    assert.equal(findParsed.results.some((row) => row.scene_id === "sc-m5-clear"), false);
+  });
+
+  test("reports previous chapter from sidecar when index is stale", async () => {
+    const sceneDir = path.join(writeSyncDir, "projects", "test-novel", "scenes");
+    fs.mkdirSync(sceneDir, { recursive: true });
+    const scenePath = path.join(sceneDir, "sc-m5-stale-index.md");
+    fs.writeFileSync(
+      scenePath,
+      "---\nscene_id: sc-m5-stale-index\ntitle: Stale Index Scene\n---\nM5 stale index prose.",
+      "utf8"
+    );
+
+    await callWriteTool("sync");
+
+    const chaptersText = await callWriteTool("list_chapters", { project_id: "test-novel" });
+    const chaptersParsed = JSON.parse(chaptersText);
+    const firstChapter = chaptersParsed.results.find((row) => row.sort_index === 1);
+    const secondChapter = chaptersParsed.results.find((row) => row.sort_index === 2);
+    assert.ok(firstChapter);
+    assert.ok(secondChapter);
+
+    await callWriteTool("assign_scene_to_chapter", {
+      scene_id: "sc-m5-stale-index",
+      project_id: "test-novel",
+      chapter_id: firstChapter.chapter_id,
+    });
+
+    const sidecarFile = path.join(sceneDir, "sc-m5-stale-index.meta.yaml");
+    const sidecar = yaml.load(fs.readFileSync(sidecarFile, "utf8"));
+    fs.writeFileSync(
+      sidecarFile,
+      yaml.dump({
+        ...sidecar,
+        chapter_id: secondChapter.chapter_id,
+        chapter: secondChapter.sort_index,
+        chapter_title: secondChapter.title,
+      }),
+      "utf8"
+    );
+
+    const clearText = await callWriteTool("assign_scene_to_chapter", {
+      scene_id: "sc-m5-stale-index",
+      project_id: "test-novel",
+      chapter_id: null,
+    });
+    const clearParsed = JSON.parse(clearText);
+
+    assert.equal(clearParsed.ok, true);
+    assert.equal(clearParsed.previous_chapter_id, secondChapter.chapter_id);
+  });
+
+  test("rejects assignment when the scene path implies another chapter", async () => {
+    const chaptersText = await callWriteTool("list_chapters", { project_id: "test-novel" });
+    const chaptersParsed = JSON.parse(chaptersText);
+    const secondChapter = chaptersParsed.results.find((row) => row.sort_index === 2);
+    assert.ok(secondChapter);
+
+    const assignText = await callWriteTool("assign_scene_to_chapter", {
+      scene_id: "sc-001",
+      project_id: "test-novel",
+      chapter_id: secondChapter.chapter_id,
+    });
+    const assignParsed = JSON.parse(assignText);
+
+    assert.equal(assignParsed.ok, false);
+    assert.equal(assignParsed.error.code, "VALIDATION_ERROR");
+    assert.match(assignParsed.error.message, /file path implies another canonical chapter/);
+    assert.equal(assignParsed.error.details.requested_chapter_id, secondChapter.chapter_id);
+    assert.notEqual(assignParsed.error.details.path_chapter, null);
+  });
+});
+
 describe("update_character_sheet tool", () => {
   test("updates arc_summary and reflects in get_character_sheet", async () => {
     const text = await callWriteTool("update_character_sheet", {

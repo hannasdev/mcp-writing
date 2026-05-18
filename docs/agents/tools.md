@@ -38,6 +38,7 @@
 - [`create_place_sheet`](#create_place_sheet)
 - [`upsert_thread_link`](#upsert_thread_link)
 - [`upsert_reference_link`](#upsert_reference_link)
+- [`assign_scene_to_chapter`](#assign_scene_to_chapter)
 - [`update_scene_metadata`](#update_scene_metadata)
 - [`update_character_sheet`](#update_character_sheet)
 - [`update_place_sheet`](#update_place_sheet)
@@ -465,6 +466,18 @@ Create or update an explicit reference link from a scene, character, place, or r
 | `source_project_id` | `string` | No | Optional project scope for the source. For scene/character/place sources, use this to disambiguate an ambiguous source_id across projects. For reference sources, when provided, it is treated as an ownership check and must match the source reference doc's project. |
 | `target_doc_id` | `string` | Yes | Target reference doc_id. |
 | `relation` | `string` | Yes | Relationship label (for example: 'informs', 'related', 'history_of'). The value is trimmed and lowercased before validation. |
+
+---
+
+## assign_scene_to_chapter
+
+Assign a scene to a canonical chapter through the explicit structure workflow. Writes chapter_id plus compatibility chapter/chapter_title fields to the scene sidecar and refreshes the index. Pass chapter_id=null to clear an explicit chapter link on an unchaptered scene. Use list_chapters first to choose a valid canonical chapter_id.
+
+| Parameter | Type | Required | Description |
+| --- | --- | :---: | --- |
+| `scene_id` | `string` | Yes | The scene_id to assign (e.g. 'sc-011-sebastian'). |
+| `project_id` | `string` | Yes | Project the scene belongs to (e.g. 'the-lamb'). |
+| `chapter_id` | `string` | Yes | Canonical chapter identifier. Use list_chapters to find valid values. Pass null to clear an explicit chapter link on an unchaptered scene. |
 
 ---
 

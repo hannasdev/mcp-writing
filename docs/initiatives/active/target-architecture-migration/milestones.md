@@ -1,7 +1,7 @@
 # Target Architecture Migration — Milestones
 
 Status: Active  
-Current milestone: M5 — Introduce Explicit Scene-to-Chapter Mutation  
+Current milestone: M6 — Normalize Compatibility Resolution  
 Owner: MCP Writing  
 Date: 2026-05-17
 
@@ -180,6 +180,8 @@ Out of scope:
 - Canonical storage redesign.
 
 ## M5 — Introduce Explicit Scene-to-Chapter Mutation
+
+Status: Complete.
 
 Goal: add the first sanctioned daily-work structural mutation path.
 
