@@ -87,6 +87,65 @@ describe("buildReviewBundlePlan", () => {
     }
   });
 
+  test("insertTestScene reuses an existing canonical chapter for compatibility chapter fixtures", () => {
+    const db = setupReviewBundleTestDb();
+    try {
+      const now = new Date().toISOString();
+      db.prepare(`
+        INSERT INTO chapters (
+          chapter_id, project_id, title, sort_index, source_path, source_checksum, metadata_stale, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).run("ch-01-canonical", "test-novel", "Canonical", 1, "/tmp/chapter-1", null, 0, now);
+
+      insertTestScene(db, {
+        sceneId: "sc-001",
+        part: 1,
+        chapter: 1,
+        timelinePosition: 1,
+        wordCount: 300,
+      });
+
+      const scene = db.prepare(`
+        SELECT chapter_id, chapter_title
+        FROM scenes
+        WHERE project_id = ? AND scene_id = ?
+      `).get("test-novel", "sc-001");
+
+      assert.equal(scene.chapter_id, "ch-01-canonical");
+      assert.equal(scene.chapter_title, "Canonical");
+    } finally {
+      db.close();
+    }
+  });
+
+  test("insertTestScene rejects explicit chapter fixture conflicts", () => {
+    const db = setupReviewBundleTestDb();
+    try {
+      insertTestScene(db, {
+        sceneId: "sc-001",
+        part: 1,
+        chapter: 1,
+        chapterId: "ch-01-first",
+        timelinePosition: 1,
+        wordCount: 300,
+      });
+
+      assert.throws(
+        () => insertTestScene(db, {
+          sceneId: "sc-002",
+          part: 1,
+          chapter: 1,
+          chapterId: "ch-01-other",
+          timelinePosition: 2,
+          wordCount: 300,
+        }),
+        /conflicts with existing chapter/
+      );
+    } finally {
+      db.close();
+    }
+  });
+
   test("applies compatibility chapter filter through canonical chapter identity", () => {
     const db = setupReviewBundleTestDb();
     try {

@@ -13,25 +13,40 @@ export function insertTestScene(db, {
   wordCount = null,
 }) {
   const now = new Date().toISOString();
-  const resolvedChapterId = chapterId ?? (chapter == null ? null : `ch-${String(chapter).padStart(2, "0")}-test`);
-  const resolvedChapterTitle = chapterTitle ?? (chapter == null ? null : `Chapter ${chapter}`);
+  let resolvedChapterId = chapterId ?? (chapter == null ? null : `ch-${String(chapter).padStart(2, "0")}-test`);
+  let resolvedChapterTitle = chapterTitle ?? (chapter == null ? null : `Chapter ${chapter}`);
 
   if (resolvedChapterId && chapter != null) {
-    db.prepare(`
-      INSERT INTO chapters (
-        chapter_id, project_id, title, sort_index, source_path, source_checksum, metadata_stale, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(project_id, sort_index) DO NOTHING
-    `).run(
-      resolvedChapterId,
-      projectId,
-      resolvedChapterTitle,
-      chapter,
-      `/tmp/chapter-${chapter}`,
-      null,
-      metadataStale,
-      now
-    );
+    const existingChapter = db.prepare(`
+      SELECT chapter_id, title
+      FROM chapters
+      WHERE project_id = ? AND sort_index = ?
+    `).get(projectId, chapter);
+
+    if (existingChapter) {
+      if (chapterId != null && existingChapter.chapter_id !== chapterId) {
+        throw new Error(
+          `insertTestScene chapterId '${chapterId}' conflicts with existing chapter '${existingChapter.chapter_id}' for project '${projectId}' chapter ${chapter}.`
+        );
+      }
+      resolvedChapterId = existingChapter.chapter_id;
+      resolvedChapterTitle = chapterTitle ?? existingChapter.title ?? resolvedChapterTitle;
+    } else {
+      db.prepare(`
+        INSERT INTO chapters (
+          chapter_id, project_id, title, sort_index, source_path, source_checksum, metadata_stale, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        resolvedChapterId,
+        projectId,
+        resolvedChapterTitle,
+        chapter,
+        `/tmp/chapter-${chapter}`,
+        null,
+        metadataStale,
+        now
+      );
+    }
   }
 
   db.prepare(`
