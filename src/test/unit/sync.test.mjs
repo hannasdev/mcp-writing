@@ -13,7 +13,7 @@ import {
   isWorldFile, readMeta, isSyncDirWritable, sidecarPath, syncAll,
   walkFiles, walkSidecars, worldEntityFolderKey, worldEntityKindForPath,
   buildCanonicalIndexPlan, buildWarningSummary, observeOrphanedSidecars,
-  observeStructureForFile, readSceneFileForSync, scanSyncFiles,
+  observeStructureForFile, readSceneFileForSync, regenerateReferenceAndWorldIndexes, scanSyncFiles,
 } from "../../sync/sync.js";
 import {
   buildSceneStructurePatch,
@@ -558,6 +558,50 @@ describe("orphaned sidecar observation", () => {
     assert.ok(diagnostics.find((diagnostic) => diagnostic.type === "orphaned_sidecar").message.includes("Orphaned sidecar"));
     assert.ok(diagnostics.find((diagnostic) => diagnostic.type === "moved_scene").message.includes("Moved scene detected"));
 
+    fs.rmSync(dir, { recursive: true });
+  });
+});
+
+describe("derived index regeneration", () => {
+  test("indexes reference docs and world entities before scene indexing", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "derived-index-"));
+    const referencePath = path.join(dir, "projects", "test-novel", "world", "reference", "lore.md");
+    const characterPath = path.join(dir, "projects", "test-novel", "world", "characters", "alex.md");
+    fs.mkdirSync(path.dirname(referencePath), { recursive: true });
+    fs.mkdirSync(path.dirname(characterPath), { recursive: true });
+    fs.writeFileSync(referencePath, [
+      "---",
+      "doc_id: ref-lore",
+      "title: Lore",
+      "tags: [continuity]",
+      "---",
+      "A compact lore note.",
+      "",
+    ].join("\n"));
+    fs.writeFileSync(characterPath, [
+      "---",
+      "character_id: char-alex",
+      "name: Alex",
+      "role: protagonist",
+      "---",
+      "",
+    ].join("\n"));
+    const db = openDb(":memory:");
+
+    const result = regenerateReferenceAndWorldIndexes(db, dir, [referencePath, characterPath]);
+
+    assert.deepEqual([...result.indexedReferenceDocIds], ["ref-lore"]);
+    assert.deepEqual(result.diagnostics, []);
+    assert.deepEqual(
+      db.prepare("SELECT doc_id, project_id, title FROM reference_docs").all().map((row) => ({ ...row })),
+      [{ doc_id: "ref-lore", project_id: "test-novel", title: "Lore" }]
+    );
+    assert.deepEqual(
+      db.prepare("SELECT character_id, project_id, name FROM characters").all().map((row) => ({ ...row })),
+      [{ character_id: "char-alex", project_id: "test-novel", name: "Alex" }]
+    );
+
+    db.close();
     fs.rmSync(dir, { recursive: true });
   });
 });

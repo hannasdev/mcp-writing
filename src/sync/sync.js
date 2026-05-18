@@ -984,6 +984,56 @@ export function pruneSyncDerivedIndexes(db, syncDir, {
   return { pruned: true, reason: null };
 }
 
+export function regenerateReferenceAndWorldIndexes(db, syncDir, files, { writable = false } = {}) {
+  const indexedReferenceDocIds = new Set();
+  const diagnostics = [];
+
+  for (const file of files) {
+    if (isReferenceFile(syncDir, file)) {
+      try {
+        const { data, content } = parseFile(file);
+        const docId = indexReferenceFile(db, syncDir, file, data, content);
+        indexedReferenceDocIds.add(docId);
+      } catch (err) {
+        const message = `[mcp-writing] Failed to index ${file}: ${err.message}`;
+        process.stderr.write(`${message}\n`);
+        diagnostics.push(buildSyncDiagnostic(message, {
+          type: "reference_index_failure",
+          file,
+        }));
+      }
+      continue;
+    }
+
+    if (!isWorldFile(syncDir, file)) continue;
+    try {
+      const { meta } = readMeta(file, syncDir, { writable });
+      if (!Object.keys(meta).length) {
+        const { data } = parseFile(file);
+        indexWorldFile(db, syncDir, file, data);
+      } else {
+        indexWorldFile(db, syncDir, file, meta);
+      }
+    } catch (err) {
+      const message = `[mcp-writing] Failed to index ${file}: ${err.message}`;
+      process.stderr.write(`${message}\n`);
+      diagnostics.push(buildSyncDiagnostic(message, {
+        type: "world_index_failure",
+        file,
+      }));
+    }
+  }
+
+  if (canPruneReferenceDocs(syncDir)) {
+    pruneMissingReferenceDocs(db, indexedReferenceDocIds);
+  }
+
+  return {
+    indexedReferenceDocIds,
+    diagnostics,
+  };
+}
+
 export function buildStructureDiagnostic(message, { type = "chapter_structure", ...details } = {}) {
   return { type, message, ...details };
 }
@@ -1356,7 +1406,6 @@ export function syncAll(db, syncDir, { quiet = false, writable = false } = {}) {
   const indexedSceneIds = new Set(); // scene_id only — for orphaned sidecar move detection
   const seenChapterKeys = new Set();
   const seenEpigraphKeys = new Set();
-  const indexedReferenceDocIds = new Set();
   let sceneIndexFailures = 0;
   const warnings = [];
   const chapterFoldersByProject = new Map();
@@ -1370,35 +1419,7 @@ export function syncAll(db, syncDir, { quiet = false, writable = false } = {}) {
 
   // --- Pass 1: world files and reference docs (characters/places must be indexed
   // before scenes so that character name -> ID resolution in scene_characters works) ---
-  for (const file of scanFiles) {
-    if (isReferenceFile(syncDir, file)) {
-      try {
-        const { data, content } = parseFile(file);
-        const docId = indexReferenceFile(db, syncDir, file, data, content);
-        indexedReferenceDocIds.add(docId);
-      } catch (err) {
-        process.stderr.write(`[mcp-writing] Failed to index ${file}: ${err.message}\n`);
-      }
-      continue;
-    }
-
-    if (!isWorldFile(syncDir, file)) continue;
-    try {
-      const { meta } = readMeta(file, syncDir, { writable });
-      if (!Object.keys(meta).length) {
-        const { data } = parseFile(file);
-        indexWorldFile(db, syncDir, file, data);
-      } else {
-        indexWorldFile(db, syncDir, file, meta);
-      }
-    } catch (err) {
-      process.stderr.write(`[mcp-writing] Failed to index ${file}: ${err.message}\n`);
-    }
-  }
-
-  if (canPruneReferenceDocs(syncDir)) {
-    pruneMissingReferenceDocs(db, indexedReferenceDocIds);
-  }
+  regenerateReferenceAndWorldIndexes(db, syncDir, scanFiles, { writable });
 
   // --- Pass 2: scene files ---
   for (const file of scanFiles) {

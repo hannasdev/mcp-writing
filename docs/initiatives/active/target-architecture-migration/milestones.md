@@ -1,7 +1,7 @@
 # Target Architecture Migration — Milestones
 
 Status: Active  
-Current milestone: M3 — Split Sync Observation From Canonical Mutation Internals  
+Current milestone: M4 — Add Read-Only Structure Diagnostics  
 Owner: MCP Writing  
 Date: 2026-05-17
 
@@ -100,7 +100,7 @@ Out of scope:
 
 ## M3 — Split Sync Observation From Canonical Mutation Internals
 
-Status: Active.
+Status: Complete.
 
 Goal: create internal seams so sync can later observe broadly without always mutating canonical structure.
 
