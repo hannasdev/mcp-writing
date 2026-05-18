@@ -422,6 +422,97 @@ describe("rename_chapter tool", () => {
   });
 });
 
+describe("reorder_chapter tool", () => {
+  test("reorders a canonical chapter and explicit scene compatibility fields", async () => {
+    const sceneDir = path.join(writeSyncDir, "projects", "test-novel", "scenes");
+    fs.mkdirSync(sceneDir, { recursive: true });
+    const scenePath = path.join(sceneDir, "sc-m7-reorder.md");
+    fs.writeFileSync(
+      scenePath,
+      "---\nscene_id: sc-m7-reorder\ntitle: Reorder M7 Scene\n---\nM7 reorder prose.",
+      "utf8"
+    );
+
+    await callWriteTool("sync");
+
+    const createText = await callWriteTool("create_chapter", {
+      project_id: "test-novel",
+      title: "M7 Before Reorder",
+      sort_index: 96,
+    });
+    const createParsed = JSON.parse(createText);
+    assert.equal(createParsed.ok, true);
+
+    await callWriteTool("assign_scene_to_chapter", {
+      scene_id: "sc-m7-reorder",
+      project_id: "test-novel",
+      chapter_id: createParsed.chapter.chapter_id,
+    });
+
+    const reorderText = await callWriteTool("reorder_chapter", {
+      project_id: "test-novel",
+      chapter_id: createParsed.chapter.chapter_id,
+      sort_index: 95,
+    });
+    const reorderParsed = JSON.parse(reorderText);
+
+    assert.equal(reorderParsed.ok, true);
+    assert.equal(reorderParsed.action, "reordered");
+    assert.equal(reorderParsed.previous_sort_index, 96);
+    assert.equal(reorderParsed.chapter.sort_index, 95);
+    assert.equal(reorderParsed.updated_scene_count, 1);
+    assert.equal(reorderParsed.updated_sidecar_count, 1);
+
+    const sidecarFile = path.join(sceneDir, "sc-m7-reorder.meta.yaml");
+    const sidecar = yaml.load(fs.readFileSync(sidecarFile, "utf8"));
+    assert.equal(sidecar.chapter_id, createParsed.chapter.chapter_id);
+    assert.equal(sidecar.chapter, 95);
+    assert.equal(sidecar.chapter_title, "M7 Before Reorder");
+
+    const chaptersText = await callWriteTool("list_chapters", { project_id: "test-novel" });
+    const chaptersParsed = JSON.parse(chaptersText);
+    const reordered = chaptersParsed.results.find((row) => row.chapter_id === createParsed.chapter.chapter_id);
+    assert.equal(reordered.sort_index, 95);
+
+    const findText = await callWriteTool("find_scenes", {
+      project_id: "test-novel",
+      chapter_id: createParsed.chapter.chapter_id,
+    });
+    const findParsed = JSON.parse(findText);
+    const reorderedScene = findParsed.results.find((row) => row.scene_id === "sc-m7-reorder");
+    assert.equal(reorderedScene.chapter, 95);
+    assert.equal(reorderedScene.chapter_title, "M7 Before Reorder");
+  });
+
+  test("rejects reordering a chapter to an occupied sort index", async () => {
+    const createText = await callWriteTool("create_chapter", {
+      project_id: "test-novel",
+      title: "M7 Reorder Conflict Source",
+      sort_index: 94,
+    });
+    const createParsed = JSON.parse(createText);
+    assert.equal(createParsed.ok, true);
+
+    const chaptersText = await callWriteTool("list_chapters", { project_id: "test-novel" });
+    const chaptersParsed = JSON.parse(chaptersText);
+    const firstChapter = chaptersParsed.results.find((row) => row.sort_index === 1);
+    assert.ok(firstChapter);
+
+    const reorderText = await callWriteTool("reorder_chapter", {
+      project_id: "test-novel",
+      chapter_id: createParsed.chapter.chapter_id,
+      sort_index: 1,
+    });
+    const reorderParsed = JSON.parse(reorderText);
+
+    assert.equal(reorderParsed.ok, false);
+    assert.equal(reorderParsed.error.code, "VALIDATION_ERROR");
+    assert.match(reorderParsed.error.message, /sort_index 1 is already used/);
+    assert.equal(reorderParsed.error.details.existing_chapter_id, firstChapter.chapter_id);
+    assert.match(reorderParsed.error.details.next_step, /Automatic resequencing/);
+  });
+});
+
 describe("update_character_sheet tool", () => {
   test("updates arc_summary and reflects in get_character_sheet", async () => {
     const text = await callWriteTool("update_character_sheet", {

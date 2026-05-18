@@ -6,6 +6,14 @@ This complements `CHANGELOG.md`:
 - `CHANGELOG.md` is technical and release-oriented.
 - This log is plain-language and outcome-oriented.
 
+### 2026-05-18 — Add explicit chapter reorder
+
+- What changed: Added a `reorder_chapter` workflow for changing canonical chapter order and refreshing explicit scene `chapter` compatibility fields.
+- Why it matters: Authors and AI agents can now express simple chapter-order changes through a named structure operation, with clear diagnostics when folder representation may need follow-up.
+- Who is affected: Authors, maintainers, and AI agents working on Target Architecture Migration M7 or explicit chapter-structure workflows.
+- Action needed: Use `list_chapters` to choose a canonical `chapter_id` and an unused `sort_index`, then call `reorder_chapter`; run `diagnose_structure` if folder-derived structure may still reflect the old order.
+- PR: TBD
+
 ### 2026-05-18 — Add explicit chapter rename
 
 - What changed: Added a `rename_chapter` workflow for changing canonical chapter titles and refreshing explicit scene `chapter_title` compatibility fields.

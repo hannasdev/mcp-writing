@@ -40,6 +40,7 @@
 - [`upsert_reference_link`](#upsert_reference_link)
 - [`create_chapter`](#create_chapter)
 - [`rename_chapter`](#rename_chapter)
+- [`reorder_chapter`](#reorder_chapter)
 - [`assign_scene_to_chapter`](#assign_scene_to_chapter)
 - [`update_scene_metadata`](#update_scene_metadata)
 - [`update_character_sheet`](#update_character_sheet)
@@ -494,6 +495,18 @@ Rename a canonical chapter through the explicit structure workflow. Updates cano
 | `project_id` | `string` | Yes | Project the chapter belongs to (e.g. 'the-lamb'). |
 | `chapter_id` | `string` | Yes | Canonical chapter identifier. Use list_chapters to find valid values. |
 | `title` | `string` | Yes | New human-readable chapter title. |
+
+---
+
+## reorder_chapter
+
+Reorder a canonical chapter through the explicit structure workflow. Updates canonical chapter order and explicit scene chapter/chapter_title compatibility fields; it does not rename, move, or resequence scene files, sidecars by path-derived structure, or Scrivener-compatible folders.
+
+| Parameter | Type | Required | Description |
+| --- | --- | :---: | --- |
+| `project_id` | `string` | Yes | Project the chapter belongs to (e.g. 'the-lamb'). |
+| `chapter_id` | `string` | Yes | Canonical chapter identifier. Use list_chapters to find valid values. |
+| `sort_index` | `integer` | Yes | New canonical chapter order within the project. Must be unused. |
 
 ---
 

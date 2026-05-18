@@ -8,8 +8,10 @@ import { buildSceneChapterAssignmentPlan } from "../structure/scene-chapter-assi
 import {
   buildCreateChapterPlan,
   buildRenameChapterPlan,
+  buildReorderChapterPlan,
   insertCanonicalChapter,
   renameCanonicalChapter,
+  reorderCanonicalChapter,
 } from "../structure/chapter-commands.js";
 import {
   persistSceneReferenceLink,
@@ -682,6 +684,106 @@ export function registerMetadataTools(s, {
         next_steps: [
           "Use list_chapters to confirm the canonical title.",
           "Run diagnose_structure if folder-derived structure may still use the previous chapter title.",
+        ],
+      });
+    }
+  );
+
+  // ---- reorder_chapter -----------------------------------------------------
+  s.tool(
+    "reorder_chapter",
+    "Reorder a canonical chapter through the explicit structure workflow. Updates canonical chapter order and explicit scene chapter/chapter_title compatibility fields; it does not rename, move, or resequence scene files, sidecars by path-derived structure, or Scrivener-compatible folders.",
+    {
+      project_id: z.string().describe("Project the chapter belongs to (e.g. 'the-lamb')."),
+      chapter_id: z.string().describe("Canonical chapter identifier. Use list_chapters to find valid values."),
+      sort_index: z.number().int().min(1).describe("New canonical chapter order within the project. Must be unused."),
+    },
+    async ({ project_id, chapter_id, sort_index }) => {
+      if (!SYNC_DIR_WRITABLE) {
+        return errorResponse("READ_ONLY", "Cannot reorder chapter: sync dir is read-only.");
+      }
+
+      const projectIdCheck = validateProjectId(project_id);
+      if (!projectIdCheck.ok) {
+        return errorResponse("INVALID_PROJECT_ID", projectIdCheck.reason, { project_id });
+      }
+
+      const plan = buildReorderChapterPlan(db, {
+        projectId: project_id,
+        chapterId: chapter_id,
+        sortIndex: sort_index,
+      });
+      if (!plan.ok) {
+        return errorResponse(plan.error.code, plan.error.message, {
+          project_id,
+          chapter_id,
+          sort_index,
+          ...(plan.error.details ?? {}),
+        });
+      }
+
+      const linkedScenes = db.prepare(`
+        SELECT scene_id, project_id, file_path
+        FROM scenes
+        WHERE project_id = ? AND chapter_id = ?
+        ORDER BY scene_id
+      `).all(project_id, chapter_id);
+
+      const sidecarUpdates = [];
+      try {
+        for (const scene of linkedScenes) {
+          const { meta } = readMeta(scene.file_path, SYNC_DIR, { writable: true });
+          if (meta.chapter_id === chapter_id) {
+            sidecarUpdates.push({
+              scene,
+              meta: {
+                ...meta,
+                chapter: plan.chapter.sort_index,
+                chapter_title: plan.chapter.title,
+              },
+            });
+          }
+        }
+
+        db.exec("BEGIN");
+        reorderCanonicalChapter(db, plan.chapter);
+        for (const update of sidecarUpdates) {
+          writeMeta(update.scene.file_path, update.meta);
+        }
+        db.exec("COMMIT");
+      } catch (err) {
+        try {
+          db.exec("ROLLBACK");
+        } catch (rollbackErr) {
+          void rollbackErr;
+        }
+        if (err.code === "ENOENT") {
+          return errorResponse("STALE_PATH", `Cannot reorder chapter '${chapter_id}': an indexed scene file is missing. Run sync() to refresh.`, {
+            project_id,
+            chapter_id,
+          });
+        }
+        return errorResponse("IO_ERROR", `Failed to reorder chapter '${chapter_id}': ${err.message}`);
+      }
+
+      return jsonResponse({
+        ok: true,
+        action: "reordered",
+        chapter: {
+          chapter_id: plan.chapter.chapter_id,
+          project_id: plan.chapter.project_id,
+          title: plan.chapter.title,
+          sort_index: plan.chapter.sort_index,
+          logline: plan.chapter.logline,
+          metadata_stale: plan.chapter.metadata_stale,
+        },
+        previous_sort_index: plan.previousChapter.sort_index,
+        updated_scene_count: linkedScenes.length,
+        updated_sidecar_count: sidecarUpdates.length,
+        diagnostics: plan.diagnostics,
+        next_steps: [
+          "Use list_chapters to confirm canonical order.",
+          "Run diagnose_structure if folder-derived structure may still use the previous order.",
         ],
       });
     }

@@ -230,6 +230,86 @@ export function buildRenameChapterPlan(db, {
   };
 }
 
+export function buildReorderChapterPlan(db, {
+  projectId,
+  chapterId,
+  sortIndex,
+  updatedAt = new Date().toISOString(),
+}) {
+  if (!Number.isInteger(sortIndex) || sortIndex < 1) {
+    return {
+      ok: false,
+      error: {
+        code: "VALIDATION_ERROR",
+        message: "sort_index must be a positive integer.",
+        details: { sort_index: sortIndex },
+      },
+    };
+  }
+
+  const chapter = db.prepare(`
+    SELECT chapter_id, project_id, title, sort_index, logline, source_path, source_checksum, metadata_stale
+    FROM chapters
+    WHERE project_id = ? AND chapter_id = ?
+  `).get(projectId, chapterId);
+  if (!chapter) {
+    return {
+      ok: false,
+      error: {
+        code: "NOT_FOUND",
+        message: `Chapter '${chapterId}' not found in project '${projectId}'.`,
+        details: { project_id: projectId, chapter_id: chapterId },
+      },
+    };
+  }
+
+  const existingBySortIndex = db.prepare(`
+    SELECT chapter_id, title, sort_index
+    FROM chapters
+    WHERE project_id = ? AND sort_index = ? AND chapter_id != ?
+  `).get(projectId, sortIndex, chapterId);
+  if (existingBySortIndex) {
+    return {
+      ok: false,
+      error: {
+        code: "VALIDATION_ERROR",
+        message: `Chapter sort_index ${sortIndex} is already used in project '${projectId}'.`,
+        details: {
+          project_id: projectId,
+          sort_index: sortIndex,
+          existing_chapter_id: existingBySortIndex.chapter_id,
+          existing_title: existingBySortIndex.title,
+          next_step: "Choose an unused sort_index. Automatic resequencing is not part of this command yet.",
+        },
+      },
+    };
+  }
+
+  const diagnostics = [];
+  if (chapter.source_path) {
+    diagnostics.push({
+      code: "REPRESENTATION_NOT_REORDERED",
+      severity: "warning",
+      message: "Reordered canonical chapter state and explicit scene compatibility fields only; the existing chapter source folder was not renamed or moved.",
+      next_step: "Run diagnose_structure after sync if folder-derived structure still reports the old order.",
+      details: {
+        source_path: chapter.source_path,
+      },
+    });
+  }
+
+  return {
+    ok: true,
+    previousChapter: chapter,
+    chapter: {
+      ...chapter,
+      sort_index: sortIndex,
+      updated_at: updatedAt,
+    },
+    diagnostics,
+  };
+}
+
 export function insertCanonicalChapter(db, chapter) {
   db.prepare(`
     INSERT INTO chapters (
@@ -267,6 +347,34 @@ export function renameCanonicalChapter(db, chapter) {
         updated_at = ?
     WHERE project_id = ? AND chapter_id = ?
   `).run(
+    chapter.title,
+    chapter.updated_at,
+    chapter.project_id,
+    chapter.chapter_id
+  );
+}
+
+export function reorderCanonicalChapter(db, chapter) {
+  db.prepare(`
+    UPDATE chapters
+    SET sort_index = ?,
+        updated_at = ?
+    WHERE project_id = ? AND chapter_id = ?
+  `).run(
+    chapter.sort_index,
+    chapter.updated_at,
+    chapter.project_id,
+    chapter.chapter_id
+  );
+
+  db.prepare(`
+    UPDATE scenes
+    SET chapter = ?,
+        chapter_title = ?,
+        updated_at = ?
+    WHERE project_id = ? AND chapter_id = ?
+  `).run(
+    chapter.sort_index,
     chapter.title,
     chapter.updated_at,
     chapter.project_id,
