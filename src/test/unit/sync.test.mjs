@@ -13,7 +13,8 @@ import {
   isWorldFile, readMeta, isSyncDirWritable, sidecarPath, syncAll,
   walkFiles, walkSidecars, worldEntityFolderKey, worldEntityKindForPath,
   buildCanonicalIndexPlan, buildWarningSummary, observeOrphanedSidecars,
-  observeStructureForFile, readSceneFileForSync, regenerateReferenceAndWorldIndexes, scanSyncFiles,
+  observeStructureForFile, readSceneFileForSync, readSceneMetadataForSync,
+  regenerateReferenceAndWorldIndexes, scanSyncFiles,
 } from "../../sync/sync.js";
 import {
   buildSceneStructurePatch,
@@ -188,6 +189,21 @@ describe("readSceneFileForSync", () => {
     assert.equal(result.prose, "Scene prose.");
     assert.equal(result.frontmatter.title, "Read Phase");
 
+    fs.rmSync(dir, { recursive: true });
+  });
+});
+
+describe("readSceneMetadataForSync", () => {
+  test("reads sidecar metadata without parsing manuscript frontmatter", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "scene-metadata-"));
+    const scenePath = path.join(dir, "projects", "test-novel", "scenes", "notes.md");
+    fs.mkdirSync(path.dirname(scenePath), { recursive: true });
+    fs.writeFileSync(scenePath, "---\ntitle: [invalid\n---\nSupport note.");
+    fs.writeFileSync(sidecarPath(scenePath), "title: Support note\n");
+
+    const result = readSceneMetadataForSync(dir, scenePath);
+
+    assert.equal(result.meta.title, "Support note");
     fs.rmSync(dir, { recursive: true });
   });
 });
@@ -1709,6 +1725,30 @@ describe("syncAll", () => {
     );
     const result = syncAll(db, dir, { quiet: true });
     assert.equal(result.indexed, 0);
+
+    db.close();
+    fs.rmSync(dir, { recursive: true });
+  });
+
+  test("skipped sidecar-only notes with malformed frontmatter do not block pruning", () => {
+    const dir = makeTempSync();
+    const db = openDb(":memory:");
+    const scenePath = path.join(dir, "projects", "test-novel", "scenes", "sc-001.md");
+    const notePath = path.join(dir, "projects", "test-novel", "scenes", "notes.md");
+
+    writeScene(dir, "sc-001");
+    syncAll(db, dir, { quiet: true });
+    assert.equal(db.prepare(`SELECT COUNT(*) AS count FROM scenes WHERE scene_id = 'sc-001'`).get().count, 1);
+
+    fs.rmSync(scenePath);
+    fs.rmSync(sidecarPath(scenePath), { force: true });
+    fs.writeFileSync(notePath, "---\ntitle: [invalid\n---\nSupport note.");
+    fs.writeFileSync(sidecarPath(notePath), "title: Support note\n");
+
+    const result = syncAll(db, dir, { quiet: true });
+
+    assert.equal(result.skipped, 1);
+    assert.equal(db.prepare(`SELECT COUNT(*) AS count FROM scenes WHERE scene_id = 'sc-001'`).get().count, 0);
 
     db.close();
     fs.rmSync(dir, { recursive: true });

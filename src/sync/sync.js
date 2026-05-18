@@ -1110,8 +1110,12 @@ export function buildCanonicalIndexPlan(db, syncDir, file, meta, observedStructu
   };
 }
 
+export function readSceneMetadataForSync(syncDir, file, { writable = false } = {}) {
+  return readMeta(file, syncDir, { writable });
+}
+
 export function readSceneFileForSync(syncDir, file, { writable = false } = {}) {
-  const metadataRead = readMeta(file, syncDir, { writable });
+  const metadataRead = readSceneMetadataForSync(syncDir, file, { writable });
   const { data: frontmatter, content: prose } = parseFile(file);
 
   return {
@@ -1425,7 +1429,7 @@ export function syncAll(db, syncDir, { quiet = false, writable = false } = {}) {
   for (const file of scanFiles) {
     if (isWorldFile(syncDir, file) || isReferenceFile(syncDir, file)) continue;
     try {
-      const { meta, sourceMeta, sidecarGenerated, derived, mismatches, prose } = readSceneFileForSync(syncDir, file, { writable });
+      const { meta, sourceMeta, sidecarGenerated, derived, mismatches } = readSceneMetadataForSync(syncDir, file, { writable });
       if (sidecarGenerated) sidecarsMigrated++;
       const structureObservation = observeStructureForFile(syncDir, file, {
         meta,
@@ -1440,6 +1444,8 @@ export function syncAll(db, syncDir, { quiet = false, writable = false } = {}) {
         if (!quiet) warnings.push(`Skipped (no scene_id): ${structureObservation.relativePath}`);
         continue;
       }
+
+      const { content: prose } = parseFile(file);
 
       // Duplicate scene_id detection
       const project_id = structureObservation.projectId;
