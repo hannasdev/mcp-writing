@@ -142,7 +142,7 @@ Start an asynchronous batch job that infers scene character mentions and updates
 | `project_id` | `string` | Yes | Project ID (e.g. 'the-lamb' or 'universe-1/book-1-the-lamb'). |
 | `scene_ids` | `string[]` | No | Optional allowlist of scene IDs to process before other filters are applied. |
 | `part` | `integer` | No | Optional part number filter. |
-| `chapter` | `integer` | No | Optional chapter number filter. |
+| `chapter` | `integer` | No | Optional compatibility chapter number resolved through canonical chapter identity. |
 | `chapter_id` | `string` | No | Optional canonical chapter identifier. |
 | `only_stale` | `boolean` | No | If true, only process scenes currently marked metadata_stale. |
 | `dry_run` | `boolean` | No | If true (default), returns preview results without writing sidecars. |
@@ -536,9 +536,9 @@ Dry-run planning tool for review bundles. Resolves scene scope, deterministic or
 | `project_id` | `string` | Yes | Project ID to scope the review bundle (e.g. 'test-novel'). |
 | `profile` | `enum` | Yes | Bundle profile: outline_discussion, editor_detailed, or beta_reader_personalized. |
 | `part` | `integer` | No | Optional part filter. |
-| `chapter` | `integer` | No | Optional compatibility chapter filter. |
+| `chapter` | `integer` | No | Optional compatibility chapter number resolved through canonical chapter identity. |
 | `chapter_id` | `string` | No | Optional canonical chapter identifier. |
-| `chapters` | `number[]` | No | Optional chapter-set filter. Use this for one/few specific chapters. Do not combine with chapter or chapter_id. |
+| `chapters` | `number[]` | No | Optional compatibility chapter-set filter resolved through canonical chapter identities. Use this for one/few specific chapters. Do not combine with chapter or chapter_id. |
 | `tag` | `string` | No | Optional tag filter (exact match). |
 | `scene_ids` | `string[]` | No | Optional explicit scene_id allowlist. Intersects with other filters. |
 | `strictness` | `enum` | No | Strictness mode: warn (default) or fail. |
@@ -564,9 +564,9 @@ Generate review bundle artifacts (PDF/markdown) from planned scene scope. Writes
 | `profile` | `enum` | Yes | Bundle profile: outline_discussion, editor_detailed, or beta_reader_personalized. |
 | `output_dir` | `string` | Yes | Directory path to write bundle artifacts into. |
 | `part` | `integer` | No | Optional part filter. |
-| `chapter` | `integer` | No | Optional compatibility chapter filter. |
+| `chapter` | `integer` | No | Optional compatibility chapter number resolved through canonical chapter identity. |
 | `chapter_id` | `string` | No | Optional canonical chapter identifier. |
-| `chapters` | `number[]` | No | Optional chapter-set filter. Use this for one/few specific chapters. Do not combine with chapter or chapter_id. |
+| `chapters` | `number[]` | No | Optional compatibility chapter-set filter resolved through canonical chapter identities. Use this for one/few specific chapters. Do not combine with chapter or chapter_id. |
 | `tag` | `string` | No | Optional tag filter (exact match). |
 | `scene_ids` | `string[]` | No | Optional explicit scene_id allowlist. Intersects with other filters. |
 | `strictness` | `enum` | No | Strictness mode: warn (default) or fail. |
@@ -627,7 +627,7 @@ Detect dominant prose conventions from existing scenes and suggest initial prose
 | `project_id` | `string` | Yes | Project ID to analyze (e.g. 'the-lamb' or 'universe-1/book-1'). |
 | `scene_ids` | `string[]` | No | Optional scene_id allowlist to analyze. |
 | `part` | `integer` | No | Optional part filter. |
-| `chapter` | `integer` | No | Optional chapter filter. |
+| `chapter` | `integer` | No | Optional compatibility chapter number resolved through canonical chapter identity. |
 | `chapter_id` | `string` | No | Optional canonical chapter identifier. |
 | `max_scenes` | `integer` | No | Maximum number of scenes to analyze (default: 50). |
 | `min_agreement` | `number` | No | Minimum agreement ratio for suggested fields (default: 0.6). |
@@ -669,7 +669,7 @@ Detect styleguide drift by comparing declared config conventions against observe
 | `project_id` | `string` | Yes | Project ID to analyze (e.g. 'the-lamb' or 'universe-1/book-1'). |
 | `scene_ids` | `string[]` | No | Optional scene_id allowlist to analyze. |
 | `part` | `integer` | No | Optional part filter. |
-| `chapter` | `integer` | No | Optional chapter filter. |
+| `chapter` | `integer` | No | Optional compatibility chapter number resolved through canonical chapter identity. |
 | `chapter_id` | `string` | No | Optional canonical chapter identifier. |
 | `max_scenes` | `integer` | No | Maximum number of scenes to analyze (default: 50). |
 | `min_agreement` | `number` | No | Minimum agreement ratio for suggested updates (default: 0.6). |

@@ -131,8 +131,10 @@ export function registerSearchTools(s, {
       if (resolvedChapterFilter.chapter) {
         conditions.push(`s.chapter_id = ?`);
         params.push(resolvedChapterFilter.chapter.chapter_id);
-      } else if (chapter_id)  { conditions.push(`s.chapter_id = ?`);         params.push(chapter_id); }
-      else if (chapter) { conditions.push(`s.chapter = ?`);           params.push(chapter); }
+      } else if (chapter != null && !project_id) {
+        conditions.push(`s.chapter = ?`);
+        params.push(chapter);
+      }
       if (pov)         { conditions.push(`s.pov = ?`);                params.push(pov); }
 
       if (joins.length)      query += " " + joins.join(" ");

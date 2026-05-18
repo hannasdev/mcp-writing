@@ -355,7 +355,7 @@ export function registerSyncTools(s, {
       project_id: z.string().describe("Project ID (e.g. 'the-lamb' or 'universe-1/book-1-the-lamb')."),
       scene_ids: z.array(z.string()).optional().describe("Optional allowlist of scene IDs to process before other filters are applied."),
       part: z.number().int().optional().describe("Optional part number filter."),
-      chapter: z.number().int().optional().describe("Optional chapter number filter."),
+      chapter: z.number().int().optional().describe("Optional compatibility chapter number resolved through canonical chapter identity."),
       chapter_id: z.string().optional().describe("Optional canonical chapter identifier."),
       only_stale: z.boolean().optional().describe("If true, only process scenes currently marked metadata_stale."),
       dry_run: z.boolean().optional().describe("If true (default), returns preview results without writing sidecars."),
