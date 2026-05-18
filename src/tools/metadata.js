@@ -4,6 +4,7 @@ import matter from "gray-matter";
 import { readMeta, writeMeta, indexSceneFile, applySceneStructurePatch } from "../sync/sync.js";
 import { validateProjectId, validateUniverseId } from "../sync/importer.js";
 import { resolveValidatedChapterFilter } from "../core/chapter-resolution.js";
+import { buildSceneChapterAssignmentPlan } from "../structure/scene-chapter-assignment.js";
 import {
   persistSceneReferenceLink,
   upsertExplicitReferenceLinkRow,
@@ -507,6 +508,92 @@ export function registerMetadataTools(s, {
         action: "upserted",
         link,
       });
+    }
+  );
+
+  // ---- assign_scene_to_chapter --------------------------------------------
+  s.tool(
+    "assign_scene_to_chapter",
+    "Assign a scene to a canonical chapter through the explicit structure workflow. Writes chapter_id plus compatibility chapter/chapter_title fields to the scene sidecar and refreshes the index. Pass chapter_id=null to clear an explicit chapter link on an unchaptered scene. Use list_chapters first to choose a valid canonical chapter_id.",
+    {
+      scene_id: z.string().describe("The scene_id to assign (e.g. 'sc-011-sebastian')."),
+      project_id: z.string().describe("Project the scene belongs to (e.g. 'the-lamb')."),
+      chapter_id: z.string().nullable().describe("Canonical chapter identifier. Use list_chapters to find valid values. Pass null to clear an explicit chapter link on an unchaptered scene."),
+    },
+    async ({ scene_id, project_id, chapter_id }) => {
+      if (!SYNC_DIR_WRITABLE) {
+        return errorResponse("READ_ONLY", "Cannot assign scene to chapter: sync dir is read-only.");
+      }
+
+      const projectIdCheck = validateProjectId(project_id);
+      if (!projectIdCheck.ok) {
+        return errorResponse("INVALID_PROJECT_ID", projectIdCheck.reason, { project_id });
+      }
+
+      const scene = db.prepare(`
+        SELECT scene_id, project_id, chapter_id, file_path
+        FROM scenes
+        WHERE scene_id = ? AND project_id = ?
+      `).get(scene_id, project_id);
+      if (!scene) {
+        return errorResponse("NOT_FOUND", `Scene '${scene_id}' not found in project '${project_id}'.`);
+      }
+
+      let chapter = null;
+      if (chapter_id !== null) {
+        const resolvedChapterFilter = resolveValidatedChapterFilter(db, {
+          projectId: project_id,
+          chapterId: chapter_id,
+        });
+
+        if (resolvedChapterFilter.error) {
+          return errorResponse(
+            resolvedChapterFilter.error.code,
+            resolvedChapterFilter.error.message,
+            { project_id, chapter_id }
+          );
+        }
+
+        chapter = resolvedChapterFilter.chapter;
+        if (!chapter) {
+          return errorResponse("NOT_FOUND", "Chapter not found for the provided project and identifier.", {
+            project_id,
+            chapter_id,
+          });
+        }
+      }
+
+      try {
+        const { meta } = readMeta(scene.file_path, SYNC_DIR, { writable: true });
+        const plan = buildSceneChapterAssignmentPlan(SYNC_DIR, scene.file_path, meta, { chapter });
+        if (!plan.ok) {
+          return errorResponse(plan.error.code, plan.error.message, {
+            project_id,
+            scene_id,
+            chapter_id,
+            ...(plan.error.details ?? {}),
+          });
+        }
+
+        writeMeta(scene.file_path, plan.meta);
+
+        const { content: prose } = matter(fs.readFileSync(scene.file_path, "utf8"));
+        indexSceneFile(db, SYNC_DIR, scene.file_path, plan.meta, prose);
+
+        return jsonResponse({
+          ok: true,
+          action: chapter === null ? "cleared" : "assigned",
+          scene_id,
+          project_id,
+          previous_chapter_id: scene.chapter_id ?? plan.previousChapterId ?? null,
+          chapter: plan.assignedChapter,
+        });
+      } catch (err) {
+        if (err.code === "ENOENT") {
+          return errorResponse("STALE_PATH", `Prose file for scene '${scene_id}' not found at indexed path — the file may have moved. Run sync() to refresh.`, { indexed_path: scene.file_path });
+        }
+        return errorResponse("IO_ERROR", `Failed to assign scene '${scene_id}' to chapter: ${err.message}`);
+      }
     }
   );
 
