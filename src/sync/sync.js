@@ -986,7 +986,6 @@ export function pruneSyncDerivedIndexes(db, syncDir, {
 
 export function regenerateReferenceAndWorldIndexes(db, syncDir, files, { writable = false } = {}) {
   const indexedReferenceDocIds = new Set();
-  const diagnostics = [];
 
   for (const file of files) {
     if (isReferenceFile(syncDir, file)) {
@@ -995,12 +994,7 @@ export function regenerateReferenceAndWorldIndexes(db, syncDir, files, { writabl
         const docId = indexReferenceFile(db, syncDir, file, data, content);
         indexedReferenceDocIds.add(docId);
       } catch (err) {
-        const message = `[mcp-writing] Failed to index ${file}: ${err.message}`;
-        process.stderr.write(`${message}\n`);
-        diagnostics.push(buildSyncDiagnostic(message, {
-          type: "reference_index_failure",
-          file,
-        }));
+        process.stderr.write(`[mcp-writing] Failed to index ${file}: ${err.message}\n`);
       }
       continue;
     }
@@ -1015,12 +1009,7 @@ export function regenerateReferenceAndWorldIndexes(db, syncDir, files, { writabl
         indexWorldFile(db, syncDir, file, meta);
       }
     } catch (err) {
-      const message = `[mcp-writing] Failed to index ${file}: ${err.message}`;
-      process.stderr.write(`${message}\n`);
-      diagnostics.push(buildSyncDiagnostic(message, {
-        type: "world_index_failure",
-        file,
-      }));
+      process.stderr.write(`[mcp-writing] Failed to index ${file}: ${err.message}\n`);
     }
   }
 
@@ -1030,7 +1019,6 @@ export function regenerateReferenceAndWorldIndexes(db, syncDir, files, { writabl
 
   return {
     indexedReferenceDocIds,
-    diagnostics,
   };
 }
 
@@ -1445,8 +1433,6 @@ export function syncAll(db, syncDir, { quiet = false, writable = false } = {}) {
         continue;
       }
 
-      const { content: prose } = parseFile(file);
-
       // Duplicate scene_id detection
       const project_id = structureObservation.projectId;
       const key = `${meta.scene_id}::${project_id}`;
@@ -1475,6 +1461,8 @@ export function syncAll(db, syncDir, { quiet = false, writable = false } = {}) {
       for (const diagnostic of structureObservation.diagnostics) {
         warnings.push(diagnostic.message);
       }
+
+      const { content: prose } = parseFile(file);
 
       const result = indexSceneFile(db, syncDir, file, meta, prose, { observedStructure: structureObservation });
       const canonicalDiagnostics = result.canonicalIndexPlan?.diagnostics ?? [];

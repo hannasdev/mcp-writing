@@ -607,7 +607,6 @@ describe("derived index regeneration", () => {
     const result = regenerateReferenceAndWorldIndexes(db, dir, [referencePath, characterPath]);
 
     assert.deepEqual([...result.indexedReferenceDocIds], ["ref-lore"]);
-    assert.deepEqual(result.diagnostics, []);
     assert.deepEqual(
       db.prepare("SELECT doc_id, project_id, title FROM reference_docs").all().map((row) => ({ ...row })),
       [{ doc_id: "ref-lore", project_id: "test-novel", title: "Lore" }]
@@ -616,6 +615,22 @@ describe("derived index regeneration", () => {
       db.prepare("SELECT character_id, project_id, name FROM characters").all().map((row) => ({ ...row })),
       [{ character_id: "char-alex", project_id: "test-novel", name: "Alex" }]
     );
+
+    db.close();
+    fs.rmSync(dir, { recursive: true });
+  });
+
+  test("keeps reference parse failures out of sync warning diagnostics", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "derived-index-failure-"));
+    const referencePath = path.join(dir, "projects", "test-novel", "world", "reference", "broken.md");
+    fs.mkdirSync(path.dirname(referencePath), { recursive: true });
+    fs.writeFileSync(referencePath, "---\ndoc_id: [invalid\n---\nBroken reference.");
+    const db = openDb(":memory:");
+
+    const result = regenerateReferenceAndWorldIndexes(db, dir, [referencePath]);
+
+    assert.deepEqual([...result.indexedReferenceDocIds], []);
+    assert.deepEqual(Object.keys(result), ["indexedReferenceDocIds"]);
 
     db.close();
     fs.rmSync(dir, { recursive: true });
@@ -1749,6 +1764,32 @@ describe("syncAll", () => {
 
     assert.equal(result.skipped, 1);
     assert.equal(db.prepare(`SELECT COUNT(*) AS count FROM scenes WHERE scene_id = 'sc-001'`).get().count, 0);
+
+    db.close();
+    fs.rmSync(dir, { recursive: true });
+  });
+
+  test("records pre-indexing diagnostics before malformed scene frontmatter fails", () => {
+    const dir = makeTempSync();
+    const db = openDb(":memory:");
+    const scenePath = path.join(dir, "projects", "test-novel", "scenes", "part-1", "chapter-1", "sc-001.md");
+    fs.mkdirSync(path.dirname(scenePath), { recursive: true });
+    fs.writeFileSync(scenePath, "---\ntitle: [invalid\n---\nScene prose.");
+    fs.writeFileSync(sidecarPath(scenePath), [
+      "scene_id: sc-001",
+      "part: 2",
+      "chapter: 9",
+      "",
+    ].join("\n"));
+
+    const result = syncAll(db, dir, { quiet: true });
+
+    assert.equal(result.indexed, 0);
+    assert.equal(result.warningSummary.path_metadata_mismatch.count, 1);
+    assert.equal(
+      result.warningSummary.path_metadata_mismatch.examples[0],
+      'Path/metadata mismatch for scene "sc-001": projects/test-novel/scenes/part-1/chapter-1/sc-001.md (part metadata 2 != path part 1, chapter metadata 9 != path chapter 1). Using path-derived values.'
+    );
 
     db.close();
     fs.rmSync(dir, { recursive: true });
