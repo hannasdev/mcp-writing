@@ -71,4 +71,20 @@ describe("buildSceneChapterAssignmentPlan", () => {
     assert.equal(plan.error.details.requested_chapter_id, "ch-02-second");
     assert.equal(plan.error.details.path_chapter, "ch-01-first");
   });
+
+  test("rejects assignment that conflicts with legacy path-derived chapter structure", () => {
+    const syncDir = "/sync";
+    const filePath = path.join(syncDir, "projects", "book", "part-1", "chapter-1", "sc-001.md");
+
+    const plan = buildSceneChapterAssignmentPlan(syncDir, filePath, {
+      scene_id: "sc-001",
+    }, { chapter });
+
+    assert.equal(plan.ok, false);
+    assert.equal(plan.error.code, "VALIDATION_ERROR");
+    assert.equal(plan.error.details.requested_chapter_id, "ch-02-second");
+    assert.equal(plan.error.details.requested_chapter, 2);
+    assert.equal(plan.error.details.path_chapter, "ch-01-chapter-1");
+    assert.equal(plan.error.details.path_chapter_number, 1);
+  });
 });

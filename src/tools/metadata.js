@@ -585,7 +585,7 @@ export function registerMetadataTools(s, {
           action: chapter === null ? "cleared" : "assigned",
           scene_id,
           project_id,
-          previous_chapter_id: scene.chapter_id ?? plan.previousChapterId ?? null,
+          previous_chapter_id: plan.previousChapterId ?? scene.chapter_id ?? null,
           chapter: plan.assignedChapter,
         });
       } catch (err) {

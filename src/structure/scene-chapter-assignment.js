@@ -45,7 +45,24 @@ export function buildSceneChapterAssignmentPlan(syncDir, filePath, meta = {}, { 
         message: "Cannot assign a scene to a different chapter while its file path implies another canonical chapter.",
         details: {
           requested_chapter_id: chapter.chapter_id,
+          requested_chapter: chapter.sort_index,
           path_chapter: pathChapter.chapter_id,
+          path_chapter_number: pathChapterNumber,
+        },
+      },
+    };
+  }
+
+  if (!pathChapter && pathChapterNumber !== null && pathChapterNumber !== chapter.sort_index) {
+    return {
+      ok: false,
+      error: {
+        code: "VALIDATION_ERROR",
+        message: "Cannot assign a scene to a different chapter while its file path implies another compatibility chapter.",
+        details: {
+          requested_chapter_id: chapter.chapter_id,
+          requested_chapter: chapter.sort_index,
+          path_chapter: pathChapterNumber,
         },
       },
     };

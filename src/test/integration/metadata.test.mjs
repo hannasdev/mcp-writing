@@ -219,6 +219,55 @@ describe("assign_scene_to_chapter tool", () => {
     assert.equal(findParsed.results.some((row) => row.scene_id === "sc-m5-clear"), false);
   });
 
+  test("reports previous chapter from sidecar when index is stale", async () => {
+    const sceneDir = path.join(writeSyncDir, "projects", "test-novel", "scenes");
+    fs.mkdirSync(sceneDir, { recursive: true });
+    const scenePath = path.join(sceneDir, "sc-m5-stale-index.md");
+    fs.writeFileSync(
+      scenePath,
+      "---\nscene_id: sc-m5-stale-index\ntitle: Stale Index Scene\n---\nM5 stale index prose.",
+      "utf8"
+    );
+
+    await callWriteTool("sync");
+
+    const chaptersText = await callWriteTool("list_chapters", { project_id: "test-novel" });
+    const chaptersParsed = JSON.parse(chaptersText);
+    const firstChapter = chaptersParsed.results.find((row) => row.sort_index === 1);
+    const secondChapter = chaptersParsed.results.find((row) => row.sort_index === 2);
+    assert.ok(firstChapter);
+    assert.ok(secondChapter);
+
+    await callWriteTool("assign_scene_to_chapter", {
+      scene_id: "sc-m5-stale-index",
+      project_id: "test-novel",
+      chapter_id: firstChapter.chapter_id,
+    });
+
+    const sidecarFile = path.join(sceneDir, "sc-m5-stale-index.meta.yaml");
+    const sidecar = yaml.load(fs.readFileSync(sidecarFile, "utf8"));
+    fs.writeFileSync(
+      sidecarFile,
+      yaml.dump({
+        ...sidecar,
+        chapter_id: secondChapter.chapter_id,
+        chapter: secondChapter.sort_index,
+        chapter_title: secondChapter.title,
+      }),
+      "utf8"
+    );
+
+    const clearText = await callWriteTool("assign_scene_to_chapter", {
+      scene_id: "sc-m5-stale-index",
+      project_id: "test-novel",
+      chapter_id: null,
+    });
+    const clearParsed = JSON.parse(clearText);
+
+    assert.equal(clearParsed.ok, true);
+    assert.equal(clearParsed.previous_chapter_id, secondChapter.chapter_id);
+  });
+
   test("rejects assignment when the scene path implies another chapter", async () => {
     const chaptersText = await callWriteTool("list_chapters", { project_id: "test-novel" });
     const chaptersParsed = JSON.parse(chaptersText);

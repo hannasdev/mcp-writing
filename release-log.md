@@ -12,7 +12,7 @@ This complements `CHANGELOG.md`:
 - Why it matters: Authors and AI agents now have a named structural operation for chapter assignment instead of relying on generic metadata edits for structural intent.
 - Who is affected: Maintainers and contributors working on Target Architecture Migration M5, plus agents repairing scene-to-chapter links.
 - Action needed: Use `list_chapters` to choose a canonical `chapter_id`, then call `assign_scene_to_chapter` for structural assignment work.
-- PR: TBD
+- PR: [#203](https://github.com/hannasdev/mcp-writing/pull/203)
 
 ### 2026-05-18 — Add read-only structure diagnostics
 
