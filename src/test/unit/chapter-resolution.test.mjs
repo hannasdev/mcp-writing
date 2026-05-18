@@ -124,6 +124,34 @@ describe("chapter compatibility resolution", () => {
     }
   });
 
+  test("rejects mixed chapter_id and chapter filters that resolve to different chapters", () => {
+    const db = openDb(":memory:");
+    try {
+      seedProject(db);
+      seedChapter(db, { chapterId: "ch-01-first", sortIndex: 1, title: "First" });
+      seedChapter(db, { chapterId: "ch-02-second", sortIndex: 2, title: "Second" });
+
+      const result = resolveValidatedChapterFilter(db, {
+        projectId: "test-novel",
+        chapterId: "ch-01-first",
+        chapterNumber: 2,
+      });
+
+      assert.equal(result.error.code, "VALIDATION_ERROR");
+      assert.equal(
+        result.error.message,
+        "chapter_id and chapter must refer to the same canonical chapter when both are provided."
+      );
+      assert.deepEqual(result.error.details, {
+        chapter_id: "ch-01-first",
+        chapter: 2,
+        resolved_chapter_id: "ch-02-second",
+      });
+    } finally {
+      db.close();
+    }
+  });
+
   test("rejects malformed chapter arrays before resolving canonical identity", () => {
     const db = openDb(":memory:");
     try {

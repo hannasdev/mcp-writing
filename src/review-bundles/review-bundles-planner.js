@@ -38,7 +38,7 @@ function sceneSort(a, b) {
   const partDiff = normalizeSortNumber(a.part) - normalizeSortNumber(b.part);
   if (partDiff !== 0) return partDiff;
 
-  const chapterDiff = normalizeSortNumber(a.chapter) - normalizeSortNumber(b.chapter);
+  const chapterDiff = normalizeSortNumber(a.canonical_chapter_sort ?? a.chapter) - normalizeSortNumber(b.canonical_chapter_sort ?? b.chapter);
   if (chapterDiff !== 0) return chapterDiff;
 
   const timelineDiff = normalizeSortNumber(a.timeline_position) - normalizeSortNumber(b.timeline_position);
@@ -274,6 +274,7 @@ export function buildReviewBundlePlan(dbHandle, {
       s.scene_id,
       s.project_id,
       s.chapter_id,
+      c.sort_index AS canonical_chapter_sort,
       s.title,
       s.part,
       s.chapter,
@@ -284,6 +285,7 @@ export function buildReviewBundlePlan(dbHandle, {
       s.save_the_cat_beat,
       s.metadata_stale
     FROM scenes s
+    LEFT JOIN chapters c ON c.project_id = s.project_id AND c.chapter_id = s.chapter_id
   `;
 
   if (joins.length > 0) {
@@ -433,6 +435,7 @@ export function buildReviewBundlePlan(dbHandle, {
       title: row.title,
       part: row.part,
       chapter: row.chapter,
+      canonical_chapter_sort: row.canonical_chapter_sort,
       timeline_position: row.timeline_position,
       metadata_stale: Number(row.metadata_stale) === 1,
     })),

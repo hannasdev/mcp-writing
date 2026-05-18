@@ -187,6 +187,72 @@ describe("buildReviewBundlePlan", () => {
     }
   });
 
+  test("orders chapter-scoped bundles by canonical chapter sort when compatibility fields drift", () => {
+    const db = setupReviewBundleTestDb();
+    try {
+      const now = new Date().toISOString();
+      db.prepare(`
+        INSERT INTO chapters (
+          chapter_id, project_id, title, sort_index, source_path, source_checksum, metadata_stale, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).run("ch-01-first", "test-novel", "First", 1, "/tmp/chapter-1", null, 0, now);
+      db.prepare(`
+        INSERT INTO chapters (
+          chapter_id, project_id, title, sort_index, source_path, source_checksum, metadata_stale, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).run("ch-02-second", "test-novel", "Second", 2, "/tmp/chapter-2", null, 0, now);
+      db.prepare(`
+        INSERT INTO scenes (
+          scene_id, project_id, chapter_id, title, part, chapter, timeline_position, word_count,
+          file_path, prose_checksum, metadata_stale, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        "sc-canonical-first",
+        "test-novel",
+        "ch-01-first",
+        "Canonical First",
+        1,
+        99,
+        1,
+        220,
+        "/tmp/sc-canonical-first.md",
+        "deadbeef",
+        0,
+        now
+      );
+      db.prepare(`
+        INSERT INTO scenes (
+          scene_id, project_id, chapter_id, title, part, chapter, timeline_position, word_count,
+          file_path, prose_checksum, metadata_stale, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        "sc-canonical-second",
+        "test-novel",
+        "ch-02-second",
+        "Canonical Second",
+        1,
+        1,
+        1,
+        240,
+        "/tmp/sc-canonical-second.md",
+        "deadbeef",
+        0,
+        now
+      );
+
+      const plan = buildReviewBundlePlan(db, {
+        project_id: "test-novel",
+        profile: "outline_discussion",
+        chapters: [1, 2],
+      });
+
+      assert.deepEqual(plan.ordering.map(row => row.scene_id), ["sc-canonical-first", "sc-canonical-second"]);
+      assert.deepEqual(plan.ordering.map(row => row.canonical_chapter_sort), [1, 2]);
+    } finally {
+      db.close();
+    }
+  });
+
   test("normalizes chapters filter into sorted unique values", () => {
     const db = setupReviewBundleTestDb();
     try {
