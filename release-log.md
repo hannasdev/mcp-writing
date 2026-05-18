@@ -6,6 +6,14 @@ This complements `CHANGELOG.md`:
 - `CHANGELOG.md` is technical and release-oriented.
 - This log is plain-language and outcome-oriented.
 
+### 2026-05-18 — Add read-only structure diagnostics
+
+- What changed: Added a read-only `diagnose_structure` workflow for reporting chapter, epigraph, folder-derived, and compatibility-field drift before any repair work.
+- Why it matters: Maintainers and AI agents can now explain ambiguous manuscript structure without silently changing canonical state or sidecar files.
+- Who is affected: Maintainers and contributors working on Target Architecture Migration M4 or investigating sync structure warnings.
+- Action needed: None.
+- PR: [#202](https://github.com/hannasdev/mcp-writing/pull/202)
+
 ### 2026-05-18 — Complete target architecture migration M3
 
 - What changed: Marked the Target Architecture Migration through M3 as complete, moved the active focus to M4 read-only structure diagnostics, and split sync internals into clearer observation, indexing, regeneration, pruning, and diagnostics phases.

@@ -4,6 +4,7 @@ import path from "node:path";
 import matter from "gray-matter";
 import { syncAll, writeMeta, readMeta, indexSceneFile, normalizeSceneMetaForPath } from "../sync/sync.js";
 import { importScrivenerSync, validateProjectId } from "../sync/importer.js";
+import { runStructureDiagnostics } from "../structure/structure-diagnostics.js";
 
 export function registerSyncTools(s, {
   db,
@@ -44,6 +45,27 @@ export function registerSyncTools(s, {
     }
     return { content: [{ type: "text", text: parts.join(" ") }] };
   });
+
+  s.tool(
+    "diagnose_structure",
+    "Run read-only structure diagnostics against the current index and sync files. Reports canonical drift, ambiguous folder-derived structure, unknown chapter links, epigraph conflicts, and compatibility chapter mismatches without repairing files or mutating the database.",
+    {
+      project_id: z.string().optional().describe("Optional project ID to limit diagnostics to one project."),
+    },
+    async ({ project_id } = {}) => {
+      if (project_id !== undefined) {
+        const projectIdCheck = validateProjectId(project_id);
+        if (!projectIdCheck.ok) {
+          return errorResponse("INVALID_PROJECT_ID", projectIdCheck.reason, { project_id });
+        }
+      }
+
+      return jsonResponse(runStructureDiagnostics(db, {
+        syncDir: SYNC_DIR,
+        projectId: project_id ?? null,
+      }));
+    }
+  );
 
   s.tool(
     "import_scrivener_sync",

@@ -7,6 +7,7 @@
 
 - [`describe_workflows`](#describe_workflows)
 - [`sync`](#sync)
+- [`diagnose_structure`](#diagnose_structure)
 - [`import_scrivener_sync`](#import_scrivener_sync)
 - [`import_scrivener_sync_async`](#import_scrivener_sync_async)
 - [`merge_scrivener_project_beta`](#merge_scrivener_project_beta)
@@ -73,6 +74,16 @@ _No parameters._
 Re-scan the sync folder and update the scene/character/place index from disk. Call this after making edits in Scrivener or updating sidecar files outside the MCP.
 
 _No parameters._
+
+---
+
+## diagnose_structure
+
+Run read-only structure diagnostics against the current index and sync files. Reports canonical drift, ambiguous folder-derived structure, unknown chapter links, epigraph conflicts, and compatibility chapter mismatches without repairing files or mutating the database.
+
+| Parameter | Type | Required | Description |
+| --- | --- | :---: | --- |
+| `project_id` | `string` | No | Optional project ID to limit diagnostics to one project. |
 
 ---
 

@@ -69,6 +69,7 @@ export const WORKFLOW_CATALOGUE = [
     use_when: "Use when new material has been added, sync/import reveals metadata gaps, or normal work touches scenes or documents with weak, stale, or missing metadata support.",
     steps: [
       { tool: "sync", note: "Refresh the index and use the result as the main signal that material has changed or parity may need attention." },
+      { tool: "diagnose_structure", note: "Use when sync warning summaries suggest chapter, epigraph, or folder-derived structure drift that should be understood before repair." },
       { tool: "enrich_scene", note: "Use for lightweight opportunistic recovery when the current task is already touching a specific low-parity scene." },
       { tool: "enrich_scene_characters_batch", note: "Use when recovery scope is broad enough to justify focused catch-up work; prefer dry_run first." },
       { tool: "suggest_scene_references", note: "Use when low parity is specifically about missing scene-to-reference relationships." },
@@ -90,6 +91,7 @@ export const WORKFLOW_CATALOGUE = [
     steps: [
       { tool: "get_runtime_config", note: "Verify sync dir, writability, and git availability." },
       { tool: "sync", note: "Index scenes from disk so the main manuscript workflows can operate." },
+      { tool: "diagnose_structure", note: "Run after sync when connecting existing projects to inspect structure drift without repairing anything." },
     ],
   },
   {
