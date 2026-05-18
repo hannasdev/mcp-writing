@@ -836,8 +836,14 @@ export function indexReferenceFile(db, syncDir, file, meta = {}, content = "") {
   return docId;
 }
 
-function pruneMissingReferenceDocs(db, seenDocIds) {
-  const rows = db.prepare(`SELECT doc_id, project_id FROM reference_docs`).all();
+function pruneMissingReferenceDocs(db, seenDocIds, syncDir) {
+  const scope = inferReferenceScopeFromSyncDir(syncDir);
+  const rows = scope?.project_id
+    ? db.prepare(`SELECT doc_id, project_id FROM reference_docs WHERE project_id = ?`).all(scope.project_id)
+    : scope?.universe_id
+      ? db.prepare(`SELECT doc_id, project_id FROM reference_docs WHERE universe_id = ?`).all(scope.universe_id)
+      : db.prepare(`SELECT doc_id, project_id FROM reference_docs`).all();
+
   for (const row of rows) {
     if (seenDocIds.has(row.doc_id)) continue;
     db.prepare(`
@@ -1017,7 +1023,7 @@ export function regenerateReferenceAndWorldIndexes(db, syncDir, files, {
   }
 
   if (pruneReferenceDocs && canPruneReferenceDocs(syncDir)) {
-    pruneMissingReferenceDocs(db, indexedReferenceDocIds);
+    pruneMissingReferenceDocs(db, indexedReferenceDocIds, syncDir);
   }
 
   return {

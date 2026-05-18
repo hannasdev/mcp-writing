@@ -1272,6 +1272,31 @@ describe("syncAll", () => {
     fs.rmSync(dir, { recursive: true });
   });
 
+  test("project-scoped reference pruning does not delete other project docs", () => {
+    const dir = makeTempSync();
+    const db = openDb(":memory:");
+    const alphaRoot = path.join(dir, "projects", "alpha-novel");
+    const betaRoot = path.join(dir, "projects", "beta-novel");
+    const alphaRefPath = path.join(alphaRoot, "world", "reference", "alpha.md");
+    const betaRefPath = path.join(betaRoot, "world", "reference", "beta.md");
+    fs.mkdirSync(path.dirname(alphaRefPath), { recursive: true });
+    fs.mkdirSync(path.dirname(betaRefPath), { recursive: true });
+    fs.writeFileSync(alphaRefPath, "---\ndoc_id: ref-alpha\ntitle: Alpha\n---\nAlpha reference.");
+    fs.writeFileSync(betaRefPath, "---\ndoc_id: ref-beta\ntitle: Beta\n---\nBeta reference.");
+
+    syncAll(db, dir, { quiet: true });
+    assert.equal(db.prepare(`SELECT COUNT(*) AS count FROM reference_docs`).get().count, 2);
+
+    fs.rmSync(alphaRefPath);
+    syncAll(db, alphaRoot, { quiet: true });
+
+    assert.equal(db.prepare(`SELECT COUNT(*) AS count FROM reference_docs WHERE doc_id = 'ref-alpha'`).get().count, 0);
+    assert.equal(db.prepare(`SELECT COUNT(*) AS count FROM reference_docs WHERE doc_id = 'ref-beta'`).get().count, 1);
+
+    db.close();
+    fs.rmSync(dir, { recursive: true });
+  });
+
   test("keeps scene->reference links isolated when the same scene_id exists in multiple projects", () => {
     const dir = makeTempSync();
     const db = openDb(":memory:");
