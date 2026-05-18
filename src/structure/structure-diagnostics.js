@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import matter from "gray-matter";
-import { load as parseYaml } from "js-yaml";
+import yaml from "js-yaml";
 import {
   inferChapterStructureFromPath,
   normalizeSceneMetaForPath,
@@ -15,11 +15,16 @@ function normalizeRelativePath(syncDir, filePath) {
   return path.relative(syncDir, filePath).split(path.sep).join("/");
 }
 
-function readStructureMetadata(syncDir, filePath) {
+function isPathInsideSyncDir(syncDir, filePath) {
+  const relativePath = path.relative(path.resolve(syncDir), path.resolve(filePath));
+  return relativePath !== "" && !relativePath.startsWith("..") && !path.isAbsolute(relativePath);
+}
+
+function readStructureMetadata(filePath) {
   const sidecar = sidecarPath(filePath);
   if (fs.existsSync(sidecar)) {
     const raw = fs.readFileSync(sidecar, "utf8");
-    return parseYaml(raw) ?? {};
+    return yaml.load(raw) ?? {};
   }
 
   const raw = fs.readFileSync(filePath, "utf8");
@@ -27,7 +32,7 @@ function readStructureMetadata(syncDir, filePath) {
 }
 
 function readObservedStructure(syncDir, filePath) {
-  const sourceMeta = readStructureMetadata(syncDir, filePath);
+  const sourceMeta = readStructureMetadata(filePath);
   const { meta } = normalizeSceneMetaForPath(syncDir, filePath, sourceMeta);
   return {
     meta,
@@ -175,6 +180,21 @@ function diagnoseObservedFiles(syncDir, diagnostics, { scenes, epigraphs }) {
 
   for (const scene of scenes) {
     if (!scene.file_path || !fs.existsSync(scene.file_path)) continue;
+    if (!isPathInsideSyncDir(syncDir, scene.file_path)) {
+      addDiagnostic(
+        diagnostics,
+        "indexed_path_outside_sync_root",
+        `Scene "${scene.scene_id}" has an indexed file path outside the active sync root.`,
+        {
+          project_id: scene.project_id,
+          scene_id: scene.scene_id,
+          file_path: scene.file_path,
+          sync_dir: syncDir,
+        },
+        { nextStep: "Run sync with the current sync root before trusting file-derived structure diagnostics." }
+      );
+      continue;
+    }
 
     let observed;
     try {
@@ -261,11 +281,37 @@ function diagnoseObservedFiles(syncDir, diagnostics, { scenes, epigraphs }) {
 
   for (const epigraph of epigraphs) {
     if (!epigraph.file_path || !fs.existsSync(epigraph.file_path)) continue;
+    if (!isPathInsideSyncDir(syncDir, epigraph.file_path)) {
+      addDiagnostic(
+        diagnostics,
+        "indexed_path_outside_sync_root",
+        `Epigraph "${epigraph.epigraph_id}" has an indexed file path outside the active sync root.`,
+        {
+          project_id: epigraph.project_id,
+          epigraph_id: epigraph.epigraph_id,
+          file_path: epigraph.file_path,
+          sync_dir: syncDir,
+        },
+        { nextStep: "Run sync with the current sync root before trusting file-derived structure diagnostics." }
+      );
+      continue;
+    }
 
     let observed;
     try {
       observed = readObservedStructure(syncDir, epigraph.file_path);
-    } catch {
+    } catch (error) {
+      addDiagnostic(
+        diagnostics,
+        "structure_file_read_failed",
+        `Could not read structure metadata for epigraph "${epigraph.epigraph_id}": ${error.message}`,
+        {
+          project_id: epigraph.project_id,
+          epigraph_id: epigraph.epigraph_id,
+          file_path: epigraph.file_path,
+        },
+        { severity: "info", nextStep: "Run sync after confirming the epigraph file still exists and has readable metadata." }
+      );
       continue;
     }
 

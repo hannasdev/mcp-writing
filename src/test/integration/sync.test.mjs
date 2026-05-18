@@ -48,6 +48,40 @@ describe("sync tool", () => {
 
     await callWriteTool("enrich_scene", { scene_id: "sc-001", project_id: "test-novel" });
   });
+
+  test("diagnose_structure reports mixed structure drift without repairing it", async () => {
+    const projectId = "diag-fixture";
+    const files = [
+      ["projects/diag-fixture/scenes/01-Arrival/sc-a.md", "scene_id: sc-a\n"],
+      ["projects/diag-fixture/scenes/01-Other/sc-b.md", "scene_id: sc-b\n"],
+      ["projects/diag-fixture/scenes/prologue/sc-prologue-a.md", "scene_id: sc-prologue-a\n"],
+      ["projects/diag-fixture/scenes/00-prologue/sc-prologue-b.md", "scene_id: sc-prologue-b\n"],
+    ];
+
+    for (const [relativePath, sidecar] of files) {
+      const scenePath = path.join(writeSyncDir, ...relativePath.split("/"));
+      fs.mkdirSync(path.dirname(scenePath), { recursive: true });
+      fs.writeFileSync(scenePath, "Scene prose.", "utf8");
+      fs.writeFileSync(scenePath.replace(/\.md$/, ".meta.yaml"), sidecar, "utf8");
+    }
+
+    await callWriteTool("sync");
+    const before = fs.readFileSync(
+      path.join(writeSyncDir, "projects", projectId, "scenes", "01-Other", "sc-b.meta.yaml"),
+      "utf8"
+    );
+
+    const text = await callWriteTool("diagnose_structure", { project_id: projectId });
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.ok, false);
+    assert.equal(parsed.summary.by_type.duplicate_chapter_sort_index, 1);
+    assert.equal(parsed.summary.by_type.multiple_scene_role, 1);
+    assert.equal(
+      fs.readFileSync(path.join(writeSyncDir, "projects", projectId, "scenes", "01-Other", "sc-b.meta.yaml"), "utf8"),
+      before
+    );
+  });
 });
 
 describe("import_scrivener_sync tool", () => {

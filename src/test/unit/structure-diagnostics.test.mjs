@@ -276,6 +276,113 @@ describe("runStructureDiagnostics", () => {
       fs.rmSync(syncDir, { recursive: true, force: true });
     }
   });
+
+  test("reports unreadable structure metadata for scenes and epigraphs", () => {
+    const syncDir = fs.mkdtempSync(path.join(os.tmpdir(), "structure-read-failure-"));
+    const db = openDb(":memory:");
+    try {
+      seedProject(db, "test-novel");
+      seedChapter(db, {
+        projectId: "test-novel",
+        chapterId: "ch-01-arrival",
+        sortIndex: 1,
+        title: "Arrival",
+      });
+
+      const scenePath = writeSceneFile(
+        syncDir,
+        "projects/test-novel/scenes/01-Arrival/sc-broken.md",
+        "scene_id: [invalid\n"
+      );
+      const epigraphPath = writeSceneFile(
+        syncDir,
+        "projects/test-novel/scenes/01-Arrival/epigraph.md",
+        "epigraph_id: [invalid\n"
+      );
+
+      seedScene(db, {
+        sceneId: "sc-broken",
+        projectId: "test-novel",
+        filePath: scenePath,
+        chapterId: "ch-01-arrival",
+      });
+      seedEpigraph(db, {
+        epigraphId: "epi-broken",
+        projectId: "test-novel",
+        chapterId: "ch-01-arrival",
+        filePath: epigraphPath,
+      });
+
+      const result = runStructureDiagnostics(db, { syncDir });
+
+      assert.equal(result.ok, false);
+      assert.equal(result.summary.by_type.structure_file_read_failed, 2);
+      assert.deepEqual(
+        result.diagnostics
+          .filter(diagnostic => diagnostic.type === "structure_file_read_failed")
+          .map(diagnostic => diagnostic.severity),
+        ["info", "info"]
+      );
+    } finally {
+      db.close();
+      fs.rmSync(syncDir, { recursive: true, force: true });
+    }
+  });
+
+  test("reports indexed file paths outside the active sync root", () => {
+    const syncDir = fs.mkdtempSync(path.join(os.tmpdir(), "structure-current-root-"));
+    const staleSyncDir = fs.mkdtempSync(path.join(os.tmpdir(), "structure-stale-root-"));
+    const db = openDb(":memory:");
+    try {
+      seedProject(db, "test-novel");
+      seedChapter(db, {
+        projectId: "test-novel",
+        chapterId: "ch-01-arrival",
+        sortIndex: 1,
+        title: "Arrival",
+      });
+
+      const staleScenePath = writeSceneFile(
+        staleSyncDir,
+        "projects/test-novel/scenes/01-Arrival/sc-stale.md",
+        "scene_id: sc-stale\n"
+      );
+      const staleEpigraphPath = writeSceneFile(
+        staleSyncDir,
+        "projects/test-novel/scenes/01-Arrival/epigraph.md",
+        "epigraph_id: epi-stale\n"
+      );
+
+      seedScene(db, {
+        sceneId: "sc-stale",
+        projectId: "test-novel",
+        filePath: staleScenePath,
+        chapterId: "ch-01-arrival",
+      });
+      seedEpigraph(db, {
+        epigraphId: "epi-stale",
+        projectId: "test-novel",
+        chapterId: "ch-01-arrival",
+        filePath: staleEpigraphPath,
+      });
+
+      const result = runStructureDiagnostics(db, { syncDir });
+
+      assert.equal(result.ok, false);
+      assert.equal(result.summary.by_type.indexed_path_outside_sync_root, 2);
+      assert.deepEqual(
+        result.diagnostics
+          .filter(diagnostic => diagnostic.type === "indexed_path_outside_sync_root")
+          .map(diagnostic => diagnostic.details.file_path)
+          .sort(),
+        [staleEpigraphPath, staleScenePath].sort()
+      );
+    } finally {
+      db.close();
+      fs.rmSync(syncDir, { recursive: true, force: true });
+      fs.rmSync(staleSyncDir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("diagnose_structure tool", () => {
