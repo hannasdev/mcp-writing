@@ -12,7 +12,7 @@ This complements `CHANGELOG.md`:
 - Why it matters: Authors and agents can keep using numeric chapter aliases during migration without silently selecting scenes whose compatibility fields disagree with canonical structure.
 - Who is affected: Authors, maintainers, and AI agents using chapter-scoped tools or review bundles.
 - Action needed: Prefer `chapter_id` from `list_chapters`; numeric chapter filters remain available as compatibility aliases when they resolve unambiguously.
-- PR: TBD
+- PR: [#204](https://github.com/hannasdev/mcp-writing/pull/204)
 
 ### 2026-05-18 — Add explicit scene chapter assignment
 
