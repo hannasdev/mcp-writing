@@ -289,6 +289,51 @@ describe("assign_scene_to_chapter tool", () => {
   });
 });
 
+describe("create_chapter tool", () => {
+  test("creates a canonical chapter and returns follow-up guidance", async () => {
+    const createText = await callWriteTool("create_chapter", {
+      project_id: "test-novel",
+      title: "M7 New Crossing",
+      sort_index: 99,
+      logline: "A crossing appears at the edge of the map.",
+    });
+    const createParsed = JSON.parse(createText);
+
+    assert.equal(createParsed.ok, true);
+    assert.equal(createParsed.action, "created");
+    assert.equal(createParsed.chapter.chapter_id, "ch-99-m7-new-crossing");
+    assert.equal(createParsed.chapter.project_id, "test-novel");
+    assert.equal(createParsed.chapter.title, "M7 New Crossing");
+    assert.equal(createParsed.chapter.sort_index, 99);
+    assert.equal(createParsed.diagnostics[0].code, "REPRESENTATION_DEFERRED");
+    assert.ok(createParsed.next_steps.some((step) => step.includes("assign_scene_to_chapter")));
+
+    const chaptersText = await callWriteTool("list_chapters", { project_id: "test-novel" });
+    const chaptersParsed = JSON.parse(chaptersText);
+    assert.ok(chaptersParsed.results.some((row) => row.chapter_id === "ch-99-m7-new-crossing"));
+  });
+
+  test("rejects creating a chapter at an occupied sort index", async () => {
+    const chaptersText = await callWriteTool("list_chapters", { project_id: "test-novel" });
+    const chaptersParsed = JSON.parse(chaptersText);
+    const firstChapter = chaptersParsed.results.find((row) => row.sort_index === 1);
+    assert.ok(firstChapter);
+
+    const createText = await callWriteTool("create_chapter", {
+      project_id: "test-novel",
+      title: "M7 Conflicting Chapter",
+      sort_index: 1,
+    });
+    const createParsed = JSON.parse(createText);
+
+    assert.equal(createParsed.ok, false);
+    assert.equal(createParsed.error.code, "VALIDATION_ERROR");
+    assert.match(createParsed.error.message, /sort_index 1 is already used/);
+    assert.equal(createParsed.error.details.existing_chapter_id, firstChapter.chapter_id);
+    assert.match(createParsed.error.details.next_step, /reorder_chapter/);
+  });
+});
+
 describe("update_character_sheet tool", () => {
   test("updates arc_summary and reflects in get_character_sheet", async () => {
     const text = await callWriteTool("update_character_sheet", {

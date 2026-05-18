@@ -77,11 +77,12 @@ export const WORKFLOW_CATALOGUE = [
   },
   {
     id: "structure_assignment",
-    label: "Assign a scene to a chapter",
-    use_when: "Use when the user wants to move an unchaptered scene into a canonical chapter, repair an explicit scene chapter link, or clear a scene's explicit chapter assignment.",
+    label: "Manage chapter structure",
+    use_when: "Use when the user wants to create a canonical chapter, move an unchaptered scene into a canonical chapter, repair an explicit scene chapter link, or clear a scene's explicit chapter assignment.",
     steps: [
       { tool: "find_scenes", note: "Identify the target scene and confirm project_id if the user did not provide both." },
-      { tool: "list_chapters", note: "Choose the canonical chapter_id for the target project before assigning." },
+      { tool: "list_chapters", note: "Inspect existing canonical chapters before creating or assigning chapter structure." },
+      { tool: "create_chapter", note: "Use when the intended canonical chapter does not exist yet; this creates chapter state only and does not generate folders or scene files." },
       { tool: "assign_scene_to_chapter", note: "Use this named structure workflow for chapter assignment or clearing instead of editing chapter fields through generic metadata updates." },
       { tool: "diagnose_structure", note: "Run when the assignment is part of a drift repair workflow or when folder-derived structure may disagree with the requested link." },
     ],

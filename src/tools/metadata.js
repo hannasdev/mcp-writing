@@ -5,6 +5,7 @@ import { readMeta, writeMeta, indexSceneFile, applySceneStructurePatch } from ".
 import { validateProjectId, validateUniverseId } from "../sync/importer.js";
 import { resolveValidatedChapterFilter } from "../core/chapter-resolution.js";
 import { buildSceneChapterAssignmentPlan } from "../structure/scene-chapter-assignment.js";
+import { buildCreateChapterPlan, insertCanonicalChapter } from "../structure/chapter-commands.js";
 import {
   persistSceneReferenceLink,
   upsertExplicitReferenceLinkRow,
@@ -507,6 +508,77 @@ export function registerMetadataTools(s, {
         ok: true,
         action: "upserted",
         link,
+      });
+    }
+  );
+
+  // ---- create_chapter ------------------------------------------------------
+  s.tool(
+    "create_chapter",
+    "Create a canonical chapter record through the explicit structure workflow. Writes canonical chapter state only; it does not create scene files, sidecars, or Scrivener-compatible folders. Use assign_scene_to_chapter afterward to place unchaptered scenes in the new chapter.",
+    {
+      project_id: z.string().describe("Project the chapter belongs to (e.g. 'the-lamb')."),
+      title: z.string().describe("Human-readable chapter title."),
+      sort_index: z.number().int().min(1).describe("Canonical chapter order within the project. Must be unused."),
+      chapter_id: z.string().optional().describe("Optional canonical chapter identifier. If omitted, one is derived from sort_index and title."),
+      logline: z.string().optional().describe("Optional chapter-level logline."),
+    },
+    async ({ project_id, title, sort_index, chapter_id, logline }) => {
+      if (!SYNC_DIR_WRITABLE) {
+        return errorResponse("READ_ONLY", "Cannot create chapter: sync dir is read-only.");
+      }
+
+      const projectIdCheck = validateProjectId(project_id);
+      if (!projectIdCheck.ok) {
+        return errorResponse("INVALID_PROJECT_ID", projectIdCheck.reason, { project_id });
+      }
+
+      const plan = buildCreateChapterPlan(db, {
+        projectId: project_id,
+        title,
+        sortIndex: sort_index,
+        chapterId: chapter_id,
+        logline,
+      });
+      if (!plan.ok) {
+        return errorResponse(plan.error.code, plan.error.message, {
+          project_id,
+          title,
+          sort_index,
+          chapter_id: chapter_id ?? null,
+          ...(plan.error.details ?? {}),
+        });
+      }
+
+      try {
+        db.exec("BEGIN");
+        insertCanonicalChapter(db, plan.chapter);
+        db.exec("COMMIT");
+      } catch (err) {
+        try {
+          db.exec("ROLLBACK");
+        } catch (rollbackErr) {
+          void rollbackErr;
+        }
+        return errorResponse("IO_ERROR", `Failed to create chapter '${plan.chapter.chapter_id}': ${err.message}`);
+      }
+
+      return jsonResponse({
+        ok: true,
+        action: "created",
+        chapter: {
+          chapter_id: plan.chapter.chapter_id,
+          project_id: plan.chapter.project_id,
+          title: plan.chapter.title,
+          sort_index: plan.chapter.sort_index,
+          logline: plan.chapter.logline,
+          metadata_stale: plan.chapter.metadata_stale,
+        },
+        diagnostics: plan.diagnostics,
+        next_steps: [
+          "Use assign_scene_to_chapter to place unchaptered scenes in this chapter.",
+          "Run diagnose_structure if existing folders or sidecars may imply conflicting structure.",
+        ],
       });
     }
   );

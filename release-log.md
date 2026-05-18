@@ -6,6 +6,14 @@ This complements `CHANGELOG.md`:
 - `CHANGELOG.md` is technical and release-oriented.
 - This log is plain-language and outcome-oriented.
 
+### 2026-05-18 — Add explicit chapter creation
+
+- What changed: Added a `create_chapter` workflow for creating canonical chapter records without generating scene files, sidecars, or Scrivener-compatible folders.
+- Why it matters: Authors and AI agents now have a named structural operation for adding chapter state before assigning scenes, keeping chapter creation out of generic metadata edits.
+- Who is affected: Authors, maintainers, and AI agents working on Target Architecture Migration M7 or explicit chapter-structure workflows.
+- Action needed: Use `list_chapters` to inspect existing order, then call `create_chapter` for a new canonical chapter and `assign_scene_to_chapter` for scene placement.
+- PR: TBD
+
 ### 2026-05-18 — Normalize chapter compatibility targeting
 
 - What changed: Numeric `chapter` and `chapters` filters now resolve through canonical chapter identity for search, prose retrieval, styleguide analysis, batch enrichment, and review-bundle planning.

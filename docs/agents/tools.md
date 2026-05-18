@@ -38,6 +38,7 @@
 - [`create_place_sheet`](#create_place_sheet)
 - [`upsert_thread_link`](#upsert_thread_link)
 - [`upsert_reference_link`](#upsert_reference_link)
+- [`create_chapter`](#create_chapter)
 - [`assign_scene_to_chapter`](#assign_scene_to_chapter)
 - [`update_scene_metadata`](#update_scene_metadata)
 - [`update_character_sheet`](#update_character_sheet)
@@ -466,6 +467,20 @@ Create or update an explicit reference link from a scene, character, place, or r
 | `source_project_id` | `string` | No | Optional project scope for the source. For scene/character/place sources, use this to disambiguate an ambiguous source_id across projects. For reference sources, when provided, it is treated as an ownership check and must match the source reference doc's project. |
 | `target_doc_id` | `string` | Yes | Target reference doc_id. |
 | `relation` | `string` | Yes | Relationship label (for example: 'informs', 'related', 'history_of'). The value is trimmed and lowercased before validation. |
+
+---
+
+## create_chapter
+
+Create a canonical chapter record through the explicit structure workflow. Writes canonical chapter state only; it does not create scene files, sidecars, or Scrivener-compatible folders. Use assign_scene_to_chapter afterward to place unchaptered scenes in the new chapter.
+
+| Parameter | Type | Required | Description |
+| --- | --- | :---: | --- |
+| `project_id` | `string` | Yes | Project the chapter belongs to (e.g. 'the-lamb'). |
+| `title` | `string` | Yes | Human-readable chapter title. |
+| `sort_index` | `integer` | Yes | Canonical chapter order within the project. Must be unused. |
+| `chapter_id` | `string` | No | Optional canonical chapter identifier. If omitted, one is derived from sort_index and title. |
+| `logline` | `string` | No | Optional chapter-level logline. |
 
 ---
 
