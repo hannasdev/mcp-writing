@@ -3,7 +3,7 @@
 Status: Active  
 Current milestone: M7 — Add Additional Explicit Structure Commands
 Owner: MCP Writing  
-Date: 2026-05-17
+Date: 2026-05-18
 
 This milestone plan intentionally gives early refactoring milestones more detail than later migration work.
 The early milestones should preserve behavior while making the current structure-control boundaries explicit.

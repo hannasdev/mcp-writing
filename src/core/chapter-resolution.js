@@ -125,6 +125,20 @@ export function resolveValidatedChapterFilter(db, { projectId, chapterNumber, ch
 
 export function resolveValidatedChapterNumberFilters(db, { projectId, chapterNumbers }) {
   if (!projectId || chapterNumbers == null) return { chapters: [] };
+  const invalidChapterNumbers = chapterNumbers.filter(value => !Number.isInteger(value));
+  if (invalidChapterNumbers.length > 0) {
+    return {
+      error: {
+        code: "VALIDATION_ERROR",
+        message: "chapters must contain only integer chapter numbers.",
+        details: {
+          project_id: projectId,
+          invalid_chapters: invalidChapterNumbers,
+          requested_chapters: chapterNumbers,
+        },
+      },
+    };
+  }
   const normalizedChapterNumbers = Array.from(new Set(chapterNumbers)).sort((a, b) => a - b);
   const chapters = [];
   const seenChapterIds = new Set();
@@ -142,6 +156,20 @@ export function resolveValidatedChapterNumberFilters(db, { projectId, chapterNum
           details: {
             ...(resolved.error.details ?? {}),
             project_id: projectId,
+            requested_chapters: normalizedChapterNumbers,
+          },
+        },
+      };
+    }
+
+    if (!resolved.chapter) {
+      return {
+        error: {
+          code: "NOT_FOUND",
+          message: "Chapter not found for the provided project and identifier.",
+          details: {
+            project_id: projectId,
+            chapter: chapterNumber,
             requested_chapters: normalizedChapterNumbers,
           },
         },

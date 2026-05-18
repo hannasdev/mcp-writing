@@ -123,4 +123,23 @@ describe("chapter compatibility resolution", () => {
       db.close();
     }
   });
+
+  test("rejects malformed chapter arrays before resolving canonical identity", () => {
+    const db = openDb(":memory:");
+    try {
+      seedProject(db);
+
+      const result = resolveValidatedChapterNumberFilters(db, {
+        projectId: "test-novel",
+        chapterNumbers: [1, null, 2.5, "3"],
+      });
+
+      assert.equal(result.error.code, "VALIDATION_ERROR");
+      assert.equal(result.error.message, "chapters must contain only integer chapter numbers.");
+      assert.deepEqual(result.error.details.invalid_chapters, [null, 2.5, "3"]);
+      assert.deepEqual(result.error.details.requested_chapters, [1, null, 2.5, "3"]);
+    } finally {
+      db.close();
+    }
+  });
 });
