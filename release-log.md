@@ -6,6 +6,14 @@ This complements `CHANGELOG.md`:
 - `CHANGELOG.md` is technical and release-oriented.
 - This log is plain-language and outcome-oriented.
 
+### 2026-05-18 — Normalize chapter compatibility targeting
+
+- What changed: Numeric `chapter` and `chapters` filters now resolve through canonical chapter identity for search, prose retrieval, styleguide analysis, batch enrichment, and review-bundle planning.
+- Why it matters: Authors and agents can keep using numeric chapter aliases during migration without silently selecting scenes whose compatibility fields disagree with canonical structure.
+- Who is affected: Authors, maintainers, and AI agents using chapter-scoped tools or review bundles.
+- Action needed: Prefer `chapter_id` from `list_chapters`; numeric chapter filters remain available as compatibility aliases when they resolve unambiguously.
+- PR: TBD
+
 ### 2026-05-18 — Add explicit scene chapter assignment
 
 - What changed: Added an `assign_scene_to_chapter` workflow for assigning unchaptered scenes to canonical chapters or clearing explicit scene chapter links.

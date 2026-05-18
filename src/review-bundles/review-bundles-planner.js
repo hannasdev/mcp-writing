@@ -1,3 +1,8 @@
+import {
+  resolveValidatedChapterFilter,
+  resolveValidatedChapterNumberFilters,
+} from "../core/chapter-resolution.js";
+
 const MAX_SORT_VALUE = Number.MAX_SAFE_INTEGER;
 const MAX_SCENE_ID_FILTER_PARAMS = 900;
 const MAX_CHAPTER_FILTER_PARAMS = 900;
@@ -201,6 +206,40 @@ export function buildReviewBundlePlan(dbHandle, {
     throw new ReviewBundlePlanError("NOT_FOUND", `Project '${project_id}' not found.`);
   }
 
+  const resolvedChapterFilter = (chapter !== undefined || chapter_id !== undefined)
+    ? resolveValidatedChapterFilter(dbHandle, {
+        projectId: project_id,
+        chapterNumber: chapter,
+        chapterId: chapter_id,
+      })
+    : { chapter: null };
+  if (resolvedChapterFilter.error) {
+    throw new ReviewBundlePlanError(
+      resolvedChapterFilter.error.code,
+      resolvedChapterFilter.error.message,
+      {
+        ...(resolvedChapterFilter.error.details ?? {}),
+        project_id,
+        chapter: chapter ?? null,
+        chapter_id: chapter_id ?? null,
+      }
+    );
+  }
+
+  const resolvedChapterSet = Array.isArray(normalizedChapters)
+    ? resolveValidatedChapterNumberFilters(dbHandle, {
+        projectId: project_id,
+        chapterNumbers: normalizedChapters,
+      })
+    : { chapters: [] };
+  if (resolvedChapterSet.error) {
+    throw new ReviewBundlePlanError(
+      resolvedChapterSet.error.code,
+      resolvedChapterSet.error.message,
+      resolvedChapterSet.error.details
+    );
+  }
+
   const requestedSceneIds = resolveRequestedSceneIds(dbHandle, project_id, scene_ids);
   const conditions = ["s.project_id = ?"];
   const joins = [];
@@ -220,24 +259,21 @@ export function buildReviewBundlePlan(dbHandle, {
     conditions.push("s.part = ?");
     conditionParams.push(part);
   }
-  if (chapter !== undefined) {
-    conditions.push("s.chapter = ?");
-    conditionParams.push(chapter);
-  }
-  if (chapter_id !== undefined) {
+  if (resolvedChapterFilter.chapter) {
     conditions.push("s.chapter_id = ?");
-    conditionParams.push(chapter_id);
+    conditionParams.push(resolvedChapterFilter.chapter.chapter_id);
   }
-  if (Array.isArray(normalizedChapters) && normalizedChapters.length > 0) {
-    const placeholders = normalizedChapters.map(() => "?").join(",");
-    conditions.push(`s.chapter IN (${placeholders})`);
-    conditionParams.push(...normalizedChapters);
+  if (resolvedChapterSet.chapters.length > 0) {
+    const placeholders = resolvedChapterSet.chapters.map(() => "?").join(",");
+    conditions.push(`s.chapter_id IN (${placeholders})`);
+    conditionParams.push(...resolvedChapterSet.chapters.map(row => row.chapter_id));
   }
 
   let query = `
     SELECT DISTINCT
       s.scene_id,
       s.project_id,
+      s.chapter_id,
       s.title,
       s.part,
       s.chapter,
@@ -354,6 +390,10 @@ export function buildReviewBundlePlan(dbHandle, {
     ...(chapter !== undefined ? { chapter } : {}),
     ...(chapter_id !== undefined ? { chapter_id } : {}),
     ...(Array.isArray(normalizedChapters) ? { chapters: normalizedChapters } : {}),
+    ...(resolvedChapterFilter.chapter ? { resolved_chapter_id: resolvedChapterFilter.chapter.chapter_id } : {}),
+    ...(resolvedChapterSet.chapters.length > 0
+      ? { resolved_chapter_ids: resolvedChapterSet.chapters.map(row => row.chapter_id) }
+      : {}),
     ...(tag ? { tag } : {}),
     ...(Array.isArray(normalizedSceneIds) ? { scene_ids: normalizedSceneIds } : {}),
   };
@@ -389,6 +429,7 @@ export function buildReviewBundlePlan(dbHandle, {
     ordering: rows.map(row => ({
       scene_id: row.scene_id,
       project_id: row.project_id,
+      chapter_id: row.chapter_id,
       title: row.title,
       part: row.part,
       chapter: row.chapter,

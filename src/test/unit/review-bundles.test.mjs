@@ -87,6 +87,67 @@ describe("buildReviewBundlePlan", () => {
     }
   });
 
+  test("applies compatibility chapter filter through canonical chapter identity", () => {
+    const db = setupReviewBundleTestDb();
+    try {
+      const now = new Date().toISOString();
+      db.prepare(`
+        INSERT INTO chapters (
+          chapter_id, project_id, title, sort_index, source_path, source_checksum, metadata_stale, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).run("ch-01-canonical", "test-novel", "Canonical", 1, "/tmp/chapter-1", null, 0, now);
+      db.prepare(`
+        INSERT INTO scenes (
+          scene_id, project_id, chapter_id, title, part, chapter, timeline_position, word_count,
+          file_path, prose_checksum, metadata_stale, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        "sc-canonical",
+        "test-novel",
+        "ch-01-canonical",
+        "Canonical Scene",
+        1,
+        99,
+        1,
+        300,
+        "/tmp/sc-canonical.md",
+        "deadbeef",
+        0,
+        now
+      );
+      db.prepare(`
+        INSERT INTO scenes (
+          scene_id, project_id, chapter_id, title, part, chapter, timeline_position, word_count,
+          file_path, prose_checksum, metadata_stale, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        "sc-legacy-only",
+        "test-novel",
+        null,
+        "Legacy Scene",
+        1,
+        1,
+        2,
+        300,
+        "/tmp/sc-legacy-only.md",
+        "deadbeef",
+        0,
+        now
+      );
+
+      const plan = buildReviewBundlePlan(db, {
+        project_id: "test-novel",
+        profile: "outline_discussion",
+        chapter: 1,
+      });
+
+      assert.deepEqual(plan.ordering.map(row => row.scene_id), ["sc-canonical"]);
+      assert.equal(plan.resolved_scope.filters.resolved_chapter_id, "ch-01-canonical");
+    } finally {
+      db.close();
+    }
+  });
+
   test("supports multi-chapter filtering via chapters array", () => {
     const db = setupReviewBundleTestDb();
     try {
@@ -120,6 +181,7 @@ describe("buildReviewBundlePlan", () => {
 
       assert.deepEqual(plan.ordering.map(row => row.scene_id), ["sc-101", "sc-103"]);
       assert.deepEqual(plan.resolved_scope.filters.chapters, [1, 3]);
+      assert.deepEqual(plan.resolved_scope.filters.resolved_chapter_ids, ["ch-01-test", "ch-03-test"]);
     } finally {
       db.close();
     }

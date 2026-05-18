@@ -1,7 +1,7 @@
 # Target Architecture Migration — Milestones
 
 Status: Active  
-Current milestone: M6 — Normalize Compatibility Resolution  
+Current milestone: M7 — Add Additional Explicit Structure Commands
 Owner: MCP Writing  
 Date: 2026-05-17
 
@@ -213,6 +213,8 @@ Out of scope:
 - Removing direct structural fields from generic metadata updates.
 
 ## M6 — Normalize Compatibility Resolution
+
+Status: Complete.
 
 Goal: reduce long-term reliance on numeric chapter fields as authority.
 

@@ -156,12 +156,6 @@ export function resolveBatchTargetScenes(dbHandle, {
   if (resolvedChapterFilter.chapter) {
     conditions.push("chapter_id = ?");
     params.push(resolvedChapterFilter.chapter.chapter_id);
-  } else if (chapterId !== undefined) {
-    conditions.push("chapter_id = ?");
-    params.push(chapterId);
-  } else if (chapter !== undefined) {
-    conditions.push("chapter = ?");
-    params.push(chapter);
   }
   if (onlyStale) {
     conditions.push("metadata_stale = 1");

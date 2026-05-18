@@ -12,7 +12,7 @@ It supports metadata-first reasoning, explicit prose editing workflows, and revi
 Active initiative: [Target Architecture Migration](docs/initiatives/active/target-architecture-migration/prd.md).
 
 The active product focus is behavior-preserving design consolidation around structural manuscript state, especially the boundaries captured in [Managed Structure Contract](docs/foundations/managed-structure-contract.md).
-Current implementation focus: M6, normalizing compatibility chapter resolution now that M5 introduced the first explicit scene-to-chapter mutation workflow.
+Current implementation focus: M7, expanding sanctioned structure mutation commands after M6 normalized numeric chapter targeting as a canonical-identity compatibility alias.
 
 ---
 
