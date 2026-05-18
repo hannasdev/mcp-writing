@@ -22,12 +22,6 @@ Track the remaining follow-up work around first-class chapters, deferred divisio
 
 **Status:** Deferred backlog (not active). Canonical chapters and epigraphs, `chapter_id` targeting, dedicated chapter/epigraph tools, and chapter-aware bundle rendering have already shipped; remaining follow-up work is paused pending structural design consolidation.
 
-### 🏗️ [Target Architecture Migration](docs/initiatives/backlog/target-architecture-migration/prd.md) 📋
-
-Preparatory refactoring and staged migration work that moves structural manuscript workflows toward the conceptual target architecture without committing too early to storage or public API changes.
-
-**Status:** Active. Early milestones focus on behavior-preserving refactors, characterization tests, and explicit structure boundaries before later compatibility tightening or storage-model decisions.
-
 ### 📊 [Embedding-Based Search](docs/initiatives/backlog/embeddings-search/prd.md) 📋
 
 Semantic search for queries that require understanding meaning, not just keywords.

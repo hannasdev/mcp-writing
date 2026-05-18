@@ -9,10 +9,10 @@ It supports metadata-first reasoning, explicit prose editing workflows, and revi
 
 ## Active Development
 
-Active initiative: [Target Architecture Migration](docs/initiatives/backlog/target-architecture-migration/prd.md).
+Active initiative: [Target Architecture Migration](docs/initiatives/active/target-architecture-migration/prd.md).
 
 The active product focus is behavior-preserving design consolidation around structural manuscript state, especially the boundaries captured in [Managed Structure Contract](docs/foundations/managed-structure-contract.md).
-Current implementation focus: M2, centralizing structural sidecar writes without changing metadata update behavior.
+Current implementation focus: M4, adding read-only structure diagnostics on top of the sync observation seams established in M3.
 
 ---
 

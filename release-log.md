@@ -6,6 +6,14 @@ This complements `CHANGELOG.md`:
 - `CHANGELOG.md` is technical and release-oriented.
 - This log is plain-language and outcome-oriented.
 
+### 2026-05-18 — Complete target architecture migration M3
+
+- What changed: Marked the Target Architecture Migration through M3 as complete, moved the active focus to M4 read-only structure diagnostics, and split sync internals into clearer observation, indexing, regeneration, pruning, and diagnostics phases.
+- Why it matters: Maintainers now have safer seams for implementing structure diagnostics without silently changing canonical manuscript state or sync output behavior.
+- Who is affected: Maintainers and contributors working on sync, structure diagnostics, or future structural mutation workflows.
+- Action needed: None.
+- PR: [#201](https://github.com/hannasdev/mcp-writing/pull/201)
+
 ### 2026-05-17 — Move repo guidance away from local skills
 
 - What changed: Removed the repo-local maintainer skill files and helper scripts, updated agent guidance to treat `PRODUCT.md` as the product-work entry point, and clarified that general Codex skills now live outside this repository.

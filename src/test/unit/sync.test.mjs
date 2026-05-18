@@ -12,6 +12,9 @@ import {
   isCanonicalWorldEntityFile, getSyncOwnershipDiagnostics, getFileWriteDiagnostics,
   isWorldFile, readMeta, isSyncDirWritable, sidecarPath, syncAll,
   walkFiles, walkSidecars, worldEntityFolderKey, worldEntityKindForPath,
+  buildCanonicalIndexPlan, buildWarningSummary, observeOrphanedSidecars,
+  observeStructureForFile, readSceneFileForSync, readSceneMetadataForSync,
+  regenerateReferenceAndWorldIndexes, scanSyncFiles,
 } from "../../sync/sync.js";
 import {
   buildSceneStructurePatch,
@@ -65,6 +68,31 @@ describe("walkFiles", () => {
     const files = walkFiles(dir);
     assert.equal(files.length, 1);
     assert.ok(files[0].endsWith("notes.txt"));
+    fs.rmSync(dir, { recursive: true });
+  });
+});
+
+describe("scanSyncFiles", () => {
+  test("returns scan files and diagnostics for ignored nested mirrors", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "scan-"));
+    const realScenePath = path.join(dir, "projects", "test-novel", "scenes", "sc-001.md");
+    const mirrorScenePath = path.join(dir, "projects", "test-novel", "scenes", "projects", "test-novel", "scenes", "sc-001.md");
+    fs.mkdirSync(path.dirname(realScenePath), { recursive: true });
+    fs.mkdirSync(path.dirname(mirrorScenePath), { recursive: true });
+    fs.writeFileSync(realScenePath, "");
+    fs.writeFileSync(mirrorScenePath, "");
+
+    const result = scanSyncFiles(dir);
+
+    assert.deepEqual(result.files.map((file) => path.relative(dir, file)), [
+      path.join("projects", "test-novel", "scenes", "sc-001.md"),
+    ]);
+    assert.deepEqual(result.diagnostics, [{
+      type: "nested_mirror",
+      message: `Ignored nested mirror path: ${path.join("projects", "test-novel", "scenes", "projects", "test-novel", "scenes", "sc-001.md")}`,
+      relativePath: path.join("projects", "test-novel", "scenes", "projects", "test-novel", "scenes", "sc-001.md"),
+    }]);
+
     fs.rmSync(dir, { recursive: true });
   });
 });
@@ -140,6 +168,42 @@ describe("readMeta", () => {
     fs.writeFileSync(path.join(dir, "sc-001.meta.yaml"), "scene_id: new-id\n");
     const { meta } = readMeta(path.join(dir, "sc-001.md"), dir);
     assert.equal(meta.scene_id, "new-id");
+    fs.rmSync(dir, { recursive: true });
+  });
+});
+
+describe("readSceneFileForSync", () => {
+  test("returns normalized metadata and prose for scene indexing", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "scene-read-"));
+    const scenePath = path.join(dir, "projects", "test-novel", "scenes", "part-1", "chapter-2", "sc-001.md");
+    fs.mkdirSync(path.dirname(scenePath), { recursive: true });
+    fs.writeFileSync(scenePath, "---\nscene_id: sc-001\ntitle: Read Phase\nchapter: 9\n---\nScene prose.");
+
+    const result = readSceneFileForSync(dir, scenePath);
+
+    assert.equal(result.meta.scene_id, "sc-001");
+    assert.equal(result.meta.chapter, 2);
+    assert.equal(result.sourceMeta.chapter, 9);
+    assert.equal(result.derived.chapter, 2);
+    assert.equal(result.mismatches.chapter, true);
+    assert.equal(result.prose, "Scene prose.");
+    assert.equal(result.frontmatter.title, "Read Phase");
+
+    fs.rmSync(dir, { recursive: true });
+  });
+});
+
+describe("readSceneMetadataForSync", () => {
+  test("reads sidecar metadata without parsing manuscript frontmatter", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "scene-metadata-"));
+    const scenePath = path.join(dir, "projects", "test-novel", "scenes", "notes.md");
+    fs.mkdirSync(path.dirname(scenePath), { recursive: true });
+    fs.writeFileSync(scenePath, "---\ntitle: [invalid\n---\nSupport note.");
+    fs.writeFileSync(sidecarPath(scenePath), "title: Support note\n");
+
+    const result = readSceneMetadataForSync(dir, scenePath);
+
+    assert.equal(result.meta.title, "Support note");
     fs.rmSync(dir, { recursive: true });
   });
 });
@@ -391,6 +455,206 @@ describe("inferChapterStructureFromPath", () => {
     assert.equal(byMetadata.isEpigraph, true);
     assert.equal(byFilename.chapter.chapter_id, "ch-01-arrival");
     assert.equal(byMetadata.chapter.chapter_id, "ch-01-arrival");
+  });
+});
+
+describe("structure observation", () => {
+  test("captures observed chapter state and path metadata diagnostics", () => {
+    const syncDir = "/tmp/sync";
+    const filePath = path.join(syncDir, "projects", "test-novel", "Draft", "01-Arrival", "sc-001.md");
+
+    const result = observeStructureForFile(syncDir, filePath, {
+      meta: { scene_id: "sc-001", part: 1, chapter: 1 },
+      sourceMeta: { part: 2, chapter: 9 },
+      derived: { part: 1, chapter: 1 },
+      mismatches: { part: true, chapter: true },
+    });
+
+    assert.equal(result.projectId, "test-novel");
+    assert.deepEqual(result.observedChapter, {
+      chapterId: "ch-01-arrival",
+      sortIndex: 1,
+      title: "Arrival",
+      folderKey: path.join("projects", "test-novel", "Draft", "01-Arrival"),
+      sourceKind: "chapter_folder",
+    });
+    assert.equal(result.diagnostics.length, 1);
+    assert.equal(result.diagnostics[0].type, "path_metadata_mismatch");
+    assert.equal(
+      result.diagnostics[0].message,
+      'Path/metadata mismatch for scene "sc-001": projects/test-novel/Draft/01-Arrival/sc-001.md (part metadata 2 != path part 1, chapter metadata 9 != path chapter 1). Using path-derived values.'
+    );
+  });
+
+  test("builds canonical indexing diagnostics without mutating canonical chapters", () => {
+    const syncDir = "/tmp/sync";
+    const filePath = path.join(syncDir, "projects", "test-novel", "scenes", "sc-001.md");
+    const db = openDb(":memory:");
+
+    const observation = observeStructureForFile(syncDir, filePath, {
+      meta: { scene_id: "sc-001", chapter_id: "ch-99-missing" },
+    });
+    const plan = buildCanonicalIndexPlan(db, syncDir, filePath, {
+      scene_id: "sc-001",
+      chapter_id: "ch-99-missing",
+    }, observation);
+
+    assert.equal(plan.projectId, "test-novel");
+    assert.equal(plan.observedStructure, observation);
+    assert.equal(plan.canonicalChapter, null);
+    assert.equal(plan.chapterResolution.chapterId, null);
+    assert.deepEqual(
+      plan.diagnostics.map((diagnostic) => diagnostic.message),
+      ["Scene references unknown chapter_id 'ch-99-missing': projects/test-novel/scenes/sc-001.md"]
+    );
+    assert.equal(db.prepare("SELECT count(*) AS count FROM chapters").get().count, 0);
+
+    db.close();
+  });
+});
+
+describe("warning summary", () => {
+  test("summarizes diagnostic warnings by taxonomy", () => {
+    const summary = buildWarningSummary([
+      "Ignored nested mirror path: projects/test-novel/scenes/projects/test-novel/scenes/sc-001.md",
+      "Scene references unknown chapter_id 'ch-99-missing': projects/test-novel/scenes/sc-001.md",
+      "Something uncategorized happened",
+    ]);
+
+    assert.deepEqual(summary, {
+      nested_mirror: {
+        count: 1,
+        examples: ["Ignored nested mirror path: projects/test-novel/scenes/projects/test-novel/scenes/sc-001.md"],
+      },
+      chapter_structure: {
+        count: 1,
+        examples: ["Scene references unknown chapter_id 'ch-99-missing': projects/test-novel/scenes/sc-001.md"],
+      },
+      other: {
+        count: 1,
+        examples: ["Something uncategorized happened"],
+      },
+    });
+  });
+});
+
+describe("orphaned sidecar observation", () => {
+  test("returns diagnostics for orphaned and moved sidecars", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sidecar-observe-"));
+    const orphanedSidecar = path.join(dir, "projects", "test-novel", "scenes", "sc-deleted.meta.yaml");
+    const movedSidecar = path.join(dir, "projects", "test-novel", "scenes", "old", "sc-moved.meta.yaml");
+    fs.mkdirSync(path.dirname(orphanedSidecar), { recursive: true });
+    fs.mkdirSync(path.dirname(movedSidecar), { recursive: true });
+    fs.writeFileSync(orphanedSidecar, "scene_id: sc-deleted\n");
+    fs.writeFileSync(movedSidecar, "scene_id: sc-moved\n");
+
+    const diagnostics = observeOrphanedSidecars(dir, {
+      indexedSceneIds: new Set(["sc-moved"]),
+    });
+
+    assert.deepEqual(
+      diagnostics.map((diagnostic) => ({
+        type: diagnostic.type,
+        sceneId: diagnostic.sceneId,
+        relativePath: diagnostic.relativePath,
+      })).sort((a, b) => a.sceneId.localeCompare(b.sceneId)),
+      [
+        {
+          type: "orphaned_sidecar",
+          sceneId: "sc-deleted",
+          relativePath: path.join("projects", "test-novel", "scenes", "sc-deleted.meta.yaml"),
+        },
+        {
+          type: "moved_scene",
+          sceneId: "sc-moved",
+          relativePath: path.join("projects", "test-novel", "scenes", "old", "sc-moved.meta.yaml"),
+        },
+      ]
+    );
+    assert.ok(diagnostics.find((diagnostic) => diagnostic.type === "orphaned_sidecar").message.includes("Orphaned sidecar"));
+    assert.ok(diagnostics.find((diagnostic) => diagnostic.type === "moved_scene").message.includes("Moved scene detected"));
+
+    fs.rmSync(dir, { recursive: true });
+  });
+});
+
+describe("derived index regeneration", () => {
+  test("indexes reference docs and world entities before scene indexing", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "derived-index-"));
+    const referencePath = path.join(dir, "projects", "test-novel", "world", "reference", "lore.md");
+    const characterPath = path.join(dir, "projects", "test-novel", "world", "characters", "alex.md");
+    fs.mkdirSync(path.dirname(referencePath), { recursive: true });
+    fs.mkdirSync(path.dirname(characterPath), { recursive: true });
+    fs.writeFileSync(referencePath, [
+      "---",
+      "doc_id: ref-lore",
+      "title: Lore",
+      "tags: [continuity]",
+      "---",
+      "A compact lore note.",
+      "",
+    ].join("\n"));
+    fs.writeFileSync(characterPath, [
+      "---",
+      "character_id: char-alex",
+      "name: Alex",
+      "role: protagonist",
+      "---",
+      "",
+    ].join("\n"));
+    const db = openDb(":memory:");
+
+    const result = regenerateReferenceAndWorldIndexes(db, dir, [referencePath, characterPath]);
+
+    assert.deepEqual([...result.indexedReferenceDocIds], ["ref-lore"]);
+    assert.deepEqual(
+      db.prepare("SELECT doc_id, project_id, title FROM reference_docs").all().map((row) => ({ ...row })),
+      [{ doc_id: "ref-lore", project_id: "test-novel", title: "Lore" }]
+    );
+    assert.deepEqual(
+      db.prepare("SELECT character_id, project_id, name FROM characters").all().map((row) => ({ ...row })),
+      [{ character_id: "char-alex", project_id: "test-novel", name: "Alex" }]
+    );
+
+    db.close();
+    fs.rmSync(dir, { recursive: true });
+  });
+
+  test("keeps reference parse failures out of sync warning diagnostics", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "derived-index-failure-"));
+    const referencePath = path.join(dir, "projects", "test-novel", "world", "reference", "broken.md");
+    fs.mkdirSync(path.dirname(referencePath), { recursive: true });
+    fs.writeFileSync(referencePath, "---\ndoc_id: [invalid\n---\nBroken reference.");
+    const db = openDb(":memory:");
+
+    const result = regenerateReferenceAndWorldIndexes(db, dir, [referencePath]);
+
+    assert.deepEqual([...result.indexedReferenceDocIds], []);
+    assert.deepEqual(Object.keys(result), ["indexedReferenceDocIds"]);
+
+    db.close();
+    fs.rmSync(dir, { recursive: true });
+  });
+
+  test("does not prune reference docs for direct filtered helper calls unless requested", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "derived-index-filtered-"));
+    const indexedPath = path.join(dir, "projects", "test-novel", "world", "reference", "indexed.md");
+    const omittedPath = path.join(dir, "projects", "test-novel", "world", "reference", "omitted.md");
+    fs.mkdirSync(path.dirname(indexedPath), { recursive: true });
+    fs.writeFileSync(indexedPath, "---\ndoc_id: ref-indexed\ntitle: Indexed\n---\nIndexed reference.");
+    fs.writeFileSync(omittedPath, "---\ndoc_id: ref-omitted\ntitle: Omitted\n---\nOmitted reference.");
+    const db = openDb(":memory:");
+
+    regenerateReferenceAndWorldIndexes(db, dir, [indexedPath, omittedPath]);
+    regenerateReferenceAndWorldIndexes(db, dir, [indexedPath]);
+
+    assert.deepEqual(
+      db.prepare("SELECT doc_id FROM reference_docs ORDER BY doc_id").all().map((row) => row.doc_id),
+      ["ref-indexed", "ref-omitted"]
+    );
+
+    db.close();
+    fs.rmSync(dir, { recursive: true });
   });
 });
 
@@ -1008,6 +1272,31 @@ describe("syncAll", () => {
     fs.rmSync(dir, { recursive: true });
   });
 
+  test("project-scoped reference pruning does not delete other project docs", () => {
+    const dir = makeTempSync();
+    const db = openDb(":memory:");
+    const alphaRoot = path.join(dir, "projects", "alpha-novel");
+    const betaRoot = path.join(dir, "projects", "beta-novel");
+    const alphaRefPath = path.join(alphaRoot, "world", "reference", "alpha.md");
+    const betaRefPath = path.join(betaRoot, "world", "reference", "beta.md");
+    fs.mkdirSync(path.dirname(alphaRefPath), { recursive: true });
+    fs.mkdirSync(path.dirname(betaRefPath), { recursive: true });
+    fs.writeFileSync(alphaRefPath, "---\ndoc_id: ref-alpha\ntitle: Alpha\n---\nAlpha reference.");
+    fs.writeFileSync(betaRefPath, "---\ndoc_id: ref-beta\ntitle: Beta\n---\nBeta reference.");
+
+    syncAll(db, dir, { quiet: true });
+    assert.equal(db.prepare(`SELECT COUNT(*) AS count FROM reference_docs`).get().count, 2);
+
+    fs.rmSync(alphaRefPath);
+    syncAll(db, alphaRoot, { quiet: true });
+
+    assert.equal(db.prepare(`SELECT COUNT(*) AS count FROM reference_docs WHERE doc_id = 'ref-alpha'`).get().count, 0);
+    assert.equal(db.prepare(`SELECT COUNT(*) AS count FROM reference_docs WHERE doc_id = 'ref-beta'`).get().count, 1);
+
+    db.close();
+    fs.rmSync(dir, { recursive: true });
+  });
+
   test("keeps scene->reference links isolated when the same scene_id exists in multiple projects", () => {
     const dir = makeTempSync();
     const db = openDb(":memory:");
@@ -1497,6 +1786,56 @@ describe("syncAll", () => {
     );
     const result = syncAll(db, dir, { quiet: true });
     assert.equal(result.indexed, 0);
+
+    db.close();
+    fs.rmSync(dir, { recursive: true });
+  });
+
+  test("skipped sidecar-only notes with malformed frontmatter do not block pruning", () => {
+    const dir = makeTempSync();
+    const db = openDb(":memory:");
+    const scenePath = path.join(dir, "projects", "test-novel", "scenes", "sc-001.md");
+    const notePath = path.join(dir, "projects", "test-novel", "scenes", "notes.md");
+
+    writeScene(dir, "sc-001");
+    syncAll(db, dir, { quiet: true });
+    assert.equal(db.prepare(`SELECT COUNT(*) AS count FROM scenes WHERE scene_id = 'sc-001'`).get().count, 1);
+
+    fs.rmSync(scenePath);
+    fs.rmSync(sidecarPath(scenePath), { force: true });
+    fs.writeFileSync(notePath, "---\ntitle: [invalid\n---\nSupport note.");
+    fs.writeFileSync(sidecarPath(notePath), "title: Support note\n");
+
+    const result = syncAll(db, dir, { quiet: true });
+
+    assert.equal(result.skipped, 1);
+    assert.equal(db.prepare(`SELECT COUNT(*) AS count FROM scenes WHERE scene_id = 'sc-001'`).get().count, 0);
+
+    db.close();
+    fs.rmSync(dir, { recursive: true });
+  });
+
+  test("records pre-indexing diagnostics before malformed scene frontmatter fails", () => {
+    const dir = makeTempSync();
+    const db = openDb(":memory:");
+    const scenePath = path.join(dir, "projects", "test-novel", "scenes", "part-1", "chapter-1", "sc-001.md");
+    fs.mkdirSync(path.dirname(scenePath), { recursive: true });
+    fs.writeFileSync(scenePath, "---\ntitle: [invalid\n---\nScene prose.");
+    fs.writeFileSync(sidecarPath(scenePath), [
+      "scene_id: sc-001",
+      "part: 2",
+      "chapter: 9",
+      "",
+    ].join("\n"));
+
+    const result = syncAll(db, dir, { quiet: true });
+
+    assert.equal(result.indexed, 0);
+    assert.equal(result.warningSummary.path_metadata_mismatch.count, 1);
+    assert.equal(
+      result.warningSummary.path_metadata_mismatch.examples[0],
+      'Path/metadata mismatch for scene "sc-001": projects/test-novel/scenes/part-1/chapter-1/sc-001.md (part metadata 2 != path part 1, chapter metadata 9 != path chapter 1). Using path-derived values.'
+    );
 
     db.close();
     fs.rmSync(dir, { recursive: true });

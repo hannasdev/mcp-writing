@@ -74,9 +74,32 @@ export function walkSidecars(dir, fileList = []) {
   return fileList;
 }
 
+export function buildSyncDiagnostic(message, { type = null, ...details } = {}) {
+  return { type, message, ...details };
+}
+
 function isNestedMirrorPath(syncDir, filePath) {
   const rel = path.relative(syncDir, filePath).split(path.sep).join("/");
   return rel.includes("/scenes/projects/") || rel.includes("/scenes/universes/");
+}
+
+export function scanSyncFiles(syncDir) {
+  const files = [];
+  const diagnostics = [];
+
+  for (const file of walkFiles(syncDir)) {
+    if (isNestedMirrorPath(syncDir, file)) {
+      const relativePath = path.relative(syncDir, file);
+      diagnostics.push(buildSyncDiagnostic(`Ignored nested mirror path: ${relativePath}`, {
+        type: "nested_mirror",
+        relativePath,
+      }));
+      continue;
+    }
+    files.push(file);
+  }
+
+  return { files, diagnostics };
 }
 
 export function sidecarPath(filePath) {
@@ -813,8 +836,14 @@ export function indexReferenceFile(db, syncDir, file, meta = {}, content = "") {
   return docId;
 }
 
-function pruneMissingReferenceDocs(db, seenDocIds) {
-  const rows = db.prepare(`SELECT doc_id, project_id FROM reference_docs`).all();
+function pruneMissingReferenceDocs(db, seenDocIds, syncDir) {
+  const scope = inferReferenceScopeFromSyncDir(syncDir);
+  const rows = scope?.project_id
+    ? db.prepare(`SELECT doc_id, project_id FROM reference_docs WHERE project_id = ?`).all(scope.project_id)
+    : scope?.universe_id
+      ? db.prepare(`SELECT doc_id, project_id FROM reference_docs WHERE universe_id = ?`).all(scope.universe_id)
+      : db.prepare(`SELECT doc_id, project_id FROM reference_docs`).all();
+
   for (const row of rows) {
     if (seenDocIds.has(row.doc_id)) continue;
     db.prepare(`
@@ -946,9 +975,157 @@ function pruneMissingEpigraphs(db, seenEpigraphKeys, syncDir) {
   }
 }
 
-export function indexSceneFile(db, syncDir, file, meta, prose) {
+export function pruneSyncDerivedIndexes(db, syncDir, {
+  seenSceneKeys,
+  seenEpigraphKeys,
+  seenChapterKeys,
+  sceneIndexFailures,
+}) {
+  if (!canPruneScenes(syncDir)) return { pruned: false, reason: "scope_not_prunable" };
+  if (sceneIndexFailures !== 0) return { pruned: false, reason: "scene_index_failures" };
+
+  pruneMissingScenes(db, seenSceneKeys, syncDir);
+  pruneMissingEpigraphs(db, seenEpigraphKeys, syncDir);
+  pruneMissingChapters(db, seenChapterKeys, syncDir);
+  return { pruned: true, reason: null };
+}
+
+export function regenerateReferenceAndWorldIndexes(db, syncDir, files, {
+  writable = false,
+  pruneReferenceDocs = false,
+} = {}) {
+  const indexedReferenceDocIds = new Set();
+
+  for (const file of files) {
+    if (isReferenceFile(syncDir, file)) {
+      try {
+        const { data, content } = parseFile(file);
+        const docId = indexReferenceFile(db, syncDir, file, data, content);
+        indexedReferenceDocIds.add(docId);
+      } catch (err) {
+        process.stderr.write(`[mcp-writing] Failed to index ${file}: ${err.message}\n`);
+      }
+      continue;
+    }
+
+    if (!isWorldFile(syncDir, file)) continue;
+    try {
+      const { meta } = readMeta(file, syncDir, { writable });
+      if (!Object.keys(meta).length) {
+        const { data } = parseFile(file);
+        indexWorldFile(db, syncDir, file, data);
+      } else {
+        indexWorldFile(db, syncDir, file, meta);
+      }
+    } catch (err) {
+      process.stderr.write(`[mcp-writing] Failed to index ${file}: ${err.message}\n`);
+    }
+  }
+
+  if (pruneReferenceDocs && canPruneReferenceDocs(syncDir)) {
+    pruneMissingReferenceDocs(db, indexedReferenceDocIds, syncDir);
+  }
+
+  return {
+    indexedReferenceDocIds,
+  };
+}
+
+export function buildStructureDiagnostic(message, { type = "chapter_structure", ...details } = {}) {
+  return { type, message, ...details };
+}
+
+export function observeStructureForFile(syncDir, file, {
+  meta = {},
+  sourceMeta = {},
+  derived = {},
+  mismatches = {},
+} = {}) {
   const { universe_id, project_id } = inferProjectAndUniverse(syncDir, file);
+  const relativePath = path.relative(syncDir, file);
   const chapterStructure = inferChapterStructureFromPath(syncDir, file, meta);
+  const diagnostics = [];
+
+  if (mismatches.part || mismatches.chapter) {
+    const details = [];
+    if (mismatches.part) details.push(`part metadata ${sourceMeta.part} != path part ${derived.part}`);
+    if (mismatches.chapter) details.push(`chapter metadata ${sourceMeta.chapter} != path chapter ${derived.chapter}`);
+    diagnostics.push(buildStructureDiagnostic(
+      `Path/metadata mismatch for scene "${meta.scene_id}": ${relativePath} (${details.join(", ")}). Using path-derived values.`,
+      {
+        type: "path_metadata_mismatch",
+        sceneId: meta.scene_id ?? null,
+        relativePath,
+      }
+    ));
+  }
+
+  return {
+    universeId: universe_id,
+    projectId: project_id,
+    relativePath,
+    chapterStructure,
+    observedChapter: chapterStructure.chapter
+      ? {
+        chapterId: chapterStructure.chapter.chapter_id,
+        sortIndex: chapterStructure.chapter.sort_index,
+        title: chapterStructure.chapter.title,
+        folderKey: chapterStructure.chapter.folder_key,
+        sourceKind: chapterStructure.chapter.source_kind,
+      }
+      : null,
+    observedEpigraph: chapterStructure.isEpigraph
+      ? {
+        epigraphId: meta.epigraph_id ?? null,
+        chapterId: meta.chapter_id ?? chapterStructure.chapter?.chapter_id ?? null,
+        relativePath,
+      }
+      : null,
+    diagnostics,
+  };
+}
+
+export function buildCanonicalIndexPlan(db, syncDir, file, meta, observedStructure = observeStructureForFile(syncDir, file, { meta })) {
+  const chapterResolution = resolveIndexedChapterForFile(db, {
+    syncDir,
+    projectId: observedStructure.projectId,
+    filePath: file,
+    relativePath: observedStructure.relativePath,
+    meta,
+    chapterStructure: observedStructure.chapterStructure,
+  });
+
+  return {
+    universeId: observedStructure.universeId,
+    projectId: observedStructure.projectId,
+    observedStructure,
+    chapterResolution,
+    canonicalChapter: chapterResolution.upsertChapter,
+    diagnostics: chapterResolution.chapterWarning
+      ? [buildStructureDiagnostic(chapterResolution.chapterWarning)]
+      : [],
+  };
+}
+
+export function readSceneMetadataForSync(syncDir, file, { writable = false } = {}) {
+  return readMeta(file, syncDir, { writable });
+}
+
+export function readSceneFileForSync(syncDir, file, { writable = false } = {}) {
+  const metadataRead = readSceneMetadataForSync(syncDir, file, { writable });
+  const { data: frontmatter, content: prose } = parseFile(file);
+
+  return {
+    ...metadataRead,
+    frontmatter,
+    prose,
+  };
+}
+
+export function indexSceneFile(db, syncDir, file, meta, prose, { observedStructure } = {}) {
+  const canonicalIndexPlan = buildCanonicalIndexPlan(db, syncDir, file, meta, observedStructure);
+  const { universeId: universe_id, projectId: project_id } = canonicalIndexPlan;
+  const { chapterStructure } = canonicalIndexPlan.observedStructure;
   const referenceIds = normalizeReferenceIdList(meta.reference_ids ?? meta.references);
   const explicitSceneLinks = collectExplicitReferenceLinks(
     meta,
@@ -965,22 +1142,13 @@ export function indexSceneFile(db, syncDir, file, meta, prose) {
     project_id, universe_id ?? null, project_id
   );
 
-  const relativePath = path.relative(syncDir, file);
-  const chapterResolution = resolveIndexedChapterForFile(db, {
-    syncDir,
-    projectId: project_id,
-    filePath: file,
-    relativePath,
-    meta,
-    chapterStructure,
-  });
   const {
     chapterId,
     chapterSortIndex,
     chapterTitle,
     chapterWarning,
     upsertChapter,
-  } = chapterResolution;
+  } = canonicalIndexPlan.chapterResolution;
 
   if (upsertChapter) {
     upsertCanonicalChapterRecord(db, {
@@ -991,7 +1159,7 @@ export function indexSceneFile(db, syncDir, file, meta, prose) {
   }
 
   if (chapterStructure.isEpigraph) {
-    return indexCanonicalEpigraph(db, {
+    const result = indexCanonicalEpigraph(db, {
       projectId: project_id,
       chapterId,
       chapterSortIndex,
@@ -999,11 +1167,12 @@ export function indexSceneFile(db, syncDir, file, meta, prose) {
       meta,
       prose,
       file,
-      relativePath,
+      relativePath: canonicalIndexPlan.observedStructure.relativePath,
       chapterWarning,
       buildProseChecksum: checksumProse,
       buildDefaultEpigraphId: ({ projectId, chapterId }) => `epi-${slugifyChapterValue(`${projectId}-${chapterId}`)}`,
     });
+    return { ...result, canonicalIndexPlan };
   }
 
   const newChecksum = checksumProse(prose);
@@ -1141,7 +1310,48 @@ export function indexSceneFile(db, syncDir, file, meta, prose) {
     relation: "informs",
   });
 
-  return { isStale, chapterId, warning: chapterWarning };
+  return { isStale, chapterId, warning: chapterWarning, canonicalIndexPlan };
+}
+
+export function observeOrphanedSidecars(syncDir, { indexedSceneIds = new Set() } = {}) {
+  const diagnostics = [];
+  const sidecars = walkSidecars(syncDir).filter(sidecar => !isNestedMirrorPath(syncDir, sidecar));
+
+  for (const sidecar of sidecars) {
+    const prose = sidecar.replace(/\.meta\.yaml$/, ".md");
+    const proseTxt = sidecar.replace(/\.meta\.yaml$/, ".txt");
+    if (fs.existsSync(prose) || fs.existsSync(proseTxt)) continue;
+
+    let orphanedSceneId = null;
+    try {
+      const raw = fs.readFileSync(sidecar, "utf8");
+      orphanedSceneId = (parseYaml(raw) ?? {}).scene_id ?? null;
+    } catch { /* empty */ }
+
+    const relativePath = path.relative(syncDir, sidecar);
+    if (orphanedSceneId && indexedSceneIds.has(orphanedSceneId)) {
+      diagnostics.push(buildSyncDiagnostic(
+        `Moved scene detected: sidecar for "${orphanedSceneId}" is at stale path ${relativePath} — prose file has moved. Consider relocating the sidecar alongside the prose file.`,
+        {
+          type: "moved_scene",
+          sceneId: orphanedSceneId,
+          relativePath,
+        }
+      ));
+    } else {
+      const label = orphanedSceneId ? `scene "${orphanedSceneId}"` : "unknown scene";
+      diagnostics.push(buildSyncDiagnostic(
+        `Orphaned sidecar (${label}, no matching .md/.txt and not indexed): ${relativePath}`,
+        {
+          type: "orphaned_sidecar",
+          sceneId: orphanedSceneId,
+          relativePath,
+        }
+      ));
+    }
+  }
+
+  return diagnostics;
 }
 
 const WARNING_TYPE_LABELS = {
@@ -1166,7 +1376,7 @@ const WARNING_PATTERNS = [
 
 const MAX_WARNING_EXAMPLES = 5;
 
-function buildWarningSummary(warnings) {
+export function buildWarningSummary(warnings) {
   const summary = {};
   for (const w of warnings) {
     const firstLine = w.split("\n")[0];
@@ -1186,7 +1396,6 @@ export function syncAll(db, syncDir, { quiet = false, writable = false } = {}) {
   // (for example after imports or path repairs) are reflected immediately.
   UNIVERSE_PROJECT_ROOT_CACHE.clear();
 
-  const files = walkFiles(syncDir);
   let indexed = 0;
   let staleMarked = 0;
   let epigraphsIndexed = 0;
@@ -1198,69 +1407,43 @@ export function syncAll(db, syncDir, { quiet = false, writable = false } = {}) {
   const indexedSceneIds = new Set(); // scene_id only — for orphaned sidecar move detection
   const seenChapterKeys = new Set();
   const seenEpigraphKeys = new Set();
-  const indexedReferenceDocIds = new Set();
   let sceneIndexFailures = 0;
   const warnings = [];
   const chapterFoldersByProject = new Map();
   const roleFoldersByProject = new Map();
 
-  const scanFiles = [];
-  for (const file of files) {
-    if (isNestedMirrorPath(syncDir, file)) {
-      warnings.push(`Ignored nested mirror path: ${path.relative(syncDir, file)}`);
-      continue;
-    }
-    scanFiles.push(file);
+  const syncScan = scanSyncFiles(syncDir);
+  const scanFiles = syncScan.files;
+  for (const diagnostic of syncScan.diagnostics) {
+    warnings.push(diagnostic.message);
   }
 
   // --- Pass 1: world files and reference docs (characters/places must be indexed
   // before scenes so that character name -> ID resolution in scene_characters works) ---
-  for (const file of scanFiles) {
-    if (isReferenceFile(syncDir, file)) {
-      try {
-        const { data, content } = parseFile(file);
-        const docId = indexReferenceFile(db, syncDir, file, data, content);
-        indexedReferenceDocIds.add(docId);
-      } catch (err) {
-        process.stderr.write(`[mcp-writing] Failed to index ${file}: ${err.message}\n`);
-      }
-      continue;
-    }
-
-    if (!isWorldFile(syncDir, file)) continue;
-    try {
-      const { meta } = readMeta(file, syncDir, { writable });
-      if (!Object.keys(meta).length) {
-        const { data } = parseFile(file);
-        indexWorldFile(db, syncDir, file, data);
-      } else {
-        indexWorldFile(db, syncDir, file, meta);
-      }
-    } catch (err) {
-      process.stderr.write(`[mcp-writing] Failed to index ${file}: ${err.message}\n`);
-    }
-  }
-
-  if (canPruneReferenceDocs(syncDir)) {
-    pruneMissingReferenceDocs(db, indexedReferenceDocIds);
-  }
+  regenerateReferenceAndWorldIndexes(db, syncDir, scanFiles, { writable, pruneReferenceDocs: true });
 
   // --- Pass 2: scene files ---
   for (const file of scanFiles) {
     if (isWorldFile(syncDir, file) || isReferenceFile(syncDir, file)) continue;
     try {
-      const { meta, sourceMeta, sidecarGenerated, derived, mismatches } = readMeta(file, syncDir, { writable });
+      const { meta, sourceMeta, sidecarGenerated, derived, mismatches } = readSceneMetadataForSync(syncDir, file, { writable });
       if (sidecarGenerated) sidecarsMigrated++;
-      const chapterStructure = inferChapterStructureFromPath(syncDir, file, meta);
+      const structureObservation = observeStructureForFile(syncDir, file, {
+        meta,
+        sourceMeta,
+        derived,
+        mismatches,
+      });
+      const { chapterStructure } = structureObservation;
 
       if (!meta.scene_id && !chapterStructure.isEpigraph) {
         skipped++;
-        if (!quiet) warnings.push(`Skipped (no scene_id): ${path.relative(syncDir, file)}`);
+        if (!quiet) warnings.push(`Skipped (no scene_id): ${structureObservation.relativePath}`);
         continue;
       }
 
       // Duplicate scene_id detection
-      const { project_id } = inferProjectAndUniverse(syncDir, file);
+      const project_id = structureObservation.projectId;
       const key = `${meta.scene_id}::${project_id}`;
       if (meta.scene_id && seenSceneIds.has(key)) {
         warnings.push(
@@ -1284,18 +1467,17 @@ export function syncAll(db, syncDir, { quiet = false, writable = false } = {}) {
         }
       }
 
-      if (mismatches.part || mismatches.chapter) {
-        const details = [];
-        if (mismatches.part) details.push(`part metadata ${sourceMeta.part} != path part ${derived.part}`);
-        if (mismatches.chapter) details.push(`chapter metadata ${sourceMeta.chapter} != path chapter ${derived.chapter}`);
-        warnings.push(
-          `Path/metadata mismatch for scene "${meta.scene_id}": ${path.relative(syncDir, file)} (${details.join(", ")}). Using path-derived values.`
-        );
+      for (const diagnostic of structureObservation.diagnostics) {
+        warnings.push(diagnostic.message);
       }
 
-      const { data: _frontmatter, content: prose } = parseFile(file);
-      const result = indexSceneFile(db, syncDir, file, meta, prose);
-      if (result.warning) {
+      const { content: prose } = parseFile(file);
+
+      const result = indexSceneFile(db, syncDir, file, meta, prose, { observedStructure: structureObservation });
+      const canonicalDiagnostics = result.canonicalIndexPlan?.diagnostics ?? [];
+      if (canonicalDiagnostics.length) {
+        for (const diagnostic of canonicalDiagnostics) warnings.push(diagnostic.message);
+      } else if (result.warning) {
         warnings.push(result.warning);
       }
       if (result.chapterId) {
@@ -1337,35 +1519,16 @@ export function syncAll(db, syncDir, { quiet = false, writable = false } = {}) {
     }
   }
 
-  if (canPruneScenes(syncDir) && sceneIndexFailures === 0) {
-    pruneMissingScenes(db, seenSceneKeys, syncDir);
-    pruneMissingEpigraphs(db, seenEpigraphKeys, syncDir);
-    pruneMissingChapters(db, seenChapterKeys, syncDir);
-  }
+  pruneSyncDerivedIndexes(db, syncDir, {
+    seenSceneKeys,
+    seenEpigraphKeys,
+    seenChapterKeys,
+    sceneIndexFailures,
+  });
 
   // --- Orphaned sidecar detection ---
-  const sidecars = walkSidecars(syncDir).filter(sidecar => !isNestedMirrorPath(syncDir, sidecar));
-  for (const sidecar of sidecars) {
-    const prose = sidecar.replace(/\.meta\.yaml$/, ".md");
-    const proseTxt = sidecar.replace(/\.meta\.yaml$/, ".txt");
-    if (!fs.existsSync(prose) && !fs.existsSync(proseTxt)) {
-      let orphanedSceneId = null;
-      try {
-        const raw = fs.readFileSync(sidecar, "utf8");
-        orphanedSceneId = (parseYaml(raw) ?? {}).scene_id ?? null;
-      } catch { /* empty */ }
-
-      if (orphanedSceneId && indexedSceneIds.has(orphanedSceneId)) {
-        warnings.push(
-          `Moved scene detected: sidecar for "${orphanedSceneId}" is at stale path ${path.relative(syncDir, sidecar)} — prose file has moved. Consider relocating the sidecar alongside the prose file.`
-        );
-      } else {
-        const label = orphanedSceneId ? `scene "${orphanedSceneId}"` : "unknown scene";
-        warnings.push(
-          `Orphaned sidecar (${label}, no matching .md/.txt and not indexed): ${path.relative(syncDir, sidecar)}`
-        );
-      }
-    }
+  for (const diagnostic of observeOrphanedSidecars(syncDir, { indexedSceneIds })) {
+    warnings.push(diagnostic.message);
   }
 
   const warningSummary = buildWarningSummary(warnings);
