@@ -1,7 +1,7 @@
 # Target Architecture Migration — Milestones
 
 Status: Active  
-Current milestone: M4 — Add Read-Only Structure Diagnostics  
+Current milestone: M5 — Introduce Explicit Scene-to-Chapter Mutation  
 Owner: MCP Writing  
 Date: 2026-05-17
 
@@ -144,11 +144,14 @@ Out of scope:
 
 ## M4 — Add Read-Only Structure Diagnostics
 
+Status: Complete.
+
 Goal: expose structure drift and ambiguity without repairing it.
 
 Deliverables:
 
 - Add an internal diagnostics layer, then expose it through a public read-only tool if appropriate.
+- Extract the M3 sync phase seams into focused structure/sync modules where doing so keeps the diagnostics layer understandable.
 - Report categories such as:
   - duplicate chapter sort indexes
   - scenes linked to unknown chapters
@@ -162,11 +165,13 @@ Acceptance criteria:
 
 - Diagnostics can run independently from repair.
 - Diagnostics distinguish observation, derived-state regeneration, and canonical mutation.
+- Structure diagnostics do not add more responsibility to `src/sync/sync.js` when a focused module boundary would keep the behavior clearer.
 - Ambiguity is reported deterministically enough for an AI agent to explain to a user.
 
 Test strategy:
 
 - Unit tests for each diagnostic category.
+- Unit tests for any extracted sync/structure module boundaries that diagnostics depend on.
 - Integration test on a mixed fixture containing clean structure, ambiguous structure, and stale compatibility fields.
 
 Out of scope:
