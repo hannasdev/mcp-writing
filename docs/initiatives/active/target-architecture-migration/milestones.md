@@ -1,7 +1,7 @@
 # Target Architecture Migration — Milestones
 
 Status: Active  
-Current milestone: M4 — Add Read-Only Structure Diagnostics  
+Current milestone: M5 — Introduce Explicit Scene-to-Chapter Mutation  
 Owner: MCP Writing  
 Date: 2026-05-17
 
@@ -143,6 +143,8 @@ Out of scope:
 - Changing import behavior.
 
 ## M4 — Add Read-Only Structure Diagnostics
+
+Status: Complete.
 
 Goal: expose structure drift and ambiguity without repairing it.
 
