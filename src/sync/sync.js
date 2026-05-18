@@ -984,7 +984,10 @@ export function pruneSyncDerivedIndexes(db, syncDir, {
   return { pruned: true, reason: null };
 }
 
-export function regenerateReferenceAndWorldIndexes(db, syncDir, files, { writable = false } = {}) {
+export function regenerateReferenceAndWorldIndexes(db, syncDir, files, {
+  writable = false,
+  pruneReferenceDocs = false,
+} = {}) {
   const indexedReferenceDocIds = new Set();
 
   for (const file of files) {
@@ -1013,7 +1016,7 @@ export function regenerateReferenceAndWorldIndexes(db, syncDir, files, { writabl
     }
   }
 
-  if (canPruneReferenceDocs(syncDir)) {
+  if (pruneReferenceDocs && canPruneReferenceDocs(syncDir)) {
     pruneMissingReferenceDocs(db, indexedReferenceDocIds);
   }
 
@@ -1411,7 +1414,7 @@ export function syncAll(db, syncDir, { quiet = false, writable = false } = {}) {
 
   // --- Pass 1: world files and reference docs (characters/places must be indexed
   // before scenes so that character name -> ID resolution in scene_characters works) ---
-  regenerateReferenceAndWorldIndexes(db, syncDir, scanFiles, { writable });
+  regenerateReferenceAndWorldIndexes(db, syncDir, scanFiles, { writable, pruneReferenceDocs: true });
 
   // --- Pass 2: scene files ---
   for (const file of scanFiles) {

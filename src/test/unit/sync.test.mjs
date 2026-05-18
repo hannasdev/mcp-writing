@@ -635,6 +635,27 @@ describe("derived index regeneration", () => {
     db.close();
     fs.rmSync(dir, { recursive: true });
   });
+
+  test("does not prune reference docs for direct filtered helper calls unless requested", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "derived-index-filtered-"));
+    const indexedPath = path.join(dir, "projects", "test-novel", "world", "reference", "indexed.md");
+    const omittedPath = path.join(dir, "projects", "test-novel", "world", "reference", "omitted.md");
+    fs.mkdirSync(path.dirname(indexedPath), { recursive: true });
+    fs.writeFileSync(indexedPath, "---\ndoc_id: ref-indexed\ntitle: Indexed\n---\nIndexed reference.");
+    fs.writeFileSync(omittedPath, "---\ndoc_id: ref-omitted\ntitle: Omitted\n---\nOmitted reference.");
+    const db = openDb(":memory:");
+
+    regenerateReferenceAndWorldIndexes(db, dir, [indexedPath, omittedPath]);
+    regenerateReferenceAndWorldIndexes(db, dir, [indexedPath]);
+
+    assert.deepEqual(
+      db.prepare("SELECT doc_id FROM reference_docs ORDER BY doc_id").all().map((row) => row.doc_id),
+      ["ref-indexed", "ref-omitted"]
+    );
+
+    db.close();
+    fs.rmSync(dir, { recursive: true });
+  });
 });
 
 describe("resolveCanonicalChapterRecord", () => {
