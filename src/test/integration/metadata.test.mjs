@@ -334,6 +334,94 @@ describe("create_chapter tool", () => {
   });
 });
 
+describe("rename_chapter tool", () => {
+  test("renames a canonical chapter and explicit scene compatibility fields", async () => {
+    const sceneDir = path.join(writeSyncDir, "projects", "test-novel", "scenes");
+    fs.mkdirSync(sceneDir, { recursive: true });
+    const scenePath = path.join(sceneDir, "sc-m7-rename.md");
+    fs.writeFileSync(
+      scenePath,
+      "---\nscene_id: sc-m7-rename\ntitle: Rename M7 Scene\n---\nM7 rename prose.",
+      "utf8"
+    );
+
+    await callWriteTool("sync");
+
+    const createText = await callWriteTool("create_chapter", {
+      project_id: "test-novel",
+      title: "M7 Before Rename",
+      sort_index: 98,
+    });
+    const createParsed = JSON.parse(createText);
+    assert.equal(createParsed.ok, true);
+
+    await callWriteTool("assign_scene_to_chapter", {
+      scene_id: "sc-m7-rename",
+      project_id: "test-novel",
+      chapter_id: createParsed.chapter.chapter_id,
+    });
+
+    const renameText = await callWriteTool("rename_chapter", {
+      project_id: "test-novel",
+      chapter_id: createParsed.chapter.chapter_id,
+      title: "M7 After Rename",
+    });
+    const renameParsed = JSON.parse(renameText);
+
+    assert.equal(renameParsed.ok, true);
+    assert.equal(renameParsed.action, "renamed");
+    assert.equal(renameParsed.previous_title, "M7 Before Rename");
+    assert.equal(renameParsed.chapter.title, "M7 After Rename");
+    assert.equal(renameParsed.updated_scene_count, 1);
+    assert.equal(renameParsed.updated_sidecar_count, 1);
+
+    const sidecarFile = path.join(sceneDir, "sc-m7-rename.meta.yaml");
+    const sidecar = yaml.load(fs.readFileSync(sidecarFile, "utf8"));
+    assert.equal(sidecar.chapter_id, createParsed.chapter.chapter_id);
+    assert.equal(sidecar.chapter_title, "M7 After Rename");
+
+    const chaptersText = await callWriteTool("list_chapters", { project_id: "test-novel" });
+    const chaptersParsed = JSON.parse(chaptersText);
+    const renamed = chaptersParsed.results.find((row) => row.chapter_id === createParsed.chapter.chapter_id);
+    assert.equal(renamed.title, "M7 After Rename");
+
+    const findText = await callWriteTool("find_scenes", {
+      project_id: "test-novel",
+      chapter_id: createParsed.chapter.chapter_id,
+    });
+    const findParsed = JSON.parse(findText);
+    const renamedScene = findParsed.results.find((row) => row.scene_id === "sc-m7-rename");
+    assert.equal(renamedScene.chapter_title, "M7 After Rename");
+  });
+
+  test("rejects renaming a chapter to an existing title", async () => {
+    const createText = await callWriteTool("create_chapter", {
+      project_id: "test-novel",
+      title: "M7 Rename Conflict Source",
+      sort_index: 97,
+    });
+    const createParsed = JSON.parse(createText);
+    assert.equal(createParsed.ok, true);
+
+    const chaptersText = await callWriteTool("list_chapters", { project_id: "test-novel" });
+    const chaptersParsed = JSON.parse(chaptersText);
+    const firstChapter = chaptersParsed.results.find((row) => row.sort_index === 1);
+    assert.ok(firstChapter);
+
+    const renameText = await callWriteTool("rename_chapter", {
+      project_id: "test-novel",
+      chapter_id: createParsed.chapter.chapter_id,
+      title: firstChapter.title,
+    });
+    const renameParsed = JSON.parse(renameText);
+
+    assert.equal(renameParsed.ok, false);
+    assert.equal(renameParsed.error.code, "VALIDATION_ERROR");
+    assert.match(renameParsed.error.message, /already used/);
+    assert.equal(renameParsed.error.details.existing_chapter_id, firstChapter.chapter_id);
+  });
+});
+
 describe("update_character_sheet tool", () => {
   test("updates arc_summary and reflects in get_character_sheet", async () => {
     const text = await callWriteTool("update_character_sheet", {

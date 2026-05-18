@@ -6,6 +6,14 @@ This complements `CHANGELOG.md`:
 - `CHANGELOG.md` is technical and release-oriented.
 - This log is plain-language and outcome-oriented.
 
+### 2026-05-18 — Add explicit chapter rename
+
+- What changed: Added a `rename_chapter` workflow for changing canonical chapter titles and refreshing explicit scene `chapter_title` compatibility fields.
+- Why it matters: Authors and AI agents can now express chapter-title changes through a named structure operation instead of generic metadata edits, while still seeing diagnostics when folder representation may need follow-up.
+- Who is affected: Authors, maintainers, and AI agents working on Target Architecture Migration M7 or explicit chapter-structure workflows.
+- Action needed: Use `list_chapters` to choose a canonical `chapter_id`, then call `rename_chapter`; run `diagnose_structure` if folder-derived structure may still reflect the old title.
+- PR: TBD
+
 ### 2026-05-18 — Add explicit chapter creation
 
 - What changed: Added a `create_chapter` workflow for creating canonical chapter records without generating scene files, sidecars, or Scrivener-compatible folders.

@@ -5,7 +5,12 @@ import { readMeta, writeMeta, indexSceneFile, applySceneStructurePatch } from ".
 import { validateProjectId, validateUniverseId } from "../sync/importer.js";
 import { resolveValidatedChapterFilter } from "../core/chapter-resolution.js";
 import { buildSceneChapterAssignmentPlan } from "../structure/scene-chapter-assignment.js";
-import { buildCreateChapterPlan, insertCanonicalChapter } from "../structure/chapter-commands.js";
+import {
+  buildCreateChapterPlan,
+  buildRenameChapterPlan,
+  insertCanonicalChapter,
+  renameCanonicalChapter,
+} from "../structure/chapter-commands.js";
 import {
   persistSceneReferenceLink,
   upsertExplicitReferenceLinkRow,
@@ -578,6 +583,105 @@ export function registerMetadataTools(s, {
         next_steps: [
           "Use assign_scene_to_chapter to place unchaptered scenes in this chapter.",
           "Run diagnose_structure if existing folders or sidecars may imply conflicting structure.",
+        ],
+      });
+    }
+  );
+
+  // ---- rename_chapter ------------------------------------------------------
+  s.tool(
+    "rename_chapter",
+    "Rename a canonical chapter through the explicit structure workflow. Updates canonical chapter state and explicit scene chapter_title compatibility fields; it does not rename scene files, sidecars by path-derived structure, or Scrivener-compatible folders.",
+    {
+      project_id: z.string().describe("Project the chapter belongs to (e.g. 'the-lamb')."),
+      chapter_id: z.string().describe("Canonical chapter identifier. Use list_chapters to find valid values."),
+      title: z.string().describe("New human-readable chapter title."),
+    },
+    async ({ project_id, chapter_id, title }) => {
+      if (!SYNC_DIR_WRITABLE) {
+        return errorResponse("READ_ONLY", "Cannot rename chapter: sync dir is read-only.");
+      }
+
+      const projectIdCheck = validateProjectId(project_id);
+      if (!projectIdCheck.ok) {
+        return errorResponse("INVALID_PROJECT_ID", projectIdCheck.reason, { project_id });
+      }
+
+      const plan = buildRenameChapterPlan(db, {
+        projectId: project_id,
+        chapterId: chapter_id,
+        title,
+      });
+      if (!plan.ok) {
+        return errorResponse(plan.error.code, plan.error.message, {
+          project_id,
+          chapter_id,
+          title,
+          ...(plan.error.details ?? {}),
+        });
+      }
+
+      const linkedScenes = db.prepare(`
+        SELECT scene_id, project_id, file_path
+        FROM scenes
+        WHERE project_id = ? AND chapter_id = ?
+        ORDER BY scene_id
+      `).all(project_id, chapter_id);
+
+      const sidecarUpdates = [];
+      try {
+        for (const scene of linkedScenes) {
+          const { meta } = readMeta(scene.file_path, SYNC_DIR, { writable: true });
+          if (meta.chapter_id === chapter_id) {
+            sidecarUpdates.push({
+              scene,
+              meta: {
+                ...meta,
+                chapter_title: plan.chapter.title,
+              },
+            });
+          }
+        }
+
+        db.exec("BEGIN");
+        renameCanonicalChapter(db, plan.chapter);
+        for (const update of sidecarUpdates) {
+          writeMeta(update.scene.file_path, update.meta);
+        }
+        db.exec("COMMIT");
+      } catch (err) {
+        try {
+          db.exec("ROLLBACK");
+        } catch (rollbackErr) {
+          void rollbackErr;
+        }
+        if (err.code === "ENOENT") {
+          return errorResponse("STALE_PATH", `Cannot rename chapter '${chapter_id}': an indexed scene file is missing. Run sync() to refresh.`, {
+            project_id,
+            chapter_id,
+          });
+        }
+        return errorResponse("IO_ERROR", `Failed to rename chapter '${chapter_id}': ${err.message}`);
+      }
+
+      return jsonResponse({
+        ok: true,
+        action: "renamed",
+        chapter: {
+          chapter_id: plan.chapter.chapter_id,
+          project_id: plan.chapter.project_id,
+          title: plan.chapter.title,
+          sort_index: plan.chapter.sort_index,
+          logline: plan.chapter.logline,
+          metadata_stale: plan.chapter.metadata_stale,
+        },
+        previous_title: plan.previousChapter.title,
+        updated_scene_count: linkedScenes.length,
+        updated_sidecar_count: sidecarUpdates.length,
+        diagnostics: plan.diagnostics,
+        next_steps: [
+          "Use list_chapters to confirm the canonical title.",
+          "Run diagnose_structure if folder-derived structure may still use the previous chapter title.",
         ],
       });
     }

@@ -39,6 +39,7 @@
 - [`upsert_thread_link`](#upsert_thread_link)
 - [`upsert_reference_link`](#upsert_reference_link)
 - [`create_chapter`](#create_chapter)
+- [`rename_chapter`](#rename_chapter)
 - [`assign_scene_to_chapter`](#assign_scene_to_chapter)
 - [`update_scene_metadata`](#update_scene_metadata)
 - [`update_character_sheet`](#update_character_sheet)
@@ -481,6 +482,18 @@ Create a canonical chapter record through the explicit structure workflow. Write
 | `sort_index` | `integer` | Yes | Canonical chapter order within the project. Must be unused. |
 | `chapter_id` | `string` | No | Optional canonical chapter identifier. If omitted, one is derived from sort_index and title. |
 | `logline` | `string` | No | Optional chapter-level logline. |
+
+---
+
+## rename_chapter
+
+Rename a canonical chapter through the explicit structure workflow. Updates canonical chapter state and explicit scene chapter_title compatibility fields; it does not rename scene files, sidecars by path-derived structure, or Scrivener-compatible folders.
+
+| Parameter | Type | Required | Description |
+| --- | --- | :---: | --- |
+| `project_id` | `string` | Yes | Project the chapter belongs to (e.g. 'the-lamb'). |
+| `chapter_id` | `string` | Yes | Canonical chapter identifier. Use list_chapters to find valid values. |
+| `title` | `string` | Yes | New human-readable chapter title. |
 
 ---
 
