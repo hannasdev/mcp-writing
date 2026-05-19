@@ -107,9 +107,9 @@ export function buildMoveScenePlan(syncDir, filePath, meta = {}, {
       ok: true,
       meta,
       assignedChapter: {
-        chapter_id: currentScene?.chapter_id ?? meta.chapter_id ?? null,
-        sort_index: currentScene?.chapter ?? meta.chapter ?? null,
-        title: currentScene?.chapter_title ?? meta.chapter_title ?? null,
+        chapter_id: meta.chapter_id ?? currentScene?.chapter_id ?? null,
+        sort_index: meta.chapter ?? currentScene?.chapter ?? null,
+        title: meta.chapter_title ?? currentScene?.chapter_title ?? null,
       },
       previousChapterId: meta.chapter_id ?? currentScene?.chapter_id ?? null,
     }

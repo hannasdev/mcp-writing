@@ -714,6 +714,78 @@ describe("move_scene tool", () => {
     assert.equal(secondMoveParsed.error.details.existing_scene_id, "sc-m7-move-occupied-a");
     assert.match(secondMoveParsed.error.details.next_step, /Automatic resequencing/);
   });
+
+  test("checks timeline conflicts against sidecar chapter when index is stale", async () => {
+    const sceneDir = path.join(writeSyncDir, "projects", "test-novel", "scenes");
+    fs.mkdirSync(sceneDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(sceneDir, "sc-m7-move-stale-subject.md"),
+      "---\nscene_id: sc-m7-move-stale-subject\ntitle: Move Stale Subject\n---\nStale subject prose.",
+      "utf8"
+    );
+    fs.writeFileSync(
+      path.join(sceneDir, "sc-m7-move-stale-blocker.md"),
+      "---\nscene_id: sc-m7-move-stale-blocker\ntitle: Move Stale Blocker\n---\nStale blocker prose.",
+      "utf8"
+    );
+
+    await callWriteTool("sync");
+
+    const sourceChapterText = await callWriteTool("create_chapter", {
+      project_id: "test-novel",
+      title: "M7 Move Stale Source",
+      sort_index: 83,
+    });
+    const sourceChapter = JSON.parse(sourceChapterText).chapter;
+
+    const targetChapterText = await callWriteTool("create_chapter", {
+      project_id: "test-novel",
+      title: "M7 Move Stale Target",
+      sort_index: 82,
+    });
+    const targetChapter = JSON.parse(targetChapterText).chapter;
+
+    const sourceMoveText = await callWriteTool("move_scene", {
+      scene_id: "sc-m7-move-stale-subject",
+      project_id: "test-novel",
+      chapter_id: sourceChapter.chapter_id,
+      timeline_position: 4,
+    });
+    assert.equal(JSON.parse(sourceMoveText).ok, true);
+
+    const blockerMoveText = await callWriteTool("move_scene", {
+      scene_id: "sc-m7-move-stale-blocker",
+      project_id: "test-novel",
+      chapter_id: targetChapter.chapter_id,
+      timeline_position: 8,
+    });
+    assert.equal(JSON.parse(blockerMoveText).ok, true);
+
+    const subjectSidecarFile = path.join(sceneDir, "sc-m7-move-stale-subject.meta.yaml");
+    const subjectSidecar = yaml.load(fs.readFileSync(subjectSidecarFile, "utf8"));
+    fs.writeFileSync(
+      subjectSidecarFile,
+      yaml.dump({
+        ...subjectSidecar,
+        chapter_id: targetChapter.chapter_id,
+        chapter: targetChapter.sort_index,
+        chapter_title: targetChapter.title,
+      }),
+      "utf8"
+    );
+
+    const moveText = await callWriteTool("move_scene", {
+      scene_id: "sc-m7-move-stale-subject",
+      project_id: "test-novel",
+      timeline_position: 8,
+    });
+    const moveParsed = JSON.parse(moveText);
+
+    assert.equal(moveParsed.ok, false);
+    assert.equal(moveParsed.error.code, "VALIDATION_ERROR");
+    assert.equal(moveParsed.error.details.chapter_id, targetChapter.chapter_id);
+    assert.equal(moveParsed.error.details.existing_scene_id, "sc-m7-move-stale-blocker");
+  });
 });
 
 describe("update_character_sheet tool", () => {

@@ -946,36 +946,6 @@ export function registerMetadataTools(s, {
         }
       }
 
-      const targetChapterId = chapter?.chapter_id ?? scene.chapter_id ?? null;
-      if (timeline_position !== undefined) {
-        const positionConflict = targetChapterId === null
-          ? db.prepare(`
-            SELECT scene_id
-            FROM scenes
-            WHERE project_id = ? AND chapter_id IS NULL AND timeline_position = ? AND scene_id != ?
-            ORDER BY scene_id
-            LIMIT 1
-          `).get(project_id, timeline_position, scene_id)
-          : db.prepare(`
-            SELECT scene_id
-            FROM scenes
-            WHERE project_id = ? AND chapter_id = ? AND timeline_position = ? AND scene_id != ?
-            ORDER BY scene_id
-            LIMIT 1
-          `).get(project_id, targetChapterId, timeline_position, scene_id);
-
-        if (positionConflict) {
-          return errorResponse("VALIDATION_ERROR", `timeline_position ${timeline_position} is already used in the target chapter.`, {
-            project_id,
-            scene_id,
-            chapter_id: targetChapterId,
-            timeline_position,
-            existing_scene_id: positionConflict.scene_id,
-            next_step: "Choose an unused timeline_position. Automatic resequencing is not part of this command yet.",
-          });
-        }
-      }
-
       try {
         const { meta } = readMeta(scene.file_path, SYNC_DIR, { writable: true });
         const plan = buildMoveScenePlan(SYNC_DIR, scene.file_path, meta, {
@@ -991,6 +961,36 @@ export function registerMetadataTools(s, {
             timeline_position: timeline_position ?? null,
             ...(plan.error.details ?? {}),
           });
+        }
+
+        const targetChapterId = plan.meta.chapter_id ?? null;
+        if (timeline_position !== undefined) {
+          const positionConflict = targetChapterId === null
+            ? db.prepare(`
+              SELECT scene_id
+              FROM scenes
+              WHERE project_id = ? AND chapter_id IS NULL AND timeline_position = ? AND scene_id != ?
+              ORDER BY scene_id
+              LIMIT 1
+            `).get(project_id, timeline_position, scene_id)
+            : db.prepare(`
+              SELECT scene_id
+              FROM scenes
+              WHERE project_id = ? AND chapter_id = ? AND timeline_position = ? AND scene_id != ?
+              ORDER BY scene_id
+              LIMIT 1
+            `).get(project_id, targetChapterId, timeline_position, scene_id);
+
+          if (positionConflict) {
+            return errorResponse("VALIDATION_ERROR", `timeline_position ${timeline_position} is already used in the target chapter.`, {
+              project_id,
+              scene_id,
+              chapter_id: targetChapterId,
+              timeline_position,
+              existing_scene_id: positionConflict.scene_id,
+              next_step: "Choose an unused timeline_position. Automatic resequencing is not part of this command yet.",
+            });
+          }
         }
 
         writeMeta(scene.file_path, plan.meta);
