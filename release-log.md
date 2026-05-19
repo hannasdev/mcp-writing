@@ -12,7 +12,7 @@ This complements `CHANGELOG.md`:
 - Why it matters: Structural changes can remain command-driven and SQLite-canonical while still giving maintainers a deterministic Git-review artifact.
 - Who is affected: Authors, maintainers, and AI agents working on post-M8 structural migration and review workflows.
 - Action needed: After canonical structure changes, call `export_structure_snapshot` and review or commit the generated file; do not edit the export as a mutation surface.
-- PR: #207
+- PR: [#207](https://github.com/hannasdev/mcp-writing/pull/207)
 
 ### 2026-05-19 — Add explicit scene move
 
