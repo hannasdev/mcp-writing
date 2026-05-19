@@ -6,6 +6,46 @@ This complements `CHANGELOG.md`:
 - `CHANGELOG.md` is technical and release-oriented.
 - This log is plain-language and outcome-oriented.
 
+### 2026-05-19 — Add explicit scene move
+
+- What changed: Added a `move_scene` workflow for moving an existing scene to a canonical chapter and/or unused `timeline_position` without moving the source file.
+- Why it matters: Authors and AI agents can now express simple scene placement changes through a named structure operation, with validation for occupied positions and diagnostics when folder representation may need follow-up.
+- Who is affected: Authors, maintainers, and AI agents working on Target Architecture Migration M7 or explicit scene/chapter structure workflows.
+- Action needed: Use `list_chapters` to choose a canonical `chapter_id` when changing chapters, then call `move_scene` with a target chapter and/or `timeline_position`; run `diagnose_structure` if folder-derived structure may still reflect the old placement.
+- PR: [#205](https://github.com/hannasdev/mcp-writing/pull/205)
+
+### 2026-05-18 — Add explicit epigraph attachment
+
+- What changed: Added an `attach_epigraph` workflow for moving an existing canonical epigraph relationship to another canonical chapter and refreshing explicit epigraph sidecar linkage.
+- Why it matters: Authors and AI agents can now repair or adjust chapter-opening epigraph placement through a named structure operation, with clear diagnostics when the source-file representation may need follow-up.
+- Who is affected: Authors, maintainers, and AI agents working on Target Architecture Migration M7 or explicit chapter/epigraph structure workflows.
+- Action needed: Use `find_epigraphs` to choose an existing `epigraph_id` and `list_chapters` to choose a canonical `chapter_id`, then call `attach_epigraph`; run `diagnose_structure` if folder-derived structure may still reflect the old attachment.
+- PR: [#205](https://github.com/hannasdev/mcp-writing/pull/205)
+
+### 2026-05-18 — Add explicit chapter reorder
+
+- What changed: Added a `reorder_chapter` workflow for changing canonical chapter order and refreshing explicit scene `chapter` compatibility fields.
+- Why it matters: Authors and AI agents can now express simple chapter-order changes through a named structure operation, with clear diagnostics when folder representation may need follow-up.
+- Who is affected: Authors, maintainers, and AI agents working on Target Architecture Migration M7 or explicit chapter-structure workflows.
+- Action needed: Use `list_chapters` to choose a canonical `chapter_id` and an unused `sort_index`, then call `reorder_chapter`; run `diagnose_structure` if folder-derived structure may still reflect the old order.
+- PR: [#205](https://github.com/hannasdev/mcp-writing/pull/205)
+
+### 2026-05-18 — Add explicit chapter rename
+
+- What changed: Added a `rename_chapter` workflow for changing canonical chapter titles and refreshing explicit scene `chapter_title` compatibility fields.
+- Why it matters: Authors and AI agents can now express chapter-title changes through a named structure operation instead of generic metadata edits, while still seeing diagnostics when folder representation may need follow-up.
+- Who is affected: Authors, maintainers, and AI agents working on Target Architecture Migration M7 or explicit chapter-structure workflows.
+- Action needed: Use `list_chapters` to choose a canonical `chapter_id`, then call `rename_chapter`; run `diagnose_structure` if folder-derived structure may still reflect the old title.
+- PR: [#205](https://github.com/hannasdev/mcp-writing/pull/205)
+
+### 2026-05-18 — Add explicit chapter creation
+
+- What changed: Added a `create_chapter` workflow for creating canonical chapter records without generating scene files, sidecars, or Scrivener-compatible folders.
+- Why it matters: Authors and AI agents now have a named structural operation for adding chapter state before assigning scenes, keeping chapter creation out of generic metadata edits.
+- Who is affected: Authors, maintainers, and AI agents working on Target Architecture Migration M7 or explicit chapter-structure workflows.
+- Action needed: Use `list_chapters` to inspect existing order, then call `create_chapter` for a new canonical chapter and `assign_scene_to_chapter` for scene placement.
+- PR: [#205](https://github.com/hannasdev/mcp-writing/pull/205)
+
 ### 2026-05-18 — Normalize chapter compatibility targeting
 
 - What changed: Numeric `chapter` and `chapters` filters now resolve through canonical chapter identity for search, prose retrieval, styleguide analysis, batch enrichment, and review-bundle planning.

@@ -1,5 +1,14 @@
 import { applySceneStructurePatch } from "./structure-inference.js";
 
+function buildAssignedChapterPayload({ chapterId, sortIndex, title }) {
+  if (!chapterId) return null;
+  return {
+    chapter_id: chapterId,
+    sort_index: sortIndex ?? null,
+    title: title ?? null,
+  };
+}
+
 export function buildSceneChapterAssignmentPlan(syncDir, filePath, meta = {}, { chapter } = {}) {
   if (chapter === undefined) {
     return {
@@ -73,5 +82,66 @@ export function buildSceneChapterAssignmentPlan(syncDir, filePath, meta = {}, { 
     meta: applySceneStructurePatch(syncDir, filePath, meta, { chapter }).meta,
     assignedChapter: chapter,
     previousChapterId: meta.chapter_id ?? null,
+  };
+}
+
+export function buildMoveScenePlan(syncDir, filePath, meta = {}, {
+  currentScene,
+  chapter,
+  timelinePosition,
+} = {}) {
+  if (chapter === undefined && timelinePosition === undefined) {
+    return {
+      ok: false,
+      error: {
+        code: "VALIDATION_ERROR",
+        message: "Provide chapter_id and/or timeline_position for move_scene.",
+      },
+    };
+  }
+
+  if (timelinePosition !== undefined && (!Number.isInteger(timelinePosition) || timelinePosition < 1)) {
+    return {
+      ok: false,
+      error: {
+        code: "VALIDATION_ERROR",
+        message: "timeline_position must be a positive integer.",
+        details: { timeline_position: timelinePosition },
+      },
+    };
+  }
+
+  const assignmentPlan = chapter === undefined
+    ? {
+      ok: true,
+      meta,
+      assignedChapter: buildAssignedChapterPayload({
+        chapterId: meta.chapter_id ?? currentScene?.chapter_id ?? null,
+        sortIndex: meta.chapter ?? currentScene?.chapter ?? null,
+        title: meta.chapter_title ?? currentScene?.chapter_title ?? null,
+      }),
+      previousChapterId: meta.chapter_id ?? currentScene?.chapter_id ?? null,
+    }
+    : buildSceneChapterAssignmentPlan(syncDir, filePath, meta, { chapter });
+
+  if (!assignmentPlan.ok) return assignmentPlan;
+
+  const shouldCarryIndexedTimelinePosition = timelinePosition === undefined
+    && chapter !== undefined
+    && meta.timeline_position === undefined
+    && currentScene?.timeline_position != null;
+  const movedMeta = {
+    ...assignmentPlan.meta,
+    ...(shouldCarryIndexedTimelinePosition ? { timeline_position: currentScene.timeline_position } : {}),
+    ...(timelinePosition !== undefined ? { timeline_position: timelinePosition } : {}),
+  };
+
+  return {
+    ok: true,
+    meta: movedMeta,
+    assignedChapter: assignmentPlan.assignedChapter,
+    previousChapterId: assignmentPlan.previousChapterId ?? currentScene?.chapter_id ?? null,
+    previousTimelinePosition: meta.timeline_position ?? currentScene?.timeline_position ?? null,
+    timelinePosition: movedMeta.timeline_position ?? null,
   };
 }

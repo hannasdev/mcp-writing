@@ -4,7 +4,17 @@ import matter from "gray-matter";
 import { readMeta, writeMeta, indexSceneFile, applySceneStructurePatch } from "../sync/sync.js";
 import { validateProjectId, validateUniverseId } from "../sync/importer.js";
 import { resolveValidatedChapterFilter } from "../core/chapter-resolution.js";
-import { buildSceneChapterAssignmentPlan } from "../structure/scene-chapter-assignment.js";
+import { buildMoveScenePlan, buildSceneChapterAssignmentPlan } from "../structure/scene-chapter-assignment.js";
+import {
+  buildCreateChapterPlan,
+  buildRenameChapterPlan,
+  buildReorderChapterPlan,
+  buildAttachEpigraphPlan,
+  insertCanonicalChapter,
+  renameCanonicalChapter,
+  reorderCanonicalChapter,
+  attachCanonicalEpigraph,
+} from "../structure/chapter-commands.js";
 import {
   persistSceneReferenceLink,
   upsertExplicitReferenceLinkRow,
@@ -79,6 +89,41 @@ function persistPlaceReferenceLink({ placePath, syncDir, targetDocId, relation }
   delete nextMeta.explicit_reference_links;
 
   writeMeta(placePath, nextMeta);
+}
+
+function writeStructureSidecarUpdates(updates, { failureCode }) {
+  const failures = [];
+  let updatedCount = 0;
+
+  for (const update of updates) {
+    try {
+      writeMeta(update.filePath, update.meta);
+      updatedCount += 1;
+    } catch (err) {
+      failures.push({
+        file_path: update.filePath,
+        message: err.message,
+      });
+    }
+  }
+
+  return {
+    updatedCount,
+    diagnostics: failures.length
+      ? [
+        {
+          code: failureCode,
+          severity: "warning",
+          message: "Canonical structure was updated, but one or more explicit sidecar compatibility updates failed.",
+          next_step: "Inspect the failed sidecar paths, then run sync and diagnose_structure before making more structure changes.",
+          details: {
+            failed_sidecar_count: failures.length,
+            failures,
+          },
+        },
+      ]
+      : [],
+  };
 }
 
 function resolveProjectScopedSource({
@@ -508,6 +553,541 @@ export function registerMetadataTools(s, {
         action: "upserted",
         link,
       });
+    }
+  );
+
+  // ---- create_chapter ------------------------------------------------------
+  s.tool(
+    "create_chapter",
+    "Create a canonical chapter record through the explicit structure workflow. Writes canonical chapter state only; it does not create scene files, sidecars, or Scrivener-compatible folders. Use assign_scene_to_chapter afterward to place unchaptered scenes in the new chapter.",
+    {
+      project_id: z.string().describe("Project the chapter belongs to (e.g. 'the-lamb')."),
+      title: z.string().describe("Human-readable chapter title."),
+      sort_index: z.number().int().min(1).describe("Canonical chapter order within the project. Must be unused."),
+      chapter_id: z.string().optional().describe("Optional canonical chapter identifier. If omitted, one is derived from sort_index and title."),
+      logline: z.string().optional().describe("Optional chapter-level logline."),
+    },
+    async ({ project_id, title, sort_index, chapter_id, logline }) => {
+      if (!SYNC_DIR_WRITABLE) {
+        return errorResponse("READ_ONLY", "Cannot create chapter: sync dir is read-only.");
+      }
+
+      const projectIdCheck = validateProjectId(project_id);
+      if (!projectIdCheck.ok) {
+        return errorResponse("INVALID_PROJECT_ID", projectIdCheck.reason, { project_id });
+      }
+
+      const plan = buildCreateChapterPlan(db, {
+        projectId: project_id,
+        title,
+        sortIndex: sort_index,
+        chapterId: chapter_id,
+        logline,
+      });
+      if (!plan.ok) {
+        return errorResponse(plan.error.code, plan.error.message, {
+          project_id,
+          title,
+          sort_index,
+          chapter_id: chapter_id ?? null,
+          ...(plan.error.details ?? {}),
+        });
+      }
+
+      try {
+        db.exec("BEGIN");
+        insertCanonicalChapter(db, plan.chapter);
+        db.exec("COMMIT");
+      } catch (err) {
+        try {
+          db.exec("ROLLBACK");
+        } catch (rollbackErr) {
+          void rollbackErr;
+        }
+        return errorResponse("IO_ERROR", `Failed to create chapter '${plan.chapter.chapter_id}': ${err.message}`);
+      }
+
+      return jsonResponse({
+        ok: true,
+        action: "created",
+        chapter: {
+          chapter_id: plan.chapter.chapter_id,
+          project_id: plan.chapter.project_id,
+          title: plan.chapter.title,
+          sort_index: plan.chapter.sort_index,
+          logline: plan.chapter.logline,
+          metadata_stale: plan.chapter.metadata_stale,
+        },
+        diagnostics: plan.diagnostics,
+        next_steps: [
+          "Use assign_scene_to_chapter to place unchaptered scenes in this chapter.",
+          "Run diagnose_structure if existing folders or sidecars may imply conflicting structure.",
+        ],
+      });
+    }
+  );
+
+  // ---- rename_chapter ------------------------------------------------------
+  s.tool(
+    "rename_chapter",
+    "Rename a canonical chapter through the explicit structure workflow. Updates canonical chapter state and explicit scene chapter_title compatibility fields; it does not rename scene files, sidecars by path-derived structure, or Scrivener-compatible folders.",
+    {
+      project_id: z.string().describe("Project the chapter belongs to (e.g. 'the-lamb')."),
+      chapter_id: z.string().describe("Canonical chapter identifier. Use list_chapters to find valid values."),
+      title: z.string().describe("New human-readable chapter title."),
+    },
+    async ({ project_id, chapter_id, title }) => {
+      if (!SYNC_DIR_WRITABLE) {
+        return errorResponse("READ_ONLY", "Cannot rename chapter: sync dir is read-only.");
+      }
+
+      const projectIdCheck = validateProjectId(project_id);
+      if (!projectIdCheck.ok) {
+        return errorResponse("INVALID_PROJECT_ID", projectIdCheck.reason, { project_id });
+      }
+
+      const plan = buildRenameChapterPlan(db, {
+        projectId: project_id,
+        chapterId: chapter_id,
+        title,
+      });
+      if (!plan.ok) {
+        return errorResponse(plan.error.code, plan.error.message, {
+          project_id,
+          chapter_id,
+          title,
+          ...(plan.error.details ?? {}),
+        });
+      }
+
+      const linkedScenes = db.prepare(`
+        SELECT scene_id, project_id, file_path
+        FROM scenes
+        WHERE project_id = ? AND chapter_id = ?
+        ORDER BY scene_id
+      `).all(project_id, chapter_id);
+
+      const sidecarUpdates = [];
+      try {
+        for (const scene of linkedScenes) {
+          const { meta } = readMeta(scene.file_path, SYNC_DIR, { writable: true });
+          if (meta.chapter_id === chapter_id) {
+            sidecarUpdates.push({
+              scene,
+              filePath: scene.file_path,
+              meta: {
+                ...meta,
+                chapter_title: plan.chapter.title,
+              },
+            });
+          }
+        }
+
+        db.exec("BEGIN");
+        renameCanonicalChapter(db, plan.chapter);
+        db.exec("COMMIT");
+      } catch (err) {
+        try {
+          db.exec("ROLLBACK");
+        } catch (rollbackErr) {
+          void rollbackErr;
+        }
+        if (err.code === "ENOENT") {
+          return errorResponse("STALE_PATH", `Cannot rename chapter '${chapter_id}': an indexed scene file is missing. Run sync() to refresh.`, {
+            project_id,
+            chapter_id,
+          });
+        }
+        return errorResponse("IO_ERROR", `Failed to rename chapter '${chapter_id}': ${err.message}`);
+      }
+
+      const sidecarWriteResult = writeStructureSidecarUpdates(sidecarUpdates, {
+        failureCode: "SCENE_SIDECAR_UPDATE_FAILED",
+      });
+
+      return jsonResponse({
+        ok: true,
+        action: "renamed",
+        chapter: {
+          chapter_id: plan.chapter.chapter_id,
+          project_id: plan.chapter.project_id,
+          title: plan.chapter.title,
+          sort_index: plan.chapter.sort_index,
+          logline: plan.chapter.logline,
+          metadata_stale: plan.chapter.metadata_stale,
+        },
+        previous_title: plan.previousChapter.title,
+        updated_scene_count: linkedScenes.length,
+        updated_sidecar_count: sidecarWriteResult.updatedCount,
+        diagnostics: [
+          ...plan.diagnostics,
+          ...sidecarWriteResult.diagnostics,
+        ],
+        next_steps: [
+          "Use list_chapters to confirm the canonical title.",
+          "Run diagnose_structure if folder-derived structure may still use the previous chapter title.",
+        ],
+      });
+    }
+  );
+
+  // ---- reorder_chapter -----------------------------------------------------
+  s.tool(
+    "reorder_chapter",
+    "Reorder a canonical chapter through the explicit structure workflow. Updates canonical chapter order and explicit scene chapter/chapter_title compatibility fields; it does not rename, move, or resequence scene files, sidecars by path-derived structure, or Scrivener-compatible folders.",
+    {
+      project_id: z.string().describe("Project the chapter belongs to (e.g. 'the-lamb')."),
+      chapter_id: z.string().describe("Canonical chapter identifier. Use list_chapters to find valid values."),
+      sort_index: z.number().int().min(1).describe("New canonical chapter order within the project. Must be unused."),
+    },
+    async ({ project_id, chapter_id, sort_index }) => {
+      if (!SYNC_DIR_WRITABLE) {
+        return errorResponse("READ_ONLY", "Cannot reorder chapter: sync dir is read-only.");
+      }
+
+      const projectIdCheck = validateProjectId(project_id);
+      if (!projectIdCheck.ok) {
+        return errorResponse("INVALID_PROJECT_ID", projectIdCheck.reason, { project_id });
+      }
+
+      const plan = buildReorderChapterPlan(db, {
+        projectId: project_id,
+        chapterId: chapter_id,
+        sortIndex: sort_index,
+      });
+      if (!plan.ok) {
+        return errorResponse(plan.error.code, plan.error.message, {
+          project_id,
+          chapter_id,
+          sort_index,
+          ...(plan.error.details ?? {}),
+        });
+      }
+
+      const linkedScenes = db.prepare(`
+        SELECT scene_id, project_id, file_path
+        FROM scenes
+        WHERE project_id = ? AND chapter_id = ?
+        ORDER BY scene_id
+      `).all(project_id, chapter_id);
+
+      const sidecarUpdates = [];
+      try {
+        for (const scene of linkedScenes) {
+          const { meta } = readMeta(scene.file_path, SYNC_DIR, { writable: true });
+          if (meta.chapter_id === chapter_id) {
+            sidecarUpdates.push({
+              scene,
+              filePath: scene.file_path,
+              meta: {
+                ...meta,
+                chapter: plan.chapter.sort_index,
+                chapter_title: plan.chapter.title,
+              },
+            });
+          }
+        }
+
+        db.exec("BEGIN");
+        reorderCanonicalChapter(db, plan.chapter);
+        db.exec("COMMIT");
+      } catch (err) {
+        try {
+          db.exec("ROLLBACK");
+        } catch (rollbackErr) {
+          void rollbackErr;
+        }
+        if (err.code === "ENOENT") {
+          return errorResponse("STALE_PATH", `Cannot reorder chapter '${chapter_id}': an indexed scene file is missing. Run sync() to refresh.`, {
+            project_id,
+            chapter_id,
+          });
+        }
+        return errorResponse("IO_ERROR", `Failed to reorder chapter '${chapter_id}': ${err.message}`);
+      }
+
+      const sidecarWriteResult = writeStructureSidecarUpdates(sidecarUpdates, {
+        failureCode: "SCENE_SIDECAR_UPDATE_FAILED",
+      });
+
+      return jsonResponse({
+        ok: true,
+        action: "reordered",
+        chapter: {
+          chapter_id: plan.chapter.chapter_id,
+          project_id: plan.chapter.project_id,
+          title: plan.chapter.title,
+          sort_index: plan.chapter.sort_index,
+          logline: plan.chapter.logline,
+          metadata_stale: plan.chapter.metadata_stale,
+        },
+        previous_sort_index: plan.previousChapter.sort_index,
+        updated_scene_count: linkedScenes.length,
+        updated_sidecar_count: sidecarWriteResult.updatedCount,
+        diagnostics: [
+          ...plan.diagnostics,
+          ...sidecarWriteResult.diagnostics,
+        ],
+        next_steps: [
+          "Use list_chapters to confirm canonical order.",
+          "Run diagnose_structure if folder-derived structure may still use the previous order.",
+        ],
+      });
+    }
+  );
+
+  // ---- attach_epigraph -----------------------------------------------------
+  s.tool(
+    "attach_epigraph",
+    "Attach an existing canonical epigraph to a canonical chapter through the explicit structure workflow. Updates canonical epigraph linkage and explicit epigraph sidecar fields; it does not move, rename, or create epigraph source files or Scrivener-compatible folders.",
+    {
+      project_id: z.string().describe("Project the epigraph belongs to (e.g. 'the-lamb')."),
+      epigraph_id: z.string().describe("Canonical epigraph identifier. Use find_epigraphs to find valid values."),
+      chapter_id: z.string().describe("Canonical chapter identifier. Use list_chapters to find valid values."),
+    },
+    async ({ project_id, epigraph_id, chapter_id }) => {
+      if (!SYNC_DIR_WRITABLE) {
+        return errorResponse("READ_ONLY", "Cannot attach epigraph: sync dir is read-only.");
+      }
+
+      const projectIdCheck = validateProjectId(project_id);
+      if (!projectIdCheck.ok) {
+        return errorResponse("INVALID_PROJECT_ID", projectIdCheck.reason, { project_id });
+      }
+
+      const plan = buildAttachEpigraphPlan(db, {
+        projectId: project_id,
+        epigraphId: epigraph_id,
+        chapterId: chapter_id,
+      });
+      if (!plan.ok) {
+        return errorResponse(plan.error.code, plan.error.message, {
+          project_id,
+          epigraph_id,
+          chapter_id,
+          ...(plan.error.details ?? {}),
+        });
+      }
+
+      try {
+        const { meta } = readMeta(plan.epigraph.file_path, SYNC_DIR, { writable: true });
+        const sidecarUpdate = {
+          filePath: plan.epigraph.file_path,
+          meta: {
+            ...meta,
+            kind: meta.kind ?? "epigraph",
+            epigraph_id: plan.epigraph.epigraph_id,
+            chapter_id: plan.chapter.chapter_id,
+            chapter: plan.chapter.sort_index,
+            chapter_title: plan.chapter.title,
+          },
+        };
+
+        db.exec("BEGIN");
+        attachCanonicalEpigraph(db, plan.epigraph);
+        db.exec("COMMIT");
+
+        const sidecarWriteResult = writeStructureSidecarUpdates([sidecarUpdate], {
+          failureCode: "EPIGRAPH_SIDECAR_UPDATE_FAILED",
+        });
+
+        return jsonResponse({
+          ok: true,
+          action: "attached",
+          epigraph: {
+            epigraph_id: plan.epigraph.epigraph_id,
+            project_id: plan.epigraph.project_id,
+            chapter_id: plan.epigraph.chapter_id,
+            metadata_stale: plan.epigraph.metadata_stale,
+          },
+          chapter: {
+            chapter_id: plan.chapter.chapter_id,
+            title: plan.chapter.title,
+            sort_index: plan.chapter.sort_index,
+          },
+          previous_chapter: plan.previousChapter
+            ? {
+              chapter_id: plan.previousChapter.chapter_id,
+              title: plan.previousChapter.title,
+              sort_index: plan.previousChapter.sort_index,
+            }
+            : null,
+          updated_sidecar_count: sidecarWriteResult.updatedCount,
+          diagnostics: [
+            ...plan.diagnostics,
+            ...sidecarWriteResult.diagnostics,
+          ],
+          next_steps: [
+            "Use find_epigraphs to confirm the canonical epigraph attachment.",
+            "Run diagnose_structure if folder-derived structure may still imply the previous chapter.",
+          ],
+        });
+      } catch (err) {
+        try {
+          db.exec("ROLLBACK");
+        } catch (rollbackErr) {
+          void rollbackErr;
+        }
+        if (err.code === "ENOENT") {
+          return errorResponse("STALE_PATH", `Cannot attach epigraph '${epigraph_id}': the indexed epigraph file is missing. Run sync() to refresh.`, {
+            project_id,
+            epigraph_id,
+            chapter_id,
+          });
+        }
+        return errorResponse("IO_ERROR", `Failed to attach epigraph '${epigraph_id}': ${err.message}`);
+      }
+    }
+  );
+
+  // ---- move_scene ----------------------------------------------------------
+  s.tool(
+    "move_scene",
+    "Move a scene through the explicit structure workflow. Updates canonical chapter linkage and/or timeline_position in the scene sidecar and index; it does not move, rename, or resequence scene files or Scrivener-compatible folders.",
+    {
+      scene_id: z.string().describe("The scene_id to move (e.g. 'sc-011-sebastian')."),
+      project_id: z.string().describe("Project the scene belongs to (e.g. 'the-lamb')."),
+      chapter_id: z.string().optional().describe("Optional canonical chapter identifier. Use list_chapters to find valid values. Omit to keep the current chapter."),
+      timeline_position: z.number().int().min(1).optional().describe("Optional new position within the target chapter. Must be unused."),
+    },
+    async ({ scene_id, project_id, chapter_id, timeline_position }) => {
+      if (!SYNC_DIR_WRITABLE) {
+        return errorResponse("READ_ONLY", "Cannot move scene: sync dir is read-only.");
+      }
+
+      const projectIdCheck = validateProjectId(project_id);
+      if (!projectIdCheck.ok) {
+        return errorResponse("INVALID_PROJECT_ID", projectIdCheck.reason, { project_id });
+      }
+
+      if (chapter_id === undefined && timeline_position === undefined) {
+        return errorResponse("VALIDATION_ERROR", "Provide chapter_id and/or timeline_position for move_scene.", {
+          project_id,
+          scene_id,
+        });
+      }
+
+      const scene = db.prepare(`
+        SELECT scene_id, project_id, chapter_id, chapter, chapter_title, timeline_position, file_path
+        FROM scenes
+        WHERE scene_id = ? AND project_id = ?
+      `).get(scene_id, project_id);
+      if (!scene) {
+        return errorResponse("NOT_FOUND", `Scene '${scene_id}' not found in project '${project_id}'.`);
+      }
+
+      let chapter = undefined;
+      if (chapter_id !== undefined) {
+        const resolvedChapterFilter = resolveValidatedChapterFilter(db, {
+          projectId: project_id,
+          chapterId: chapter_id,
+        });
+
+        if (resolvedChapterFilter.error) {
+          return errorResponse(
+            resolvedChapterFilter.error.code,
+            resolvedChapterFilter.error.message,
+            { project_id, chapter_id }
+          );
+        }
+
+        chapter = resolvedChapterFilter.chapter;
+        if (!chapter) {
+          return errorResponse("NOT_FOUND", "Chapter not found for the provided project and identifier.", {
+            project_id,
+            chapter_id,
+          });
+        }
+      }
+
+      try {
+        const { meta } = readMeta(scene.file_path, SYNC_DIR, { writable: true });
+        const plan = buildMoveScenePlan(SYNC_DIR, scene.file_path, meta, {
+          currentScene: scene,
+          chapter,
+          timelinePosition: timeline_position,
+        });
+        if (!plan.ok) {
+          return errorResponse(plan.error.code, plan.error.message, {
+            project_id,
+            scene_id,
+            chapter_id: chapter_id ?? null,
+            timeline_position: timeline_position ?? null,
+            ...(plan.error.details ?? {}),
+          });
+        }
+
+        const targetChapterId = plan.meta.chapter_id ?? null;
+        const effectiveTimelinePosition = plan.timelinePosition;
+        const targetChapterChanged = chapter_id !== undefined
+          && (plan.previousChapterId ?? null) !== targetChapterId;
+        if (effectiveTimelinePosition != null && (timeline_position !== undefined || targetChapterChanged)) {
+          const positionConflict = targetChapterId === null
+            ? db.prepare(`
+              SELECT scene_id
+              FROM scenes
+              WHERE project_id = ? AND chapter_id IS NULL AND timeline_position = ? AND scene_id != ?
+              ORDER BY scene_id
+              LIMIT 1
+            `).get(project_id, effectiveTimelinePosition, scene_id)
+            : db.prepare(`
+              SELECT scene_id
+              FROM scenes
+              WHERE project_id = ? AND chapter_id = ? AND timeline_position = ? AND scene_id != ?
+              ORDER BY scene_id
+              LIMIT 1
+            `).get(project_id, targetChapterId, effectiveTimelinePosition, scene_id);
+
+          if (positionConflict) {
+            return errorResponse("VALIDATION_ERROR", `timeline_position ${effectiveTimelinePosition} is already used in the target chapter.`, {
+              project_id,
+              scene_id,
+              chapter_id: targetChapterId,
+              timeline_position: effectiveTimelinePosition,
+              existing_scene_id: positionConflict.scene_id,
+              next_step: "Choose an unused timeline_position. Automatic resequencing is not part of this command yet.",
+            });
+          }
+        }
+
+        writeMeta(scene.file_path, plan.meta);
+
+        const { content: prose } = matter(fs.readFileSync(scene.file_path, "utf8"));
+        indexSceneFile(db, SYNC_DIR, scene.file_path, plan.meta, prose);
+
+        return jsonResponse({
+          ok: true,
+          action: "moved",
+          scene_id,
+          project_id,
+          previous_chapter_id: plan.previousChapterId,
+          previous_timeline_position: plan.previousTimelinePosition,
+          chapter: plan.assignedChapter,
+          timeline_position: plan.timelinePosition,
+          diagnostics: [
+            {
+              code: "REPRESENTATION_NOT_MOVED",
+              severity: "warning",
+              message: "Moved canonical scene structure fields only; the existing scene source file was not moved or renamed.",
+              next_step: "Run diagnose_structure if folder-derived structure may still imply the previous placement.",
+              details: {
+                file_path: scene.file_path,
+              },
+            },
+          ],
+          next_steps: [
+            "Use find_scenes to confirm the scene's canonical chapter and timeline_position.",
+            "Run diagnose_structure if folder-derived structure may still imply the previous placement.",
+          ],
+        });
+      } catch (err) {
+        if (err.code === "ENOENT") {
+          return errorResponse("STALE_PATH", `Prose file for scene '${scene_id}' not found at indexed path. Run sync() to refresh.`, {
+            indexed_path: scene.file_path,
+          });
+        }
+        return errorResponse("IO_ERROR", `Failed to move scene '${scene_id}': ${err.message}`);
+      }
     }
   );
 
