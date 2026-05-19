@@ -91,6 +91,41 @@ function persistPlaceReferenceLink({ placePath, syncDir, targetDocId, relation }
   writeMeta(placePath, nextMeta);
 }
 
+function writeStructureSidecarUpdates(updates, { failureCode }) {
+  const failures = [];
+  let updatedCount = 0;
+
+  for (const update of updates) {
+    try {
+      writeMeta(update.filePath, update.meta);
+      updatedCount += 1;
+    } catch (err) {
+      failures.push({
+        file_path: update.filePath,
+        message: err.message,
+      });
+    }
+  }
+
+  return {
+    updatedCount,
+    diagnostics: failures.length
+      ? [
+        {
+          code: failureCode,
+          severity: "warning",
+          message: "Canonical structure was updated, but one or more explicit sidecar compatibility updates failed.",
+          next_step: "Inspect the failed sidecar paths, then run sync and diagnose_structure before making more structure changes.",
+          details: {
+            failed_sidecar_count: failures.length,
+            failures,
+          },
+        },
+      ]
+      : [],
+  };
+}
+
 function resolveProjectScopedSource({
   db,
   errorResponse,
@@ -639,6 +674,7 @@ export function registerMetadataTools(s, {
           if (meta.chapter_id === chapter_id) {
             sidecarUpdates.push({
               scene,
+              filePath: scene.file_path,
               meta: {
                 ...meta,
                 chapter_title: plan.chapter.title,
@@ -649,9 +685,6 @@ export function registerMetadataTools(s, {
 
         db.exec("BEGIN");
         renameCanonicalChapter(db, plan.chapter);
-        for (const update of sidecarUpdates) {
-          writeMeta(update.scene.file_path, update.meta);
-        }
         db.exec("COMMIT");
       } catch (err) {
         try {
@@ -668,6 +701,10 @@ export function registerMetadataTools(s, {
         return errorResponse("IO_ERROR", `Failed to rename chapter '${chapter_id}': ${err.message}`);
       }
 
+      const sidecarWriteResult = writeStructureSidecarUpdates(sidecarUpdates, {
+        failureCode: "SCENE_SIDECAR_UPDATE_FAILED",
+      });
+
       return jsonResponse({
         ok: true,
         action: "renamed",
@@ -681,8 +718,11 @@ export function registerMetadataTools(s, {
         },
         previous_title: plan.previousChapter.title,
         updated_scene_count: linkedScenes.length,
-        updated_sidecar_count: sidecarUpdates.length,
-        diagnostics: plan.diagnostics,
+        updated_sidecar_count: sidecarWriteResult.updatedCount,
+        diagnostics: [
+          ...plan.diagnostics,
+          ...sidecarWriteResult.diagnostics,
+        ],
         next_steps: [
           "Use list_chapters to confirm the canonical title.",
           "Run diagnose_structure if folder-derived structure may still use the previous chapter title.",
@@ -738,6 +778,7 @@ export function registerMetadataTools(s, {
           if (meta.chapter_id === chapter_id) {
             sidecarUpdates.push({
               scene,
+              filePath: scene.file_path,
               meta: {
                 ...meta,
                 chapter: plan.chapter.sort_index,
@@ -749,9 +790,6 @@ export function registerMetadataTools(s, {
 
         db.exec("BEGIN");
         reorderCanonicalChapter(db, plan.chapter);
-        for (const update of sidecarUpdates) {
-          writeMeta(update.scene.file_path, update.meta);
-        }
         db.exec("COMMIT");
       } catch (err) {
         try {
@@ -768,6 +806,10 @@ export function registerMetadataTools(s, {
         return errorResponse("IO_ERROR", `Failed to reorder chapter '${chapter_id}': ${err.message}`);
       }
 
+      const sidecarWriteResult = writeStructureSidecarUpdates(sidecarUpdates, {
+        failureCode: "SCENE_SIDECAR_UPDATE_FAILED",
+      });
+
       return jsonResponse({
         ok: true,
         action: "reordered",
@@ -781,8 +823,11 @@ export function registerMetadataTools(s, {
         },
         previous_sort_index: plan.previousChapter.sort_index,
         updated_scene_count: linkedScenes.length,
-        updated_sidecar_count: sidecarUpdates.length,
-        diagnostics: plan.diagnostics,
+        updated_sidecar_count: sidecarWriteResult.updatedCount,
+        diagnostics: [
+          ...plan.diagnostics,
+          ...sidecarWriteResult.diagnostics,
+        ],
         next_steps: [
           "Use list_chapters to confirm canonical order.",
           "Run diagnose_structure if folder-derived structure may still use the previous order.",
@@ -827,18 +872,56 @@ export function registerMetadataTools(s, {
       try {
         const { meta } = readMeta(plan.epigraph.file_path, SYNC_DIR, { writable: true });
         const sidecarUpdate = {
+          filePath: plan.epigraph.file_path,
+          meta: {
           ...meta,
           kind: meta.kind ?? "epigraph",
           epigraph_id: plan.epigraph.epigraph_id,
           chapter_id: plan.chapter.chapter_id,
           chapter: plan.chapter.sort_index,
           chapter_title: plan.chapter.title,
+          },
         };
 
         db.exec("BEGIN");
         attachCanonicalEpigraph(db, plan.epigraph);
-        writeMeta(plan.epigraph.file_path, sidecarUpdate);
         db.exec("COMMIT");
+
+        const sidecarWriteResult = writeStructureSidecarUpdates([sidecarUpdate], {
+          failureCode: "EPIGRAPH_SIDECAR_UPDATE_FAILED",
+        });
+
+        return jsonResponse({
+          ok: true,
+          action: "attached",
+          epigraph: {
+            epigraph_id: plan.epigraph.epigraph_id,
+            project_id: plan.epigraph.project_id,
+            chapter_id: plan.epigraph.chapter_id,
+            metadata_stale: plan.epigraph.metadata_stale,
+          },
+          chapter: {
+            chapter_id: plan.chapter.chapter_id,
+            title: plan.chapter.title,
+            sort_index: plan.chapter.sort_index,
+          },
+          previous_chapter: plan.previousChapter
+            ? {
+              chapter_id: plan.previousChapter.chapter_id,
+              title: plan.previousChapter.title,
+              sort_index: plan.previousChapter.sort_index,
+            }
+            : null,
+          updated_sidecar_count: sidecarWriteResult.updatedCount,
+          diagnostics: [
+            ...plan.diagnostics,
+            ...sidecarWriteResult.diagnostics,
+          ],
+          next_steps: [
+            "Use find_epigraphs to confirm the canonical epigraph attachment.",
+            "Run diagnose_structure if folder-derived structure may still imply the previous chapter.",
+          ],
+        });
       } catch (err) {
         try {
           db.exec("ROLLBACK");
@@ -854,35 +937,6 @@ export function registerMetadataTools(s, {
         }
         return errorResponse("IO_ERROR", `Failed to attach epigraph '${epigraph_id}': ${err.message}`);
       }
-
-      return jsonResponse({
-        ok: true,
-        action: "attached",
-        epigraph: {
-          epigraph_id: plan.epigraph.epigraph_id,
-          project_id: plan.epigraph.project_id,
-          chapter_id: plan.epigraph.chapter_id,
-          metadata_stale: plan.epigraph.metadata_stale,
-        },
-        chapter: {
-          chapter_id: plan.chapter.chapter_id,
-          title: plan.chapter.title,
-          sort_index: plan.chapter.sort_index,
-        },
-        previous_chapter: plan.previousChapter
-          ? {
-            chapter_id: plan.previousChapter.chapter_id,
-            title: plan.previousChapter.title,
-            sort_index: plan.previousChapter.sort_index,
-          }
-          : null,
-        updated_sidecar_count: 1,
-        diagnostics: plan.diagnostics,
-        next_steps: [
-          "Use find_epigraphs to confirm the canonical epigraph attachment.",
-          "Run diagnose_structure if folder-derived structure may still imply the previous chapter.",
-        ],
-      });
     }
   );
 
@@ -964,7 +1018,10 @@ export function registerMetadataTools(s, {
         }
 
         const targetChapterId = plan.meta.chapter_id ?? null;
-        if (timeline_position !== undefined) {
+        const effectiveTimelinePosition = plan.timelinePosition;
+        const targetChapterChanged = chapter_id !== undefined
+          && (plan.previousChapterId ?? null) !== targetChapterId;
+        if (effectiveTimelinePosition != null && (timeline_position !== undefined || targetChapterChanged)) {
           const positionConflict = targetChapterId === null
             ? db.prepare(`
               SELECT scene_id
@@ -972,21 +1029,21 @@ export function registerMetadataTools(s, {
               WHERE project_id = ? AND chapter_id IS NULL AND timeline_position = ? AND scene_id != ?
               ORDER BY scene_id
               LIMIT 1
-            `).get(project_id, timeline_position, scene_id)
+            `).get(project_id, effectiveTimelinePosition, scene_id)
             : db.prepare(`
               SELECT scene_id
               FROM scenes
               WHERE project_id = ? AND chapter_id = ? AND timeline_position = ? AND scene_id != ?
               ORDER BY scene_id
               LIMIT 1
-            `).get(project_id, targetChapterId, timeline_position, scene_id);
+            `).get(project_id, targetChapterId, effectiveTimelinePosition, scene_id);
 
           if (positionConflict) {
-            return errorResponse("VALIDATION_ERROR", `timeline_position ${timeline_position} is already used in the target chapter.`, {
+            return errorResponse("VALIDATION_ERROR", `timeline_position ${effectiveTimelinePosition} is already used in the target chapter.`, {
               project_id,
               scene_id,
               chapter_id: targetChapterId,
-              timeline_position,
+              timeline_position: effectiveTimelinePosition,
               existing_scene_id: positionConflict.scene_id,
               next_step: "Choose an unused timeline_position. Automatic resequencing is not part of this command yet.",
             });

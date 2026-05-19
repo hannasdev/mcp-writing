@@ -1,5 +1,14 @@
 import { applySceneStructurePatch } from "./structure-inference.js";
 
+function buildAssignedChapterPayload({ chapterId, sortIndex, title }) {
+  if (!chapterId) return null;
+  return {
+    chapter_id: chapterId,
+    sort_index: sortIndex ?? null,
+    title: title ?? null,
+  };
+}
+
 export function buildSceneChapterAssignmentPlan(syncDir, filePath, meta = {}, { chapter } = {}) {
   if (chapter === undefined) {
     return {
@@ -106,11 +115,11 @@ export function buildMoveScenePlan(syncDir, filePath, meta = {}, {
     ? {
       ok: true,
       meta,
-      assignedChapter: {
-        chapter_id: meta.chapter_id ?? currentScene?.chapter_id ?? null,
-        sort_index: meta.chapter ?? currentScene?.chapter ?? null,
+      assignedChapter: buildAssignedChapterPayload({
+        chapterId: meta.chapter_id ?? currentScene?.chapter_id ?? null,
+        sortIndex: meta.chapter ?? currentScene?.chapter ?? null,
         title: meta.chapter_title ?? currentScene?.chapter_title ?? null,
-      },
+      }),
       previousChapterId: meta.chapter_id ?? currentScene?.chapter_id ?? null,
     }
     : buildSceneChapterAssignmentPlan(syncDir, filePath, meta, { chapter });

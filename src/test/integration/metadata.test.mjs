@@ -715,6 +715,65 @@ describe("move_scene tool", () => {
     assert.match(secondMoveParsed.error.details.next_step, /Automatic resequencing/);
   });
 
+  test("rejects moving chapters when existing timeline position is occupied in target", async () => {
+    const sceneDir = path.join(writeSyncDir, "projects", "test-novel", "scenes");
+    fs.mkdirSync(sceneDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(sceneDir, "sc-m7-move-carry-position.md"),
+      "---\nscene_id: sc-m7-move-carry-position\ntitle: Move Carry Position\ntimeline_position: 6\n---\nCarry position prose.",
+      "utf8"
+    );
+    fs.writeFileSync(
+      path.join(sceneDir, "sc-m7-move-carry-blocker.md"),
+      "---\nscene_id: sc-m7-move-carry-blocker\ntitle: Move Carry Blocker\n---\nCarry blocker prose.",
+      "utf8"
+    );
+
+    await callWriteTool("sync");
+
+    const sourceChapterText = await callWriteTool("create_chapter", {
+      project_id: "test-novel",
+      title: "M7 Move Carry Source",
+      sort_index: 81,
+    });
+    const sourceChapter = JSON.parse(sourceChapterText).chapter;
+
+    const targetChapterText = await callWriteTool("create_chapter", {
+      project_id: "test-novel",
+      title: "M7 Move Carry Target",
+      sort_index: 80,
+    });
+    const targetChapter = JSON.parse(targetChapterText).chapter;
+
+    const sourceMoveText = await callWriteTool("move_scene", {
+      scene_id: "sc-m7-move-carry-position",
+      project_id: "test-novel",
+      chapter_id: sourceChapter.chapter_id,
+    });
+    assert.equal(JSON.parse(sourceMoveText).ok, true);
+
+    const blockerMoveText = await callWriteTool("move_scene", {
+      scene_id: "sc-m7-move-carry-blocker",
+      project_id: "test-novel",
+      chapter_id: targetChapter.chapter_id,
+      timeline_position: 6,
+    });
+    assert.equal(JSON.parse(blockerMoveText).ok, true);
+
+    const moveText = await callWriteTool("move_scene", {
+      scene_id: "sc-m7-move-carry-position",
+      project_id: "test-novel",
+      chapter_id: targetChapter.chapter_id,
+    });
+    const moveParsed = JSON.parse(moveText);
+
+    assert.equal(moveParsed.ok, false);
+    assert.equal(moveParsed.error.code, "VALIDATION_ERROR");
+    assert.equal(moveParsed.error.details.chapter_id, targetChapter.chapter_id);
+    assert.equal(moveParsed.error.details.timeline_position, 6);
+    assert.equal(moveParsed.error.details.existing_scene_id, "sc-m7-move-carry-blocker");
+  });
+
   test("checks timeline conflicts against sidecar chapter when index is stale", async () => {
     const sceneDir = path.join(writeSyncDir, "projects", "test-novel", "scenes");
     fs.mkdirSync(sceneDir, { recursive: true });

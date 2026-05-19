@@ -150,6 +150,28 @@ describe("buildMoveScenePlan", () => {
     assert.equal(plan.previousTimelinePosition, 3);
   });
 
+  test("returns null chapter payload for timeline-only unchaptered moves", () => {
+    const syncDir = "/sync";
+    const filePath = path.join(syncDir, "projects", "book", "scenes", "loose.md");
+
+    const plan = buildMoveScenePlan(syncDir, filePath, {
+      scene_id: "sc-loose",
+      timeline_position: 3,
+    }, {
+      currentScene: {
+        chapter_id: null,
+        chapter: null,
+        chapter_title: null,
+        timeline_position: 3,
+      },
+      timelinePosition: 4,
+    });
+
+    assert.equal(plan.ok, true);
+    assert.equal(plan.assignedChapter, null);
+    assert.equal(plan.timelinePosition, 4);
+  });
+
   test("rejects a move with no target chapter or timeline position", () => {
     const syncDir = "/sync";
     const filePath = path.join(syncDir, "projects", "book", "scenes", "loose.md");
