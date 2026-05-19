@@ -12,7 +12,7 @@ This complements `CHANGELOG.md`:
 - Why it matters: Authors and AI agents can keep older chapter-scoped discovery and review workflows working without treating numeric sidecar fields as structural authority.
 - Who is affected: Authors, maintainers, and AI agents using chapter-scoped search, chapter prose, styleguide, enrichment, or review-bundle workflows.
 - Action needed: Prefer `chapter_id` from `list_chapters` for new workflows and all structural mutations; use numeric chapter aliases only for read-scoped compatibility selection.
-- PR: TBD
+- PR: [#210](https://github.com/hannasdev/mcp-writing/pull/210)
 
 ### 2026-05-19 — Restore canonical structure from trusted exports
 
@@ -20,7 +20,7 @@ This complements `CHANGELOG.md`:
 - Why it matters: Maintainers and AI agents now have a deliberate recovery path when canonical structure is missing or damaged, without making sync or edited exports authoritative.
 - Who is affected: Authors, maintainers, and AI agents recovering structure after database loss or repairing canonical structure from a reviewed generated export.
 - Action needed: Run `diagnose_structure`, then dry-run `restore_structure_from_export`; only run with `dry_run=false` after reviewing the diagnostics and planned changes.
-- PR: TBD
+- PR: [#210](https://github.com/hannasdev/mcp-writing/pull/210)
 
 ### 2026-05-19 — Diagnose structure export trust before repair
 
@@ -28,7 +28,7 @@ This complements `CHANGELOG.md`:
 - Why it matters: Maintainers and AI agents can tell whether an export is safe recovery input before any explicit restore or repair workflow exists.
 - Who is affected: Authors, maintainers, and AI agents reviewing canonical structure changes or preparing future export-based repair.
 - Action needed: Run `diagnose_structure` before trusting a structure export for recovery; regenerate stale or incompatible exports with `export_structure_snapshot`.
-- PR: TBD
+- PR: [#210](https://github.com/hannasdev/mcp-writing/pull/210)
 
 ### 2026-05-19 — Keep ordinary sync from adopting structure drift
 
@@ -36,7 +36,7 @@ This complements `CHANGELOG.md`:
 - Why it matters: Daily sync can refresh indexes after external edits without turning compatibility files or folder layout into hidden structural authority.
 - Who is affected: Authors, maintainers, and AI agents working with Scrivener sync folders or direct sidecar/folder edits after a project has canonical structure.
 - Action needed: Use explicit import, repair, or structure tools for intentional chapter and epigraph changes; treat sync warnings as drift to review.
-- PR: TBD
+- PR: [#210](https://github.com/hannasdev/mcp-writing/pull/210)
 
 ### 2026-05-19 — Route scene structure edits through explicit tools
 
@@ -44,7 +44,7 @@ This complements `CHANGELOG.md`:
 - Why it matters: Chapter placement and scene ordering now stay on named structure workflows instead of leaking through generic metadata edits.
 - Who is affected: Authors, maintainers, and AI agents changing scene chapter placement or ordering.
 - Action needed: Use `list_chapters` to choose a canonical `chapter_id`, then call `assign_scene_to_chapter` or `move_scene` for structural changes; keep `update_scene_metadata` for non-structural editorial metadata.
-- PR: TBD
+- PR: [#210](https://github.com/hannasdev/mcp-writing/pull/210)
 
 ### 2026-05-19 — Add local pre-PR quality gate
 

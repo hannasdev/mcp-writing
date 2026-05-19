@@ -624,7 +624,7 @@ describe("move_scene tool", () => {
     });
     const moveParsed = JSON.parse(moveText);
 
-    assert.equal(moveParsed.ok, true);
+    assert.equal(moveParsed.ok, true, moveText);
     assert.equal(moveParsed.action, "moved");
     assert.equal(moveParsed.scene_id, "sc-m7-move");
     assert.equal(moveParsed.chapter.chapter_id, createParsed.chapter.chapter_id);

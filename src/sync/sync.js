@@ -1315,6 +1315,22 @@ export function indexSceneFile(db, syncDir, file, meta, prose, { observedStructu
   return { isStale, chapterId, warning: chapterWarning, canonicalIndexPlan };
 }
 
+export function isManagedStructureProject(db, projectId) {
+  if (!projectId) return false;
+  const row = db.prepare(`
+    SELECT 1 AS managed
+    FROM (
+      SELECT project_id FROM chapters WHERE project_id = ?
+      UNION
+      SELECT project_id FROM epigraphs WHERE project_id = ?
+      UNION
+      SELECT project_id FROM scenes WHERE project_id = ? AND chapter_id IS NOT NULL AND chapter_id != ''
+    )
+    LIMIT 1
+  `).get(projectId, projectId, projectId);
+  return Boolean(row);
+}
+
 export function observeOrphanedSidecars(syncDir, { indexedSceneIds = new Set() } = {}) {
   const diagnostics = [];
   const sidecars = walkSidecars(syncDir).filter(sidecar => !isNestedMirrorPath(syncDir, sidecar));

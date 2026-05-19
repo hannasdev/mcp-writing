@@ -14,7 +14,8 @@ import {
   walkFiles, walkSidecars, worldEntityFolderKey, worldEntityKindForPath,
   buildCanonicalIndexPlan, buildWarningSummary, observeOrphanedSidecars,
   observeStructureForFile, readSceneFileForSync, readSceneMetadataForSync,
-  regenerateReferenceAndWorldIndexes, scanSyncFiles,
+  regenerateReferenceAndWorldIndexes, scanSyncFiles, indexSceneFile,
+  isManagedStructureProject,
 } from "../../sync/sync.js";
 import {
   buildSceneStructurePatch,
@@ -510,6 +511,72 @@ describe("structure observation", () => {
     assert.equal(db.prepare("SELECT count(*) AS count FROM chapters").get().count, 0);
 
     db.close();
+  });
+
+  test("managed direct reindex preserves existing canonical chapter over observed structure", () => {
+    const syncDir = "/tmp/sync";
+    const filePath = path.join(syncDir, "projects", "test-novel", "part-1", "chapter-1", "sc-001.md");
+    const db = openDb(":memory:");
+    try {
+      db.prepare(`INSERT INTO projects (project_id, universe_id, name) VALUES (?, ?, ?)`)
+        .run("test-novel", null, "Test Novel");
+      for (const chapter of [
+        ["ch-01-chapter-1", "Chapter 1", 1],
+        ["ch-02-chapter-2", "Chapter 2", 2],
+      ]) {
+        db.prepare(`
+          INSERT INTO chapters (
+            chapter_id, project_id, title, sort_index, source_path, source_checksum, metadata_stale, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(chapter[0], "test-novel", chapter[1], chapter[2], null, null, 0, "2026-05-19T12:00:00.000Z");
+      }
+      db.prepare(`
+        INSERT INTO scenes (
+          scene_id, project_id, chapter_id, title, chapter, chapter_title,
+          file_path, prose_checksum, metadata_stale, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        "sc-001",
+        "test-novel",
+        "ch-02-chapter-2",
+        "Scene",
+        2,
+        "Chapter 2",
+        filePath,
+        "old-checksum",
+        0,
+        "2026-05-19T12:00:00.000Z"
+      );
+
+      assert.equal(isManagedStructureProject(db, "test-novel"), true);
+
+      indexSceneFile(
+        db,
+        syncDir,
+        filePath,
+        {
+          scene_id: "sc-001",
+          title: "Scene",
+          chapter_id: "ch-01-chapter-1",
+          chapter: 1,
+          chapter_title: "Chapter 1",
+        },
+        "Updated prose.",
+        { managedStructure: isManagedStructureProject(db, "test-novel") }
+      );
+
+      const scene = db.prepare(`
+        SELECT chapter_id, chapter, chapter_title
+        FROM scenes
+        WHERE scene_id = ? AND project_id = ?
+      `).get("sc-001", "test-novel");
+
+      assert.equal(scene.chapter_id, "ch-02-chapter-2");
+      assert.equal(scene.chapter, 2);
+      assert.equal(scene.chapter_title, "Chapter 2");
+    } finally {
+      db.close();
+    }
   });
 });
 

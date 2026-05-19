@@ -98,6 +98,28 @@ function seedTrustedExportFixture(db, syncDir) {
 }
 
 describe("restoreStructureFromExport", () => {
+  test("reports invalid export locations as refused even in dry-run mode", () => {
+    const syncDir = fs.mkdtempSync(path.join(os.tmpdir(), "structure-restore-"));
+    const db = openDb(":memory:");
+    try {
+      seedProject(db);
+
+      const result = restoreStructureFromExport(db, {
+        syncDir,
+        projectId: "test-novel",
+        structureExportPath: "../outside.structure.json",
+      });
+
+      assert.equal(result.ok, false);
+      assert.equal(result.action, "restore_refused");
+      assert.equal(result.dry_run, true);
+      assert.equal(result.diagnostics[0].type, "structure_export_invalid_location");
+    } finally {
+      db.close();
+      fs.rmSync(syncDir, { recursive: true, force: true });
+    }
+  });
+
   test("restores missing canonical chapters and epigraphs transactionally", () => {
     const syncDir = fs.mkdtempSync(path.join(os.tmpdir(), "structure-restore-"));
     const db = openDb(":memory:");

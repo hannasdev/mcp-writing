@@ -1,7 +1,7 @@
 import { z } from "zod";
 import fs from "node:fs";
 import matter from "gray-matter";
-import { readMeta, writeMeta, indexSceneFile } from "../sync/sync.js";
+import { readMeta, writeMeta, indexSceneFile, isManagedStructureProject } from "../sync/sync.js";
 import { validateProjectId, validateUniverseId } from "../sync/importer.js";
 import { resolveValidatedChapterFilter } from "../core/chapter-resolution.js";
 import { buildMoveScenePlan, buildSceneChapterAssignmentPlan } from "../structure/scene-chapter-assignment.js";
@@ -1104,7 +1104,9 @@ export function registerMetadataTools(s, {
           { failureCode: "SCENE_STRUCTURE_SIDECAR_MIRROR_FAILED" }
         );
         if (sidecarMirror.updatedCount > 0) {
-          indexSceneFile(db, SYNC_DIR, scene.file_path, plan.meta, prose);
+          indexSceneFile(db, SYNC_DIR, scene.file_path, plan.meta, prose, {
+            managedStructure: isManagedStructureProject(db, project_id),
+          });
         }
 
         return jsonResponse({
@@ -1220,7 +1222,9 @@ export function registerMetadataTools(s, {
           { failureCode: "SCENE_STRUCTURE_SIDECAR_MIRROR_FAILED" }
         );
         if (sidecarMirror.updatedCount > 0) {
-          indexSceneFile(db, SYNC_DIR, scene.file_path, plan.meta, prose);
+          indexSceneFile(db, SYNC_DIR, scene.file_path, plan.meta, prose, {
+            managedStructure: isManagedStructureProject(db, project_id),
+          });
         }
 
         return jsonResponse({
@@ -1293,7 +1297,9 @@ export function registerMetadataTools(s, {
         writeMeta(scene.file_path, updated);
 
         const { content: prose } = matter(fs.readFileSync(scene.file_path, "utf8"));
-        indexSceneFile(db, SYNC_DIR, scene.file_path, updated, prose);
+        indexSceneFile(db, SYNC_DIR, scene.file_path, updated, prose, {
+          managedStructure: isManagedStructureProject(db, project_id),
+        });
 
         return { content: [{ type: "text", text: `Updated metadata for scene '${scene_id}'.` }] };
       } catch (err) {

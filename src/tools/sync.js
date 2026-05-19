@@ -2,7 +2,7 @@ import { z } from "zod";
 import fs from "node:fs";
 import path from "node:path";
 import matter from "gray-matter";
-import { syncAll, writeMeta, readMeta, indexSceneFile, normalizeSceneMetaForPath } from "../sync/sync.js";
+import { syncAll, writeMeta, readMeta, indexSceneFile, normalizeSceneMetaForPath, isManagedStructureProject } from "../sync/sync.js";
 import { importScrivenerSync, validateProjectId } from "../sync/importer.js";
 import { runStructureDiagnostics } from "../structure/structure-diagnostics.js";
 import {
@@ -730,7 +730,9 @@ export function registerSyncTools(s, {
         }).meta;
 
         writeMeta(scene.file_path, updatedMeta);
-        indexSceneFile(db, SYNC_DIR, scene.file_path, updatedMeta, prose);
+        indexSceneFile(db, SYNC_DIR, scene.file_path, updatedMeta, prose, {
+          managedStructure: isManagedStructureProject(db, scene.project_id),
+        });
         db.prepare(`UPDATE scenes SET metadata_stale = 0 WHERE scene_id = ? AND project_id = ?`)
           .run(scene.scene_id, scene.project_id);
 

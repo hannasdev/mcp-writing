@@ -614,7 +614,7 @@ export function restoreStructureFromExport(db, {
     diagnostics.push(resolved.diagnostic);
     return {
       ok: false,
-      action: dryRun ? "planned" : "restore_refused",
+      action: "restore_refused",
       project_id: projectId,
       dry_run: dryRun,
       diagnostics,

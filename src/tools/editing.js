@@ -5,7 +5,7 @@ import { createHash } from "node:crypto";
 import matter from "gray-matter";
 import yaml from "js-yaml";
 import { createSnapshot, listSnapshots } from "../core/git.js";
-import { getFileWriteDiagnostics, readMeta, indexSceneFile } from "../sync/sync.js";
+import { getFileWriteDiagnostics, readMeta, indexSceneFile, isManagedStructureProject } from "../sync/sync.js";
 import { resolveStyleguideConfig } from "../styleguide/prose-styleguide.js";
 import {
   PROSE_STYLEGUIDE_SKILL_BASENAME,
@@ -478,7 +478,9 @@ export function registerEditingTools(s, {
         if (currentRaw === content) {
           const { meta: canonicalMeta } = readMeta(proposal.scene_file_path, SYNC_DIR, { writable: false });
           const { content: currentProse } = matter(currentRaw);
-          indexSceneFile(db, SYNC_DIR, proposal.scene_file_path, canonicalMeta, currentProse);
+          indexSceneFile(db, SYNC_DIR, proposal.scene_file_path, canonicalMeta, currentProse, {
+            managedStructure: isManagedStructureProject(db, proposal.project_id ?? project_id),
+          });
           pendingProposals.delete(proposal_id);
 
           return jsonResponse({
@@ -499,7 +501,9 @@ export function registerEditingTools(s, {
 
         const { meta: canonicalMeta } = readMeta(proposal.scene_file_path, SYNC_DIR, { writable: false });
         const { content: newProse } = matter(content);
-        indexSceneFile(db, SYNC_DIR, proposal.scene_file_path, canonicalMeta, newProse);
+        indexSceneFile(db, SYNC_DIR, proposal.scene_file_path, canonicalMeta, newProse, {
+          managedStructure: isManagedStructureProject(db, proposal.project_id ?? project_id),
+        });
 
         pendingProposals.delete(proposal_id);
 
