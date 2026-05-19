@@ -6,6 +6,14 @@ This complements `CHANGELOG.md`:
 - `CHANGELOG.md` is technical and release-oriented.
 - This log is plain-language and outcome-oriented.
 
+### 2026-05-19 — Add local pre-PR quality gate
+
+- What changed: Added `npm run check:pr` as a local pre-PR gate and optimized CI so stale PR runs are canceled while static validation shares one setup job.
+- Why it matters: Maintainers and AI-assisted contributors can catch lint, generated-doc, import-guard, and test issues before opening or updating a PR, reducing review churn after Copilot or CI feedback.
+- Who is affected: Maintainers and contributors preparing pull requests.
+- Action needed: Run `npm run check:pr` before opening or updating a PR; update branch protection if it still requires the old separate static-check job names.
+- PR: [#208](https://github.com/hannasdev/mcp-writing/pull/208)
+
 ### 2026-05-19 — Add deterministic structure exports
 
 - What changed: Added `export_structure_snapshot`, a generated JSON export of SQLite-canonical project structure for review and future recovery workflows.

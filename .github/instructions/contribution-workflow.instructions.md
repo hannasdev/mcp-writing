@@ -33,14 +33,20 @@ Branch names should use semantic prefixes aligned with [conventional commits](ht
    - Use conventional commit format: `<type>(<scope>): <message>`
    - Example: `docs: add copilot-instructions for MCP discovery`
 
-3. **Push and open PR**:
+3. **Run the local pre-PR gate**:
+   ```bash
+   npm run check:pr
+   ```
+   This runs linting, the legacy root import guard, generated docs verification, and the full test suite before CI or Copilot review.
+
+4. **Push and open PR**:
    ```bash
    git push -u origin <branch-name>
    ```
    - GitHub will suggest creating a PR
    - Write a clear description explaining the change
 
-4. **Merge strategy**:
+5. **Merge strategy**:
    - Default: **squash merge** (linear history)
    - Use **rebase merge** only when preserving multiple meaningful commits is important for future debugging or auditability
    - Avoid **merge commits** unless required to resolve conflicts that cannot be handled cleanly with squash or rebase
