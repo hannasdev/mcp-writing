@@ -1,7 +1,7 @@
 # Target Architecture Migration — Milestones
 
 Status: Active  
-Current milestone: M7 — Add Additional Explicit Structure Commands
+Current milestone: M8 — Decide Canonical Storage Direction  
 Owner: MCP Writing  
 Date: 2026-05-18
 
@@ -239,6 +239,8 @@ Test strategy:
 
 ## M7 — Add Additional Explicit Structure Commands
 
+Status: Complete.
+
 Goal: expand sanctioned structural mutation paths after the first command proves the pattern.
 
 Potential commands:
@@ -264,6 +266,8 @@ Details intentionally deferred:
 ## M8 — Decide Canonical Storage Direction
 
 Goal: make an evidence-based decision about whether sidecars remain canonical storage or become a representation layer.
+
+Draft decision brief: [M8 Canonical Storage Direction](./m8-canonical-storage-decision.md).
 
 Questions to answer:
 
