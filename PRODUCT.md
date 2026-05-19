@@ -12,7 +12,8 @@ It supports metadata-first reasoning, explicit prose editing workflows, and revi
 Active initiative: [Target Architecture Migration](docs/initiatives/active/target-architecture-migration/prd.md).
 
 The active product focus is behavior-preserving design consolidation around structural manuscript state, especially the boundaries captured in [Managed Structure Contract](docs/foundations/managed-structure-contract.md).
-Current implementation focus: M8, deciding the canonical storage direction now that explicit M7 structure mutation commands are in place.
+The M8 canonical storage decision is accepted: SQLite is the durable canonical model for structural manuscript state, while prose remains file-based and generated exports provide review and recovery surfaces.
+Current implementation focus: the first post-M8 migration slice, deterministic structure exports for Git review and recovery.
 
 ---
 

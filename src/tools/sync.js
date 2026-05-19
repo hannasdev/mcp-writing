@@ -5,6 +5,11 @@ import matter from "gray-matter";
 import { syncAll, writeMeta, readMeta, indexSceneFile, normalizeSceneMetaForPath } from "../sync/sync.js";
 import { importScrivenerSync, validateProjectId } from "../sync/importer.js";
 import { runStructureDiagnostics } from "../structure/structure-diagnostics.js";
+import {
+  buildStructureExport,
+  defaultStructureExportFileName,
+  writeStructureExportFile,
+} from "../structure/structure-export.js";
 
 export function registerSyncTools(s, {
   db,
@@ -23,6 +28,7 @@ export function registerSyncTools(s, {
   resolveBatchTargetScenes,
   maxScenesNextStep,
   isPathInsideSyncDir,
+  resolveOutputDirWithinSync,
   deriveLoglineFromProse,
   inferCharacterIdsFromProse,
 }) {
@@ -64,6 +70,81 @@ export function registerSyncTools(s, {
         syncDir: SYNC_DIR,
         projectId: project_id ?? null,
       }));
+    }
+  );
+
+  s.tool(
+    "export_structure_snapshot",
+    "Generate a deterministic JSON structure export from SQLite canonical state for Git review and future explicit recovery workflows. The export is generated transparency only: editing it does not change canonical state.",
+    {
+      project_id: z.string().describe("Project ID to export (e.g. 'test-novel')."),
+      output_dir: z.string().optional().describe("Directory under WRITING_SYNC_DIR where the export JSON should be written. Defaults to structure-exports."),
+    },
+    async ({ project_id, output_dir }) => {
+      if (!SYNC_DIR_WRITABLE) {
+        return errorResponse("READ_ONLY", "Cannot export structure snapshot: sync dir is read-only.");
+      }
+
+      const projectIdCheck = validateProjectId(project_id);
+      if (!projectIdCheck.ok) {
+        return errorResponse("INVALID_PROJECT_ID", projectIdCheck.reason, { project_id });
+      }
+
+      try {
+        const requestedOutputDir = output_dir
+          ? (path.isAbsolute(output_dir) ? output_dir : path.join(SYNC_DIR_ABS, output_dir))
+          : path.join(SYNC_DIR_ABS, "structure-exports");
+        const { resolvedOutputDir, relativeToSyncDir } = resolveOutputDirWithinSync(requestedOutputDir);
+        const outputDirSegments = relativeToSyncDir
+          .split(path.sep)
+          .filter(Boolean)
+          .map(segment => segment.toLowerCase());
+        if (outputDirSegments.includes("scenes")) {
+          return errorResponse(
+            "INVALID_OUTPUT_DIR",
+            "output_dir cannot be inside a scenes directory. Choose a dedicated generated export folder under WRITING_SYNC_DIR.",
+            { output_dir: resolvedOutputDir }
+          );
+        }
+
+        const built = buildStructureExport(db, {
+          projectId: project_id,
+          syncDir: SYNC_DIR_ABS,
+        });
+        if (!built.ok) {
+          return errorResponse(built.error.code, built.error.message, built.error.details);
+        }
+
+        const fileName = defaultStructureExportFileName(project_id);
+        const outputPath = writeStructureExportFile(built.snapshot, {
+          outputDir: resolvedOutputDir,
+          fileName,
+        });
+
+        return jsonResponse({
+          ok: true,
+          action: "exported",
+          project_id,
+          output_path: outputPath,
+          relative_output_path: path.join(relativeToSyncDir, fileName).split(path.sep).join("/"),
+          export: built.snapshot.export,
+          summary: built.snapshot.summary,
+          next_step: "Review or commit the generated structure export. Do not edit it as a mutation surface; use explicit structure tools for canonical changes.",
+        });
+      } catch (error) {
+        if (
+          error &&
+          typeof error === "object" &&
+          error.name === "CoreValidationError" &&
+          typeof error.code === "string"
+        ) {
+          return errorResponse(error.code, error.message ?? "Request failed.", error.details);
+        }
+        return errorResponse(
+          "EXPORT_STRUCTURE_FAILED",
+          error instanceof Error ? error.message : "Failed to export structure snapshot."
+        );
+      }
     }
   );
 

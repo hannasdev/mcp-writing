@@ -1,7 +1,7 @@
 # Target Architecture Migration — Milestones
 
 Status: Active  
-Current milestone: M8 — Decide Canonical Storage Direction  
+Current focus: Post-M8 — Deterministic Structure Exports  
 Owner: MCP Writing  
 Date: 2026-05-18
 
@@ -265,9 +265,11 @@ Details intentionally deferred:
 
 ## M8 — Decide Canonical Storage Direction
 
+Status: Complete.
+
 Goal: make an evidence-based decision about whether sidecars remain canonical storage or become a representation layer.
 
-Draft decision brief: [M8 Canonical Storage Direction](./m8-canonical-storage-decision.md).
+Decision record: [M8 Canonical Storage Direction](./m8-canonical-storage-decision.md).
 
 Questions to answer:
 
@@ -283,6 +285,30 @@ Acceptance criteria:
 - A decision record or follow-up PRD exists before implementation.
 - Migration strategy is explicit.
 - Rollback and recovery risks are documented.
+
+## Post-M8 Slice 1 — Deterministic Structure Exports
+
+Goal: add a generated structure export so SQLite-canonical structural changes remain reviewable in Git and recoverable through explicit workflows.
+
+Initial scope:
+
+- export project structural state from SQLite in deterministic order;
+- include chapters, scene structural links, timeline positions, and epigraph attachments;
+- include enough metadata to detect stale exports;
+- document that the export is generated transparency, not a mutation surface.
+
+Acceptance criteria:
+
+- The export is generated from SQLite canonical state.
+- Re-running the export without structural changes produces stable output.
+- The export can be used as evidence for review and as input to a future explicit recovery workflow.
+- Editing the export directly does not change canonical state.
+
+Out of scope:
+
+- restoring from the export;
+- removing sidecar compatibility fields;
+- changing Scrivener import/export semantics.
 
 ## Test Strategy Summary
 

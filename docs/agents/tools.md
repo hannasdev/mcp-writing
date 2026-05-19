@@ -8,6 +8,7 @@
 - [`describe_workflows`](#describe_workflows)
 - [`sync`](#sync)
 - [`diagnose_structure`](#diagnose_structure)
+- [`export_structure_snapshot`](#export_structure_snapshot)
 - [`import_scrivener_sync`](#import_scrivener_sync)
 - [`import_scrivener_sync_async`](#import_scrivener_sync_async)
 - [`merge_scrivener_project_beta`](#merge_scrivener_project_beta)
@@ -90,6 +91,17 @@ Run read-only structure diagnostics against the current index and sync files. Re
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |
 | `project_id` | `string` | No | Optional project ID to limit diagnostics to one project. |
+
+---
+
+## export_structure_snapshot
+
+Generate a deterministic JSON structure export from SQLite canonical state for Git review and future explicit recovery workflows. The export is generated transparency only: editing it does not change canonical state.
+
+| Parameter | Type | Required | Description |
+| --- | --- | :---: | --- |
+| `project_id` | `string` | Yes | Project ID to export (e.g. 'test-novel'). |
+| `output_dir` | `string` | No | Directory under WRITING_SYNC_DIR where the export JSON should be written. Defaults to structure-exports. |
 
 ---
 

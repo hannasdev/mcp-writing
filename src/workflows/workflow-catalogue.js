@@ -89,6 +89,7 @@ export const WORKFLOW_CATALOGUE = [
       { tool: "move_scene", note: "Use when a scene should move to another canonical chapter and/or unused timeline_position; this does not move the scene source file." },
       { tool: "assign_scene_to_chapter", note: "Use this named structure workflow for chapter assignment or clearing instead of editing chapter fields through generic metadata updates." },
       { tool: "diagnose_structure", note: "Run when the assignment is part of a drift repair workflow or when folder-derived structure may disagree with the requested link." },
+      { tool: "export_structure_snapshot", note: "Generate a deterministic SQLite-derived structure export for Git review after canonical structure changes; editing the export does not mutate structure." },
     ],
   },
   {
