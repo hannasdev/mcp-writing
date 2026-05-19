@@ -752,6 +752,11 @@ describe("move_scene tool", () => {
     });
     assert.equal(JSON.parse(sourceMoveText).ok, true);
 
+    const subjectSidecarFile = path.join(sceneDir, "sc-m7-move-carry-position.meta.yaml");
+    const subjectSidecar = yaml.load(fs.readFileSync(subjectSidecarFile, "utf8"));
+    delete subjectSidecar.timeline_position;
+    fs.writeFileSync(subjectSidecarFile, yaml.dump(subjectSidecar), "utf8");
+
     const blockerMoveText = await callWriteTool("move_scene", {
       scene_id: "sc-m7-move-carry-blocker",
       project_id: "test-novel",

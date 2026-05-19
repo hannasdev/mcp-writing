@@ -126,8 +126,13 @@ export function buildMoveScenePlan(syncDir, filePath, meta = {}, {
 
   if (!assignmentPlan.ok) return assignmentPlan;
 
+  const shouldCarryIndexedTimelinePosition = timelinePosition === undefined
+    && chapter !== undefined
+    && meta.timeline_position === undefined
+    && currentScene?.timeline_position != null;
   const movedMeta = {
     ...assignmentPlan.meta,
+    ...(shouldCarryIndexedTimelinePosition ? { timeline_position: currentScene.timeline_position } : {}),
     ...(timelinePosition !== undefined ? { timeline_position: timelinePosition } : {}),
   };
 
@@ -137,6 +142,6 @@ export function buildMoveScenePlan(syncDir, filePath, meta = {}, {
     assignedChapter: assignmentPlan.assignedChapter,
     previousChapterId: assignmentPlan.previousChapterId ?? currentScene?.chapter_id ?? null,
     previousTimelinePosition: meta.timeline_position ?? currentScene?.timeline_position ?? null,
-    timelinePosition: timelinePosition ?? meta.timeline_position ?? currentScene?.timeline_position ?? null,
+    timelinePosition: movedMeta.timeline_position ?? null,
   };
 }

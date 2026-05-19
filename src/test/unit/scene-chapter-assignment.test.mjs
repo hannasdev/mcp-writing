@@ -172,6 +172,31 @@ describe("buildMoveScenePlan", () => {
     assert.equal(plan.timelinePosition, 4);
   });
 
+  test("carries indexed timeline position into sidecar metadata when changing chapters", () => {
+    const syncDir = "/sync";
+    const filePath = path.join(syncDir, "projects", "book", "scenes", "loose.md");
+
+    const plan = buildMoveScenePlan(syncDir, filePath, {
+      scene_id: "sc-loose",
+      chapter_id: "ch-01-first",
+      chapter: 1,
+      chapter_title: "First",
+    }, {
+      currentScene: {
+        chapter_id: "ch-01-first",
+        chapter: 1,
+        chapter_title: "First",
+        timeline_position: 6,
+      },
+      chapter,
+    });
+
+    assert.equal(plan.ok, true);
+    assert.equal(plan.meta.chapter_id, "ch-02-second");
+    assert.equal(plan.meta.timeline_position, 6);
+    assert.equal(plan.timelinePosition, 6);
+  });
+
   test("rejects a move with no target chapter or timeline position", () => {
     const syncDir = "/sync";
     const filePath = path.join(syncDir, "projects", "book", "scenes", "loose.md");
