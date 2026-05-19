@@ -54,10 +54,13 @@ If both return successfully, the server is ready to use.
 npm install
 npm test           # unit + integration tests
 npm run test:unit  # unit tests only (no server required)
+npm run check:pr   # pre-PR gate: lint, import guard, generated docs, tests
 npm run lint:metadata      # lint metadata in WRITING_SYNC_DIR or ./sync
 ```
 
 Unit tests use an in-memory SQLite database and temporary directories — no server needed. Integration tests generate a fixture sync tree at runtime in temporary directories, spawn a real server on port 3099, and verify all MCP tools end-to-end.
+
+Before opening or updating a pull request, run `npm run check:pr`. This mirrors the local validation surface expected before CI review: ESLint, the legacy root import guard, generated tool docs verification, and the full unit + integration test suite.
 
 For real projects, keep your manuscript sync folder outside this tool repository and point `WRITING_SYNC_DIR` at that external path.
 
