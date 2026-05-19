@@ -1,9 +1,13 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import {
   buildStructureExport,
   defaultStructureExportFileName,
   renderStructureExport,
+  writeStructureExportFile,
 } from "../../structure/structure-export.js";
 import { setupReviewBundleTestDb } from "../helpers/db.js";
 
@@ -123,10 +127,38 @@ describe("buildStructureExport", () => {
     assert.equal(result.error.code, "NOT_FOUND");
     assert.equal(result.error.details.project_id, "missing");
   });
+
+  test("rejects absolute stored paths outside sync_dir", () => {
+    const db = setupReviewBundleTestDb();
+    seedExportFixture(db);
+    db.prepare(`
+      UPDATE scenes
+      SET file_path = ?
+      WHERE scene_id = ?
+    `).run("/tmp/elsewhere/sc-first.md", "sc-first");
+
+    assert.throws(
+      () => buildStructureExport(db, { projectId: "test-novel", syncDir: "/tmp/sync" }),
+      /Cannot export path outside sync_dir/
+    );
+  });
 });
 
 describe("defaultStructureExportFileName", () => {
   test("derives a safe filename from nested project ids", () => {
     assert.equal(defaultStructureExportFileName("universe-one/book-one"), "universe-one-book-one.structure.json");
+  });
+});
+
+describe("writeStructureExportFile", () => {
+  test("rejects output_dir when it already exists as a file", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "structure-export-"));
+    const outputDir = path.join(root, "not-a-directory");
+    fs.writeFileSync(outputDir, "file", "utf8");
+
+    assert.throws(
+      () => writeStructureExportFile({ export: {} }, { outputDir, fileName: "test.structure.json" }),
+      /output_dir exists but is not a directory/
+    );
   });
 });

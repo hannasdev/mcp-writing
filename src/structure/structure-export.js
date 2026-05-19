@@ -7,7 +7,13 @@ export const STRUCTURE_EXPORT_SCHEMA_VERSION = 1;
 function normalizePathForExport(syncDir, filePath) {
   if (!filePath) return null;
   const normalized = path.isAbsolute(filePath)
-    ? path.relative(path.resolve(syncDir), filePath)
+    ? (() => {
+        const relative = path.relative(path.resolve(syncDir), filePath);
+        if (relative.startsWith("..") || path.isAbsolute(relative)) {
+          throw new Error(`Cannot export path outside sync_dir: ${filePath}`);
+        }
+        return relative;
+      })()
     : filePath;
   return normalized.split(path.sep).join("/");
 }
@@ -195,7 +201,14 @@ export function writeStructureExportFile(snapshot, { outputDir, fileName }) {
 
   if (!fs.existsSync(normalizedOutputDir)) {
     fs.mkdirSync(normalizedOutputDir, { recursive: true });
+  } else {
+    const outputDirStat = fs.lstatSync(normalizedOutputDir);
+    if (!outputDirStat.isDirectory()) {
+      throw new Error(`output_dir exists but is not a directory: ${normalizedOutputDir}`);
+    }
   }
+  fs.accessSync(normalizedOutputDir, fs.constants.W_OK);
+
   const stat = (() => {
     try {
       return fs.lstatSync(targetPath);
