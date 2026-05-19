@@ -28,8 +28,8 @@ Instead of feeding an entire manuscript to an AI and hoping it fits in the conte
 
 **Current status:**
 - **Core platform complete:** Metadata-first analysis, sidecar-backed metadata maintenance, AI-assisted prose editing with confirmation + git history, review bundles, and Scrivener Direct extraction are all implemented.
-- **Recently completed:** Target Architecture Migration established SQLite as canonical structural storage and added deterministic generated structure exports for Git review and future recovery workflows.
-- **Active development:** Structural Authority Hardening is tightening remaining structure-authority paths so scene placement and ordering go through explicit structure workflows.
+- **Recently completed:** Structural Authority Hardening tightened remaining structure-authority paths so scene placement and ordering go through explicit structure workflows, ordinary sync reports drift instead of adopting it, and trusted structure exports can be diagnosed and restored explicitly.
+- **Active development:** none selected.
 - **Deferred backlog:** embeddings search.
 - **Ideas and open questions:** tracked separately so future exploration does not distort the active roadmap.
 

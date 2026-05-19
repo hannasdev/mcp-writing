@@ -1,8 +1,17 @@
 # PRD: Structural Authority Hardening
 
-**Status:** Active implementation
+**Status:** Done
 
-This follow-up initiative closes the remaining discrepancies between the current implementation and the [Conceptual Target Architecture](../../../foundations/target-architecture.md) after the completed [Target Architecture Migration](../../done/target-architecture-migration/prd.md).
+Completed scope:
+
+- `update_scene_metadata` rejects structural mutation fields in normal use;
+- scene structure commands persist SQLite canonical state before sidecar compatibility mirrors;
+- ordinary sync preserves canonical structure and reports sidecar/folder-derived drift for managed projects;
+- `diagnose_structure` reports generated structure export trust and staleness;
+- `restore_structure_from_export` provides explicit transactional recovery from trusted exports;
+- numeric chapter inputs are documented as read-scope compatibility aliases resolved through canonical chapter identity.
+
+This follow-up initiative closes the remaining discrepancies between the current implementation and the [Conceptual Target Architecture](../../../foundations/target-architecture.md) after the completed [Target Architecture Migration](../target-architecture-migration/prd.md).
 
 Target Architecture Migration established the doctrine and first implementation slice: SQLite is canonical for structural manuscript state, explicit structure commands exist, diagnostics are read-only, and deterministic structure exports make canonical state reviewable in Git.
 This follow-up tightens the remaining compatibility paths so daily work can no longer accidentally treat sidecars, folder layout, numeric chapter fields, or generic metadata updates as structural authority.
@@ -29,14 +38,14 @@ The current implementation is materially aligned with the target architecture, b
 These are intentional migration affordances, not current bugs.
 The risk is that they become permanent authority leaks if they are not given a focused cleanup milestone.
 
-## Implementation Progress
+## Implementation Summary
 
-- Done in current branch: remove structural authority from `update_scene_metadata` by rejecting `part`, `chapter`, `chapter_id`, and `timeline_position` in normal metadata updates.
-- Done in current branch: move `assign_scene_to_chapter` and `move_scene` to SQLite-first persistence with sidecar mirroring diagnostics.
-- Done in current branch: split ordinary sync from import/repair inference for managed projects, so sync preserves existing canonical chapter/epigraph state and reports file-derived drift instead of adopting it.
-- Done in current branch: add structure export trust diagnostics for missing, stale, wrong-project, and incompatible-schema exports.
-- Done in current branch: add explicit trusted-export restore/repair with dry-run validation, checksum/schema/file/conflict checks, and transactional SQLite writes.
-- Done in current branch: retain numeric chapter inputs as read-scope compatibility aliases resolved through canonical chapter identity, while documenting that structural mutation uses `chapter_id` and named structure workflows.
+- Removed structural authority from `update_scene_metadata` by rejecting `part`, `chapter`, `chapter_id`, and `timeline_position` in normal metadata updates.
+- Moved `assign_scene_to_chapter` and `move_scene` to SQLite-first persistence with sidecar mirroring diagnostics.
+- Split ordinary sync from import/repair inference for managed projects, so sync preserves existing canonical chapter/epigraph state and reports file-derived drift instead of adopting it.
+- Added structure export trust diagnostics for missing, stale, wrong-project, and incompatible-schema exports.
+- Added explicit trusted-export restore/repair with dry-run validation, checksum/schema/file/conflict checks, and transactional SQLite writes.
+- Retained numeric chapter inputs as read-scope compatibility aliases resolved through canonical chapter identity, while documenting that structural mutation uses `chapter_id` and named structure workflows.
 
 ## Design Principles
 
@@ -138,6 +147,6 @@ Manual verification:
 
 - [Conceptual Target Architecture](../../../foundations/target-architecture.md)
 - [Managed Structure Contract](../../../foundations/managed-structure-contract.md)
-- [Target Architecture Migration](../../done/target-architecture-migration/prd.md)
-- [M8 Canonical Storage Direction](../../done/target-architecture-migration/m8-canonical-storage-decision.md)
+- [Target Architecture Migration](../target-architecture-migration/prd.md)
+- [M8 Canonical Storage Direction](../target-architecture-migration/m8-canonical-storage-decision.md)
 - [Chapter Structure Follow-up](../../backlog/chapter-structure/prd.md)

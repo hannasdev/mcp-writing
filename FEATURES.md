@@ -95,6 +95,18 @@ Highlights:
 
 ## Recently Delivered
 
+### 🧱 [Structural Authority Hardening](docs/initiatives/done/structural-authority-hardening/prd.md)
+
+Final authority hardening after the target architecture migration.
+
+Highlights:
+
+- Ordinary `sync` observes sidecar and folder drift without adopting it as canonical structure for managed projects
+- `update_scene_metadata` rejects structural fields and routes chapter placement/order changes to explicit structure workflows
+- Structure export diagnostics report missing, stale, wrong-project, and incompatible-schema exports before repair
+- `restore_structure_from_export` provides explicit transactional recovery from trusted generated exports
+- Numeric chapter inputs remain read-scope compatibility aliases resolved through canonical chapter identity
+
 ### 🏗️ [Target Architecture Migration](docs/initiatives/done/target-architecture-migration/prd.md)
 
 Structural manuscript state boundaries, explicit mutation workflows, and SQLite-canonical structure storage.
