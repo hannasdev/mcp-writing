@@ -41,7 +41,7 @@ describe("update_scene_metadata tool", () => {
     assert.ok(text.toLowerCase().includes("not found"));
   });
 
-  test("persists canonical chapter_id for an unchaptered scene update", async () => {
+  test("rejects structural field updates", async () => {
     const sceneDir = path.join(writeSyncDir, "projects", "test-novel", "scenes");
     fs.mkdirSync(sceneDir, { recursive: true });
     const scenePath = path.join(sceneDir, "sc-unchaptered.md");
@@ -57,62 +57,37 @@ describe("update_scene_metadata tool", () => {
     const chaptersParsed = JSON.parse(chaptersText);
     const firstChapter = chaptersParsed.results.find((row) => row.sort_index === 1);
     assert.ok(firstChapter);
+    const sidecarFile = path.join(sceneDir, "sc-unchaptered.meta.yaml");
+    const sidecarBefore = fs.existsSync(sidecarFile) ? fs.readFileSync(sidecarFile, "utf8") : null;
 
     const updateText = await callWriteTool("update_scene_metadata", {
       scene_id: "sc-unchaptered",
       project_id: "test-novel",
-      fields: { chapter_id: firstChapter.chapter_id },
-    });
-    assert.ok(updateText.includes("Updated metadata"));
-
-    const sidecarFile = path.join(sceneDir, "sc-unchaptered.meta.yaml");
-    const sidecar = yaml.load(fs.readFileSync(sidecarFile, "utf8"));
-    assert.equal(sidecar.chapter_id, firstChapter.chapter_id);
-    assert.equal(sidecar.chapter, 1);
-    assert.equal(sidecar.chapter_title, firstChapter.title);
-
-    const findText = await callWriteTool("find_scenes", {
-      project_id: "test-novel",
-      chapter_id: firstChapter.chapter_id,
-    });
-    const parsed = JSON.parse(findText);
-    assert.ok(parsed.results.some((row) => row.scene_id === "sc-unchaptered"));
-  });
-
-  test("rejects conflicting mixed chapter filters", async () => {
-    const chaptersText = await callWriteTool("list_chapters", { project_id: "test-novel" });
-    const chaptersParsed = JSON.parse(chaptersText);
-    const firstChapter = chaptersParsed.results.find((row) => row.sort_index === 1);
-    assert.ok(firstChapter);
-
-    const text = await callWriteTool("update_scene_metadata", {
-      scene_id: "sc-001",
-      project_id: "test-novel",
       fields: {
+        part: 1,
+        chapter: firstChapter.sort_index,
         chapter_id: firstChapter.chapter_id,
-        chapter: 2,
+        timeline_position: 3,
       },
     });
-    const parsed = JSON.parse(text);
+    const parsed = JSON.parse(updateText);
 
     assert.equal(parsed.ok, false);
     assert.equal(parsed.error.code, "VALIDATION_ERROR");
-    assert.match(parsed.error.message, /must refer to the same canonical chapter/);
-  });
+    assert.match(parsed.error.message, /cannot change structural fields/);
+    assert.deepEqual(parsed.error.details.blocked_fields, [
+      "part",
+      "chapter",
+      "chapter_id",
+      "timeline_position",
+    ]);
+    assert.deepEqual(parsed.error.details.allowed_structure_tools, [
+      "assign_scene_to_chapter",
+      "move_scene",
+    ]);
 
-  test("rejects clearing chapter_id for a path-chaptered scene", async () => {
-    const text = await callWriteTool("update_scene_metadata", {
-      scene_id: "sc-001",
-      project_id: "test-novel",
-      fields: { chapter_id: null },
-    });
-    const parsed = JSON.parse(text);
-
-    assert.equal(parsed.ok, false);
-    assert.equal(parsed.error.code, "VALIDATION_ERROR");
-    assert.match(parsed.error.message, /file path implies a chapter/);
-    assert.equal(parsed.error.details.scene_id, "sc-001");
-    assert.notEqual(parsed.error.details.path_chapter, null);
+    const sidecarAfter = fs.existsSync(sidecarFile) ? fs.readFileSync(sidecarFile, "utf8") : null;
+    assert.equal(sidecarAfter, sidecarBefore);
   });
 });
 
@@ -143,6 +118,8 @@ describe("assign_scene_to_chapter tool", () => {
     assert.equal(assignParsed.ok, true);
     assert.equal(assignParsed.action, "assigned");
     assert.equal(assignParsed.chapter.chapter_id, secondChapter.chapter_id);
+    assert.equal(assignParsed.updated_sidecar_count, 1);
+    assert.deepEqual(assignParsed.diagnostics, []);
 
     const sidecarFile = path.join(sceneDir, "sc-m5-assigned.meta.yaml");
     const sidecar = yaml.load(fs.readFileSync(sidecarFile, "utf8"));
@@ -204,6 +181,8 @@ describe("assign_scene_to_chapter tool", () => {
     assert.equal(clearParsed.ok, true);
     assert.equal(clearParsed.action, "cleared");
     assert.equal(clearParsed.chapter, null);
+    assert.equal(clearParsed.updated_sidecar_count, 1);
+    assert.deepEqual(clearParsed.diagnostics, []);
 
     const sidecarFile = path.join(sceneDir, "sc-m5-clear.meta.yaml");
     const sidecar = yaml.load(fs.readFileSync(sidecarFile, "utf8"));
@@ -649,6 +628,7 @@ describe("move_scene tool", () => {
     assert.equal(moveParsed.chapter.chapter_id, createParsed.chapter.chapter_id);
     assert.equal(moveParsed.timeline_position, 12);
     assert.equal(moveParsed.previous_timeline_position, 3);
+    assert.equal(moveParsed.updated_sidecar_count, 1);
     assert.equal(moveParsed.diagnostics[0].code, "REPRESENTATION_NOT_MOVED");
 
     const sidecarFile = path.join(sceneDir, "sc-m7-move.meta.yaml");

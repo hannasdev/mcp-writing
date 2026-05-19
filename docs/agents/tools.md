@@ -538,7 +538,7 @@ Attach an existing canonical epigraph to a canonical chapter through the explici
 
 ## move_scene
 
-Move a scene through the explicit structure workflow. Updates canonical chapter linkage and/or timeline_position in the scene sidecar and index; it does not move, rename, or resequence scene files or Scrivener-compatible folders.
+Move a scene through the explicit structure workflow. Writes canonical SQLite chapter linkage and/or timeline_position first, then mirrors compatibility fields to the scene sidecar and index; it does not move, rename, or resequence scene files or Scrivener-compatible folders.
 
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |
@@ -551,7 +551,7 @@ Move a scene through the explicit structure workflow. Updates canonical chapter 
 
 ## assign_scene_to_chapter
 
-Assign a scene to a canonical chapter through the explicit structure workflow. Writes chapter_id plus compatibility chapter/chapter_title fields to the scene sidecar and refreshes the index. Pass chapter_id=null to clear an explicit chapter link on an unchaptered scene. Use list_chapters first to choose a valid canonical chapter_id.
+Assign a scene to a canonical chapter through the explicit structure workflow. Writes canonical SQLite chapter linkage first, then mirrors chapter_id plus compatibility chapter/chapter_title fields to the scene sidecar and index. Pass chapter_id=null to clear an explicit chapter link on an unchaptered scene. Use list_chapters first to choose a valid canonical chapter_id.
 
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |
@@ -563,7 +563,7 @@ Assign a scene to a canonical chapter through the explicit structure workflow. W
 
 ## update_scene_metadata
 
-Update one or more metadata fields for a scene. Writes to the .meta.yaml sidecar — never modifies prose. Changes are immediately reflected in the index. Only available when the sync dir is writable.
+Update one or more non-structural metadata fields for a scene. Writes to the .meta.yaml sidecar — never modifies prose. Structural fields (part, chapter, chapter_id, timeline_position) are rejected here; use assign_scene_to_chapter or move_scene for chapter placement and ordering. Changes are immediately reflected in the index. Only available when the sync dir is writable.
 
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |

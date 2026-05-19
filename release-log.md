@@ -6,6 +6,14 @@ This complements `CHANGELOG.md`:
 - `CHANGELOG.md` is technical and release-oriented.
 - This log is plain-language and outcome-oriented.
 
+### 2026-05-19 — Route scene structure edits through explicit tools
+
+- What changed: `update_scene_metadata` now rejects structural fields (`part`, `chapter`, `chapter_id`, and `timeline_position`) and points callers to `assign_scene_to_chapter` or `move_scene`; those scene structure tools now persist SQLite canonical state before mirroring sidecar compatibility fields.
+- Why it matters: Chapter placement and scene ordering now stay on named structure workflows instead of leaking through generic metadata edits.
+- Who is affected: Authors, maintainers, and AI agents changing scene chapter placement or ordering.
+- Action needed: Use `list_chapters` to choose a canonical `chapter_id`, then call `assign_scene_to_chapter` or `move_scene` for structural changes; keep `update_scene_metadata` for non-structural editorial metadata.
+- PR: TBD
+
 ### 2026-05-19 — Add local pre-PR quality gate
 
 - What changed: Added `npm run check:pr` as a local pre-PR gate and optimized CI so stale PR runs are canceled while static validation shares one setup job.

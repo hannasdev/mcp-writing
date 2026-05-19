@@ -29,7 +29,7 @@ Instead of feeding an entire manuscript to an AI and hoping it fits in the conte
 **Current status:**
 - **Core platform complete:** Metadata-first analysis, sidecar-backed metadata maintenance, AI-assisted prose editing with confirmation + git history, review bundles, and Scrivener Direct extraction are all implemented.
 - **Recently completed:** Target Architecture Migration established SQLite as canonical structural storage and added deterministic generated structure exports for Git review and future recovery workflows.
-- **Active development:** No active initiative is currently selected.
+- **Active development:** Structural Authority Hardening is tightening remaining structure-authority paths so scene placement and ordering go through explicit structure workflows.
 - **Deferred backlog:** embeddings search.
 - **Ideas and open questions:** tracked separately so future exploration does not distort the active roadmap.
 
@@ -150,7 +150,7 @@ Outcome: subplot structure stays visible and auditable, which reduces dropped th
 Goal: keep indexes accurate without manually re-tagging everything.
 
 1. After rewriting scenes, call `enrich_scene` to re-derive lightweight metadata from current prose.
-2. Use `update_scene_metadata` for intentional editorial fields (for example, beat, POV, timeline position, and tags).
+2. Use `update_scene_metadata` for intentional editorial fields (for example, beat, POV, status, and tags); use `assign_scene_to_chapter` or `move_scene` for chapter placement and ordering.
 3. Use `search_metadata` and `find_scenes` to verify scenes are discoverable under the expected filters.
 
 Outcome: your AI assistant can reliably find the right scenes without drifting from the manuscript.

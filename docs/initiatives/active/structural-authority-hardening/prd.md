@@ -1,6 +1,6 @@
 # PRD: Structural Authority Hardening
 
-**Status:** Deferred backlog (not active)
+**Status:** Active implementation
 
 This follow-up initiative closes the remaining discrepancies between the current implementation and the [Conceptual Target Architecture](../../../foundations/target-architecture.md) after the completed [Target Architecture Migration](../../done/target-architecture-migration/prd.md).
 
@@ -21,13 +21,19 @@ Make structural authority enforcement match the documented architecture:
 The current implementation is materially aligned with the target architecture, but several transitional paths still blur the boundary:
 
 1. Ordinary `sync` can still infer and upsert canonical chapter or epigraph structure from folder and sidecar state.
-2. `update_scene_metadata` still accepts structure-adjacent fields such as `part`, `chapter`, `chapter_id`, and `timeline_position`.
+2. `update_scene_metadata` accepted structure-adjacent fields such as `part`, `chapter`, `chapter_id`, and `timeline_position` before this initiative's first implementation slice.
 3. `assign_scene_to_chapter` and `move_scene` still write sidecars first and refresh SQLite through indexing, rather than writing canonical SQLite state first and mirroring representation after.
 4. Deterministic structure exports exist, but staleness diagnostics and restore/repair from a trusted export do not.
 5. Numeric chapter compatibility aliases remain visible in several public contracts and query/order paths.
 
 These are intentional migration affordances, not current bugs.
 The risk is that they become permanent authority leaks if they are not given a focused cleanup milestone.
+
+## Implementation Progress
+
+- Done in current branch: remove structural authority from `update_scene_metadata` by rejecting `part`, `chapter`, `chapter_id`, and `timeline_position` in normal metadata updates.
+- Done in current branch: move `assign_scene_to_chapter` and `move_scene` to SQLite-first persistence with sidecar mirroring diagnostics.
+- Pending: split ordinary sync from import/repair inference, add export staleness diagnostics, add trusted-export restore/repair, and decide numeric chapter compatibility behavior.
 
 ## Design Principles
 
@@ -131,4 +137,4 @@ Manual verification:
 - [Managed Structure Contract](../../../foundations/managed-structure-contract.md)
 - [Target Architecture Migration](../../done/target-architecture-migration/prd.md)
 - [M8 Canonical Storage Direction](../../done/target-architecture-migration/m8-canonical-storage-decision.md)
-- [Chapter Structure Follow-up](../chapter-structure/prd.md)
+- [Chapter Structure Follow-up](../../backlog/chapter-structure/prd.md)

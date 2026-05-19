@@ -22,12 +22,6 @@ Track the remaining follow-up work around first-class chapters, deferred divisio
 
 **Status:** Deferred backlog (not active). Canonical chapters and epigraphs, `chapter_id` targeting, dedicated chapter/epigraph tools, and chapter-aware bundle rendering have already shipped; remaining follow-up work is available for future prioritization.
 
-### 🏗️ [Structural Authority Hardening](docs/initiatives/backlog/structural-authority-hardening/prd.md) 📋
-
-Close the remaining target-architecture discrepancies after M8 by tightening ordinary sync, generic metadata updates, sidecar mirroring, structure export staleness checks, and trusted-export recovery workflows.
-
-**Status:** Deferred backlog (not active). Target Architecture Migration is complete; this follow-up is the next focused cleanup if structural authority enforcement becomes the priority.
-
 ### 📊 [Embedding-Based Search](docs/initiatives/backlog/embeddings-search/prd.md) 📋
 
 Semantic search for queries that require understanding meaning, not just keywords.

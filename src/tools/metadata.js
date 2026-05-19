@@ -1,7 +1,7 @@
 import { z } from "zod";
 import fs from "node:fs";
 import matter from "gray-matter";
-import { readMeta, writeMeta, indexSceneFile, applySceneStructurePatch } from "../sync/sync.js";
+import { readMeta, writeMeta, indexSceneFile } from "../sync/sync.js";
 import { validateProjectId, validateUniverseId } from "../sync/importer.js";
 import { resolveValidatedChapterFilter } from "../core/chapter-resolution.js";
 import { buildMoveScenePlan, buildSceneChapterAssignmentPlan } from "../structure/scene-chapter-assignment.js";
@@ -20,6 +20,12 @@ import {
   upsertExplicitReferenceLinkRow,
   upsertSerializedReferenceLinks,
 } from "./reference-link-persistence.js";
+
+const STRUCTURAL_SCENE_METADATA_FIELDS = ["part", "chapter", "chapter_id", "timeline_position"];
+
+function getProvidedStructuralSceneMetadataFields(fields) {
+  return STRUCTURAL_SCENE_METADATA_FIELDS.filter((field) => Object.hasOwn(fields, field));
+}
 
 function persistReferenceDocLink({ filePath, targetDocId, relation }) {
   const raw = fs.readFileSync(filePath, "utf8");
@@ -124,6 +130,41 @@ function writeStructureSidecarUpdates(updates, { failureCode }) {
       ]
       : [],
   };
+}
+
+function persistSceneStructureCanonical(db, {
+  projectId,
+  sceneId,
+  assignedChapter,
+  timelinePosition,
+  updateTimelinePosition = false,
+}) {
+  const chapterId = assignedChapter?.chapter_id ?? null;
+  const chapter = assignedChapter?.sort_index ?? null;
+  const chapterTitle = assignedChapter?.title ?? null;
+  const updatedAt = new Date().toISOString();
+
+  if (updateTimelinePosition) {
+    db.prepare(`
+      UPDATE scenes
+      SET chapter_id = ?,
+          chapter = ?,
+          chapter_title = ?,
+          timeline_position = ?,
+          updated_at = ?
+      WHERE scene_id = ? AND project_id = ?
+    `).run(chapterId, chapter, chapterTitle, timelinePosition ?? null, updatedAt, sceneId, projectId);
+    return;
+  }
+
+  db.prepare(`
+    UPDATE scenes
+    SET chapter_id = ?,
+        chapter = ?,
+        chapter_title = ?,
+        updated_at = ?
+    WHERE scene_id = ? AND project_id = ?
+  `).run(chapterId, chapter, chapterTitle, updatedAt, sceneId, projectId);
 }
 
 function resolveProjectScopedSource({
@@ -943,7 +984,7 @@ export function registerMetadataTools(s, {
   // ---- move_scene ----------------------------------------------------------
   s.tool(
     "move_scene",
-    "Move a scene through the explicit structure workflow. Updates canonical chapter linkage and/or timeline_position in the scene sidecar and index; it does not move, rename, or resequence scene files or Scrivener-compatible folders.",
+    "Move a scene through the explicit structure workflow. Writes canonical SQLite chapter linkage and/or timeline_position first, then mirrors compatibility fields to the scene sidecar and index; it does not move, rename, or resequence scene files or Scrivener-compatible folders.",
     {
       scene_id: z.string().describe("The scene_id to move (e.g. 'sc-011-sebastian')."),
       project_id: z.string().describe("Project the scene belongs to (e.g. 'the-lamb')."),
@@ -1050,10 +1091,21 @@ export function registerMetadataTools(s, {
           }
         }
 
-        writeMeta(scene.file_path, plan.meta);
-
         const { content: prose } = matter(fs.readFileSync(scene.file_path, "utf8"));
-        indexSceneFile(db, SYNC_DIR, scene.file_path, plan.meta, prose);
+        persistSceneStructureCanonical(db, {
+          projectId: project_id,
+          sceneId: scene_id,
+          assignedChapter: plan.assignedChapter,
+          timelinePosition: plan.timelinePosition,
+          updateTimelinePosition: true,
+        });
+        const sidecarMirror = writeStructureSidecarUpdates(
+          [{ filePath: scene.file_path, meta: plan.meta }],
+          { failureCode: "SCENE_STRUCTURE_SIDECAR_MIRROR_FAILED" }
+        );
+        if (sidecarMirror.updatedCount > 0) {
+          indexSceneFile(db, SYNC_DIR, scene.file_path, plan.meta, prose);
+        }
 
         return jsonResponse({
           ok: true,
@@ -1064,6 +1116,7 @@ export function registerMetadataTools(s, {
           previous_timeline_position: plan.previousTimelinePosition,
           chapter: plan.assignedChapter,
           timeline_position: plan.timelinePosition,
+          updated_sidecar_count: sidecarMirror.updatedCount,
           diagnostics: [
             {
               code: "REPRESENTATION_NOT_MOVED",
@@ -1074,6 +1127,7 @@ export function registerMetadataTools(s, {
                 file_path: scene.file_path,
               },
             },
+            ...sidecarMirror.diagnostics,
           ],
           next_steps: [
             "Use find_scenes to confirm the scene's canonical chapter and timeline_position.",
@@ -1094,7 +1148,7 @@ export function registerMetadataTools(s, {
   // ---- assign_scene_to_chapter --------------------------------------------
   s.tool(
     "assign_scene_to_chapter",
-    "Assign a scene to a canonical chapter through the explicit structure workflow. Writes chapter_id plus compatibility chapter/chapter_title fields to the scene sidecar and refreshes the index. Pass chapter_id=null to clear an explicit chapter link on an unchaptered scene. Use list_chapters first to choose a valid canonical chapter_id.",
+    "Assign a scene to a canonical chapter through the explicit structure workflow. Writes canonical SQLite chapter linkage first, then mirrors chapter_id plus compatibility chapter/chapter_title fields to the scene sidecar and index. Pass chapter_id=null to clear an explicit chapter link on an unchaptered scene. Use list_chapters first to choose a valid canonical chapter_id.",
     {
       scene_id: z.string().describe("The scene_id to assign (e.g. 'sc-011-sebastian')."),
       project_id: z.string().describe("Project the scene belongs to (e.g. 'the-lamb')."),
@@ -1155,10 +1209,19 @@ export function registerMetadataTools(s, {
           });
         }
 
-        writeMeta(scene.file_path, plan.meta);
-
         const { content: prose } = matter(fs.readFileSync(scene.file_path, "utf8"));
-        indexSceneFile(db, SYNC_DIR, scene.file_path, plan.meta, prose);
+        persistSceneStructureCanonical(db, {
+          projectId: project_id,
+          sceneId: scene_id,
+          assignedChapter: plan.assignedChapter,
+        });
+        const sidecarMirror = writeStructureSidecarUpdates(
+          [{ filePath: scene.file_path, meta: plan.meta }],
+          { failureCode: "SCENE_STRUCTURE_SIDECAR_MIRROR_FAILED" }
+        );
+        if (sidecarMirror.updatedCount > 0) {
+          indexSceneFile(db, SYNC_DIR, scene.file_path, plan.meta, prose);
+        }
 
         return jsonResponse({
           ok: true,
@@ -1167,6 +1230,8 @@ export function registerMetadataTools(s, {
           project_id,
           previous_chapter_id: plan.previousChapterId ?? scene.chapter_id ?? null,
           chapter: plan.assignedChapter,
+          updated_sidecar_count: sidecarMirror.updatedCount,
+          diagnostics: sidecarMirror.diagnostics,
         });
       } catch (err) {
         if (err.code === "ENOENT") {
@@ -1180,7 +1245,7 @@ export function registerMetadataTools(s, {
   // ---- update_scene_metadata -----------------------------------------------
   s.tool(
     "update_scene_metadata",
-    "Update one or more metadata fields for a scene. Writes to the .meta.yaml sidecar — never modifies prose. Changes are immediately reflected in the index. Only available when the sync dir is writable.",
+    "Update one or more non-structural metadata fields for a scene. Writes to the .meta.yaml sidecar — never modifies prose. Structural fields (part, chapter, chapter_id, timeline_position) are rejected here; use assign_scene_to_chapter or move_scene for chapter placement and ordering. Changes are immediately reflected in the index. Only available when the sync dir is writable.",
     {
       scene_id:   z.string().describe("The scene_id to update (e.g. 'sc-011-sebastian')."),
       project_id: z.string().describe("Project the scene belongs to (e.g. 'the-lamb')."),
@@ -1190,10 +1255,10 @@ export function registerMetadataTools(s, {
         status:            z.string().optional().describe("Workflow status (e.g. 'draft', 'revision', 'complete'). Free text — no fixed vocabulary."),
         save_the_cat_beat: z.string().optional(),
         pov:               z.string().optional(),
-        part:              z.number().int().optional(),
-        chapter:           z.number().int().optional().describe("Compatibility chapter number. When it resolves to a canonical chapter, update_scene_metadata also persists the matching chapter_id."),
-        chapter_id:        z.string().nullable().optional().describe("Canonical chapter identifier. Use list_chapters to find valid values. Pass null to clear an explicit chapter link on an unchaptered scene."),
-        timeline_position: z.number().int().optional(),
+        part:              z.number().int().optional().describe("Rejected by update_scene_metadata. Structural placement must use explicit structure workflows."),
+        chapter:           z.number().int().optional().describe("Rejected by update_scene_metadata. Use assign_scene_to_chapter or move_scene with canonical chapter_id."),
+        chapter_id:        z.string().nullable().optional().describe("Rejected by update_scene_metadata. Use list_chapters, then assign_scene_to_chapter or move_scene."),
+        timeline_position: z.number().int().optional().describe("Rejected by update_scene_metadata. Use move_scene for ordering changes."),
         story_time:        z.string().optional(),
         tags:              z.array(z.string()).optional(),
         characters:        z.array(z.string()).optional(),
@@ -1209,75 +1274,22 @@ export function registerMetadataTools(s, {
       if (!scene) {
         return errorResponse("NOT_FOUND", `Scene '${scene_id}' not found in project '${project_id}'.`);
       }
+      const structuralFields = getProvidedStructuralSceneMetadataFields(fields);
+      if (structuralFields.length > 0) {
+        return errorResponse(
+          "VALIDATION_ERROR",
+          "update_scene_metadata cannot change structural fields. Use assign_scene_to_chapter for chapter assignment or move_scene for chapter and timeline placement.",
+          {
+            project_id,
+            scene_id,
+            blocked_fields: structuralFields,
+            allowed_structure_tools: ["assign_scene_to_chapter", "move_scene"],
+          }
+        );
+      }
       try {
         const { meta } = readMeta(scene.file_path, SYNC_DIR, { writable: true });
-        const nextFields = { ...fields };
-        let chapter = undefined;
-
-        if (fields.chapter_id === null && fields.chapter !== undefined) {
-          return errorResponse(
-            "VALIDATION_ERROR",
-            "chapter_id cannot be null when chapter is also provided.",
-            {
-              project_id,
-              chapter_id: null,
-              chapter: fields.chapter,
-            }
-          );
-        }
-
-        if (fields.chapter_id === null) {
-          const structurePlan = applySceneStructurePatch(SYNC_DIR, scene.file_path, meta);
-          if (structurePlan.derived.chapter !== null || structurePlan.chapterStructure.chapter?.chapter_id) {
-            return errorResponse(
-              "VALIDATION_ERROR",
-              "chapter_id cannot be cleared for a scene whose file path implies a chapter.",
-              {
-                project_id,
-                scene_id,
-                chapter_id: null,
-                path_chapter: structurePlan.chapterStructure.chapter?.chapter_id ?? structurePlan.derived.chapter,
-              }
-            );
-          }
-          chapter = null;
-        } else if (fields.chapter_id !== undefined || fields.chapter !== undefined) {
-          const resolvedChapterFilter = resolveValidatedChapterFilter(db, {
-            projectId: project_id,
-            chapterNumber: fields.chapter,
-            chapterId: fields.chapter_id,
-          });
-
-          if (resolvedChapterFilter.error) {
-            return errorResponse(
-              resolvedChapterFilter.error.code,
-              resolvedChapterFilter.error.message,
-              {
-                project_id,
-                chapter_id: fields.chapter_id ?? null,
-                chapter: fields.chapter ?? null,
-              }
-            );
-          }
-
-          const resolvedChapter = resolvedChapterFilter.chapter;
-
-          if (!resolvedChapter) {
-            return errorResponse(
-              "NOT_FOUND",
-              "Chapter not found for the provided project and identifier.",
-              {
-                project_id,
-                chapter_id: fields.chapter_id ?? null,
-                chapter: fields.chapter ?? null,
-              }
-            );
-          }
-
-          chapter = resolvedChapter;
-        }
-
-        const updated = applySceneStructurePatch(SYNC_DIR, scene.file_path, { ...meta, ...nextFields }, { chapter }).meta;
+        const updated = { ...meta, ...fields };
         writeMeta(scene.file_path, updated);
 
         const { content: prose } = matter(fs.readFileSync(scene.file_path, "utf8"));
