@@ -54,11 +54,12 @@ export function registerSyncTools(s, {
 
   s.tool(
     "diagnose_structure",
-    "Run read-only structure diagnostics against the current index and sync files. Reports canonical drift, ambiguous folder-derived structure, unknown chapter links, epigraph conflicts, and compatibility chapter mismatches without repairing files or mutating the database.",
+    "Run read-only structure diagnostics against the current index, sync files, and generated structure exports. Reports canonical drift, ambiguous folder-derived structure, unknown chapter links, epigraph conflicts, compatibility chapter mismatches, and export trust/staleness issues without repairing files or mutating the database.",
     {
       project_id: z.string().optional().describe("Optional project ID to limit diagnostics to one project."),
+      structure_export_dir: z.string().optional().describe("Directory under WRITING_SYNC_DIR containing generated structure exports. Defaults to structure-exports."),
     },
-    async ({ project_id } = {}) => {
+    async ({ project_id, structure_export_dir } = {}) => {
       if (project_id !== undefined) {
         const projectIdCheck = validateProjectId(project_id);
         if (!projectIdCheck.ok) {
@@ -68,6 +69,7 @@ export function registerSyncTools(s, {
 
       return jsonResponse(runStructureDiagnostics(db, {
         syncDir: SYNC_DIR,
+        structureExportDir: structure_export_dir ?? null,
         projectId: project_id ?? null,
       }));
     }

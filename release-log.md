@@ -6,6 +6,14 @@ This complements `CHANGELOG.md`:
 - `CHANGELOG.md` is technical and release-oriented.
 - This log is plain-language and outcome-oriented.
 
+### 2026-05-19 — Diagnose structure export trust before repair
+
+- What changed: `diagnose_structure` now checks generated structure exports and reports when an export is missing, stale relative to SQLite, from a different project, unreadable, or generated with an incompatible schema.
+- Why it matters: Maintainers and AI agents can tell whether an export is safe recovery input before any explicit restore or repair workflow exists.
+- Who is affected: Authors, maintainers, and AI agents reviewing canonical structure changes or preparing future export-based repair.
+- Action needed: Run `diagnose_structure` before trusting a structure export for recovery; regenerate stale or incompatible exports with `export_structure_snapshot`.
+- PR: TBD
+
 ### 2026-05-19 — Keep ordinary sync from adopting structure drift
 
 - What changed: For already managed projects, `sync` now preserves canonical chapter and epigraph state in SQLite and reports file-derived structure drift from folders, sidecars, or epigraph metadata instead of silently adopting it.

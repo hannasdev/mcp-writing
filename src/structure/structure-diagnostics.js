@@ -3,6 +3,11 @@ import path from "node:path";
 import matter from "gray-matter";
 import yaml from "js-yaml";
 import {
+  buildStructureExport,
+  defaultStructureExportFileName,
+  STRUCTURE_EXPORT_SCHEMA_VERSION,
+} from "./structure-export.js";
+import {
   inferChapterStructureFromPath,
   normalizeSceneMetaForPath,
 } from "./structure-inference.js";
@@ -88,6 +93,16 @@ function readIndexedEpigraphRows(db, projectId) {
     FROM epigraphs
     WHERE 1 = 1${scope.sql}
     ORDER BY project_id, epigraph_id
+  `).all(...scope.params);
+}
+
+function readProjectRows(db, projectId) {
+  const scope = projectClause(projectId);
+  return db.prepare(`
+    SELECT project_id
+    FROM projects
+    WHERE 1 = 1${scope.sql}
+    ORDER BY project_id
   `).all(...scope.params);
 }
 
@@ -334,8 +349,231 @@ function diagnoseObservedFiles(syncDir, diagnostics, { scenes, epigraphs }) {
   }
 }
 
+function resolveStructureExportPath(syncDir, exportDir, projectId) {
+  const resolvedSyncDir = path.resolve(syncDir);
+  const resolvedExportDir = exportDir
+    ? (path.isAbsolute(exportDir) ? path.resolve(exportDir) : path.resolve(resolvedSyncDir, exportDir))
+    : path.resolve(resolvedSyncDir, "structure-exports");
+  const relativeDir = path.relative(resolvedSyncDir, resolvedExportDir);
+  if (relativeDir.startsWith("..") || path.isAbsolute(relativeDir)) {
+    throw new Error(`Structure export directory must be inside sync_dir: ${exportDir}`);
+  }
+  return path.join(resolvedExportDir, defaultStructureExportFileName(projectId));
+}
+
+function readStructureExportFile(filePath) {
+  try {
+    return JSON.parse(fs.readFileSync(filePath, "utf8"));
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error : new Error("Could not read structure export."),
+    };
+  }
+}
+
+function diagnoseStructureExports(db, diagnostics, {
+  syncDir,
+  exportDir,
+  projectId,
+}) {
+  if (!syncDir) return [];
+
+  const exportChecks = [];
+  const projects = readProjectRows(db, projectId);
+  for (const project of projects) {
+    const expectedProjectId = project.project_id;
+    let exportPath;
+    try {
+      exportPath = resolveStructureExportPath(syncDir, exportDir, expectedProjectId);
+    } catch {
+      addDiagnostic(
+        diagnostics,
+        "structure_export_invalid_location",
+        `Structure export location for project "${expectedProjectId}" is outside the active sync root.`,
+        {
+          project_id: expectedProjectId,
+          export_dir: exportDir,
+          sync_dir: syncDir,
+        },
+        {
+          nextStep: "Use an export directory inside WRITING_SYNC_DIR before trusting generated structure exports.",
+        }
+      );
+      exportChecks.push({
+        project_id: expectedProjectId,
+        export_path: null,
+        trusted: false,
+        status: "invalid_location",
+      });
+      continue;
+    }
+
+    if (!fs.existsSync(exportPath)) {
+      addDiagnostic(
+        diagnostics,
+        "structure_export_missing",
+        `Project "${expectedProjectId}" does not have a generated structure export.`,
+        {
+          project_id: expectedProjectId,
+          export_path: exportPath,
+        },
+        {
+          severity: "info",
+          nextStep: "Run export_structure_snapshot before relying on export-based recovery.",
+        }
+      );
+      exportChecks.push({
+        project_id: expectedProjectId,
+        export_path: exportPath,
+        trusted: false,
+        status: "missing",
+      });
+      continue;
+    }
+
+    const parsed = readStructureExportFile(exportPath);
+    if (parsed.error) {
+      addDiagnostic(
+        diagnostics,
+        "structure_export_unreadable",
+        `Structure export for project "${expectedProjectId}" could not be read as JSON.`,
+        {
+          project_id: expectedProjectId,
+          export_path: exportPath,
+          error: parsed.error.message,
+        },
+        {
+          nextStep: "Regenerate the export with export_structure_snapshot before using it for recovery.",
+        }
+      );
+      exportChecks.push({
+        project_id: expectedProjectId,
+        export_path: exportPath,
+        trusted: false,
+        status: "unreadable",
+      });
+      continue;
+    }
+
+    const exportedProjectId = parsed.project?.project_id ?? parsed.export?.project_id ?? null;
+    if (exportedProjectId !== expectedProjectId) {
+      addDiagnostic(
+        diagnostics,
+        "structure_export_project_mismatch",
+        `Structure export for project "${expectedProjectId}" belongs to project "${exportedProjectId ?? "unknown"}".`,
+        {
+          project_id: expectedProjectId,
+          export_path: exportPath,
+          exported_project_id: exportedProjectId,
+        },
+        {
+          nextStep: "Regenerate the export for this project before using it for recovery.",
+        }
+      );
+      exportChecks.push({
+        project_id: expectedProjectId,
+        export_path: exportPath,
+        trusted: false,
+        status: "wrong_project",
+      });
+      continue;
+    }
+
+    const exportedSchemaVersion = parsed.export?.schema_version ?? null;
+    if (exportedSchemaVersion !== STRUCTURE_EXPORT_SCHEMA_VERSION) {
+      addDiagnostic(
+        diagnostics,
+        "structure_export_incompatible_schema",
+        `Structure export for project "${expectedProjectId}" has schema version "${exportedSchemaVersion ?? "unknown"}"; expected "${STRUCTURE_EXPORT_SCHEMA_VERSION}".`,
+        {
+          project_id: expectedProjectId,
+          export_path: exportPath,
+          exported_schema_version: exportedSchemaVersion,
+          expected_schema_version: STRUCTURE_EXPORT_SCHEMA_VERSION,
+        },
+        {
+          nextStep: "Regenerate the export with the current server before using it for recovery.",
+        }
+      );
+      exportChecks.push({
+        project_id: expectedProjectId,
+        export_path: exportPath,
+        trusted: false,
+        status: "incompatible_schema",
+      });
+      continue;
+    }
+
+    const built = buildStructureExport(db, {
+      projectId: expectedProjectId,
+      syncDir,
+    });
+    if (!built.ok) {
+      addDiagnostic(
+        diagnostics,
+        "structure_export_current_snapshot_failed",
+        `Could not build current structure snapshot for project "${expectedProjectId}".`,
+        {
+          project_id: expectedProjectId,
+          export_path: exportPath,
+          error_code: built.error.code,
+          error_message: built.error.message,
+        },
+        {
+          nextStep: "Repair the canonical project record before trusting structure exports.",
+        }
+      );
+      exportChecks.push({
+        project_id: expectedProjectId,
+        export_path: exportPath,
+        trusted: false,
+        status: "current_snapshot_failed",
+      });
+      continue;
+    }
+
+    const exportedChecksum = parsed.export?.structure_checksum ?? null;
+    const currentChecksum = built.snapshot.export.structure_checksum;
+    if (exportedChecksum !== currentChecksum) {
+      addDiagnostic(
+        diagnostics,
+        "structure_export_stale",
+        `Structure export for project "${expectedProjectId}" is stale relative to current SQLite canonical state.`,
+        {
+          project_id: expectedProjectId,
+          export_path: exportPath,
+          exported_checksum: exportedChecksum,
+          current_checksum: currentChecksum,
+        },
+        {
+          nextStep: "Regenerate the export with export_structure_snapshot, then review the Git diff.",
+        }
+      );
+      exportChecks.push({
+        project_id: expectedProjectId,
+        export_path: exportPath,
+        trusted: false,
+        status: "stale",
+      });
+      continue;
+    }
+
+    exportChecks.push({
+      project_id: expectedProjectId,
+      export_path: exportPath,
+      trusted: true,
+      status: "current",
+      schema_version: exportedSchemaVersion,
+      structure_checksum: currentChecksum,
+    });
+  }
+
+  return exportChecks;
+}
+
 export function runStructureDiagnostics(db, {
   syncDir,
+  structureExportDir = null,
   projectId = null,
 } = {}) {
   const diagnostics = [];
@@ -348,6 +586,12 @@ export function runStructureDiagnostics(db, {
   if (syncDir) {
     diagnoseObservedFiles(syncDir, diagnostics, { scenes, epigraphs });
   }
+
+  const structureExports = diagnoseStructureExports(db, diagnostics, {
+    syncDir,
+    exportDir: structureExportDir,
+    projectId,
+  });
 
   diagnostics.sort((a, b) => {
     const projectCompare = String(a.details.project_id ?? "").localeCompare(String(b.details.project_id ?? ""));
@@ -363,6 +607,7 @@ export function runStructureDiagnostics(db, {
       project_id: projectId,
       scenes: scenes.length,
       epigraphs: epigraphs.length,
+      structure_exports: structureExports,
     },
     summary: {
       total: diagnostics.length,

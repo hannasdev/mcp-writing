@@ -69,7 +69,7 @@ export const WORKFLOW_CATALOGUE = [
     use_when: "Use when new material has been added, sync/import reveals metadata gaps, or normal work touches scenes or documents with weak, stale, or missing metadata support.",
     steps: [
       { tool: "sync", note: "Refresh the index and use the result as the main signal that material has changed or parity may need attention." },
-      { tool: "diagnose_structure", note: "Use when sync warning summaries suggest chapter, epigraph, or folder-derived structure drift that should be understood before repair." },
+      { tool: "diagnose_structure", note: "Use when sync warning summaries suggest chapter, epigraph, folder-derived, or generated-export drift that should be understood before repair." },
       { tool: "enrich_scene", note: "Use for lightweight opportunistic recovery when the current task is already touching a specific low-parity scene." },
       { tool: "enrich_scene_characters_batch", note: "Use when recovery scope is broad enough to justify focused catch-up work; prefer dry_run first." },
       { tool: "suggest_scene_references", note: "Use when low parity is specifically about missing scene-to-reference relationships." },
@@ -88,7 +88,7 @@ export const WORKFLOW_CATALOGUE = [
       { tool: "attach_epigraph", note: "Use when an existing canonical epigraph should belong to a different canonical chapter; this does not move the epigraph source file." },
       { tool: "move_scene", note: "Use when a scene should move to another canonical chapter and/or unused timeline_position; this does not move the scene source file." },
       { tool: "assign_scene_to_chapter", note: "Use this named structure workflow for chapter assignment or clearing instead of editing chapter fields through generic metadata updates." },
-      { tool: "diagnose_structure", note: "Run when the assignment is part of a drift repair workflow or when folder-derived structure may disagree with the requested link." },
+      { tool: "diagnose_structure", note: "Run when the assignment is part of a drift repair workflow, when folder-derived structure may disagree with the requested link, or before trusting an export for recovery." },
       { tool: "export_structure_snapshot", note: "Generate a deterministic SQLite-derived structure export for Git review after canonical structure changes; editing the export does not mutate structure." },
     ],
   },

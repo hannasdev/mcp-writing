@@ -5,6 +5,11 @@ import os from "node:os";
 import path from "node:path";
 import { openDb } from "../../core/db.js";
 import { runStructureDiagnostics } from "../../structure/structure-diagnostics.js";
+import {
+  buildStructureExport,
+  defaultStructureExportFileName,
+  writeStructureExportFile,
+} from "../../structure/structure-export.js";
 import { registerSyncTools } from "../../tools/sync.js";
 
 function seedProject(db, projectId) {
@@ -74,6 +79,15 @@ function writeSceneFile(syncDir, relativePath, sidecarYaml) {
   fs.writeFileSync(filePath, "Scene prose.", "utf8");
   fs.writeFileSync(filePath.replace(/\.md$/, ".meta.yaml"), sidecarYaml, "utf8");
   return filePath;
+}
+
+function writeCurrentStructureExport(db, syncDir, projectId, outputDir = path.join(syncDir, "structure-exports")) {
+  const built = buildStructureExport(db, { projectId, syncDir });
+  assert.equal(built.ok, true);
+  return writeStructureExportFile(built.snapshot, {
+    outputDir,
+    fileName: defaultStructureExportFileName(projectId),
+  });
 }
 
 function makeSyncToolHarness(db, { syncDir }) {
@@ -381,6 +395,108 @@ describe("runStructureDiagnostics", () => {
       db.close();
       fs.rmSync(syncDir, { recursive: true, force: true });
       fs.rmSync(staleSyncDir, { recursive: true, force: true });
+    }
+  });
+
+  test("reports generated structure export staleness and trust state", () => {
+    const syncDir = fs.mkdtempSync(path.join(os.tmpdir(), "structure-export-diagnostics-"));
+    const db = openDb(":memory:");
+    try {
+      seedProject(db, "test-novel");
+      seedChapter(db, {
+        projectId: "test-novel",
+        chapterId: "ch-01-arrival",
+        sortIndex: 1,
+        title: "Arrival",
+      });
+
+      writeCurrentStructureExport(db, syncDir, "test-novel");
+      const current = runStructureDiagnostics(db, { syncDir, projectId: "test-novel" });
+
+      assert.equal(current.ok, true);
+      assert.equal(current.summary.by_type.structure_export_stale, undefined);
+      assert.equal(current.checked.structure_exports[0].trusted, true);
+      assert.equal(current.checked.structure_exports[0].status, "current");
+
+      db.prepare(`
+        UPDATE chapters
+        SET title = ?
+        WHERE project_id = ? AND chapter_id = ?
+      `).run("A New Arrival", "test-novel", "ch-01-arrival");
+
+      const stale = runStructureDiagnostics(db, { syncDir, projectId: "test-novel" });
+
+      assert.equal(stale.ok, false);
+      assert.equal(stale.summary.by_type.structure_export_stale, 1);
+      assert.equal(stale.checked.structure_exports[0].trusted, false);
+      assert.equal(stale.checked.structure_exports[0].status, "stale");
+      assert.match(stale.diagnostics[0].next_step, /Regenerate/);
+    } finally {
+      db.close();
+      fs.rmSync(syncDir, { recursive: true, force: true });
+    }
+  });
+
+  test("reports missing, wrong-project, and incompatible structure exports", () => {
+    const syncDir = fs.mkdtempSync(path.join(os.tmpdir(), "structure-export-trust-"));
+    const outputDir = path.join(syncDir, "structure-exports");
+    const db = openDb(":memory:");
+    try {
+      seedProject(db, "missing-export");
+      seedProject(db, "wrong-project");
+      seedProject(db, "incompatible-export");
+      seedProject(db, "other-project");
+
+      fs.mkdirSync(outputDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(outputDir, defaultStructureExportFileName("wrong-project")),
+        JSON.stringify({
+          export: {
+            schema_version: 1,
+            structure_checksum: "other",
+          },
+          project: {
+            project_id: "other-project",
+          },
+        }),
+        "utf8"
+      );
+      fs.writeFileSync(
+        path.join(outputDir, defaultStructureExportFileName("incompatible-export")),
+        JSON.stringify({
+          export: {
+            schema_version: 999,
+            structure_checksum: "old",
+          },
+          project: {
+            project_id: "incompatible-export",
+          },
+        }),
+        "utf8"
+      );
+
+      const result = runStructureDiagnostics(db, { syncDir });
+
+      assert.equal(result.ok, false);
+      assert.equal(result.summary.by_type.structure_export_missing, 2);
+      assert.equal(result.summary.by_type.structure_export_project_mismatch, 1);
+      assert.equal(result.summary.by_type.structure_export_incompatible_schema, 1);
+      assert.deepEqual(
+        result.checked.structure_exports.map(exportCheck => [
+          exportCheck.project_id,
+          exportCheck.status,
+          exportCheck.trusted,
+        ]),
+        [
+          ["incompatible-export", "incompatible_schema", false],
+          ["missing-export", "missing", false],
+          ["other-project", "missing", false],
+          ["wrong-project", "wrong_project", false],
+        ]
+      );
+    } finally {
+      db.close();
+      fs.rmSync(syncDir, { recursive: true, force: true });
     }
   });
 });

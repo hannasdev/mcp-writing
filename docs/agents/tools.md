@@ -86,11 +86,12 @@ _No parameters._
 
 ## diagnose_structure
 
-Run read-only structure diagnostics against the current index and sync files. Reports canonical drift, ambiguous folder-derived structure, unknown chapter links, epigraph conflicts, and compatibility chapter mismatches without repairing files or mutating the database.
+Run read-only structure diagnostics against the current index, sync files, and generated structure exports. Reports canonical drift, ambiguous folder-derived structure, unknown chapter links, epigraph conflicts, compatibility chapter mismatches, and export trust/staleness issues without repairing files or mutating the database.
 
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |
 | `project_id` | `string` | No | Optional project ID to limit diagnostics to one project. |
+| `structure_export_dir` | `string` | No | Directory under WRITING_SYNC_DIR containing generated structure exports. Defaults to structure-exports. |
 
 ---
 

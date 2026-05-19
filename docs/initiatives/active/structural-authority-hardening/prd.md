@@ -34,7 +34,8 @@ The risk is that they become permanent authority leaks if they are not given a f
 - Done in current branch: remove structural authority from `update_scene_metadata` by rejecting `part`, `chapter`, `chapter_id`, and `timeline_position` in normal metadata updates.
 - Done in current branch: move `assign_scene_to_chapter` and `move_scene` to SQLite-first persistence with sidecar mirroring diagnostics.
 - Done in current branch: split ordinary sync from import/repair inference for managed projects, so sync preserves existing canonical chapter/epigraph state and reports file-derived drift instead of adopting it.
-- Pending: add export staleness diagnostics, add trusted-export restore/repair, and decide numeric chapter compatibility behavior.
+- Done in current branch: add structure export trust diagnostics for missing, stale, wrong-project, and incompatible-schema exports.
+- Pending: add trusted-export restore/repair and decide numeric chapter compatibility behavior.
 
 ## Design Principles
 
