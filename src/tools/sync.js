@@ -10,6 +10,7 @@ import {
   defaultStructureExportFileName,
   writeStructureExportFile,
 } from "../structure/structure-export.js";
+import { restoreStructureFromExport } from "../structure/structure-restore.js";
 
 export function registerSyncTools(s, {
   db,
@@ -147,6 +148,35 @@ export function registerSyncTools(s, {
           error instanceof Error ? error.message : "Failed to export structure snapshot."
         );
       }
+    }
+  );
+
+  s.tool(
+    "restore_structure_from_export",
+    "Explicitly restore canonical SQLite chapter, scene-placement, and epigraph structure from a trusted generated structure export. This is a repair workflow, never a sync side effect; it validates project identity, schema, checksum, file presence, and conflicts before applying a transaction.",
+    {
+      project_id: z.string().describe("Project ID to restore (e.g. 'test-novel')."),
+      structure_export_path: z.string().optional().describe("Path under WRITING_SYNC_DIR to the generated structure export JSON. Defaults to structure-exports/<project>.structure.json."),
+      structure_export_dir: z.string().optional().describe("Directory under WRITING_SYNC_DIR containing generated structure exports. Ignored when structure_export_path is provided. Defaults to structure-exports."),
+      dry_run: z.boolean().optional().describe("If true (default), validate and summarize planned repairs without writing SQLite state."),
+    },
+    async ({ project_id, structure_export_path, structure_export_dir, dry_run = true }) => {
+      if (!SYNC_DIR_WRITABLE && dry_run === false) {
+        return errorResponse("READ_ONLY", "Cannot restore structure from export: sync dir is read-only.");
+      }
+
+      const projectIdCheck = validateProjectId(project_id);
+      if (!projectIdCheck.ok) {
+        return errorResponse("INVALID_PROJECT_ID", projectIdCheck.reason, { project_id });
+      }
+
+      return jsonResponse(restoreStructureFromExport(db, {
+        syncDir: SYNC_DIR_ABS,
+        projectId: project_id,
+        structureExportPath: structure_export_path ?? null,
+        structureExportDir: structure_export_dir ?? null,
+        dryRun: dry_run,
+      }));
     }
   );
 

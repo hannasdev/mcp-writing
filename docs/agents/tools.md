@@ -9,6 +9,7 @@
 - [`sync`](#sync)
 - [`diagnose_structure`](#diagnose_structure)
 - [`export_structure_snapshot`](#export_structure_snapshot)
+- [`restore_structure_from_export`](#restore_structure_from_export)
 - [`import_scrivener_sync`](#import_scrivener_sync)
 - [`import_scrivener_sync_async`](#import_scrivener_sync_async)
 - [`merge_scrivener_project_beta`](#merge_scrivener_project_beta)
@@ -103,6 +104,19 @@ Generate a deterministic JSON structure export from SQLite canonical state for G
 | --- | --- | :---: | --- |
 | `project_id` | `string` | Yes | Project ID to export (e.g. 'test-novel'). |
 | `output_dir` | `string` | No | Directory under WRITING_SYNC_DIR where the export JSON should be written. Defaults to structure-exports. |
+
+---
+
+## restore_structure_from_export
+
+Explicitly restore canonical SQLite chapter, scene-placement, and epigraph structure from a trusted generated structure export. This is a repair workflow, never a sync side effect; it validates project identity, schema, checksum, file presence, and conflicts before applying a transaction.
+
+| Parameter | Type | Required | Description |
+| --- | --- | :---: | --- |
+| `project_id` | `string` | Yes | Project ID to restore (e.g. 'test-novel'). |
+| `structure_export_path` | `string` | No | Path under WRITING_SYNC_DIR to the generated structure export JSON. Defaults to structure-exports/<project>.structure.json. |
+| `structure_export_dir` | `string` | No | Directory under WRITING_SYNC_DIR containing generated structure exports. Ignored when structure_export_path is provided. Defaults to structure-exports. |
+| `dry_run` | `boolean` | No | If true (default), validate and summarize planned repairs without writing SQLite state. |
 
 ---
 

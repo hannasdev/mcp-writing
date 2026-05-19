@@ -35,7 +35,8 @@ The risk is that they become permanent authority leaks if they are not given a f
 - Done in current branch: move `assign_scene_to_chapter` and `move_scene` to SQLite-first persistence with sidecar mirroring diagnostics.
 - Done in current branch: split ordinary sync from import/repair inference for managed projects, so sync preserves existing canonical chapter/epigraph state and reports file-derived drift instead of adopting it.
 - Done in current branch: add structure export trust diagnostics for missing, stale, wrong-project, and incompatible-schema exports.
-- Pending: add trusted-export restore/repair and decide numeric chapter compatibility behavior.
+- Done in current branch: add explicit trusted-export restore/repair with dry-run validation, checksum/schema/file/conflict checks, and transactional SQLite writes.
+- Pending: decide numeric chapter compatibility behavior.
 
 ## Design Principles
 

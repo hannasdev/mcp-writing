@@ -6,6 +6,14 @@ This complements `CHANGELOG.md`:
 - `CHANGELOG.md` is technical and release-oriented.
 - This log is plain-language and outcome-oriented.
 
+### 2026-05-19 — Restore canonical structure from trusted exports
+
+- What changed: Added `restore_structure_from_export`, an explicit repair workflow that dry-runs by default, validates a generated structure export, and can transactionally restore canonical chapter, scene-placement, and epigraph state in SQLite.
+- Why it matters: Maintainers and AI agents now have a deliberate recovery path when canonical structure is missing or damaged, without making sync or edited exports authoritative.
+- Who is affected: Authors, maintainers, and AI agents recovering structure after database loss or repairing canonical structure from a reviewed generated export.
+- Action needed: Run `diagnose_structure`, then dry-run `restore_structure_from_export`; only run with `dry_run=false` after reviewing the diagnostics and planned changes.
+- PR: TBD
+
 ### 2026-05-19 — Diagnose structure export trust before repair
 
 - What changed: `diagnose_structure` now checks generated structure exports and reports when an export is missing, stale relative to SQLite, from a different project, unreadable, or generated with an incompatible schema.
