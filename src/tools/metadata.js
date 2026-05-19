@@ -874,12 +874,12 @@ export function registerMetadataTools(s, {
         const sidecarUpdate = {
           filePath: plan.epigraph.file_path,
           meta: {
-          ...meta,
-          kind: meta.kind ?? "epigraph",
-          epigraph_id: plan.epigraph.epigraph_id,
-          chapter_id: plan.chapter.chapter_id,
-          chapter: plan.chapter.sort_index,
-          chapter_title: plan.chapter.title,
+            ...meta,
+            kind: meta.kind ?? "epigraph",
+            epigraph_id: plan.epigraph.epigraph_id,
+            chapter_id: plan.chapter.chapter_id,
+            chapter: plan.chapter.sort_index,
+            chapter_title: plan.chapter.title,
           },
         };
 
