@@ -142,6 +142,21 @@ describe("buildStructureExport", () => {
       /Cannot export path outside sync_dir/
     );
   });
+
+  test("rejects relative stored paths outside sync_dir", () => {
+    const db = setupReviewBundleTestDb();
+    seedExportFixture(db);
+    db.prepare(`
+      UPDATE scenes
+      SET file_path = ?
+      WHERE scene_id = ?
+    `).run("../elsewhere/sc-first.md", "sc-first");
+
+    assert.throws(
+      () => buildStructureExport(db, { projectId: "test-novel", syncDir: "/tmp/sync" }),
+      /Cannot export path outside sync_dir/
+    );
+  });
 });
 
 describe("defaultStructureExportFileName", () => {

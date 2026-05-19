@@ -6,15 +6,14 @@ export const STRUCTURE_EXPORT_SCHEMA_VERSION = 1;
 
 function normalizePathForExport(syncDir, filePath) {
   if (!filePath) return null;
-  const normalized = path.isAbsolute(filePath)
-    ? (() => {
-        const relative = path.relative(path.resolve(syncDir), filePath);
-        if (relative.startsWith("..") || path.isAbsolute(relative)) {
-          throw new Error(`Cannot export path outside sync_dir: ${filePath}`);
-        }
-        return relative;
-      })()
-    : filePath;
+  const syncRoot = path.resolve(syncDir);
+  const resolvedPath = path.isAbsolute(filePath)
+    ? path.resolve(filePath)
+    : path.resolve(syncRoot, filePath);
+  const normalized = path.relative(syncRoot, resolvedPath);
+  if (normalized.startsWith("..") || path.isAbsolute(normalized)) {
+    throw new Error(`Cannot export path outside sync_dir: ${filePath}`);
+  }
   return normalized.split(path.sep).join("/");
 }
 
