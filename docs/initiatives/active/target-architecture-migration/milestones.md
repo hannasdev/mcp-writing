@@ -1,7 +1,7 @@
 # Target Architecture Migration — Milestones
 
 Status: Active  
-Current milestone: M8 — Decide Canonical Storage Direction
+Current milestone: M8 — Decide Canonical Storage Direction  
 Owner: MCP Writing  
 Date: 2026-05-18
 
