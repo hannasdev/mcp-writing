@@ -82,6 +82,46 @@ describe("sync tool", () => {
       before
     );
   });
+
+  test("export_structure_snapshot writes stable generated structure JSON", async () => {
+    const text = await callWriteTool("export_structure_snapshot", {
+      project_id: "test-novel",
+      output_dir: "structure-exports",
+    });
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.action, "exported");
+    assert.equal(parsed.relative_output_path, "structure-exports/test-novel.structure.json");
+    assert.equal(parsed.export.canonical_source, "sqlite");
+    assert.equal(parsed.export.generated_transparency, true);
+    assert.equal(parsed.export.mutation_surface, false);
+    assert.match(parsed.export.structure_checksum, /^[a-f0-9]{64}$/);
+    assert.equal(parsed.summary.chapter_count >= 2, true);
+    assert.equal(parsed.summary.scene_count >= 3, true);
+
+    const outputPath = path.join(writeSyncDir, "structure-exports", "test-novel.structure.json");
+    const firstContent = fs.readFileSync(outputPath, "utf8");
+    const snapshot = JSON.parse(firstContent);
+    assert.equal(snapshot.export.structure_checksum, parsed.export.structure_checksum);
+    assert.equal(snapshot.project.project_id, "test-novel");
+    assert.deepEqual(
+      snapshot.chapters.map(chapter => chapter.sort_index).slice(0, 2),
+      [1, 2]
+    );
+    assert.ok(snapshot.scenes.some(scene => scene.scene_id === "sc-001"));
+    assert.match(
+      firstContent,
+      /"mutation_surface": false/
+    );
+
+    await callWriteTool("export_structure_snapshot", {
+      project_id: "test-novel",
+      output_dir: "structure-exports",
+    });
+    const secondContent = fs.readFileSync(outputPath, "utf8");
+    assert.equal(secondContent, firstContent);
+  });
 });
 
 describe("import_scrivener_sync tool", () => {

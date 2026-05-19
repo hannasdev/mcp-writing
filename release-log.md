@@ -6,6 +6,14 @@ This complements `CHANGELOG.md`:
 - `CHANGELOG.md` is technical and release-oriented.
 - This log is plain-language and outcome-oriented.
 
+### 2026-05-19 — Add deterministic structure exports
+
+- What changed: Added `export_structure_snapshot`, a generated JSON export of SQLite-canonical project structure for review and future recovery workflows.
+- Why it matters: Structural changes can remain command-driven and SQLite-canonical while still giving maintainers a deterministic Git-review artifact.
+- Who is affected: Authors, maintainers, and AI agents working on post-M8 structural migration and review workflows.
+- Action needed: After canonical structure changes, call `export_structure_snapshot` and review or commit the generated file; do not edit the export as a mutation surface.
+- PR: TBD
+
 ### 2026-05-19 — Add explicit scene move
 
 - What changed: Added a `move_scene` workflow for moving an existing scene to a canonical chapter and/or unused `timeline_position` without moving the source file.
