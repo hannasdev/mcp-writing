@@ -36,7 +36,7 @@ The risk is that they become permanent authority leaks if they are not given a f
 - Done in current branch: split ordinary sync from import/repair inference for managed projects, so sync preserves existing canonical chapter/epigraph state and reports file-derived drift instead of adopting it.
 - Done in current branch: add structure export trust diagnostics for missing, stale, wrong-project, and incompatible-schema exports.
 - Done in current branch: add explicit trusted-export restore/repair with dry-run validation, checksum/schema/file/conflict checks, and transactional SQLite writes.
-- Pending: decide numeric chapter compatibility behavior.
+- Done in current branch: retain numeric chapter inputs as read-scope compatibility aliases resolved through canonical chapter identity, while documenting that structural mutation uses `chapter_id` and named structure workflows.
 
 ## Design Principles
 
@@ -83,8 +83,8 @@ The risk is that they become permanent authority leaks if they are not given a f
    - Restore is transactional and returns a reviewable summary.
 
 6. Decide the fate of numeric chapter compatibility aliases.
-   - Choose whether numeric chapter inputs remain presentation aliases, become deprecated with warnings, or are removed from daily-work contracts.
-   - Ensure ordering and shared selectors use canonical chapter identity/order where available.
+   - Numeric chapter inputs remain read-scope compatibility aliases for selection and review workflows.
+   - They are resolved through canonical chapter identity/order where available, must agree with `chapter_id` when both are provided, and are not daily-work structural mutation targets.
 
 ### Acceptance Criteria
 

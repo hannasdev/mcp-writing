@@ -46,6 +46,15 @@ They may be useful, inspectable, portable, and Git-friendly, but they should not
    Human-readable folder names, numeric chapter labels, and Scrivener ordering can be useful views or migration hints.
    They should not be long-term identity, ordering, or relationship authority once the domain model has first-class concepts.
 
+## Numeric Chapter Compatibility
+
+Numeric `chapter` and `chapters` inputs are retained as compatibility aliases for read-scoped workflows such as scene discovery, chapter prose retrieval, styleguide analysis, batch enrichment, and review bundle planning.
+They are resolved through canonical chapter identity and order before selecting material.
+When callers provide both a numeric alias and `chapter_id`, the values must resolve to the same canonical chapter.
+
+Numeric aliases are not structural mutation targets.
+Daily chapter creation, chapter rename/reorder, scene placement, and epigraph attachment should use `list_chapters` to choose a canonical `chapter_id`, then call the named structure workflow that owns the mutation.
+
 ## Artifact Classes
 
 | Class | Examples | Write Rule |

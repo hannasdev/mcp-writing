@@ -150,7 +150,7 @@ Outcome: subplot structure stays visible and auditable, which reduces dropped th
 Goal: keep indexes accurate without manually re-tagging everything.
 
 1. After rewriting scenes, call `enrich_scene` to re-derive lightweight metadata from current prose.
-2. Use `update_scene_metadata` for intentional editorial fields (for example, beat, POV, status, and tags); use `assign_scene_to_chapter` or `move_scene` for chapter placement and ordering.
+2. Use `update_scene_metadata` for intentional editorial fields (for example, beat, POV, status, and tags); use `list_chapters` plus `assign_scene_to_chapter` or `move_scene` for chapter placement and ordering. Numeric chapter filters are compatibility aliases for read scopes, not mutation targets.
 3. Use `search_metadata` and `find_scenes` to verify scenes are discoverable under the expected filters.
 
 Outcome: your AI assistant can reliably find the right scenes without drifting from the manuscript.

@@ -71,14 +71,14 @@ export function registerSearchTools(s, {
   // ---- find_scenes ---------------------------------------------------------
   s.tool(
     "find_scenes",
-    "Find scenes by filtering on character, Save the Cat beat, tags, chapter identity, numeric compatibility chapter, or POV. Returns ordered scene metadata only — no prose. Most filters are optional and combinable. `chapter_id` requires `project_id`, and mixed `chapter_id`/`chapter` filters must resolve to the same canonical chapter. Supports pagination via page/page_size and auto-paginates large result sets with total_count. Warns if any matching scenes have stale metadata. Response shape note: always returns a structured envelope (`results`, `total_count`, with pagination fields when paging is active).",
+    "Find scenes by filtering on character, Save the Cat beat, tags, canonical chapter identity, numeric chapter alias, or POV. Returns ordered scene metadata only — no prose. Most filters are optional and combinable. `chapter_id` requires `project_id`; numeric `chapter` is a compatibility alias for read scopes only, resolved through canonical chapter identity, and must agree with `chapter_id` when both are provided. Supports pagination via page/page_size and auto-paginates large result sets with total_count. Warns if any matching scenes have stale metadata. Response shape note: always returns a structured envelope (`results`, `total_count`, with pagination fields when paging is active).",
     {
       project_id: z.string().optional().describe("Project ID (e.g. 'the-lamb'). Use to scope results to one project."),
       character:  z.string().optional().describe("A character_id (e.g. 'char-mira-nystrom'). Returns only scenes that character appears in. Use list_characters first to find valid IDs."),
       beat:       z.string().optional().describe("Save the Cat beat name (e.g. 'Opening Image'). Exact match."),
       tag:        z.string().optional().describe("Scene tag to filter by. Exact match."),
       part:       z.number().int().optional().describe("Part number (integer, e.g. 1). Chapters are numbered globally across the whole project."),
-      chapter:    z.number().int().optional().describe("Compatibility chapter number resolved from canonical chapter sort order."),
+      chapter:    z.number().int().optional().describe("Read-scope compatibility alias resolved from canonical chapter sort order. Not a structural mutation target."),
       chapter_id: z.string().optional().describe("Canonical chapter identifier. Requires project_id. Use list_chapters to find valid values."),
       pov:        z.string().optional().describe("POV character_id. Use list_characters first to find valid IDs."),
       page:       z.number().int().min(1).optional().describe("Optional page number for paginated responses (1-based)."),
@@ -258,11 +258,11 @@ export function registerSearchTools(s, {
   // ---- get_chapter_prose ---------------------------------------------------
   s.tool(
     "get_chapter_prose",
-    `Load the full prose for every scene in a chapter, concatenated in order. Provide chapter_id or chapter, plus project_id. Canonical targeting uses chapter_id; numeric chapter remains available as a compatibility alias resolved from canonical sort order. Expensive — only use when you need to read an entire chapter. Capped at ${MAX_CHAPTER_SCENES} scenes. Use find_scenes first to confirm the chapter exists.`,
+    `Load the full prose for every scene in a chapter, concatenated in order. Provide chapter_id or chapter, plus project_id. Canonical targeting uses chapter_id; numeric chapter remains available as a read-scope compatibility alias resolved from canonical sort order. Expensive — only use when you need to read an entire chapter. Capped at ${MAX_CHAPTER_SCENES} scenes. Use find_scenes first to confirm the chapter exists.`,
     {
       project_id: z.string().describe("Project ID (e.g. 'the-lamb')."),
       chapter_id: z.string().optional().describe("Canonical chapter identifier."),
-      chapter:    z.number().int().optional().describe("Compatibility chapter number resolved from canonical sort order."),
+      chapter:    z.number().int().optional().describe("Read-scope compatibility alias resolved from canonical chapter sort order. Not a structural mutation target."),
     },
     async ({ project_id, chapter_id, chapter }) => {
       if (!chapter_id && chapter == null) {
@@ -334,7 +334,7 @@ export function registerSearchTools(s, {
   // ---- list_chapters ------------------------------------------------------
   s.tool(
     "list_chapters",
-    "List canonical chapters for a project. Returns chapter_id plus compatibility sort order so callers can migrate from numeric chapter targeting without losing orientation.",
+    "List canonical chapters for a project. Returns chapter_id plus compatibility sort order so callers can orient from numeric chapter aliases without treating those aliases as structural authority.",
     {
       project_id: z.string().describe("Project ID."),
     },
@@ -365,11 +365,11 @@ export function registerSearchTools(s, {
   // ---- find_epigraphs -----------------------------------------------------
   s.tool(
     "find_epigraphs",
-    "List canonical epigraphs for a project, optionally narrowed to a canonical chapter_id or compatibility chapter number.",
+    "List canonical epigraphs for a project, optionally narrowed to a canonical chapter_id or read-scope numeric chapter alias.",
     {
       project_id: z.string().describe("Project ID."),
       chapter_id: z.string().optional().describe("Canonical chapter identifier."),
-      chapter: z.number().int().optional().describe("Compatibility chapter number resolved from canonical sort order."),
+      chapter: z.number().int().optional().describe("Read-scope compatibility alias resolved from canonical chapter sort order. Not a structural mutation target."),
     },
     async ({ project_id, chapter_id, chapter }) => {
       const resolvedChapterFilter = (chapter_id || chapter != null)

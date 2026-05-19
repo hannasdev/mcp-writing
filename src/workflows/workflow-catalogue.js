@@ -4,7 +4,7 @@ export const WORKFLOW_CATALOGUE = [
     label: "Find scenes for a manuscript question",
     use_when: "Start here for most sessions: when the user has a manuscript question, you need to narrow scope, or you are not yet sure which scene matters.",
     steps: [
-      { tool: "find_scenes", note: "Use structured metadata filters first when the question already suggests characters, beats, tags, parts, chapters, or POV." },
+      { tool: "find_scenes", note: "Use structured metadata filters first when the question already suggests characters, beats, tags, parts, chapters, or POV; numeric chapter values are read-scope aliases, while structure changes require canonical chapter_id workflows." },
       { tool: "search_metadata", note: "Use this when the question is thematic, fuzzy, or keyword-driven rather than cleanly filterable." },
       { tool: "get_scene_prose", note: "Escalate to prose only after likely scenes have been identified and metadata is no longer enough." },
       { tool: "flag_scene", note: "Use only when the current task naturally leads to recording a follow-up note for later editorial attention." },
@@ -81,7 +81,7 @@ export const WORKFLOW_CATALOGUE = [
     use_when: "Use when the user wants to create, rename, or reorder a canonical chapter, attach an epigraph to a chapter, move a scene into a canonical chapter or position, repair an explicit scene chapter link, or clear a scene's explicit chapter assignment.",
     steps: [
       { tool: "find_scenes", note: "Identify the target scene and confirm project_id if the user did not provide both." },
-      { tool: "list_chapters", note: "Inspect existing canonical chapters before creating or assigning chapter structure." },
+      { tool: "list_chapters", note: "Inspect existing canonical chapters before creating or assigning chapter structure; use numeric sort order only as orientation, not as structural authority." },
       { tool: "create_chapter", note: "Use when the intended canonical chapter does not exist yet; this creates chapter state only and does not generate folders or scene files." },
       { tool: "rename_chapter", note: "Use when the canonical chapter title should change; this does not rename folders or generated representation paths." },
       { tool: "reorder_chapter", note: "Use when the canonical chapter order should change to an unused sort_index; this does not rename folders or generated representation paths." },

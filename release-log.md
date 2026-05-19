@@ -6,6 +6,14 @@ This complements `CHANGELOG.md`:
 - `CHANGELOG.md` is technical and release-oriented.
 - This log is plain-language and outcome-oriented.
 
+### 2026-05-19 — Clarify numeric chapter compatibility aliases
+
+- What changed: Numeric `chapter` and `chapters` inputs are now explicitly documented as read-scope compatibility aliases that resolve through canonical chapter identity; structural changes continue to use `chapter_id` and named structure workflows.
+- Why it matters: Authors and AI agents can keep older chapter-scoped discovery and review workflows working without treating numeric sidecar fields as structural authority.
+- Who is affected: Authors, maintainers, and AI agents using chapter-scoped search, chapter prose, styleguide, enrichment, or review-bundle workflows.
+- Action needed: Prefer `chapter_id` from `list_chapters` for new workflows and all structural mutations; use numeric chapter aliases only for read-scoped compatibility selection.
+- PR: TBD
+
 ### 2026-05-19 — Restore canonical structure from trusted exports
 
 - What changed: Added `restore_structure_from_export`, an explicit repair workflow that dry-runs by default, validates a generated structure export, and can transactionally restore canonical chapter, scene-placement, and epigraph state in SQLite.

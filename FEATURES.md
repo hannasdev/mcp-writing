@@ -115,7 +115,7 @@ Highlights:
 - Canonical `chapters` and `epigraphs` entities with project-scoped identifiers
 - `list_chapters` and `find_epigraphs` as dedicated discovery tools
 - `find_scenes`, `get_chapter_prose`, styleguide flows, and review bundles updated for `chapter_id`
-- Explicit chapter-folder and `epigraph.md` indexing path, with numeric chapter filters retained as compatibility aliases
+- Explicit chapter-folder and `epigraph.md` indexing path, with numeric chapter filters retained as read-scope compatibility aliases resolved through canonical chapter identity
 
 Implementation status:
 
