@@ -28,7 +28,8 @@ Instead of feeding an entire manuscript to an AI and hoping it fits in the conte
 
 **Current status:**
 - **Core platform complete:** Metadata-first analysis, sidecar-backed metadata maintenance, AI-assisted prose editing with confirmation + git history, review bundles, and Scrivener Direct extraction are all implemented.
-- **Active development:** OpenClaw integration, the client-agnostic setup contract, and chapter-structure follow-up work after the first-class chapter/epigraph rollout.
+- **Recently completed:** Target Architecture Migration established SQLite as canonical structural storage and added deterministic generated structure exports for Git review and future recovery workflows.
+- **Active development:** No active initiative is currently selected.
 - **Deferred backlog:** embeddings search.
 - **Ideas and open questions:** tracked separately so future exploration does not distort the active roadmap.
 

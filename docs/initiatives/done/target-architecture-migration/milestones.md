@@ -1,9 +1,9 @@
 # Target Architecture Migration — Milestones
 
-Status: Active  
-Current focus: Post-M8 — Deterministic Structure Exports  
+Status: Done  
+Current focus: None — initiative closed  
 Owner: MCP Writing  
-Date: 2026-05-18
+Date: 2026-05-19
 
 This milestone plan intentionally gives early refactoring milestones more detail than later migration work.
 The early milestones should preserve behavior while making the current structure-control boundaries explicit.
@@ -22,6 +22,8 @@ Stage preparatory refactoring that moves Writing MCP toward the target architect
 - Keep the system passing and releasable after each milestone.
 
 ## M1 — Name Current Structure Inference Boundaries
+
+Status: Complete.
 
 Goal: make existing structure inference and indexing behavior easier to understand without changing it.
 
@@ -287,6 +289,8 @@ Acceptance criteria:
 - Rollback and recovery risks are documented.
 
 ## Post-M8 Slice 1 — Deterministic Structure Exports
+
+Status: Complete.
 
 Goal: add a generated structure export so SQLite-canonical structural changes remain reviewable in Git and recoverable through explicit workflows.
 

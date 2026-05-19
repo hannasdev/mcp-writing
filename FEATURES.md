@@ -95,6 +95,17 @@ Highlights:
 
 ## Recently Delivered
 
+### 🏗️ [Target Architecture Migration](docs/initiatives/done/target-architecture-migration/prd.md)
+
+Structural manuscript state boundaries, explicit mutation workflows, and SQLite-canonical structure storage.
+
+Highlights:
+
+- Structure inference, sidecar structural writes, sync observation, diagnostics, and compatibility resolution now have clearer internal boundaries
+- Explicit structure commands cover scene assignment, chapter creation/rename/reorder, epigraph attachment, and scene movement
+- SQLite is documented as canonical for structural manuscript state while prose remains file-based
+- `export_structure_snapshot` generates deterministic SQLite-derived structure exports for Git review and future recovery workflows
+
 ### 📚 Chapter and Epigraph Indexing
 
 First-class chapters and epigraphs with canonical `chapter_id` targeting, chapter-aware retrieval, and chapter-linked rendering.
