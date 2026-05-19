@@ -4,9 +4,11 @@ import {
   buildCreateChapterPlan,
   buildRenameChapterPlan,
   buildReorderChapterPlan,
+  buildAttachEpigraphPlan,
   insertCanonicalChapter,
   renameCanonicalChapter,
   reorderCanonicalChapter,
+  attachCanonicalEpigraph,
 } from "../../structure/chapter-commands.js";
 import { setupReviewBundleTestDb } from "../helpers/db.js";
 
@@ -330,5 +332,131 @@ describe("buildReorderChapterPlan", () => {
     assert.equal(plan.ok, true);
     assert.equal(plan.diagnostics[0].code, "REPRESENTATION_NOT_REORDERED");
     assert.equal(plan.diagnostics[0].details.source_path, "projects/test-novel/scenes/Draft/03-Existing");
+  });
+});
+
+describe("buildAttachEpigraphPlan", () => {
+  test("prepares an epigraph attachment to another canonical chapter", () => {
+    const db = setupReviewBundleTestDb();
+    insertCanonicalChapter(db, {
+      chapter_id: "ch-03-source",
+      project_id: "test-novel",
+      title: "Source",
+      sort_index: 3,
+      logline: null,
+      source_path: null,
+      source_checksum: null,
+      metadata_stale: 0,
+      updated_at: "2026-05-18T00:00:00.000Z",
+    });
+    insertCanonicalChapter(db, {
+      chapter_id: "ch-04-target",
+      project_id: "test-novel",
+      title: "Target",
+      sort_index: 4,
+      logline: null,
+      source_path: null,
+      source_checksum: null,
+      metadata_stale: 0,
+      updated_at: "2026-05-18T00:00:00.000Z",
+    });
+    db.prepare(`
+      INSERT INTO epigraphs (
+        epigraph_id, project_id, chapter_id, body, file_path, prose_checksum, metadata_stale, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      "epi-source",
+      "test-novel",
+      "ch-03-source",
+      "Opening line.",
+      "/tmp/epigraph.md",
+      "deadbeef",
+      0,
+      "2026-05-18T00:00:00.000Z"
+    );
+
+    const plan = buildAttachEpigraphPlan(db, {
+      projectId: "test-novel",
+      epigraphId: "epi-source",
+      chapterId: "ch-04-target",
+      updatedAt: "2026-05-18T01:00:00.000Z",
+    });
+
+    assert.equal(plan.ok, true);
+    assert.equal(plan.previousChapter.chapter_id, "ch-03-source");
+    assert.equal(plan.chapter.chapter_id, "ch-04-target");
+    assert.equal(plan.epigraph.chapter_id, "ch-04-target");
+    assert.equal(plan.diagnostics[0].code, "REPRESENTATION_NOT_MOVED");
+
+    attachCanonicalEpigraph(db, plan.epigraph);
+
+    const epigraph = db.prepare(`
+      SELECT chapter_id
+      FROM epigraphs
+      WHERE project_id = ? AND epigraph_id = ?
+    `).get("test-novel", "epi-source");
+    assert.equal(epigraph.chapter_id, "ch-04-target");
+  });
+
+  test("rejects attaching to a chapter that already has another epigraph", () => {
+    const db = setupReviewBundleTestDb();
+    insertCanonicalChapter(db, {
+      chapter_id: "ch-03-source",
+      project_id: "test-novel",
+      title: "Source",
+      sort_index: 3,
+      logline: null,
+      source_path: null,
+      source_checksum: null,
+      metadata_stale: 0,
+      updated_at: "2026-05-18T00:00:00.000Z",
+    });
+    insertCanonicalChapter(db, {
+      chapter_id: "ch-04-target",
+      project_id: "test-novel",
+      title: "Target",
+      sort_index: 4,
+      logline: null,
+      source_path: null,
+      source_checksum: null,
+      metadata_stale: 0,
+      updated_at: "2026-05-18T00:00:00.000Z",
+    });
+    const insertEpigraph = db.prepare(`
+      INSERT INTO epigraphs (
+        epigraph_id, project_id, chapter_id, body, file_path, prose_checksum, metadata_stale, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    insertEpigraph.run(
+      "epi-source",
+      "test-novel",
+      "ch-03-source",
+      "Source line.",
+      "/tmp/source-epigraph.md",
+      "source",
+      0,
+      "2026-05-18T00:00:00.000Z"
+    );
+    insertEpigraph.run(
+      "epi-target",
+      "test-novel",
+      "ch-04-target",
+      "Target line.",
+      "/tmp/target-epigraph.md",
+      "target",
+      0,
+      "2026-05-18T00:00:00.000Z"
+    );
+
+    const plan = buildAttachEpigraphPlan(db, {
+      projectId: "test-novel",
+      epigraphId: "epi-source",
+      chapterId: "ch-04-target",
+    });
+
+    assert.equal(plan.ok, false);
+    assert.equal(plan.error.code, "VALIDATION_ERROR");
+    assert.equal(plan.error.details.existing_epigraph_id, "epi-target");
+    assert.match(plan.error.details.next_step, /find_epigraphs/);
   });
 });

@@ -1,7 +1,7 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import path from "node:path";
-import { buildSceneChapterAssignmentPlan } from "../../structure/scene-chapter-assignment.js";
+import { buildMoveScenePlan, buildSceneChapterAssignmentPlan } from "../../structure/scene-chapter-assignment.js";
 
 describe("buildSceneChapterAssignmentPlan", () => {
   const chapter = {
@@ -86,5 +86,80 @@ describe("buildSceneChapterAssignmentPlan", () => {
     assert.equal(plan.error.details.requested_chapter, 2);
     assert.equal(plan.error.details.path_chapter, "ch-01-chapter-1");
     assert.equal(plan.error.details.path_chapter_number, 1);
+  });
+});
+
+describe("buildMoveScenePlan", () => {
+  const chapter = {
+    chapter_id: "ch-02-second",
+    sort_index: 2,
+    title: "Second",
+  };
+
+  test("moves a scene to a canonical chapter and timeline position", () => {
+    const syncDir = "/sync";
+    const filePath = path.join(syncDir, "projects", "book", "scenes", "loose.md");
+
+    const plan = buildMoveScenePlan(syncDir, filePath, {
+      scene_id: "sc-loose",
+      title: "Loose",
+      chapter_id: "ch-01-first",
+      chapter: 1,
+      chapter_title: "First",
+      timeline_position: 3,
+    }, {
+      chapter,
+      timelinePosition: 7,
+    });
+
+    assert.equal(plan.ok, true);
+    assert.equal(plan.meta.chapter_id, "ch-02-second");
+    assert.equal(plan.meta.chapter, 2);
+    assert.equal(plan.meta.chapter_title, "Second");
+    assert.equal(plan.meta.timeline_position, 7);
+    assert.equal(plan.previousChapterId, "ch-01-first");
+    assert.equal(plan.previousTimelinePosition, 3);
+    assert.deepEqual(plan.assignedChapter, chapter);
+  });
+
+  test("updates timeline position while preserving the current chapter", () => {
+    const syncDir = "/sync";
+    const filePath = path.join(syncDir, "projects", "book", "scenes", "loose.md");
+
+    const plan = buildMoveScenePlan(syncDir, filePath, {
+      scene_id: "sc-loose",
+      chapter_id: "ch-01-first",
+      chapter: 1,
+      chapter_title: "First",
+      timeline_position: 3,
+    }, {
+      currentScene: {
+        chapter_id: "ch-01-first",
+        chapter: 1,
+        chapter_title: "First",
+        timeline_position: 3,
+      },
+      timelinePosition: 4,
+    });
+
+    assert.equal(plan.ok, true);
+    assert.equal(plan.meta.chapter_id, "ch-01-first");
+    assert.equal(plan.meta.chapter, 1);
+    assert.equal(plan.meta.chapter_title, "First");
+    assert.equal(plan.meta.timeline_position, 4);
+    assert.equal(plan.previousTimelinePosition, 3);
+  });
+
+  test("rejects a move with no target chapter or timeline position", () => {
+    const syncDir = "/sync";
+    const filePath = path.join(syncDir, "projects", "book", "scenes", "loose.md");
+
+    const plan = buildMoveScenePlan(syncDir, filePath, {
+      scene_id: "sc-loose",
+    });
+
+    assert.equal(plan.ok, false);
+    assert.equal(plan.error.code, "VALIDATION_ERROR");
+    assert.match(plan.error.message, /Provide chapter_id/);
   });
 });

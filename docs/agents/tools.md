@@ -41,6 +41,8 @@
 - [`create_chapter`](#create_chapter)
 - [`rename_chapter`](#rename_chapter)
 - [`reorder_chapter`](#reorder_chapter)
+- [`attach_epigraph`](#attach_epigraph)
+- [`move_scene`](#move_scene)
 - [`assign_scene_to_chapter`](#assign_scene_to_chapter)
 - [`update_scene_metadata`](#update_scene_metadata)
 - [`update_character_sheet`](#update_character_sheet)
@@ -507,6 +509,31 @@ Reorder a canonical chapter through the explicit structure workflow. Updates can
 | `project_id` | `string` | Yes | Project the chapter belongs to (e.g. 'the-lamb'). |
 | `chapter_id` | `string` | Yes | Canonical chapter identifier. Use list_chapters to find valid values. |
 | `sort_index` | `integer` | Yes | New canonical chapter order within the project. Must be unused. |
+
+---
+
+## attach_epigraph
+
+Attach an existing canonical epigraph to a canonical chapter through the explicit structure workflow. Updates canonical epigraph linkage and explicit epigraph sidecar fields; it does not move, rename, or create epigraph source files or Scrivener-compatible folders.
+
+| Parameter | Type | Required | Description |
+| --- | --- | :---: | --- |
+| `project_id` | `string` | Yes | Project the epigraph belongs to (e.g. 'the-lamb'). |
+| `epigraph_id` | `string` | Yes | Canonical epigraph identifier. Use find_epigraphs to find valid values. |
+| `chapter_id` | `string` | Yes | Canonical chapter identifier. Use list_chapters to find valid values. |
+
+---
+
+## move_scene
+
+Move a scene through the explicit structure workflow. Updates canonical chapter linkage and/or timeline_position in the scene sidecar and index; it does not move, rename, or resequence scene files or Scrivener-compatible folders.
+
+| Parameter | Type | Required | Description |
+| --- | --- | :---: | --- |
+| `scene_id` | `string` | Yes | The scene_id to move (e.g. 'sc-011-sebastian'). |
+| `project_id` | `string` | Yes | Project the scene belongs to (e.g. 'the-lamb'). |
+| `chapter_id` | `string` | No | Optional canonical chapter identifier. Use list_chapters to find valid values. Omit to keep the current chapter. |
+| `timeline_position` | `integer` | No | Optional new position within the target chapter. Must be unused. |
 
 ---
 

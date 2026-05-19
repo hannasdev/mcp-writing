@@ -75,3 +75,59 @@ export function buildSceneChapterAssignmentPlan(syncDir, filePath, meta = {}, { 
     previousChapterId: meta.chapter_id ?? null,
   };
 }
+
+export function buildMoveScenePlan(syncDir, filePath, meta = {}, {
+  currentScene,
+  chapter,
+  timelinePosition,
+} = {}) {
+  if (chapter === undefined && timelinePosition === undefined) {
+    return {
+      ok: false,
+      error: {
+        code: "VALIDATION_ERROR",
+        message: "Provide chapter_id and/or timeline_position for move_scene.",
+      },
+    };
+  }
+
+  if (timelinePosition !== undefined && (!Number.isInteger(timelinePosition) || timelinePosition < 1)) {
+    return {
+      ok: false,
+      error: {
+        code: "VALIDATION_ERROR",
+        message: "timeline_position must be a positive integer.",
+        details: { timeline_position: timelinePosition },
+      },
+    };
+  }
+
+  const assignmentPlan = chapter === undefined
+    ? {
+      ok: true,
+      meta,
+      assignedChapter: {
+        chapter_id: currentScene?.chapter_id ?? meta.chapter_id ?? null,
+        sort_index: currentScene?.chapter ?? meta.chapter ?? null,
+        title: currentScene?.chapter_title ?? meta.chapter_title ?? null,
+      },
+      previousChapterId: meta.chapter_id ?? currentScene?.chapter_id ?? null,
+    }
+    : buildSceneChapterAssignmentPlan(syncDir, filePath, meta, { chapter });
+
+  if (!assignmentPlan.ok) return assignmentPlan;
+
+  const movedMeta = {
+    ...assignmentPlan.meta,
+    ...(timelinePosition !== undefined ? { timeline_position: timelinePosition } : {}),
+  };
+
+  return {
+    ok: true,
+    meta: movedMeta,
+    assignedChapter: assignmentPlan.assignedChapter,
+    previousChapterId: assignmentPlan.previousChapterId ?? currentScene?.chapter_id ?? null,
+    previousTimelinePosition: meta.timeline_position ?? currentScene?.timeline_position ?? null,
+    timelinePosition: timelinePosition ?? meta.timeline_position ?? currentScene?.timeline_position ?? null,
+  };
+}

@@ -310,6 +310,121 @@ export function buildReorderChapterPlan(db, {
   };
 }
 
+export function buildAttachEpigraphPlan(db, {
+  projectId,
+  epigraphId,
+  chapterId,
+  updatedAt = new Date().toISOString(),
+}) {
+  const normalizedEpigraphId = typeof epigraphId === "string" ? epigraphId.trim() : "";
+  const normalizedChapterId = typeof chapterId === "string" ? chapterId.trim() : "";
+
+  if (!normalizedEpigraphId) {
+    return {
+      ok: false,
+      error: {
+        code: "VALIDATION_ERROR",
+        message: "Provide a non-empty epigraph_id.",
+      },
+    };
+  }
+
+  if (!normalizedChapterId) {
+    return {
+      ok: false,
+      error: {
+        code: "VALIDATION_ERROR",
+        message: "Provide a non-empty chapter_id.",
+      },
+    };
+  }
+
+  const chapter = db.prepare(`
+    SELECT chapter_id, project_id, title, sort_index, logline, source_path, source_checksum, metadata_stale
+    FROM chapters
+    WHERE project_id = ? AND chapter_id = ?
+  `).get(projectId, normalizedChapterId);
+  if (!chapter) {
+    return {
+      ok: false,
+      error: {
+        code: "NOT_FOUND",
+        message: `Chapter '${normalizedChapterId}' not found in project '${projectId}'.`,
+        details: { project_id: projectId, chapter_id: normalizedChapterId },
+      },
+    };
+  }
+
+  const epigraph = db.prepare(`
+    SELECT epigraph_id, project_id, chapter_id, body, file_path, prose_checksum, metadata_stale
+    FROM epigraphs
+    WHERE project_id = ? AND epigraph_id = ?
+  `).get(projectId, normalizedEpigraphId);
+  if (!epigraph) {
+    return {
+      ok: false,
+      error: {
+        code: "NOT_FOUND",
+        message: `Epigraph '${normalizedEpigraphId}' not found in project '${projectId}'.`,
+        details: { project_id: projectId, epigraph_id: normalizedEpigraphId },
+      },
+    };
+  }
+
+  const existingForChapter = db.prepare(`
+    SELECT epigraph_id, chapter_id
+    FROM epigraphs
+    WHERE project_id = ? AND chapter_id = ? AND epigraph_id != ?
+  `).get(projectId, normalizedChapterId, normalizedEpigraphId);
+  if (existingForChapter) {
+    return {
+      ok: false,
+      error: {
+        code: "VALIDATION_ERROR",
+        message: `Chapter '${normalizedChapterId}' already has epigraph '${existingForChapter.epigraph_id}'.`,
+        details: {
+          project_id: projectId,
+          chapter_id: normalizedChapterId,
+          epigraph_id: normalizedEpigraphId,
+          existing_epigraph_id: existingForChapter.epigraph_id,
+          next_step: "Use find_epigraphs to inspect the current chapter epigraph before reattaching another one.",
+        },
+      },
+    };
+  }
+
+  const previousChapter = db.prepare(`
+    SELECT chapter_id, title, sort_index
+    FROM chapters
+    WHERE project_id = ? AND chapter_id = ?
+  `).get(projectId, epigraph.chapter_id);
+
+  const diagnostics = [];
+  if (epigraph.file_path) {
+    diagnostics.push({
+      code: "REPRESENTATION_NOT_MOVED",
+      severity: "warning",
+      message: "Attached canonical epigraph state and explicit epigraph sidecar fields only; the existing epigraph source file was not moved.",
+      next_step: "Run diagnose_structure after sync if folder-derived structure still reports the previous chapter.",
+      details: {
+        file_path: epigraph.file_path,
+      },
+    });
+  }
+
+  return {
+    ok: true,
+    previousChapter,
+    chapter,
+    epigraph: {
+      ...epigraph,
+      chapter_id: normalizedChapterId,
+      updated_at: updatedAt,
+    },
+    diagnostics,
+  };
+}
+
 export function insertCanonicalChapter(db, chapter) {
   db.prepare(`
     INSERT INTO chapters (
@@ -351,6 +466,20 @@ export function renameCanonicalChapter(db, chapter) {
     chapter.updated_at,
     chapter.project_id,
     chapter.chapter_id
+  );
+}
+
+export function attachCanonicalEpigraph(db, epigraph) {
+  db.prepare(`
+    UPDATE epigraphs
+    SET chapter_id = ?,
+        updated_at = ?
+    WHERE project_id = ? AND epigraph_id = ?
+  `).run(
+    epigraph.chapter_id,
+    epigraph.updated_at,
+    epigraph.project_id,
+    epigraph.epigraph_id
   );
 }
 

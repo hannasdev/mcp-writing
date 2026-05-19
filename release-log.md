@@ -6,6 +6,22 @@ This complements `CHANGELOG.md`:
 - `CHANGELOG.md` is technical and release-oriented.
 - This log is plain-language and outcome-oriented.
 
+### 2026-05-19 — Add explicit scene move
+
+- What changed: Added a `move_scene` workflow for moving an existing scene to a canonical chapter and/or unused `timeline_position` without moving the source file.
+- Why it matters: Authors and AI agents can now express simple scene placement changes through a named structure operation, with validation for occupied positions and diagnostics when folder representation may need follow-up.
+- Who is affected: Authors, maintainers, and AI agents working on Target Architecture Migration M7 or explicit scene/chapter structure workflows.
+- Action needed: Use `list_chapters` to choose a canonical `chapter_id` when changing chapters, then call `move_scene` with a target chapter and/or `timeline_position`; run `diagnose_structure` if folder-derived structure may still reflect the old placement.
+- PR: TBD
+
+### 2026-05-18 — Add explicit epigraph attachment
+
+- What changed: Added an `attach_epigraph` workflow for moving an existing canonical epigraph relationship to another canonical chapter and refreshing explicit epigraph sidecar linkage.
+- Why it matters: Authors and AI agents can now repair or adjust chapter-opening epigraph placement through a named structure operation, with clear diagnostics when the source-file representation may need follow-up.
+- Who is affected: Authors, maintainers, and AI agents working on Target Architecture Migration M7 or explicit chapter/epigraph structure workflows.
+- Action needed: Use `find_epigraphs` to choose an existing `epigraph_id` and `list_chapters` to choose a canonical `chapter_id`, then call `attach_epigraph`; run `diagnose_structure` if folder-derived structure may still reflect the old attachment.
+- PR: TBD
+
 ### 2026-05-18 — Add explicit chapter reorder
 
 - What changed: Added a `reorder_chapter` workflow for changing canonical chapter order and refreshing explicit scene `chapter` compatibility fields.

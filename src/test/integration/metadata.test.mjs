@@ -513,6 +513,209 @@ describe("reorder_chapter tool", () => {
   });
 });
 
+describe("attach_epigraph tool", () => {
+  test("attaches an existing canonical epigraph to another chapter and updates explicit sidecar linkage", async () => {
+    const draftDir = path.join(writeSyncDir, "projects", "test-novel", "scenes", "Draft");
+    const sourceDir = path.join(draftDir, "89-M7 Epigraph Source");
+    fs.mkdirSync(sourceDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(sourceDir, "epigraph.md"),
+      "---\nepigraph_id: epi-m7-attach\n---\nM7 attach epigraph prose.",
+      "utf8"
+    );
+
+    await callWriteTool("sync");
+
+    const createText = await callWriteTool("create_chapter", {
+      project_id: "test-novel",
+      title: "M7 Epigraph Target",
+      sort_index: 88,
+    });
+    const createParsed = JSON.parse(createText);
+    assert.equal(createParsed.ok, true);
+
+    const sourceEpigraphsText = await callWriteTool("find_epigraphs", {
+      project_id: "test-novel",
+      chapter: 89,
+    });
+    const sourceEpigraphsParsed = JSON.parse(sourceEpigraphsText);
+    const sourceEpigraph = sourceEpigraphsParsed.results.find((row) => row.epigraph_id === "epi-m7-attach");
+    assert.ok(sourceEpigraph);
+
+    const attachText = await callWriteTool("attach_epigraph", {
+      project_id: "test-novel",
+      epigraph_id: "epi-m7-attach",
+      chapter_id: createParsed.chapter.chapter_id,
+    });
+    const attachParsed = JSON.parse(attachText);
+
+    assert.equal(attachParsed.ok, true);
+    assert.equal(attachParsed.action, "attached");
+    assert.equal(attachParsed.epigraph.epigraph_id, "epi-m7-attach");
+    assert.equal(attachParsed.epigraph.chapter_id, createParsed.chapter.chapter_id);
+    assert.equal(attachParsed.previous_chapter.chapter_id, sourceEpigraph.chapter_id);
+    assert.equal(attachParsed.updated_sidecar_count, 1);
+    assert.equal(attachParsed.diagnostics[0].code, "REPRESENTATION_NOT_MOVED");
+
+    const sidecarFile = path.join(sourceDir, "epigraph.meta.yaml");
+    const sidecar = yaml.load(fs.readFileSync(sidecarFile, "utf8"));
+    assert.equal(sidecar.kind, "epigraph");
+    assert.equal(sidecar.epigraph_id, "epi-m7-attach");
+    assert.equal(sidecar.chapter_id, createParsed.chapter.chapter_id);
+    assert.equal(sidecar.chapter, 88);
+    assert.equal(sidecar.chapter_title, "M7 Epigraph Target");
+
+    const targetEpigraphsText = await callWriteTool("find_epigraphs", {
+      project_id: "test-novel",
+      chapter_id: createParsed.chapter.chapter_id,
+    });
+    const targetEpigraphsParsed = JSON.parse(targetEpigraphsText);
+    assert.ok(targetEpigraphsParsed.results.some((row) => row.epigraph_id === "epi-m7-attach"));
+  });
+
+  test("rejects attaching an epigraph to a chapter that already has one", async () => {
+    const draftDir = path.join(writeSyncDir, "projects", "test-novel", "scenes", "Draft");
+    const sourceDir = path.join(draftDir, "87-M7 Attach Conflict Source");
+    const targetDir = path.join(draftDir, "86-M7 Attach Conflict Target");
+    fs.mkdirSync(sourceDir, { recursive: true });
+    fs.mkdirSync(targetDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(sourceDir, "epigraph.md"),
+      "---\nepigraph_id: epi-m7-conflict-source\n---\nSource conflict epigraph.",
+      "utf8"
+    );
+    fs.writeFileSync(
+      path.join(targetDir, "epigraph.md"),
+      "---\nepigraph_id: epi-m7-conflict-target\n---\nTarget conflict epigraph.",
+      "utf8"
+    );
+
+    await callWriteTool("sync");
+
+    const targetEpigraphsText = await callWriteTool("find_epigraphs", {
+      project_id: "test-novel",
+      chapter: 86,
+    });
+    const targetEpigraphsParsed = JSON.parse(targetEpigraphsText);
+    const targetEpigraph = targetEpigraphsParsed.results.find((row) => row.epigraph_id === "epi-m7-conflict-target");
+    assert.ok(targetEpigraph);
+
+    const attachText = await callWriteTool("attach_epigraph", {
+      project_id: "test-novel",
+      epigraph_id: "epi-m7-conflict-source",
+      chapter_id: targetEpigraph.chapter_id,
+    });
+    const attachParsed = JSON.parse(attachText);
+
+    assert.equal(attachParsed.ok, false);
+    assert.equal(attachParsed.error.code, "VALIDATION_ERROR");
+    assert.equal(attachParsed.error.details.existing_epigraph_id, "epi-m7-conflict-target");
+    assert.match(attachParsed.error.details.next_step, /find_epigraphs/);
+  });
+});
+
+describe("move_scene tool", () => {
+  test("moves a scene to a canonical chapter and timeline position", async () => {
+    const sceneDir = path.join(writeSyncDir, "projects", "test-novel", "scenes");
+    fs.mkdirSync(sceneDir, { recursive: true });
+    const scenePath = path.join(sceneDir, "sc-m7-move.md");
+    fs.writeFileSync(
+      scenePath,
+      "---\nscene_id: sc-m7-move\ntitle: Move M7 Scene\ntimeline_position: 3\n---\nM7 move prose.",
+      "utf8"
+    );
+
+    await callWriteTool("sync");
+
+    const createText = await callWriteTool("create_chapter", {
+      project_id: "test-novel",
+      title: "M7 Move Target",
+      sort_index: 85,
+    });
+    const createParsed = JSON.parse(createText);
+    assert.equal(createParsed.ok, true);
+
+    const moveText = await callWriteTool("move_scene", {
+      scene_id: "sc-m7-move",
+      project_id: "test-novel",
+      chapter_id: createParsed.chapter.chapter_id,
+      timeline_position: 12,
+    });
+    const moveParsed = JSON.parse(moveText);
+
+    assert.equal(moveParsed.ok, true);
+    assert.equal(moveParsed.action, "moved");
+    assert.equal(moveParsed.scene_id, "sc-m7-move");
+    assert.equal(moveParsed.chapter.chapter_id, createParsed.chapter.chapter_id);
+    assert.equal(moveParsed.timeline_position, 12);
+    assert.equal(moveParsed.previous_timeline_position, 3);
+    assert.equal(moveParsed.diagnostics[0].code, "REPRESENTATION_NOT_MOVED");
+
+    const sidecarFile = path.join(sceneDir, "sc-m7-move.meta.yaml");
+    const sidecar = yaml.load(fs.readFileSync(sidecarFile, "utf8"));
+    assert.equal(sidecar.chapter_id, createParsed.chapter.chapter_id);
+    assert.equal(sidecar.chapter, 85);
+    assert.equal(sidecar.chapter_title, "M7 Move Target");
+    assert.equal(sidecar.timeline_position, 12);
+
+    const findText = await callWriteTool("find_scenes", {
+      project_id: "test-novel",
+      chapter_id: createParsed.chapter.chapter_id,
+    });
+    const findParsed = JSON.parse(findText);
+    const movedScene = findParsed.results.find((row) => row.scene_id === "sc-m7-move");
+    assert.equal(movedScene.timeline_position, 12);
+    assert.equal(movedScene.chapter_id, createParsed.chapter.chapter_id);
+  });
+
+  test("rejects moving a scene to an occupied timeline position in the target chapter", async () => {
+    const sceneDir = path.join(writeSyncDir, "projects", "test-novel", "scenes");
+    fs.mkdirSync(sceneDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(sceneDir, "sc-m7-move-occupied-a.md"),
+      "---\nscene_id: sc-m7-move-occupied-a\ntitle: Move Occupied A\n---\nOccupied A prose.",
+      "utf8"
+    );
+    fs.writeFileSync(
+      path.join(sceneDir, "sc-m7-move-occupied-b.md"),
+      "---\nscene_id: sc-m7-move-occupied-b\ntitle: Move Occupied B\n---\nOccupied B prose.",
+      "utf8"
+    );
+
+    await callWriteTool("sync");
+
+    const createText = await callWriteTool("create_chapter", {
+      project_id: "test-novel",
+      title: "M7 Move Conflict Target",
+      sort_index: 84,
+    });
+    const createParsed = JSON.parse(createText);
+    assert.equal(createParsed.ok, true);
+
+    const firstMoveText = await callWriteTool("move_scene", {
+      scene_id: "sc-m7-move-occupied-a",
+      project_id: "test-novel",
+      chapter_id: createParsed.chapter.chapter_id,
+      timeline_position: 8,
+    });
+    const firstMoveParsed = JSON.parse(firstMoveText);
+    assert.equal(firstMoveParsed.ok, true);
+
+    const secondMoveText = await callWriteTool("move_scene", {
+      scene_id: "sc-m7-move-occupied-b",
+      project_id: "test-novel",
+      chapter_id: createParsed.chapter.chapter_id,
+      timeline_position: 8,
+    });
+    const secondMoveParsed = JSON.parse(secondMoveText);
+
+    assert.equal(secondMoveParsed.ok, false);
+    assert.equal(secondMoveParsed.error.code, "VALIDATION_ERROR");
+    assert.equal(secondMoveParsed.error.details.existing_scene_id, "sc-m7-move-occupied-a");
+    assert.match(secondMoveParsed.error.details.next_step, /Automatic resequencing/);
+  });
+});
+
 describe("update_character_sheet tool", () => {
   test("updates arc_summary and reflects in get_character_sheet", async () => {
     const text = await callWriteTool("update_character_sheet", {
