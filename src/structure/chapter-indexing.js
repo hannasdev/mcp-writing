@@ -202,7 +202,15 @@ export function resolveIndexedChapterForFile(db, {
   relativePath,
   meta = {},
   chapterStructure,
+  managedStructure = false,
 }) {
+  const existingScene = meta.scene_id
+    ? db.prepare(`
+      SELECT chapter_id, chapter, chapter_title
+      FROM scenes
+      WHERE scene_id = ? AND project_id = ?
+    `).get(meta.scene_id, projectId)
+    : null;
   let chapterId = meta.chapter_id ?? chapterStructure.chapter?.chapter_id ?? null;
   let chapterSortIndex = chapterStructure.chapter?.sort_index ?? meta.chapter ?? null;
   let chapterTitle = chapterStructure.chapter?.title ?? meta.chapter_title ?? (chapterSortIndex != null ? `Chapter ${chapterSortIndex}` : null);
@@ -212,6 +220,56 @@ export function resolveIndexedChapterForFile(db, {
   let shouldUpsertChapter = false;
   const explicitSceneChapterId = !chapterStructure.isEpigraph ? meta.chapter_id ?? null : null;
   let explicitSceneCanonicalChapter = null;
+
+  if (managedStructure && !chapterStructure.isEpigraph) {
+    let managedWarning = null;
+    if (existingScene?.chapter_id) {
+      const canonicalChapter = db.prepare(`
+        SELECT chapter_id, sort_index, title
+        FROM chapters
+        WHERE chapter_id = ? AND project_id = ?
+      `).get(existingScene.chapter_id, projectId);
+      if (canonicalChapter) {
+        chapterId = canonicalChapter.chapter_id;
+        chapterSortIndex = canonicalChapter.sort_index ?? null;
+        chapterTitle = canonicalChapter.title ?? null;
+        const observedChapterId = meta.chapter_id ?? chapterStructure.chapter?.chapter_id ?? null;
+        const observedSortIndex = chapterStructure.chapter?.sort_index ?? meta.chapter ?? null;
+        const observedTitle = chapterStructure.chapter?.title ?? meta.chapter_title ?? null;
+        if (
+          (observedChapterId && observedChapterId !== chapterId)
+          || (observedSortIndex != null && observedSortIndex !== chapterSortIndex)
+          || (observedTitle && observedTitle !== chapterTitle)
+        ) {
+          managedWarning = `Managed structure sync ignored file-derived chapter linkage for scene '${meta.scene_id}': ${relativePath}`;
+        }
+      } else {
+        chapterId = null;
+        chapterSortIndex = null;
+        chapterTitle = null;
+        managedWarning = `Scene references unknown chapter_id '${existingScene.chapter_id}': ${relativePath}`;
+      }
+    } else {
+      const observedChapterId = meta.chapter_id ?? chapterStructure.chapter?.chapter_id ?? null;
+      const observedSortIndex = chapterStructure.chapter?.sort_index ?? meta.chapter ?? null;
+      const observedTitle = chapterStructure.chapter?.title ?? meta.chapter_title ?? null;
+      if (observedChapterId || observedSortIndex != null || observedTitle) {
+        managedWarning = `Managed structure sync ignored file-derived chapter linkage for scene '${meta.scene_id}': ${relativePath}`;
+      }
+      chapterId = null;
+      chapterSortIndex = null;
+      chapterTitle = null;
+    }
+
+    return {
+      chapterId,
+      chapterSortIndex,
+      chapterTitle,
+      chapterSourcePath,
+      chapterWarning: managedWarning,
+      upsertChapter: null,
+    };
+  }
 
   if (explicitSceneChapterId && !chapterStructure.chapter) {
     explicitSceneCanonicalChapter = db.prepare(`

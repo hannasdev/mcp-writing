@@ -32,7 +32,7 @@ export function registerSyncTools(s, {
   deriveLoglineFromProse,
   inferCharacterIdsFromProse,
 }) {
-  s.tool("sync", "Re-scan the sync folder and update the scene/character/place index from disk. Call this after making edits in Scrivener or updating sidecar files outside the MCP.", {}, async () => {
+  s.tool("sync", "Re-scan the sync folder and update derived scene/character/place indexes from disk. For already managed projects, sync reports file-derived chapter or epigraph drift without adopting it as canonical structure; use explicit import, repair, or structure tools for structural changes.", {}, async () => {
     const result = syncAll(db, SYNC_DIR, { writable: SYNC_DIR_WRITABLE });
     const parts = [`Sync complete. ${result.indexed} scenes indexed. ${result.staleMarked} scenes marked stale.`];
     if (result.staleMarked > 0) {

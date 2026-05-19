@@ -78,7 +78,7 @@ _No parameters._
 
 ## sync
 
-Re-scan the sync folder and update the scene/character/place index from disk. Call this after making edits in Scrivener or updating sidecar files outside the MCP.
+Re-scan the sync folder and update derived scene/character/place indexes from disk. For already managed projects, sync reports file-derived chapter or epigraph drift without adopting it as canonical structure; use explicit import, repair, or structure tools for structural changes.
 
 _No parameters._
 

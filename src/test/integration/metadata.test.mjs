@@ -494,7 +494,8 @@ describe("reorder_chapter tool", () => {
 
 describe("attach_epigraph tool", () => {
   test("attaches an existing canonical epigraph to another chapter and updates explicit sidecar linkage", async () => {
-    const draftDir = path.join(writeSyncDir, "projects", "test-novel", "scenes", "Draft");
+    const projectId = "m7-epigraph-attach";
+    const draftDir = path.join(writeSyncDir, "projects", projectId, "scenes", "Draft");
     const sourceDir = path.join(draftDir, "89-M7 Epigraph Source");
     fs.mkdirSync(sourceDir, { recursive: true });
     fs.writeFileSync(
@@ -506,7 +507,7 @@ describe("attach_epigraph tool", () => {
     await callWriteTool("sync");
 
     const createText = await callWriteTool("create_chapter", {
-      project_id: "test-novel",
+      project_id: projectId,
       title: "M7 Epigraph Target",
       sort_index: 88,
     });
@@ -514,7 +515,7 @@ describe("attach_epigraph tool", () => {
     assert.equal(createParsed.ok, true);
 
     const sourceEpigraphsText = await callWriteTool("find_epigraphs", {
-      project_id: "test-novel",
+      project_id: projectId,
       chapter: 89,
     });
     const sourceEpigraphsParsed = JSON.parse(sourceEpigraphsText);
@@ -522,7 +523,7 @@ describe("attach_epigraph tool", () => {
     assert.ok(sourceEpigraph);
 
     const attachText = await callWriteTool("attach_epigraph", {
-      project_id: "test-novel",
+      project_id: projectId,
       epigraph_id: "epi-m7-attach",
       chapter_id: createParsed.chapter.chapter_id,
     });
@@ -545,7 +546,7 @@ describe("attach_epigraph tool", () => {
     assert.equal(sidecar.chapter_title, "M7 Epigraph Target");
 
     const targetEpigraphsText = await callWriteTool("find_epigraphs", {
-      project_id: "test-novel",
+      project_id: projectId,
       chapter_id: createParsed.chapter.chapter_id,
     });
     const targetEpigraphsParsed = JSON.parse(targetEpigraphsText);
@@ -553,7 +554,8 @@ describe("attach_epigraph tool", () => {
   });
 
   test("rejects attaching an epigraph to a chapter that already has one", async () => {
-    const draftDir = path.join(writeSyncDir, "projects", "test-novel", "scenes", "Draft");
+    const projectId = "m7-epigraph-conflict";
+    const draftDir = path.join(writeSyncDir, "projects", projectId, "scenes", "Draft");
     const sourceDir = path.join(draftDir, "87-M7 Attach Conflict Source");
     const targetDir = path.join(draftDir, "86-M7 Attach Conflict Target");
     fs.mkdirSync(sourceDir, { recursive: true });
@@ -572,7 +574,7 @@ describe("attach_epigraph tool", () => {
     await callWriteTool("sync");
 
     const targetEpigraphsText = await callWriteTool("find_epigraphs", {
-      project_id: "test-novel",
+      project_id: projectId,
       chapter: 86,
     });
     const targetEpigraphsParsed = JSON.parse(targetEpigraphsText);
@@ -580,7 +582,7 @@ describe("attach_epigraph tool", () => {
     assert.ok(targetEpigraph);
 
     const attachText = await callWriteTool("attach_epigraph", {
-      project_id: "test-novel",
+      project_id: projectId,
       epigraph_id: "epi-m7-conflict-source",
       chapter_id: targetEpigraph.chapter_id,
     });

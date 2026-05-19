@@ -6,6 +6,14 @@ This complements `CHANGELOG.md`:
 - `CHANGELOG.md` is technical and release-oriented.
 - This log is plain-language and outcome-oriented.
 
+### 2026-05-19 — Keep ordinary sync from adopting structure drift
+
+- What changed: For already managed projects, `sync` now preserves canonical chapter and epigraph state in SQLite and reports file-derived structure drift from folders, sidecars, or epigraph metadata instead of silently adopting it.
+- Why it matters: Daily sync can refresh indexes after external edits without turning compatibility files or folder layout into hidden structural authority.
+- Who is affected: Authors, maintainers, and AI agents working with Scrivener sync folders or direct sidecar/folder edits after a project has canonical structure.
+- Action needed: Use explicit import, repair, or structure tools for intentional chapter and epigraph changes; treat sync warnings as drift to review.
+- PR: TBD
+
 ### 2026-05-19 — Route scene structure edits through explicit tools
 
 - What changed: `update_scene_metadata` now rejects structural fields (`part`, `chapter`, `chapter_id`, and `timeline_position`) and points callers to `assign_scene_to_chapter` or `move_scene`; those scene structure tools now persist SQLite canonical state before mirroring sidecar compatibility fields.
