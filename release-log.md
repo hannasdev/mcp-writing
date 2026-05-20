@@ -6,6 +6,14 @@ This complements `CHANGELOG.md`:
 - `CHANGELOG.md` is technical and release-oriented.
 - This log is plain-language and outcome-oriented.
 
+### 2026-05-20 — Add security linting to the PR gate
+
+- What changed: Added Node security linting to the existing ESLint workflow, with high-confidence unsafe patterns failing lint, noisy project-specific hotspot rules tuned out, and a deferred filesystem-boundary hardening initiative documented for follow-up.
+- Why it matters: Maintainers and AI-assisted contributors get automated review coverage for common JavaScript security mistakes without burying normal PR checks in expected filesystem and metadata warnings.
+- Who is affected: Maintainers and contributors preparing pull requests.
+- Action needed: Run `npm run check:pr` before opening or updating a PR; review any new security lint failures as part of normal code review.
+- PR: [#211](https://github.com/hannasdev/mcp-writing/pull/211)
+
 ### 2026-05-19 — Clarify numeric chapter compatibility aliases
 
 - What changed: Numeric `chapter` and `chapters` inputs are now explicitly documented as read-scope compatibility aliases that resolve through canonical chapter identity; structural changes continue to use `chapter_id` and named structure workflows.
