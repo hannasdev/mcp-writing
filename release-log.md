@@ -12,7 +12,7 @@ This complements `CHANGELOG.md`:
 - Why it matters: Maintainers and AI-assisted contributors get automated review coverage for common JavaScript security mistakes without burying normal PR checks in expected filesystem and metadata warnings.
 - Who is affected: Maintainers and contributors preparing pull requests.
 - Action needed: Run `npm run check:pr` before opening or updating a PR; review any new security lint failures as part of normal code review.
-- PR: TBD
+- PR: [#211](https://github.com/hannasdev/mcp-writing/pull/211)
 
 ### 2026-05-19 — Clarify numeric chapter compatibility aliases
 
