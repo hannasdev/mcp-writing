@@ -437,6 +437,36 @@ describe("runStructureDiagnostics", () => {
     }
   });
 
+  test("refuses to trust a tampered structure export with a stale embedded checksum", () => {
+    const syncDir = fs.mkdtempSync(path.join(os.tmpdir(), "structure-export-tampered-"));
+    const db = openDb(":memory:");
+    try {
+      seedProject(db, "test-novel");
+      seedChapter(db, {
+        projectId: "test-novel",
+        chapterId: "ch-01-arrival",
+        sortIndex: 1,
+        title: "Arrival",
+      });
+
+      const exportPath = writeCurrentStructureExport(db, syncDir, "test-novel");
+      const snapshot = JSON.parse(fs.readFileSync(exportPath, "utf8"));
+      snapshot.chapters[0].title = "Tampered Arrival";
+      fs.writeFileSync(exportPath, JSON.stringify(snapshot, null, 2), "utf8");
+
+      const result = runStructureDiagnostics(db, { syncDir, projectId: "test-novel" });
+
+      assert.equal(result.ok, false);
+      assert.equal(result.summary.by_type.structure_export_checksum_mismatch, 1);
+      assert.equal(result.summary.by_type.structure_export_stale, undefined);
+      assert.equal(result.checked.structure_exports[0].trusted, false);
+      assert.equal(result.checked.structure_exports[0].status, "checksum_mismatch");
+    } finally {
+      db.close();
+      fs.rmSync(syncDir, { recursive: true, force: true });
+    }
+  });
+
   test("reports current snapshot failures while checking structure export trust", () => {
     const syncDir = fs.mkdtempSync(path.join(os.tmpdir(), "structure-export-snapshot-failure-"));
     const db = openDb(":memory:");

@@ -4,6 +4,7 @@ import matter from "gray-matter";
 import yaml from "js-yaml";
 import {
   buildStructureExport,
+  computeStructureChecksum,
   defaultStructureExportFileName,
   STRUCTURE_EXPORT_SCHEMA_VERSION,
 } from "./structure-export.js";
@@ -571,6 +572,31 @@ function diagnoseStructureExports(db, diagnostics, {
     }
 
     const exportedChecksum = parsed.export?.structure_checksum ?? null;
+    const computedExportChecksum = computeStructureChecksum(parsed);
+    if (!exportedChecksum || exportedChecksum !== computedExportChecksum) {
+      addDiagnostic(
+        diagnostics,
+        "structure_export_checksum_mismatch",
+        `Structure export for project "${expectedProjectId}" does not match its embedded checksum.`,
+        {
+          project_id: expectedProjectId,
+          export_path: exportPath,
+          exported_checksum: exportedChecksum,
+          computed_checksum: computedExportChecksum,
+        },
+        {
+          nextStep: "Regenerate the export with export_structure_snapshot before using it for recovery.",
+        }
+      );
+      exportChecks.push({
+        project_id: expectedProjectId,
+        export_path: exportPath,
+        trusted: false,
+        status: "checksum_mismatch",
+      });
+      continue;
+    }
+
     const currentChecksum = built.snapshot.export.structure_checksum;
     if (exportedChecksum !== currentChecksum) {
       addDiagnostic(
