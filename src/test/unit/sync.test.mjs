@@ -578,6 +578,69 @@ describe("structure observation", () => {
       db.close();
     }
   });
+
+  test("managed direct reindex preserves existing canonical scene ordering over sidecar fields", () => {
+    const syncDir = "/tmp/sync";
+    const filePath = path.join(syncDir, "projects", "test-novel", "part-1", "chapter-1", "sc-001.md");
+    const db = openDb(":memory:");
+    try {
+      db.prepare(`INSERT INTO projects (project_id, universe_id, name) VALUES (?, ?, ?)`)
+        .run("test-novel", null, "Test Novel");
+      db.prepare(`
+        INSERT INTO chapters (
+          chapter_id, project_id, title, sort_index, source_path, source_checksum, metadata_stale, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).run("ch-01-chapter-1", "test-novel", "Chapter 1", 1, null, null, 0, "2026-05-19T12:00:00.000Z");
+      db.prepare(`
+        INSERT INTO scenes (
+          scene_id, project_id, chapter_id, title, part, chapter, chapter_title,
+          timeline_position, file_path, prose_checksum, metadata_stale, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        "sc-001",
+        "test-novel",
+        "ch-01-chapter-1",
+        "Scene",
+        2,
+        1,
+        "Chapter 1",
+        7,
+        filePath,
+        "old-checksum",
+        0,
+        "2026-05-19T12:00:00.000Z"
+      );
+
+      const result = indexSceneFile(
+        db,
+        syncDir,
+        filePath,
+        {
+          scene_id: "sc-001",
+          title: "Scene",
+          part: 9,
+          chapter_id: "ch-01-chapter-1",
+          chapter: 1,
+          chapter_title: "Chapter 1",
+          timeline_position: 99,
+        },
+        "Updated prose.",
+        { managedStructure: true }
+      );
+
+      const scene = db.prepare(`
+        SELECT part, timeline_position
+        FROM scenes
+        WHERE scene_id = ? AND project_id = ?
+      `).get("sc-001", "test-novel");
+
+      assert.equal(scene.part, 2);
+      assert.equal(scene.timeline_position, 7);
+      assert.ok(result.canonicalIndexPlan.diagnostics.some((diagnostic) => diagnostic.message.includes("ignored file-derived scene ordering")));
+    } finally {
+      db.close();
+    }
+  });
 });
 
 describe("warning summary", () => {
@@ -2612,6 +2675,93 @@ describe("syncAll", () => {
       db.prepare(`SELECT COUNT(*) AS count FROM epigraph_characters WHERE project_id = 'test-novel' AND epigraph_id = 'epi-001'`).get().count,
       1
     );
+
+    db.close();
+    fs.rmSync(dir, { recursive: true });
+  });
+
+  test("managed sync refreshes a moved epigraph file without adopting renamed folder structure", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sync-"));
+    const db = openDb(":memory:");
+    const chapterDir = path.join(dir, "projects", "test-novel", "Draft", "01-Old chapter");
+    const renamedChapterDir = path.join(dir, "projects", "test-novel", "Draft", "01-Renamed chapter");
+    fs.mkdirSync(chapterDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(chapterDir, "sc-001.md"),
+      "---\nscene_id: sc-001\ntitle: Arrival\n---\nScene prose."
+    );
+    fs.writeFileSync(
+      path.join(chapterDir, "epigraph.md"),
+      "---\nkind: epigraph\n---\nOriginal epigraph."
+    );
+
+    syncAll(db, dir, { quiet: true });
+    const original = db.prepare(`
+      SELECT epigraph_id, chapter_id, file_path, body
+      FROM epigraphs
+      WHERE project_id = 'test-novel'
+    `).get();
+    assert.equal(original.chapter_id, "ch-01-old-chapter");
+
+    fs.renameSync(chapterDir, renamedChapterDir);
+    fs.writeFileSync(
+      path.join(renamedChapterDir, "epigraph.md"),
+      "---\nkind: epigraph\n---\nMoved epigraph prose."
+    );
+
+    const result = syncAll(db, dir, { quiet: true });
+    const epigraph = db.prepare(`
+      SELECT epigraph_id, chapter_id, file_path, body
+      FROM epigraphs
+      WHERE project_id = 'test-novel'
+    `).get();
+
+    assert.equal(result.epigraphsIndexed, 1);
+    assert.equal(epigraph.epigraph_id, original.epigraph_id);
+    assert.equal(epigraph.chapter_id, "ch-01-old-chapter");
+    assert.equal(epigraph.file_path, path.join(renamedChapterDir, "epigraph.md"));
+    assert.equal(epigraph.body, "Moved epigraph prose.");
+    assert.ok(result.warnings.some((warning) => warning.includes("preserved canonical epigraph")));
+
+    db.close();
+    fs.rmSync(dir, { recursive: true });
+  });
+
+  test("managed sync ignores an extra epigraph file while canonical epigraph file still exists", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sync-"));
+    const db = openDb(":memory:");
+    const chapterDir = path.join(dir, "projects", "test-novel", "Draft", "01-Only chapter");
+    fs.mkdirSync(chapterDir, { recursive: true });
+    const originalPath = path.join(chapterDir, "epigraph.md");
+    fs.writeFileSync(
+      path.join(chapterDir, "sc-001.md"),
+      "---\nscene_id: sc-001\ntitle: Arrival\n---\nScene prose."
+    );
+    fs.writeFileSync(
+      originalPath,
+      "---\nepigraph_id: epi-original\n---\nOriginal epigraph."
+    );
+
+    syncAll(db, dir, { quiet: true });
+    fs.writeFileSync(
+      path.join(chapterDir, "extra-epigraph.md"),
+      "---\nkind: epigraph\n---\nExtra epigraph should not replace canonical state."
+    );
+
+    const result = syncAll(db, dir, { quiet: true });
+    const epigraphs = db.prepare(`
+      SELECT epigraph_id, chapter_id, file_path, body
+      FROM epigraphs
+      WHERE project_id = 'test-novel'
+      ORDER BY epigraph_id
+    `).all();
+
+    assert.equal(result.epigraphsIndexed, 1);
+    assert.deepEqual(
+      epigraphs.map((row) => [row.epigraph_id, row.chapter_id, row.file_path, row.body]),
+      [["epi-original", "ch-01-only-chapter", originalPath, "Original epigraph."]]
+    );
+    assert.ok(result.warnings.some((warning) => warning.includes("Managed structure sync ignored file-derived epigraph linkage")));
 
     db.close();
     fs.rmSync(dir, { recursive: true });

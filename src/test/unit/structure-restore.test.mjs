@@ -25,6 +25,15 @@ function writeProseFile(syncDir, relativePath, prose) {
   return filePath;
 }
 
+function checksumProse(prose) {
+  let hash = 5381;
+  for (let i = 0; i < prose.length; i++) {
+    hash = ((hash << 5) + hash) ^ prose.charCodeAt(i);
+    hash = hash >>> 0;
+  }
+  return hash.toString(16);
+}
+
 function seedTrustedExportFixture(db, syncDir) {
   const updatedAt = "2026-05-19T12:00:00.000Z";
   seedProject(db);
@@ -69,7 +78,7 @@ function seedTrustedExportFixture(db, syncDir) {
     "Arrival",
     1,
     scenePath,
-    "scene-checksum",
+    checksumProse("Scene prose."),
     0,
     updatedAt
   );
@@ -83,7 +92,7 @@ function seedTrustedExportFixture(db, syncDir) {
     "ch-01-arrival",
     "Epigraph body.",
     epigraphPath,
-    "epigraph-checksum",
+    checksumProse("Epigraph body."),
     0,
     updatedAt
   );
@@ -213,6 +222,58 @@ describe("restoreStructureFromExport", () => {
         `).get("test-novel", "ch-01-arrival").title,
         "Arrival"
       );
+    } finally {
+      db.close();
+      fs.rmSync(syncDir, { recursive: true, force: true });
+    }
+  });
+
+  test("refuses restore when exported prose file checksums no longer match disk", () => {
+    const syncDir = fs.mkdtempSync(path.join(os.tmpdir(), "structure-restore-stale-file-"));
+    const db = openDb(":memory:");
+    try {
+      const { scenePath, epigraphPath } = seedTrustedExportFixture(db, syncDir);
+      fs.writeFileSync(scenePath, "Scene prose changed after export.", "utf8");
+      fs.writeFileSync(epigraphPath, "---\nepigraph_id: epi-arrival\n---\nEpigraph changed after export.", "utf8");
+
+      const result = restoreStructureFromExport(db, {
+        syncDir,
+        projectId: "test-novel",
+        dryRun: false,
+      });
+
+      assert.equal(result.ok, false);
+      assert.equal(result.action, "restore_refused");
+      assert.equal(result.summary.by_type.structure_export_file_checksum_mismatch, 2);
+      assert.equal(
+        db.prepare(`
+          SELECT body FROM epigraphs WHERE project_id = ? AND epigraph_id = ?
+        `).get("test-novel", "epi-arrival").body,
+        "Epigraph body."
+      );
+    } finally {
+      db.close();
+      fs.rmSync(syncDir, { recursive: true, force: true });
+    }
+  });
+
+  test("refuses restore when an exported file path is not a regular file", () => {
+    const syncDir = fs.mkdtempSync(path.join(os.tmpdir(), "structure-restore-file-kind-"));
+    const db = openDb(":memory:");
+    try {
+      const { scenePath } = seedTrustedExportFixture(db, syncDir);
+      fs.rmSync(scenePath);
+      fs.mkdirSync(scenePath);
+
+      const result = restoreStructureFromExport(db, {
+        syncDir,
+        projectId: "test-novel",
+        dryRun: false,
+      });
+
+      assert.equal(result.ok, false);
+      assert.equal(result.action, "restore_refused");
+      assert.equal(result.summary.by_type.structure_export_file_not_regular, 1);
     } finally {
       db.close();
       fs.rmSync(syncDir, { recursive: true, force: true });

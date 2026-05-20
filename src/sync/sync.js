@@ -1179,10 +1179,33 @@ export function indexSceneFile(db, syncDir, file, meta, prose, { observedStructu
 
   const newChecksum = checksumProse(prose);
   const existing = db.prepare(
-    `SELECT prose_checksum FROM scenes WHERE scene_id = ? AND project_id = ?`
+    `SELECT prose_checksum, part, timeline_position FROM scenes WHERE scene_id = ? AND project_id = ?`
   ).get(meta.scene_id, project_id);
 
   const isStale = existing && existing.prose_checksum !== newChecksum ? 1 : 0;
+  const effectivePart = managedStructure
+    ? (existing?.part ?? null)
+    : (meta.part ?? null);
+  const effectiveTimelinePosition = managedStructure
+    ? (existing?.timeline_position ?? null)
+    : (meta.timeline_position ?? null);
+  if (managedStructure) {
+    const observedPart = meta.part ?? null;
+    const observedTimelinePosition = meta.timeline_position ?? null;
+    if (
+      observedPart !== effectivePart
+      || observedTimelinePosition !== effectiveTimelinePosition
+    ) {
+      canonicalIndexPlan.diagnostics.push(buildStructureDiagnostic(
+        `Managed structure sync ignored file-derived scene ordering for scene '${meta.scene_id}': ${canonicalIndexPlan.observedStructure.relativePath}`,
+        {
+          type: "chapter_structure",
+          sceneId: meta.scene_id,
+          relativePath: canonicalIndexPlan.observedStructure.relativePath,
+        }
+      ));
+    }
+  }
 
   db.prepare(`
     INSERT INTO scenes (
@@ -1215,13 +1238,13 @@ export function indexSceneFile(db, syncDir, file, meta, prose, { observedStructu
   `).run(
     meta.scene_id, project_id,
     chapterId, meta.scene_role ?? chapterStructure.role ?? null,
-    meta.title ?? null, meta.part ?? null, chapterSortIndex, chapterTitle,
+    meta.title ?? null, effectivePart, chapterSortIndex, chapterTitle,
     meta.pov ?? null, meta.logline ?? meta.synopsis ?? null,
     meta.scene_change ?? meta.change ?? null,
     meta.causality ?? null, meta.stakes ?? null,
     meta.scene_functions?.length ? JSON.stringify(meta.scene_functions) : null,
     meta.save_the_cat_beat ?? meta.save_the_cat ?? null,
-    meta.timeline_position ?? null, meta.story_time ?? null,
+    effectiveTimelinePosition, meta.story_time ?? null,
     meta.word_count ?? prose.split(/\s+/).filter(Boolean).length,
     file, newChecksum, isStale,
     new Date().toISOString()
@@ -1386,7 +1409,7 @@ const WARNING_PATTERNS = [
   { type: "no_scene_id",            re: /^Skipped \(no scene_id\):/  },
   { type: "duplicate_scene_id",     re: /^Duplicate scene_id/        },
   { type: "path_metadata_mismatch", re: /^Path\/metadata mismatch/   },
-  { type: "chapter_structure",      re: /^(Chapter structure warning|Epigraph requires explicit chapter linkage|Epigraph references unknown chapter_id|Scene references unknown chapter_id|Ambiguous chapter linkage|Epigraph identity conflict|Managed structure sync ignored)/ },
+  { type: "chapter_structure",      re: /^(Chapter structure warning|Epigraph requires explicit chapter linkage|Epigraph references unknown chapter_id|Scene references unknown chapter_id|Ambiguous chapter linkage|Epigraph identity conflict|Managed structure sync ignored|Managed structure sync preserved canonical epigraph)/ },
   { type: "moved_scene",            re: /^Moved scene detected:/      },
   { type: "orphaned_sidecar",       re: /^Orphaned sidecar/          },
   { type: "nested_mirror",          re: /^Ignored nested mirror path:/ },

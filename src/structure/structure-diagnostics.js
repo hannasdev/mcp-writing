@@ -295,7 +295,20 @@ function diagnoseObservedFiles(syncDir, diagnostics, { scenes, epigraphs }) {
   }
 
   for (const epigraph of epigraphs) {
-    if (!epigraph.file_path || !fs.existsSync(epigraph.file_path)) continue;
+    if (!epigraph.file_path || !fs.existsSync(epigraph.file_path)) {
+      addDiagnostic(
+        diagnostics,
+        "indexed_epigraph_file_missing",
+        `Epigraph "${epigraph.epigraph_id}" has an indexed file path that no longer exists.`,
+        {
+          project_id: epigraph.project_id,
+          epigraph_id: epigraph.epigraph_id,
+          file_path: epigraph.file_path,
+        },
+        { nextStep: "Run sync to refresh moved epigraph file paths, then inspect remaining drift." }
+      );
+      continue;
+    }
     if (!isPathInsideSyncDir(syncDir, epigraph.file_path)) {
       addDiagnostic(
         diagnostics,

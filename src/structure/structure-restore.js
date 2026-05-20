@@ -95,7 +95,11 @@ function resolveExportedPath(syncDir, exportedPath, {
     return null;
   }
 
-  if (!fs.existsSync(resolvedPath)) {
+  let fileStat;
+  try {
+    fileStat = fs.statSync(resolvedPath);
+  } catch (error) {
+    if (error?.code !== "ENOENT") throw error;
     diagnostics.push(createDiagnostic(
       "structure_export_file_missing",
       `${itemKind} "${itemId}" in project "${projectId}" points to a missing file.`,
@@ -111,6 +115,22 @@ function resolveExportedPath(syncDir, exportedPath, {
     return null;
   }
 
+  if (!fileStat.isFile()) {
+    diagnostics.push(createDiagnostic(
+      "structure_export_file_not_regular",
+      `${itemKind} "${itemId}" in project "${projectId}" points to a path that is not a regular file.`,
+      {
+        project_id: projectId,
+        item_kind: itemKind,
+        item_id: itemId,
+        exported_path: exportedPath,
+        resolved_path: resolvedPath,
+      },
+      { nextStep: "Regenerate the structure export after resolving the file path." }
+    ));
+    return null;
+  }
+
   return resolvedPath;
 }
 
@@ -121,6 +141,36 @@ function countBy(items, key) {
     result[value] = (result[value] ?? 0) + 1;
   }
   return result;
+}
+
+function checksumProse(prose) {
+  let hash = 5381;
+  for (let i = 0; i < prose.length; i++) {
+    hash = ((hash << 5) + hash) ^ prose.charCodeAt(i);
+    hash = hash >>> 0;
+  }
+  return hash.toString(16);
+}
+
+function validateExportedFileChecksum({ diagnostics, projectId, itemKind, itemId, filePath, expectedChecksum }) {
+  if (!filePath || expectedChecksum == null) return;
+
+  const actualChecksum = checksumProse(matter(fs.readFileSync(filePath, "utf8")).content);
+  if (actualChecksum === expectedChecksum) return;
+
+  diagnostics.push(createDiagnostic(
+    "structure_export_file_checksum_mismatch",
+    `${itemKind} "${itemId}" in project "${projectId}" no longer matches the structure export checksum.`,
+    {
+      project_id: projectId,
+      item_kind: itemKind,
+      item_id: itemId,
+      file_path: filePath,
+      exported_checksum: expectedChecksum,
+      current_checksum: actualChecksum,
+    },
+    { nextStep: "Run sync and regenerate the structure export before restoring from it." }
+  ));
 }
 
 function addDuplicateDiagnostics({ diagnostics, projectId, rows, key, itemKind, type }) {
@@ -331,6 +381,14 @@ function validateCurrentDatabase(db, snapshot, {
       itemKind: "scene",
       diagnostics,
     });
+    validateExportedFileChecksum({
+      diagnostics,
+      projectId,
+      itemKind: "scene",
+      itemId: scene.scene_id,
+      filePath,
+      expectedChecksum: scene.prose_checksum ?? null,
+    });
     const indexedScene = db.prepare(`
       SELECT scene_id
       FROM scenes
@@ -363,11 +421,19 @@ function validateCurrentDatabase(db, snapshot, {
         { nextStep: "Regenerate or inspect the export before restoring." }
       ));
     }
-    resolveExportedPath(syncDir, epigraph.file_path, {
+    const filePath = resolveExportedPath(syncDir, epigraph.file_path, {
       projectId,
       itemId: epigraph.epigraph_id,
       itemKind: "epigraph",
       diagnostics,
+    });
+    validateExportedFileChecksum({
+      diagnostics,
+      projectId,
+      itemKind: "epigraph",
+      itemId: epigraph.epigraph_id,
+      filePath,
+      expectedChecksum: epigraph.prose_checksum ?? null,
     });
 
     const existingById = db.prepare(`
