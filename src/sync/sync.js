@@ -1184,16 +1184,21 @@ export function indexSceneFile(db, syncDir, file, meta, prose, { observedStructu
 
   const isStale = existing && existing.prose_checksum !== newChecksum ? 1 : 0;
   const effectivePart = managedStructure
-    ? (existing?.part ?? meta.part ?? null)
+    ? (existing?.part ?? null)
     : (meta.part ?? null);
   const effectiveTimelinePosition = managedStructure
-    ? (existing?.timeline_position ?? meta.timeline_position ?? null)
+    ? (existing?.timeline_position ?? null)
     : (meta.timeline_position ?? null);
   if (managedStructure) {
     const observedPart = meta.part ?? null;
     const observedTimelinePosition = meta.timeline_position ?? null;
     if (
-      (existing?.part != null && observedPart != null && observedPart !== existing.part)
+      (existing?.part == null && observedPart != null)
+      || (existing?.part != null && observedPart != null && observedPart !== existing.part)
+      || (
+        existing?.timeline_position == null
+        && observedTimelinePosition != null
+      )
       || (
         existing?.timeline_position != null
         && observedTimelinePosition != null

@@ -642,7 +642,7 @@ describe("structure observation", () => {
     }
   });
 
-  test("managed direct reindex adopts observed ordering for newly indexed scenes", () => {
+  test("managed direct reindex ignores observed ordering for newly indexed scenes", () => {
     const syncDir = "/tmp/sync";
     const filePath = path.join(syncDir, "projects", "test-novel", "part-1", "chapter-1", "sc-new.md");
     const db = openDb(":memory:");
@@ -678,9 +678,9 @@ describe("structure observation", () => {
         WHERE scene_id = ? AND project_id = ?
       `).get("sc-new", "test-novel");
 
-      assert.equal(scene.part, 3);
-      assert.equal(scene.timeline_position, 12);
-      assert.ok(!result.canonicalIndexPlan.diagnostics.some((diagnostic) => diagnostic.message.includes("ignored file-derived scene ordering")));
+      assert.equal(scene.part, null);
+      assert.equal(scene.timeline_position, null);
+      assert.ok(result.canonicalIndexPlan.diagnostics.some((diagnostic) => diagnostic.message.includes("ignored file-derived scene ordering")));
     } finally {
       db.close();
     }
