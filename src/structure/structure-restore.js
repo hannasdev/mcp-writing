@@ -6,6 +6,7 @@ import {
   defaultStructureExportFileName,
   STRUCTURE_EXPORT_SCHEMA_VERSION,
 } from "./structure-export.js";
+import { checksumProse } from "../sync/sync.js";
 
 function createDiagnostic(type, message, details = {}, {
   severity = "error",
@@ -141,15 +142,6 @@ function countBy(items, key) {
     result[value] = (result[value] ?? 0) + 1;
   }
   return result;
-}
-
-function checksumProse(prose) {
-  let hash = 5381;
-  for (let i = 0; i < prose.length; i++) {
-    hash = ((hash << 5) + hash) ^ prose.charCodeAt(i);
-    hash = hash >>> 0;
-  }
-  return hash.toString(16);
 }
 
 function validateExportedFileChecksum({ diagnostics, projectId, itemKind, itemId, filePath, expectedChecksum }) {
@@ -339,6 +331,7 @@ function validateCurrentDatabase(db, snapshot, {
   const scenes = Array.isArray(snapshot?.scenes) ? snapshot.scenes : [];
   const epigraphs = Array.isArray(snapshot?.epigraphs) ? snapshot.epigraphs : [];
   const chapterIds = new Set(chapters.map(chapter => chapter.chapter_id).filter(Boolean));
+  const epigraphIds = new Set(epigraphs.map(epigraph => epigraph.epigraph_id).filter(Boolean));
 
   addDuplicateDiagnostics({ diagnostics, projectId, rows: chapters, key: "chapter_id", itemKind: "chapter", type: "structure_export_duplicate_chapter_id" });
   addDuplicateDiagnostics({ diagnostics, projectId, rows: chapters, key: "sort_index", itemKind: "chapter", type: "structure_export_duplicate_chapter_sort" });
@@ -492,6 +485,27 @@ function validateCurrentDatabase(db, snapshot, {
         exported_chapter_ids: exportedChapterIds,
       },
       { nextStep: "Use explicit structure tools to resolve extra canonical chapters before restoring from export." }
+    ));
+  }
+
+  const exportedEpigraphIds = [...epigraphIds];
+  const extraEpigraphs = db.prepare(`
+    SELECT epigraph_id, chapter_id
+    FROM epigraphs
+    WHERE project_id = ?
+    ORDER BY epigraph_id
+  `).all(projectId).filter(epigraph => !epigraphIds.has(epigraph.epigraph_id));
+  for (const epigraph of extraEpigraphs) {
+    diagnostics.push(createDiagnostic(
+      "structure_restore_extra_epigraph_conflict",
+      `Current SQLite epigraph "${epigraph.epigraph_id}" is not present in the structure export.`,
+      {
+        project_id: projectId,
+        epigraph_id: epigraph.epigraph_id,
+        chapter_id: epigraph.chapter_id,
+        exported_epigraph_ids: exportedEpigraphIds,
+      },
+      { nextStep: "Use explicit structure tools to resolve extra canonical epigraphs before restoring from export." }
     ));
   }
 }

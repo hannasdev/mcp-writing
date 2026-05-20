@@ -10,6 +10,7 @@ import {
   writeStructureExportFile,
 } from "../../structure/structure-export.js";
 import { restoreStructureFromExport } from "../../structure/structure-restore.js";
+import { checksumProse } from "../../sync/sync.js";
 
 function seedProject(db, projectId = "test-novel") {
   db.prepare(`
@@ -23,15 +24,6 @@ function writeProseFile(syncDir, relativePath, prose) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.writeFileSync(filePath, prose, "utf8");
   return filePath;
-}
-
-function checksumProse(prose) {
-  let hash = 5381;
-  for (let i = 0; i < prose.length; i++) {
-    hash = ((hash << 5) + hash) ^ prose.charCodeAt(i);
-    hash = hash >>> 0;
-  }
-  return hash.toString(16);
 }
 
 function seedTrustedExportFixture(db, syncDir) {
@@ -311,6 +303,59 @@ describe("restoreStructureFromExport", () => {
       assert.equal(result.summary.by_type.structure_restore_extra_chapter_conflict, 1);
       assert.equal(
         db.prepare(`SELECT COUNT(*) AS count FROM chapters WHERE project_id = ?`).get("test-novel").count,
+        2
+      );
+    } finally {
+      db.close();
+      fs.rmSync(syncDir, { recursive: true, force: true });
+    }
+  });
+
+  test("refuses extra current epigraphs that are absent from the export", () => {
+    const syncDir = fs.mkdtempSync(path.join(os.tmpdir(), "structure-restore-extra-epigraph-"));
+    const db = openDb(":memory:");
+    try {
+      seedTrustedExportFixture(db, syncDir);
+      db.prepare(`
+        INSERT INTO chapters (
+          chapter_id, project_id, title, sort_index, logline, source_path, source_checksum, metadata_stale, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        "ch-02-extra",
+        "test-novel",
+        "Extra",
+        2,
+        null,
+        null,
+        null,
+        0,
+        "2026-05-19T12:00:00.000Z"
+      );
+      db.prepare(`
+        INSERT INTO epigraphs (
+          epigraph_id, project_id, chapter_id, body, file_path, prose_checksum, metadata_stale, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        "epi-extra",
+        "test-novel",
+        "ch-02-extra",
+        "Extra epigraph.",
+        path.join(syncDir, "projects/test-novel/scenes/01-Arrival/extra-epigraph.md"),
+        checksumProse("Extra epigraph."),
+        0,
+        "2026-05-19T12:00:00.000Z"
+      );
+
+      const result = restoreStructureFromExport(db, {
+        syncDir,
+        projectId: "test-novel",
+        dryRun: false,
+      });
+
+      assert.equal(result.ok, false);
+      assert.equal(result.summary.by_type.structure_restore_extra_epigraph_conflict, 1);
+      assert.equal(
+        db.prepare(`SELECT COUNT(*) AS count FROM epigraphs WHERE project_id = ?`).get("test-novel").count,
         2
       );
     } finally {
