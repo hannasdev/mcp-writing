@@ -6,6 +6,9 @@ export default [
   js.configs.recommended,
   security.configs.recommended,
   {
+    plugins: {
+      security,
+    },
     languageOptions: {
       ecmaVersion: 2024,
       sourceType: "module",
