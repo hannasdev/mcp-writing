@@ -162,7 +162,7 @@ export function registerSyncTools(s, {
     },
     async ({ project_id, structure_export_path, structure_export_dir, dry_run = true }) => {
       if (!SYNC_DIR_WRITABLE && dry_run === false) {
-        return errorResponse("READ_ONLY", "Cannot restore structure from export: sync dir is read-only.");
+        return errorResponse("READ_ONLY", "Cannot restore structure from export: server is in read-only mode for canonical structure mutations.");
       }
 
       const projectIdCheck = validateProjectId(project_id);

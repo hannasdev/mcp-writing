@@ -437,6 +437,49 @@ describe("runStructureDiagnostics", () => {
     }
   });
 
+  test("reports current snapshot failures while checking structure export trust", () => {
+    const syncDir = fs.mkdtempSync(path.join(os.tmpdir(), "structure-export-snapshot-failure-"));
+    const db = openDb(":memory:");
+    try {
+      seedProject(db, "test-novel");
+      seedChapter(db, {
+        projectId: "test-novel",
+        chapterId: "ch-01-arrival",
+        sortIndex: 1,
+        title: "Arrival",
+      });
+      const scenePath = writeSceneFile(
+        syncDir,
+        "projects/test-novel/scenes/01-Arrival/sc-001.md",
+        "scene_id: sc-001\n"
+      );
+      seedScene(db, {
+        sceneId: "sc-001",
+        projectId: "test-novel",
+        filePath: scenePath,
+        chapterId: "ch-01-arrival",
+      });
+      writeCurrentStructureExport(db, syncDir, "test-novel");
+
+      db.prepare(`
+        UPDATE scenes
+        SET file_path = ?
+        WHERE project_id = ? AND scene_id = ?
+      `).run(path.join(os.tmpdir(), "outside-sync", "sc-001.md"), "test-novel", "sc-001");
+
+      const result = runStructureDiagnostics(db, { syncDir, projectId: "test-novel" });
+
+      assert.equal(result.ok, false);
+      assert.equal(result.summary.by_type.structure_export_current_snapshot_failed, 1);
+      assert.equal(result.checked.structure_exports[0].trusted, false);
+      assert.equal(result.checked.structure_exports[0].status, "current_snapshot_failed");
+      assert.match(result.diagnostics.find(diagnostic => diagnostic.type === "structure_export_current_snapshot_failed").details.error_message, /outside sync_dir/);
+    } finally {
+      db.close();
+      fs.rmSync(syncDir, { recursive: true, force: true });
+    }
+  });
+
   test("reports missing, wrong-project, and incompatible structure exports", () => {
     const syncDir = fs.mkdtempSync(path.join(os.tmpdir(), "structure-export-trust-"));
     const outputDir = path.join(syncDir, "structure-exports");
@@ -521,6 +564,27 @@ describe("diagnose_structure tool", () => {
       assert.equal(result.checked.project_id, "test-novel");
       assert.equal(result.summary.by_type.scene_unknown_chapter, 1);
       assert.match(result.next_steps[0], /Review diagnostics/);
+    } finally {
+      db.close();
+      fs.rmSync(syncDir, { recursive: true, force: true });
+    }
+  });
+
+  test("restore_structure_from_export reports canonical mutation read-only mode", async () => {
+    const syncDir = fs.mkdtempSync(path.join(os.tmpdir(), "structure-tool-read-only-"));
+    const db = openDb(":memory:");
+    try {
+      seedProject(db, "test-novel");
+
+      const tools = makeSyncToolHarness(db, { syncDir });
+      const result = await tools.call("restore_structure_from_export", {
+        project_id: "test-novel",
+        dry_run: false,
+      });
+
+      assert.equal(result.ok, false);
+      assert.equal(result.error.code, "READ_ONLY");
+      assert.match(result.error.message, /read-only mode for canonical structure mutations/);
     } finally {
       db.close();
       fs.rmSync(syncDir, { recursive: true, force: true });

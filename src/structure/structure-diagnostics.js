@@ -517,10 +517,35 @@ function diagnoseStructureExports(db, diagnostics, {
       continue;
     }
 
-    const built = buildStructureExport(db, {
-      projectId: expectedProjectId,
-      syncDir,
-    });
+    let built;
+    try {
+      built = buildStructureExport(db, {
+        projectId: expectedProjectId,
+        syncDir,
+      });
+    } catch (error) {
+      addDiagnostic(
+        diagnostics,
+        "structure_export_current_snapshot_failed",
+        `Could not build current structure snapshot for project "${expectedProjectId}".`,
+        {
+          project_id: expectedProjectId,
+          export_path: exportPath,
+          error_code: "CURRENT_SNAPSHOT_FAILED",
+          error_message: error instanceof Error ? error.message : String(error),
+        },
+        {
+          nextStep: "Repair the canonical project record before trusting structure exports.",
+        }
+      );
+      exportChecks.push({
+        project_id: expectedProjectId,
+        export_path: exportPath,
+        trusted: false,
+        status: "current_snapshot_failed",
+      });
+      continue;
+    }
     if (!built.ok) {
       addDiagnostic(
         diagnostics,

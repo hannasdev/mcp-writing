@@ -1184,17 +1184,21 @@ export function indexSceneFile(db, syncDir, file, meta, prose, { observedStructu
 
   const isStale = existing && existing.prose_checksum !== newChecksum ? 1 : 0;
   const effectivePart = managedStructure
-    ? (existing?.part ?? null)
+    ? (existing?.part ?? meta.part ?? null)
     : (meta.part ?? null);
   const effectiveTimelinePosition = managedStructure
-    ? (existing?.timeline_position ?? null)
+    ? (existing?.timeline_position ?? meta.timeline_position ?? null)
     : (meta.timeline_position ?? null);
   if (managedStructure) {
     const observedPart = meta.part ?? null;
     const observedTimelinePosition = meta.timeline_position ?? null;
     if (
-      observedPart !== effectivePart
-      || observedTimelinePosition !== effectiveTimelinePosition
+      (existing?.part != null && observedPart != null && observedPart !== existing.part)
+      || (
+        existing?.timeline_position != null
+        && observedTimelinePosition != null
+        && observedTimelinePosition !== existing.timeline_position
+      )
     ) {
       canonicalIndexPlan.diagnostics.push(buildStructureDiagnostic(
         `Managed structure sync ignored file-derived scene ordering for scene '${meta.scene_id}': ${canonicalIndexPlan.observedStructure.relativePath}`,

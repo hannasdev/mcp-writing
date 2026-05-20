@@ -641,6 +641,50 @@ describe("structure observation", () => {
       db.close();
     }
   });
+
+  test("managed direct reindex adopts observed ordering for newly indexed scenes", () => {
+    const syncDir = "/tmp/sync";
+    const filePath = path.join(syncDir, "projects", "test-novel", "part-1", "chapter-1", "sc-new.md");
+    const db = openDb(":memory:");
+    try {
+      db.prepare(`INSERT INTO projects (project_id, universe_id, name) VALUES (?, ?, ?)`)
+        .run("test-novel", null, "Test Novel");
+      db.prepare(`
+        INSERT INTO chapters (
+          chapter_id, project_id, title, sort_index, source_path, source_checksum, metadata_stale, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).run("ch-01-chapter-1", "test-novel", "Chapter 1", 1, null, null, 0, "2026-05-19T12:00:00.000Z");
+
+      const result = indexSceneFile(
+        db,
+        syncDir,
+        filePath,
+        {
+          scene_id: "sc-new",
+          title: "New Scene",
+          part: 3,
+          chapter_id: "ch-01-chapter-1",
+          chapter: 1,
+          chapter_title: "Chapter 1",
+          timeline_position: 12,
+        },
+        "New prose.",
+        { managedStructure: true }
+      );
+
+      const scene = db.prepare(`
+        SELECT part, timeline_position
+        FROM scenes
+        WHERE scene_id = ? AND project_id = ?
+      `).get("sc-new", "test-novel");
+
+      assert.equal(scene.part, 3);
+      assert.equal(scene.timeline_position, 12);
+      assert.ok(!result.canonicalIndexPlan.diagnostics.some((diagnostic) => diagnostic.message.includes("ignored file-derived scene ordering")));
+    } finally {
+      db.close();
+    }
+  });
 });
 
 describe("warning summary", () => {
