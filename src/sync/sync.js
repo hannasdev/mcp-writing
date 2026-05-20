@@ -1085,7 +1085,7 @@ export function observeStructureForFile(syncDir, file, {
   };
 }
 
-export function buildCanonicalIndexPlan(db, syncDir, file, meta, observedStructure = observeStructureForFile(syncDir, file, { meta })) {
+export function buildCanonicalIndexPlan(db, syncDir, file, meta, observedStructure = observeStructureForFile(syncDir, file, { meta }), { managedStructure = false } = {}) {
   const chapterResolution = resolveIndexedChapterForFile(db, {
     syncDir,
     projectId: observedStructure.projectId,
@@ -1093,6 +1093,7 @@ export function buildCanonicalIndexPlan(db, syncDir, file, meta, observedStructu
     relativePath: observedStructure.relativePath,
     meta,
     chapterStructure: observedStructure.chapterStructure,
+    managedStructure,
   });
 
   return {
@@ -1122,8 +1123,8 @@ export function readSceneFileForSync(syncDir, file, { writable = false } = {}) {
   };
 }
 
-export function indexSceneFile(db, syncDir, file, meta, prose, { observedStructure } = {}) {
-  const canonicalIndexPlan = buildCanonicalIndexPlan(db, syncDir, file, meta, observedStructure);
+export function indexSceneFile(db, syncDir, file, meta, prose, { observedStructure, managedStructure = false } = {}) {
+  const canonicalIndexPlan = buildCanonicalIndexPlan(db, syncDir, file, meta, observedStructure, { managedStructure });
   const { universeId: universe_id, projectId: project_id } = canonicalIndexPlan;
   const { chapterStructure } = canonicalIndexPlan.observedStructure;
   const referenceIds = normalizeReferenceIdList(meta.reference_ids ?? meta.references);
@@ -1169,6 +1170,7 @@ export function indexSceneFile(db, syncDir, file, meta, prose, { observedStructu
       file,
       relativePath: canonicalIndexPlan.observedStructure.relativePath,
       chapterWarning,
+      managedStructure,
       buildProseChecksum: checksumProse,
       buildDefaultEpigraphId: ({ projectId, chapterId }) => `epi-${slugifyChapterValue(`${projectId}-${chapterId}`)}`,
     });
@@ -1177,10 +1179,42 @@ export function indexSceneFile(db, syncDir, file, meta, prose, { observedStructu
 
   const newChecksum = checksumProse(prose);
   const existing = db.prepare(
-    `SELECT prose_checksum FROM scenes WHERE scene_id = ? AND project_id = ?`
+    `SELECT prose_checksum, part, timeline_position FROM scenes WHERE scene_id = ? AND project_id = ?`
   ).get(meta.scene_id, project_id);
 
   const isStale = existing && existing.prose_checksum !== newChecksum ? 1 : 0;
+  const effectivePart = managedStructure
+    ? (existing?.part ?? null)
+    : (meta.part ?? null);
+  const effectiveTimelinePosition = managedStructure
+    ? (existing?.timeline_position ?? null)
+    : (meta.timeline_position ?? null);
+  if (managedStructure) {
+    const observedPart = meta.part ?? null;
+    const observedTimelinePosition = meta.timeline_position ?? null;
+    if (
+      (existing?.part == null && observedPart != null)
+      || (existing?.part != null && observedPart != null && observedPart !== existing.part)
+      || (
+        existing?.timeline_position == null
+        && observedTimelinePosition != null
+      )
+      || (
+        existing?.timeline_position != null
+        && observedTimelinePosition != null
+        && observedTimelinePosition !== existing.timeline_position
+      )
+    ) {
+      canonicalIndexPlan.diagnostics.push(buildStructureDiagnostic(
+        `Managed structure sync ignored file-derived scene ordering for scene '${meta.scene_id}': ${canonicalIndexPlan.observedStructure.relativePath}`,
+        {
+          type: "chapter_structure",
+          sceneId: meta.scene_id,
+          relativePath: canonicalIndexPlan.observedStructure.relativePath,
+        }
+      ));
+    }
+  }
 
   db.prepare(`
     INSERT INTO scenes (
@@ -1213,13 +1247,13 @@ export function indexSceneFile(db, syncDir, file, meta, prose, { observedStructu
   `).run(
     meta.scene_id, project_id,
     chapterId, meta.scene_role ?? chapterStructure.role ?? null,
-    meta.title ?? null, meta.part ?? null, chapterSortIndex, chapterTitle,
+    meta.title ?? null, effectivePart, chapterSortIndex, chapterTitle,
     meta.pov ?? null, meta.logline ?? meta.synopsis ?? null,
     meta.scene_change ?? meta.change ?? null,
     meta.causality ?? null, meta.stakes ?? null,
     meta.scene_functions?.length ? JSON.stringify(meta.scene_functions) : null,
     meta.save_the_cat_beat ?? meta.save_the_cat ?? null,
-    meta.timeline_position ?? null, meta.story_time ?? null,
+    effectiveTimelinePosition, meta.story_time ?? null,
     meta.word_count ?? prose.split(/\s+/).filter(Boolean).length,
     file, newChecksum, isStale,
     new Date().toISOString()
@@ -1313,6 +1347,22 @@ export function indexSceneFile(db, syncDir, file, meta, prose, { observedStructu
   return { isStale, chapterId, warning: chapterWarning, canonicalIndexPlan };
 }
 
+export function isManagedStructureProject(db, projectId) {
+  if (!projectId) return false;
+  const row = db.prepare(`
+    SELECT 1 AS managed
+    FROM (
+      SELECT project_id FROM chapters WHERE project_id = ?
+      UNION
+      SELECT project_id FROM epigraphs WHERE project_id = ?
+      UNION
+      SELECT project_id FROM scenes WHERE project_id = ? AND chapter_id IS NOT NULL AND chapter_id != ''
+    )
+    LIMIT 1
+  `).get(projectId, projectId, projectId);
+  return Boolean(row);
+}
+
 export function observeOrphanedSidecars(syncDir, { indexedSceneIds = new Set() } = {}) {
   const diagnostics = [];
   const sidecars = walkSidecars(syncDir).filter(sidecar => !isNestedMirrorPath(syncDir, sidecar));
@@ -1368,7 +1418,7 @@ const WARNING_PATTERNS = [
   { type: "no_scene_id",            re: /^Skipped \(no scene_id\):/  },
   { type: "duplicate_scene_id",     re: /^Duplicate scene_id/        },
   { type: "path_metadata_mismatch", re: /^Path\/metadata mismatch/   },
-  { type: "chapter_structure",      re: /^(Chapter structure warning|Epigraph requires explicit chapter linkage|Epigraph references unknown chapter_id|Scene references unknown chapter_id|Ambiguous chapter linkage|Epigraph identity conflict)/ },
+  { type: "chapter_structure",      re: /^(Chapter structure warning|Epigraph requires explicit chapter linkage|Epigraph references unknown chapter_id|Scene references unknown chapter_id|Ambiguous chapter linkage|Epigraph identity conflict|Managed structure sync ignored|Managed structure sync preserved canonical epigraph)/ },
   { type: "moved_scene",            re: /^Moved scene detected:/      },
   { type: "orphaned_sidecar",       re: /^Orphaned sidecar/          },
   { type: "nested_mirror",          re: /^Ignored nested mirror path:/ },
@@ -1396,6 +1446,22 @@ export function syncAll(db, syncDir, { quiet = false, writable = false } = {}) {
   // (for example after imports or path repairs) are reflected immediately.
   UNIVERSE_PROJECT_ROOT_CACHE.clear();
 
+  const managedProjectIds = new Set(db.prepare(`
+    SELECT project_id FROM chapters
+    UNION
+    SELECT project_id FROM epigraphs
+    UNION
+    SELECT project_id FROM scenes WHERE chapter_id IS NOT NULL AND chapter_id != ''
+  `).all().map((row) => row.project_id));
+  const managedChapterKeys = new Set(db.prepare(`
+    SELECT chapter_id, project_id
+    FROM chapters
+  `).all().map((row) => `${row.chapter_id}::${row.project_id}`));
+  const managedEpigraphKeys = new Set(db.prepare(`
+    SELECT epigraph_id, project_id
+    FROM epigraphs
+  `).all().map((row) => `${row.epigraph_id}::${row.project_id}`));
+
   let indexed = 0;
   let staleMarked = 0;
   let epigraphsIndexed = 0;
@@ -1405,8 +1471,8 @@ export function syncAll(db, syncDir, { quiet = false, writable = false } = {}) {
   const seenSceneIds = new Map(); // scene_id+project_id → file path, for duplicate detection
   const seenSceneKeys = new Set();
   const indexedSceneIds = new Set(); // scene_id only — for orphaned sidecar move detection
-  const seenChapterKeys = new Set();
-  const seenEpigraphKeys = new Set();
+  const seenChapterKeys = new Set(managedChapterKeys);
+  const seenEpigraphKeys = new Set(managedEpigraphKeys);
   let sceneIndexFailures = 0;
   const warnings = [];
   const chapterFoldersByProject = new Map();
@@ -1473,7 +1539,10 @@ export function syncAll(db, syncDir, { quiet = false, writable = false } = {}) {
 
       const { content: prose } = parseFile(file);
 
-      const result = indexSceneFile(db, syncDir, file, meta, prose, { observedStructure: structureObservation });
+      const result = indexSceneFile(db, syncDir, file, meta, prose, {
+        observedStructure: structureObservation,
+        managedStructure: managedProjectIds.has(project_id),
+      });
       const canonicalDiagnostics = result.canonicalIndexPlan?.diagnostics ?? [];
       if (canonicalDiagnostics.length) {
         for (const diagnostic of canonicalDiagnostics) warnings.push(diagnostic.message);

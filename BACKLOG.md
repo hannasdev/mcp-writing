@@ -14,13 +14,13 @@ Deploy Writing MCP as a service in the OpenClaw runtime with the Writing World a
 
 Define a shared setup contract for configuration-driven writing features so setup can live in client-native UI surfaces while the MCP remains focused on durable capabilities.
 
-**Status:** Deferred backlog (not active). Product direction remains useful, but implementation is paused while structural workflow boundaries are clarified.
+**Status:** Deferred backlog (not active). Product direction remains useful and is available for future prioritization.
 
 ### 📚 [Chapter Structure Follow-up](docs/initiatives/backlog/chapter-structure/prd.md) 📋
 
 Track the remaining follow-up work around first-class chapters, deferred divisions, and final documentation cleanup after the initial chapter/epigraph rollout.
 
-**Status:** Deferred backlog (not active). Canonical chapters and epigraphs, `chapter_id` targeting, dedicated chapter/epigraph tools, and chapter-aware bundle rendering have already shipped; remaining follow-up work is paused pending structural design consolidation.
+**Status:** Deferred backlog (not active). Canonical chapters and epigraphs, `chapter_id` targeting, dedicated chapter/epigraph tools, and chapter-aware bundle rendering have already shipped; remaining follow-up work is available for future prioritization.
 
 ### 📊 [Embedding-Based Search](docs/initiatives/backlog/embeddings-search/prd.md) 📋
 

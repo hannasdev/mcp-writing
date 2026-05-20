@@ -2,7 +2,7 @@ import { z } from "zod";
 import fs from "node:fs";
 import path from "node:path";
 import matter from "gray-matter";
-import { syncAll, writeMeta, readMeta, indexSceneFile, normalizeSceneMetaForPath } from "../sync/sync.js";
+import { syncAll, writeMeta, readMeta, indexSceneFile, normalizeSceneMetaForPath, isManagedStructureProject } from "../sync/sync.js";
 import { importScrivenerSync, validateProjectId } from "../sync/importer.js";
 import { runStructureDiagnostics } from "../structure/structure-diagnostics.js";
 import {
@@ -10,6 +10,7 @@ import {
   defaultStructureExportFileName,
   writeStructureExportFile,
 } from "../structure/structure-export.js";
+import { restoreStructureFromExport } from "../structure/structure-restore.js";
 
 export function registerSyncTools(s, {
   db,
@@ -32,7 +33,7 @@ export function registerSyncTools(s, {
   deriveLoglineFromProse,
   inferCharacterIdsFromProse,
 }) {
-  s.tool("sync", "Re-scan the sync folder and update the scene/character/place index from disk. Call this after making edits in Scrivener or updating sidecar files outside the MCP.", {}, async () => {
+  s.tool("sync", "Re-scan the sync folder and update derived scene/character/place indexes from disk. For already managed projects, sync reports file-derived chapter or epigraph drift without adopting it as canonical structure; use explicit import, repair, or structure tools for structural changes.", {}, async () => {
     const result = syncAll(db, SYNC_DIR, { writable: SYNC_DIR_WRITABLE });
     const parts = [`Sync complete. ${result.indexed} scenes indexed. ${result.staleMarked} scenes marked stale.`];
     if (result.staleMarked > 0) {
@@ -54,11 +55,12 @@ export function registerSyncTools(s, {
 
   s.tool(
     "diagnose_structure",
-    "Run read-only structure diagnostics against the current index and sync files. Reports canonical drift, ambiguous folder-derived structure, unknown chapter links, epigraph conflicts, and compatibility chapter mismatches without repairing files or mutating the database.",
+    "Run read-only structure diagnostics against the current index, sync files, and generated structure exports. Reports canonical drift, ambiguous folder-derived structure, unknown chapter links, epigraph conflicts, compatibility chapter mismatches, and export trust/staleness issues without repairing files or mutating the database.",
     {
       project_id: z.string().optional().describe("Optional project ID to limit diagnostics to one project."),
+      structure_export_dir: z.string().optional().describe("Directory under WRITING_SYNC_DIR containing generated structure exports. Defaults to structure-exports."),
     },
-    async ({ project_id } = {}) => {
+    async ({ project_id, structure_export_dir } = {}) => {
       if (project_id !== undefined) {
         const projectIdCheck = validateProjectId(project_id);
         if (!projectIdCheck.ok) {
@@ -68,6 +70,7 @@ export function registerSyncTools(s, {
 
       return jsonResponse(runStructureDiagnostics(db, {
         syncDir: SYNC_DIR,
+        structureExportDir: structure_export_dir ?? null,
         projectId: project_id ?? null,
       }));
     }
@@ -145,6 +148,35 @@ export function registerSyncTools(s, {
           error instanceof Error ? error.message : "Failed to export structure snapshot."
         );
       }
+    }
+  );
+
+  s.tool(
+    "restore_structure_from_export",
+    "Explicitly restore canonical SQLite chapter, scene-placement, and epigraph structure from a trusted generated structure export. This is a repair workflow, never a sync side effect; it validates project identity, schema, checksum, file presence, and conflicts before applying a transaction.",
+    {
+      project_id: z.string().describe("Project ID to restore (e.g. 'test-novel')."),
+      structure_export_path: z.string().optional().describe("Path under WRITING_SYNC_DIR to the generated structure export JSON. Defaults to structure-exports/<project>.structure.json."),
+      structure_export_dir: z.string().optional().describe("Directory under WRITING_SYNC_DIR containing generated structure exports. Ignored when structure_export_path is provided. Defaults to structure-exports."),
+      dry_run: z.boolean().optional().describe("If true (default), validate and summarize planned repairs without writing SQLite state."),
+    },
+    async ({ project_id, structure_export_path, structure_export_dir, dry_run = true }) => {
+      if (!SYNC_DIR_WRITABLE && dry_run === false) {
+        return errorResponse("READ_ONLY", "Cannot restore structure from export: server is in read-only mode for canonical structure mutations.");
+      }
+
+      const projectIdCheck = validateProjectId(project_id);
+      if (!projectIdCheck.ok) {
+        return errorResponse("INVALID_PROJECT_ID", projectIdCheck.reason, { project_id });
+      }
+
+      return jsonResponse(restoreStructureFromExport(db, {
+        syncDir: SYNC_DIR_ABS,
+        projectId: project_id,
+        structureExportPath: structure_export_path ?? null,
+        structureExportDir: structure_export_dir ?? null,
+        dryRun: dry_run,
+      }));
     }
   );
 
@@ -436,7 +468,7 @@ export function registerSyncTools(s, {
       project_id: z.string().describe("Project ID (e.g. 'the-lamb' or 'universe-1/book-1-the-lamb')."),
       scene_ids: z.array(z.string()).optional().describe("Optional allowlist of scene IDs to process before other filters are applied."),
       part: z.number().int().optional().describe("Optional part number filter."),
-      chapter: z.number().int().optional().describe("Optional compatibility chapter number resolved through canonical chapter identity."),
+      chapter: z.number().int().optional().describe("Optional read-scope compatibility alias resolved through canonical chapter identity. Not a structural mutation target."),
       chapter_id: z.string().optional().describe("Optional canonical chapter identifier."),
       only_stale: z.boolean().optional().describe("If true, only process scenes currently marked metadata_stale."),
       dry_run: z.boolean().optional().describe("If true (default), returns preview results without writing sidecars."),
@@ -698,7 +730,9 @@ export function registerSyncTools(s, {
         }).meta;
 
         writeMeta(scene.file_path, updatedMeta);
-        indexSceneFile(db, SYNC_DIR, scene.file_path, updatedMeta, prose);
+        indexSceneFile(db, SYNC_DIR, scene.file_path, updatedMeta, prose, {
+          managedStructure: isManagedStructureProject(db, scene.project_id),
+        });
         db.prepare(`UPDATE scenes SET metadata_stale = 0 WHERE scene_id = ? AND project_id = ?`)
           .run(scene.scene_id, scene.project_id);
 

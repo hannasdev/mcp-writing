@@ -6,6 +6,46 @@ This complements `CHANGELOG.md`:
 - `CHANGELOG.md` is technical and release-oriented.
 - This log is plain-language and outcome-oriented.
 
+### 2026-05-19 — Clarify numeric chapter compatibility aliases
+
+- What changed: Numeric `chapter` and `chapters` inputs are now explicitly documented as read-scope compatibility aliases that resolve through canonical chapter identity; structural changes continue to use `chapter_id` and named structure workflows.
+- Why it matters: Authors and AI agents can keep older chapter-scoped discovery and review workflows working without treating numeric sidecar fields as structural authority.
+- Who is affected: Authors, maintainers, and AI agents using chapter-scoped search, chapter prose, styleguide, enrichment, or review-bundle workflows.
+- Action needed: Prefer `chapter_id` from `list_chapters` for new workflows and all structural mutations; use numeric chapter aliases only for read-scoped compatibility selection.
+- PR: [#210](https://github.com/hannasdev/mcp-writing/pull/210)
+
+### 2026-05-19 — Restore canonical structure from trusted exports
+
+- What changed: Added `restore_structure_from_export`, an explicit repair workflow that dry-runs by default, validates a generated structure export, and can transactionally restore canonical chapter, scene-placement, and epigraph state in SQLite.
+- Why it matters: Maintainers and AI agents now have a deliberate recovery path when canonical structure is missing or damaged, without making sync or edited exports authoritative.
+- Who is affected: Authors, maintainers, and AI agents recovering structure after database loss or repairing canonical structure from a reviewed generated export.
+- Action needed: Run `diagnose_structure`, then dry-run `restore_structure_from_export`; only run with `dry_run=false` after reviewing the diagnostics and planned changes.
+- PR: [#210](https://github.com/hannasdev/mcp-writing/pull/210)
+
+### 2026-05-19 — Diagnose structure export trust before repair
+
+- What changed: `diagnose_structure` now checks generated structure exports and reports when an export is missing, stale relative to SQLite, from a different project, unreadable, or generated with an incompatible schema.
+- Why it matters: Maintainers and AI agents can tell whether an export is safe recovery input before any explicit restore or repair workflow exists.
+- Who is affected: Authors, maintainers, and AI agents reviewing canonical structure changes or preparing future export-based repair.
+- Action needed: Run `diagnose_structure` before trusting a structure export for recovery; regenerate stale or incompatible exports with `export_structure_snapshot`.
+- PR: [#210](https://github.com/hannasdev/mcp-writing/pull/210)
+
+### 2026-05-19 — Keep ordinary sync from adopting structure drift
+
+- What changed: For already managed projects, `sync` now preserves canonical chapter and epigraph state in SQLite and reports file-derived structure drift from folders, sidecars, or epigraph metadata instead of silently adopting it.
+- Why it matters: Daily sync can refresh indexes after external edits without turning compatibility files or folder layout into hidden structural authority.
+- Who is affected: Authors, maintainers, and AI agents working with Scrivener sync folders or direct sidecar/folder edits after a project has canonical structure.
+- Action needed: Use explicit import, repair, or structure tools for intentional chapter and epigraph changes; treat sync warnings as drift to review.
+- PR: [#210](https://github.com/hannasdev/mcp-writing/pull/210)
+
+### 2026-05-19 — Route scene structure edits through explicit tools
+
+- What changed: `update_scene_metadata` now rejects structural fields (`part`, `chapter`, `chapter_id`, and `timeline_position`) and points callers to `assign_scene_to_chapter` or `move_scene`; those scene structure tools now persist SQLite canonical state before mirroring sidecar compatibility fields.
+- Why it matters: Chapter placement and scene ordering now stay on named structure workflows instead of leaking through generic metadata edits.
+- Who is affected: Authors, maintainers, and AI agents changing scene chapter placement or ordering.
+- Action needed: Use `list_chapters` to choose a canonical `chapter_id`, then call `assign_scene_to_chapter` or `move_scene` for structural changes; keep `update_scene_metadata` for non-structural editorial metadata.
+- PR: [#210](https://github.com/hannasdev/mcp-writing/pull/210)
+
 ### 2026-05-19 — Add local pre-PR quality gate
 
 - What changed: Added `npm run check:pr` as a local pre-PR gate and optimized CI so stale PR runs are canceled while static validation shares one setup job.

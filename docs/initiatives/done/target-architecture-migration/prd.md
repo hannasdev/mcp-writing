@@ -1,6 +1,15 @@
 # PRD: Target Architecture Migration
 
-**Status:** Active
+**Status:** Done
+
+Completed scope:
+
+- behavior-preserving structure boundary refactors;
+- read-only structure diagnostics;
+- explicit structural mutation workflows;
+- canonical compatibility resolution improvements;
+- accepted SQLite-canonical storage direction;
+- deterministic generated structure exports for Git review and future recovery workflows.
 
 This initiative captures preparatory refactoring and staged migration work needed to move Writing MCP toward the [Conceptual Target Architecture](../../../foundations/target-architecture.md) without forcing an early storage rewrite or behavior change.
 

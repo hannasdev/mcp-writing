@@ -306,7 +306,8 @@ describe("canonical chapter and epigraph tools", () => {
   });
 
   test("indexes explicit epigraph files and returns them through find_epigraphs", async () => {
-    const chapterDir = path.join(writeSyncDir, "projects", "test-novel", "Draft", "03-A New Dawn");
+    const projectId = "epigraph-search";
+    const chapterDir = path.join(writeSyncDir, "projects", projectId, "Draft", "03-A New Dawn");
     fs.mkdirSync(chapterDir, { recursive: true });
     fs.writeFileSync(
       path.join(chapterDir, "sc-004.md"),
@@ -319,13 +320,13 @@ describe("canonical chapter and epigraph tools", () => {
 
     await callWriteTool("sync");
 
-    const chaptersText = await callWriteTool("list_chapters", { project_id: "test-novel" });
+    const chaptersText = await callWriteTool("list_chapters", { project_id: projectId });
     const chaptersParsed = JSON.parse(chaptersText);
     const dawnChapter = chaptersParsed.results.find((row) => row.title === "A New Dawn");
     assert.ok(dawnChapter);
 
     const epigraphsText = await callWriteTool("find_epigraphs", {
-      project_id: "test-novel",
+      project_id: projectId,
       chapter_id: dawnChapter.chapter_id,
     });
     const epigraphsParsed = JSON.parse(epigraphsText);
@@ -334,7 +335,7 @@ describe("canonical chapter and epigraph tools", () => {
     assert.match(epigraphsParsed.results[0].body, /hinge turns/);
 
     const compatibleEpigraphsText = await callWriteTool("find_epigraphs", {
-      project_id: "test-novel",
+      project_id: projectId,
       chapter_id: dawnChapter.chapter_id,
       chapter: 3,
     });

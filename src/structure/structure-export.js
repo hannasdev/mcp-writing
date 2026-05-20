@@ -45,6 +45,22 @@ function sha256(value) {
   return crypto.createHash("sha256").update(value).digest("hex");
 }
 
+export function computeStructureChecksum(snapshot) {
+  const {
+    export: exportMetadata = {},
+    ...rest
+  } = snapshot ?? {};
+  const {
+    structure_checksum: _structureChecksum,
+    ...checksumExportMetadata
+  } = exportMetadata;
+
+  return sha256(stableStringify({
+    export: checksumExportMetadata,
+    ...rest,
+  }, 0));
+}
+
 export function defaultStructureExportFileName(projectId) {
   const slug = String(projectId ?? "project")
     .toLowerCase()
@@ -173,7 +189,7 @@ export function buildStructureExport(db, { projectId, syncDir }) {
     epigraphs,
   };
 
-  const structureChecksum = sha256(stableStringify(baseSnapshot, 0));
+  const structureChecksum = computeStructureChecksum(baseSnapshot);
   return {
     ok: true,
     snapshot: {

@@ -238,20 +238,17 @@ Some scenes are missing `part`, `chapter`, or `timeline_position` metadata. Dete
 
 In `strictness=warn` mode, the bundle is generated with the fallback ordering applied.
 
-In `strictness=fail` mode, generation is currently not blocked by missing ordering fields alone — only stale metadata triggers a hard block. If you need strict ordering guarantees, update the affected scenes via `update_scene_metadata` before generating.
+In `strictness=fail` mode, generation is currently not blocked by missing ordering fields alone — only stale metadata triggers a hard block. If you need strict ordering guarantees, update affected scene placement through explicit structure workflows before generating.
 
-Fix: use `find_scenes` to identify scenes with null ordering fields, then update them:
+Fix: use `find_scenes` to identify scenes with null ordering fields, then use `move_scene` for timeline placement or `assign_scene_to_chapter` for chapter placement:
 
 ```json
 {
-	"tool": "update_scene_metadata",
+	"tool": "move_scene",
 	"project_id": "my-project",
 	"scene_id": "sc-001-example",
-	"fields": {
-		"part": 1,
-		"chapter": 2,
-		"timeline_position": 3
-	}
+	"chapter_id": "ch-02-example",
+	"timeline_position": 3
 }
 ```
 

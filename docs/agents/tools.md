@@ -9,6 +9,7 @@
 - [`sync`](#sync)
 - [`diagnose_structure`](#diagnose_structure)
 - [`export_structure_snapshot`](#export_structure_snapshot)
+- [`restore_structure_from_export`](#restore_structure_from_export)
 - [`import_scrivener_sync`](#import_scrivener_sync)
 - [`import_scrivener_sync_async`](#import_scrivener_sync_async)
 - [`merge_scrivener_project_beta`](#merge_scrivener_project_beta)
@@ -78,7 +79,7 @@ _No parameters._
 
 ## sync
 
-Re-scan the sync folder and update the scene/character/place index from disk. Call this after making edits in Scrivener or updating sidecar files outside the MCP.
+Re-scan the sync folder and update derived scene/character/place indexes from disk. For already managed projects, sync reports file-derived chapter or epigraph drift without adopting it as canonical structure; use explicit import, repair, or structure tools for structural changes.
 
 _No parameters._
 
@@ -86,11 +87,12 @@ _No parameters._
 
 ## diagnose_structure
 
-Run read-only structure diagnostics against the current index and sync files. Reports canonical drift, ambiguous folder-derived structure, unknown chapter links, epigraph conflicts, and compatibility chapter mismatches without repairing files or mutating the database.
+Run read-only structure diagnostics against the current index, sync files, and generated structure exports. Reports canonical drift, ambiguous folder-derived structure, unknown chapter links, epigraph conflicts, compatibility chapter mismatches, and export trust/staleness issues without repairing files or mutating the database.
 
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |
 | `project_id` | `string` | No | Optional project ID to limit diagnostics to one project. |
+| `structure_export_dir` | `string` | No | Directory under WRITING_SYNC_DIR containing generated structure exports. Defaults to structure-exports. |
 
 ---
 
@@ -102,6 +104,19 @@ Generate a deterministic JSON structure export from SQLite canonical state for G
 | --- | --- | :---: | --- |
 | `project_id` | `string` | Yes | Project ID to export (e.g. 'test-novel'). |
 | `output_dir` | `string` | No | Directory under WRITING_SYNC_DIR where the export JSON should be written. Defaults to structure-exports. |
+
+---
+
+## restore_structure_from_export
+
+Explicitly restore canonical SQLite chapter, scene-placement, and epigraph structure from a trusted generated structure export. This is a repair workflow, never a sync side effect; it validates project identity, schema, checksum, file presence, and conflicts before applying a transaction.
+
+| Parameter | Type | Required | Description |
+| --- | --- | :---: | --- |
+| `project_id` | `string` | Yes | Project ID to restore (e.g. 'test-novel'). |
+| `structure_export_path` | `string` | No | Path under WRITING_SYNC_DIR to the generated structure export JSON. Defaults to structure-exports/<project>.structure.json. |
+| `structure_export_dir` | `string` | No | Directory under WRITING_SYNC_DIR containing generated structure exports. Ignored when structure_export_path is provided. Defaults to structure-exports. |
+| `dry_run` | `boolean` | No | If true (default), validate and summarize planned repairs without writing SQLite state. |
 
 ---
 
@@ -159,7 +174,7 @@ Start an asynchronous batch job that infers scene character mentions and updates
 | `project_id` | `string` | Yes | Project ID (e.g. 'the-lamb' or 'universe-1/book-1-the-lamb'). |
 | `scene_ids` | `string[]` | No | Optional allowlist of scene IDs to process before other filters are applied. |
 | `part` | `integer` | No | Optional part number filter. |
-| `chapter` | `integer` | No | Optional compatibility chapter number resolved through canonical chapter identity. |
+| `chapter` | `integer` | No | Optional read-scope compatibility alias resolved through canonical chapter identity. Not a structural mutation target. |
 | `chapter_id` | `string` | No | Optional canonical chapter identifier. |
 | `only_stale` | `boolean` | No | If true, only process scenes currently marked metadata_stale. |
 | `dry_run` | `boolean` | No | If true (default), returns preview results without writing sidecars. |
@@ -214,7 +229,7 @@ Re-derive lightweight scene metadata from current prose (logline and character m
 
 ## find_scenes
 
-Find scenes by filtering on character, Save the Cat beat, tags, chapter identity, numeric compatibility chapter, or POV. Returns ordered scene metadata only — no prose. Most filters are optional and combinable. `chapter_id` requires `project_id`, and mixed `chapter_id`/`chapter` filters must resolve to the same canonical chapter. Supports pagination via page/page_size and auto-paginates large result sets with total_count. Warns if any matching scenes have stale metadata. Response shape note: always returns a structured envelope (`results`, `total_count`, with pagination fields when paging is active).
+Find scenes by filtering on character, Save the Cat beat, tags, canonical chapter identity, numeric chapter alias, or POV. Returns ordered scene metadata only — no prose. Most filters are optional and combinable. `chapter_id` requires `project_id`; numeric `chapter` is a compatibility alias for read scopes only, resolved through canonical chapter identity, and must agree with `chapter_id` when both are provided. Supports pagination via page/page_size and auto-paginates large result sets with total_count. Warns if any matching scenes have stale metadata. Response shape note: always returns a structured envelope (`results`, `total_count`, with pagination fields when paging is active).
 
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |
@@ -223,7 +238,7 @@ Find scenes by filtering on character, Save the Cat beat, tags, chapter identity
 | `beat` | `string` | No | Save the Cat beat name (e.g. 'Opening Image'). Exact match. |
 | `tag` | `string` | No | Scene tag to filter by. Exact match. |
 | `part` | `integer` | No | Part number (integer, e.g. 1). Chapters are numbered globally across the whole project. |
-| `chapter` | `integer` | No | Compatibility chapter number resolved from canonical chapter sort order. |
+| `chapter` | `integer` | No | Read-scope compatibility alias resolved from canonical chapter sort order. Not a structural mutation target. |
 | `chapter_id` | `string` | No | Canonical chapter identifier. Requires project_id. Use list_chapters to find valid values. |
 | `pov` | `string` | No | POV character_id. Use list_characters first to find valid IDs. |
 | `page` | `integer` | No | Optional page number for paginated responses (1-based). |
@@ -245,19 +260,19 @@ Load the full prose text of a single scene. Use this for close reading, continui
 
 ## get_chapter_prose
 
-Load the full prose for every scene in a chapter, concatenated in order. Provide chapter_id or chapter, plus project_id. Canonical targeting uses chapter_id; numeric chapter remains available as a compatibility alias resolved from canonical sort order. Expensive — only use when you need to read an entire chapter. Capped at 10 scenes. Use find_scenes first to confirm the chapter exists.
+Load the full prose for every scene in a chapter, concatenated in order. Provide chapter_id or chapter, plus project_id. Canonical targeting uses chapter_id; numeric chapter remains available as a read-scope compatibility alias resolved from canonical sort order. Expensive — only use when you need to read an entire chapter. Capped at 10 scenes. Use find_scenes first to confirm the chapter exists.
 
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |
 | `project_id` | `string` | Yes | Project ID (e.g. 'the-lamb'). |
 | `chapter_id` | `string` | No | Canonical chapter identifier. |
-| `chapter` | `integer` | No | Compatibility chapter number resolved from canonical sort order. |
+| `chapter` | `integer` | No | Read-scope compatibility alias resolved from canonical chapter sort order. Not a structural mutation target. |
 
 ---
 
 ## list_chapters
 
-List canonical chapters for a project. Returns chapter_id plus compatibility sort order so callers can migrate from numeric chapter targeting without losing orientation.
+List canonical chapters for a project. Returns chapter_id plus compatibility sort order so callers can orient from numeric chapter aliases without treating those aliases as structural authority.
 
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |
@@ -267,13 +282,13 @@ List canonical chapters for a project. Returns chapter_id plus compatibility sor
 
 ## find_epigraphs
 
-List canonical epigraphs for a project, optionally narrowed to a canonical chapter_id or compatibility chapter number.
+List canonical epigraphs for a project, optionally narrowed to a canonical chapter_id or read-scope numeric chapter alias.
 
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |
 | `project_id` | `string` | Yes | Project ID. |
 | `chapter_id` | `string` | No | Canonical chapter identifier. |
-| `chapter` | `integer` | No | Compatibility chapter number resolved from canonical sort order. |
+| `chapter` | `integer` | No | Read-scope compatibility alias resolved from canonical chapter sort order. Not a structural mutation target. |
 
 ---
 
@@ -538,7 +553,7 @@ Attach an existing canonical epigraph to a canonical chapter through the explici
 
 ## move_scene
 
-Move a scene through the explicit structure workflow. Updates canonical chapter linkage and/or timeline_position in the scene sidecar and index; it does not move, rename, or resequence scene files or Scrivener-compatible folders.
+Move a scene through the explicit structure workflow. Writes canonical SQLite chapter linkage and/or timeline_position first, then mirrors compatibility fields to the scene sidecar and index; it does not move, rename, or resequence scene files or Scrivener-compatible folders.
 
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |
@@ -551,7 +566,7 @@ Move a scene through the explicit structure workflow. Updates canonical chapter 
 
 ## assign_scene_to_chapter
 
-Assign a scene to a canonical chapter through the explicit structure workflow. Writes chapter_id plus compatibility chapter/chapter_title fields to the scene sidecar and refreshes the index. Pass chapter_id=null to clear an explicit chapter link on an unchaptered scene. Use list_chapters first to choose a valid canonical chapter_id.
+Assign a scene to a canonical chapter through the explicit structure workflow. Writes canonical SQLite chapter linkage first, then mirrors chapter_id plus compatibility chapter/chapter_title fields to the scene sidecar and index. Pass chapter_id=null to clear an explicit chapter link on an unchaptered scene. Use list_chapters first to choose a valid canonical chapter_id.
 
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |
@@ -563,7 +578,7 @@ Assign a scene to a canonical chapter through the explicit structure workflow. W
 
 ## update_scene_metadata
 
-Update one or more metadata fields for a scene. Writes to the .meta.yaml sidecar — never modifies prose. Changes are immediately reflected in the index. Only available when the sync dir is writable.
+Update one or more non-structural metadata fields for a scene. Writes to the .meta.yaml sidecar — never modifies prose. Structural fields (part, chapter, chapter_id, timeline_position) are rejected here; use assign_scene_to_chapter or move_scene for chapter placement and ordering. Changes are immediately reflected in the index. Only available when the sync dir is writable.
 
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |
@@ -616,9 +631,9 @@ Dry-run planning tool for review bundles. Resolves scene scope, deterministic or
 | `project_id` | `string` | Yes | Project ID to scope the review bundle (e.g. 'test-novel'). |
 | `profile` | `enum` | Yes | Bundle profile: outline_discussion, editor_detailed, or beta_reader_personalized. |
 | `part` | `integer` | No | Optional part filter. |
-| `chapter` | `integer` | No | Optional compatibility chapter number resolved through canonical chapter identity. |
+| `chapter` | `integer` | No | Optional read-scope compatibility alias resolved through canonical chapter identity. Not a structural mutation target. |
 | `chapter_id` | `string` | No | Optional canonical chapter identifier. |
-| `chapters` | `number[]` | No | Optional compatibility chapter-set filter resolved through canonical chapter identities. Use this for one/few specific chapters. Do not combine with chapter or chapter_id. |
+| `chapters` | `number[]` | No | Optional read-scope compatibility chapter-set alias resolved through canonical chapter identities. Use this for one/few specific chapters. Do not combine with chapter or chapter_id. |
 | `tag` | `string` | No | Optional tag filter (exact match). |
 | `scene_ids` | `string[]` | No | Optional explicit scene_id allowlist. Intersects with other filters. |
 | `strictness` | `enum` | No | Strictness mode: warn (default) or fail. |
@@ -644,9 +659,9 @@ Generate review bundle artifacts (PDF/markdown) from planned scene scope. Writes
 | `profile` | `enum` | Yes | Bundle profile: outline_discussion, editor_detailed, or beta_reader_personalized. |
 | `output_dir` | `string` | Yes | Directory path to write bundle artifacts into. |
 | `part` | `integer` | No | Optional part filter. |
-| `chapter` | `integer` | No | Optional compatibility chapter number resolved through canonical chapter identity. |
+| `chapter` | `integer` | No | Optional read-scope compatibility alias resolved through canonical chapter identity. Not a structural mutation target. |
 | `chapter_id` | `string` | No | Optional canonical chapter identifier. |
-| `chapters` | `number[]` | No | Optional compatibility chapter-set filter resolved through canonical chapter identities. Use this for one/few specific chapters. Do not combine with chapter or chapter_id. |
+| `chapters` | `number[]` | No | Optional read-scope compatibility chapter-set alias resolved through canonical chapter identities. Use this for one/few specific chapters. Do not combine with chapter or chapter_id. |
 | `tag` | `string` | No | Optional tag filter (exact match). |
 | `scene_ids` | `string[]` | No | Optional explicit scene_id allowlist. Intersects with other filters. |
 | `strictness` | `enum` | No | Strictness mode: warn (default) or fail. |
@@ -707,7 +722,7 @@ Detect dominant prose conventions from existing scenes and suggest initial prose
 | `project_id` | `string` | Yes | Project ID to analyze (e.g. 'the-lamb' or 'universe-1/book-1'). |
 | `scene_ids` | `string[]` | No | Optional scene_id allowlist to analyze. |
 | `part` | `integer` | No | Optional part filter. |
-| `chapter` | `integer` | No | Optional compatibility chapter number resolved through canonical chapter identity. |
+| `chapter` | `integer` | No | Optional read-scope compatibility alias resolved through canonical chapter identity. Not a structural mutation target. |
 | `chapter_id` | `string` | No | Optional canonical chapter identifier. |
 | `max_scenes` | `integer` | No | Maximum number of scenes to analyze (default: 50). |
 | `min_agreement` | `number` | No | Minimum agreement ratio for suggested fields (default: 0.6). |
@@ -749,7 +764,7 @@ Detect styleguide drift by comparing declared config conventions against observe
 | `project_id` | `string` | Yes | Project ID to analyze (e.g. 'the-lamb' or 'universe-1/book-1'). |
 | `scene_ids` | `string[]` | No | Optional scene_id allowlist to analyze. |
 | `part` | `integer` | No | Optional part filter. |
-| `chapter` | `integer` | No | Optional compatibility chapter number resolved through canonical chapter identity. |
+| `chapter` | `integer` | No | Optional read-scope compatibility alias resolved through canonical chapter identity. Not a structural mutation target. |
 | `chapter_id` | `string` | No | Optional canonical chapter identifier. |
 | `max_scenes` | `integer` | No | Maximum number of scenes to analyze (default: 50). |
 | `min_agreement` | `number` | No | Minimum agreement ratio for suggested updates (default: 0.6). |

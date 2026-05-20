@@ -95,6 +95,29 @@ Highlights:
 
 ## Recently Delivered
 
+### 🧱 [Structural Authority Hardening](docs/initiatives/done/structural-authority-hardening/prd.md)
+
+Final authority hardening after the target architecture migration.
+
+Highlights:
+
+- Ordinary `sync` observes sidecar and folder drift without adopting it as canonical structure for managed projects
+- `update_scene_metadata` rejects structural fields and routes chapter placement/order changes to explicit structure workflows
+- Structure export diagnostics report missing, stale, wrong-project, and incompatible-schema exports before repair
+- `restore_structure_from_export` provides explicit transactional recovery from trusted generated exports
+- Numeric chapter inputs remain read-scope compatibility aliases resolved through canonical chapter identity
+
+### 🏗️ [Target Architecture Migration](docs/initiatives/done/target-architecture-migration/prd.md)
+
+Structural manuscript state boundaries, explicit mutation workflows, and SQLite-canonical structure storage.
+
+Highlights:
+
+- Structure inference, sidecar structural writes, sync observation, diagnostics, and compatibility resolution now have clearer internal boundaries
+- Explicit structure commands cover scene assignment, chapter creation/rename/reorder, epigraph attachment, and scene movement
+- SQLite is documented as canonical for structural manuscript state while prose remains file-based
+- `export_structure_snapshot` generates deterministic SQLite-derived structure exports for Git review and future recovery workflows
+
 ### 📚 Chapter and Epigraph Indexing
 
 First-class chapters and epigraphs with canonical `chapter_id` targeting, chapter-aware retrieval, and chapter-linked rendering.
@@ -104,7 +127,7 @@ Highlights:
 - Canonical `chapters` and `epigraphs` entities with project-scoped identifiers
 - `list_chapters` and `find_epigraphs` as dedicated discovery tools
 - `find_scenes`, `get_chapter_prose`, styleguide flows, and review bundles updated for `chapter_id`
-- Explicit chapter-folder and `epigraph.md` indexing path, with numeric chapter filters retained as compatibility aliases
+- Explicit chapter-folder and `epigraph.md` indexing path, with numeric chapter filters retained as read-scope compatibility aliases resolved through canonical chapter identity
 
 Implementation status:
 

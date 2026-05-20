@@ -122,6 +122,26 @@ describe("sync tool", () => {
     const secondContent = fs.readFileSync(outputPath, "utf8");
     assert.equal(secondContent, firstContent);
   });
+
+  test("restore_structure_from_export dry-run validates current export", async () => {
+    await callWriteTool("export_structure_snapshot", {
+      project_id: "test-novel",
+      output_dir: "structure-exports",
+    });
+
+    const text = await callWriteTool("restore_structure_from_export", {
+      project_id: "test-novel",
+      dry_run: true,
+    });
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.action, "planned");
+    assert.equal(parsed.dry_run, true);
+    assert.deepEqual(parsed.diagnostics, []);
+    assert.equal(parsed.planned_changes.chapters_created, 0);
+    assert.equal(parsed.planned_changes.epigraphs_created, 0);
+  });
 });
 
 describe("import_scrivener_sync tool", () => {

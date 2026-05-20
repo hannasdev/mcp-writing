@@ -1,3 +1,5 @@
+import fs from "node:fs";
+
 export function indexCanonicalEpigraph(db, {
   projectId,
   chapterId,
@@ -10,8 +12,116 @@ export function indexCanonicalEpigraph(db, {
   chapterWarning = null,
   buildProseChecksum,
   buildDefaultEpigraphId,
+  managedStructure = false,
   updatedAt = new Date().toISOString(),
 }) {
+  const defaultEpigraphId = chapterId
+    ? buildDefaultEpigraphId({ projectId, chapterId })
+    : null;
+  const requestedEpigraphId = meta.epigraph_id ?? defaultEpigraphId;
+  const epigraphChecksum = buildProseChecksum(prose);
+
+  if (managedStructure) {
+    const existingEpigraphByPath = db.prepare(`
+      SELECT epigraph_id, chapter_id, file_path, prose_checksum
+      FROM epigraphs
+      WHERE project_id = ? AND file_path = ?
+      LIMIT 1
+    `).get(projectId, file);
+    const existingEpigraphById = requestedEpigraphId
+      ? db.prepare(`
+        SELECT e.epigraph_id, e.chapter_id, e.file_path, e.prose_checksum, c.sort_index AS chapter_sort_index
+        FROM epigraphs e
+        LEFT JOIN chapters c
+          ON c.project_id = e.project_id
+         AND c.chapter_id = e.chapter_id
+        WHERE e.project_id = ? AND e.epigraph_id = ?
+        LIMIT 1
+      `).get(projectId, requestedEpigraphId)
+      : null;
+    const existingEpigraphByCompatibleId = existingEpigraphById
+      && (
+        chapterSortIndex == null
+        || existingEpigraphById.chapter_sort_index == null
+        || existingEpigraphById.chapter_sort_index === chapterSortIndex
+      )
+      ? existingEpigraphById
+      : null;
+    const existingEpigraphByChapter = chapterId
+      ? db.prepare(`
+        SELECT epigraph_id, chapter_id, file_path, prose_checksum
+        FROM epigraphs
+        WHERE project_id = ? AND chapter_id = ?
+        ORDER BY epigraph_id
+        LIMIT 2
+      `).all(projectId, chapterId)
+      : [];
+    const existingEpigraphByChapterSort = chapterSortIndex != null
+      ? db.prepare(`
+        SELECT e.epigraph_id, e.chapter_id, e.file_path, e.prose_checksum
+        FROM epigraphs e
+        JOIN chapters c
+          ON c.project_id = e.project_id
+         AND c.chapter_id = e.chapter_id
+        WHERE e.project_id = ? AND c.sort_index = ?
+        ORDER BY e.epigraph_id
+        LIMIT 2
+      `).all(projectId, chapterSortIndex)
+      : [];
+    const movedCandidate = (candidate) => candidate && (!candidate.file_path || !fs.existsSync(candidate.file_path))
+      ? candidate
+      : null;
+    const existingEpigraph = existingEpigraphByPath
+      ?? movedCandidate(existingEpigraphByCompatibleId)
+      ?? (existingEpigraphByChapter.length === 1 ? movedCandidate(existingEpigraphByChapter[0]) : null)
+      ?? (existingEpigraphByChapterSort.length === 1 ? movedCandidate(existingEpigraphByChapterSort[0]) : null);
+
+    if (!existingEpigraph) {
+      return {
+        isStale: 0,
+        skippedAsEpigraph: true,
+        warning: `Managed structure sync ignored file-derived epigraph linkage: ${relativePath}`,
+      };
+    }
+
+    const epigraphIsStale = existingEpigraph.prose_checksum !== null && existingEpigraph.prose_checksum !== epigraphChecksum ? 1 : 0;
+    db.prepare(`
+      UPDATE epigraphs
+      SET body = ?,
+          file_path = ?,
+          prose_checksum = ?,
+          metadata_stale = CASE
+            WHEN ? != prose_checksum THEN 1
+            ELSE metadata_stale
+          END,
+          updated_at = ?
+      WHERE epigraph_id = ? AND project_id = ?
+    `).run(
+      prose,
+      file,
+      epigraphChecksum,
+      epigraphChecksum,
+      updatedAt,
+      existingEpigraph.epigraph_id,
+      projectId
+    );
+
+    return {
+      isStale: epigraphIsStale,
+      skippedAsEpigraph: true,
+      epigraphIndexed: true,
+      chapterId: existingEpigraph.chapter_id,
+      epigraphId: existingEpigraph.epigraph_id,
+      warning: existingEpigraphByPath
+        ? (requestedEpigraphId && requestedEpigraphId !== existingEpigraph.epigraph_id
+          ? `Managed structure sync ignored file-derived epigraph_id '${requestedEpigraphId}': ${relativePath}`
+          : chapterId && chapterId !== existingEpigraph.chapter_id
+            ? `Managed structure sync ignored file-derived epigraph linkage: ${relativePath}`
+            : null)
+        : `Managed structure sync preserved canonical epigraph '${existingEpigraph.epigraph_id}' while refreshing moved file path: ${relativePath}`,
+    };
+  }
+
   const canonicalChapter = chapterId
     ? db.prepare(`SELECT chapter_id FROM chapters WHERE chapter_id = ? AND project_id = ?`).get(chapterId, projectId)
     : null;
@@ -26,9 +136,6 @@ export function indexCanonicalEpigraph(db, {
     return { isStale: 0, skippedAsEpigraph: true, warning: reason };
   }
 
-  const defaultEpigraphId = buildDefaultEpigraphId({ projectId, chapterId });
-  const requestedEpigraphId = meta.epigraph_id ?? defaultEpigraphId;
-  const epigraphChecksum = buildProseChecksum(prose);
   const epigraphById = db.prepare(`
     SELECT epigraph_id, chapter_id, prose_checksum
     FROM epigraphs
