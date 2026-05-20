@@ -385,6 +385,66 @@ function readStructureExportFile(filePath) {
   }
 }
 
+function diagnoseStructureExportFileKind(diagnostics, {
+  projectId,
+  exportPath,
+}) {
+  let exportStat;
+  try {
+    exportStat = fs.lstatSync(exportPath);
+  } catch (error) {
+    if (error?.code !== "ENOENT") throw error;
+    addDiagnostic(
+      diagnostics,
+      "structure_export_missing",
+      `Project "${projectId}" does not have a generated structure export.`,
+      {
+        project_id: projectId,
+        export_path: exportPath,
+      },
+      {
+        severity: "info",
+        nextStep: "Run export_structure_snapshot before relying on export-based recovery.",
+      }
+    );
+    return "missing";
+  }
+
+  if (exportStat.isSymbolicLink()) {
+    addDiagnostic(
+      diagnostics,
+      "structure_export_symlink",
+      `Structure export for project "${projectId}" is a symlink, which is not trusted diagnostics input.`,
+      {
+        project_id: projectId,
+        export_path: exportPath,
+      },
+      {
+        nextStep: "Use a regular generated structure export file under WRITING_SYNC_DIR.",
+      }
+    );
+    return "symlink";
+  }
+
+  if (!exportStat.isFile()) {
+    addDiagnostic(
+      diagnostics,
+      "structure_export_not_regular",
+      `Structure export for project "${projectId}" is not a regular file.`,
+      {
+        project_id: projectId,
+        export_path: exportPath,
+      },
+      {
+        nextStep: "Regenerate the export with export_structure_snapshot before using it for recovery.",
+      }
+    );
+    return "not_regular";
+  }
+
+  return "regular";
+}
+
 function diagnoseStructureExports(db, diagnostics, {
   syncDir,
   exportDir,
@@ -422,25 +482,16 @@ function diagnoseStructureExports(db, diagnostics, {
       continue;
     }
 
-    if (!fs.existsSync(exportPath)) {
-      addDiagnostic(
-        diagnostics,
-        "structure_export_missing",
-        `Project "${expectedProjectId}" does not have a generated structure export.`,
-        {
-          project_id: expectedProjectId,
-          export_path: exportPath,
-        },
-        {
-          severity: "info",
-          nextStep: "Run export_structure_snapshot before relying on export-based recovery.",
-        }
-      );
+    const exportFileKind = diagnoseStructureExportFileKind(diagnostics, {
+      projectId: expectedProjectId,
+      exportPath,
+    });
+    if (exportFileKind !== "regular") {
       exportChecks.push({
         project_id: expectedProjectId,
         export_path: exportPath,
         trusted: false,
-        status: "missing",
+        status: exportFileKind,
       });
       continue;
     }

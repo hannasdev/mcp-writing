@@ -572,6 +572,72 @@ describe("runStructureDiagnostics", () => {
       fs.rmSync(syncDir, { recursive: true, force: true });
     }
   });
+
+  test("refuses to trust symlinked or non-regular structure export files", () => {
+    const syncDir = fs.mkdtempSync(path.join(os.tmpdir(), "structure-export-file-kind-"));
+    const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), "structure-export-outside-"));
+    const outputDir = path.join(syncDir, "structure-exports");
+    const db = openDb(":memory:");
+    try {
+      seedProject(db, "symlink-export");
+      seedProject(db, "directory-export");
+
+      fs.mkdirSync(outputDir, { recursive: true });
+      fs.mkdirSync(
+        path.join(outputDir, defaultStructureExportFileName("directory-export"))
+      );
+
+      const outsideExportPath = path.join(outsideDir, "trusted-export.json");
+      fs.writeFileSync(outsideExportPath, JSON.stringify({
+        export: {
+          schema_version: 1,
+          canonical_source: "sqlite",
+          project_id: "symlink-export",
+          generated_transparency: true,
+          mutation_surface: false,
+          structure_checksum: "not-checked",
+        },
+        project: {
+          project_id: "symlink-export",
+          universe_id: null,
+          name: "symlink-export",
+        },
+        summary: {
+          chapter_count: 0,
+          scene_count: 0,
+          epigraph_count: 0,
+        },
+        chapters: [],
+        scenes: [],
+        epigraphs: [],
+      }), "utf8");
+      fs.symlinkSync(
+        outsideExportPath,
+        path.join(outputDir, defaultStructureExportFileName("symlink-export"))
+      );
+
+      const result = runStructureDiagnostics(db, { syncDir });
+
+      assert.equal(result.ok, false);
+      assert.equal(result.summary.by_type.structure_export_symlink, 1);
+      assert.equal(result.summary.by_type.structure_export_not_regular, 1);
+      assert.deepEqual(
+        result.checked.structure_exports.map(exportCheck => [
+          exportCheck.project_id,
+          exportCheck.status,
+          exportCheck.trusted,
+        ]),
+        [
+          ["directory-export", "not_regular", false],
+          ["symlink-export", "symlink", false],
+        ]
+      );
+    } finally {
+      db.close();
+      fs.rmSync(syncDir, { recursive: true, force: true });
+      fs.rmSync(outsideDir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("diagnose_structure tool", () => {
