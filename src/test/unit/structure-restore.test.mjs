@@ -272,6 +272,60 @@ describe("restoreStructureFromExport", () => {
     }
   });
 
+  test("refuses restore when an exported file path is a symlink", () => {
+    const syncDir = fs.mkdtempSync(path.join(os.tmpdir(), "structure-restore-file-symlink-"));
+    const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), "structure-restore-outside-"));
+    const db = openDb(":memory:");
+    try {
+      const { scenePath } = seedTrustedExportFixture(db, syncDir);
+      const outsideScenePath = path.join(outsideDir, "sc-001.md");
+      fs.writeFileSync(outsideScenePath, "Scene prose.", "utf8");
+      fs.rmSync(scenePath);
+      fs.symlinkSync(outsideScenePath, scenePath);
+
+      const result = restoreStructureFromExport(db, {
+        syncDir,
+        projectId: "test-novel",
+        dryRun: false,
+      });
+
+      assert.equal(result.ok, false);
+      assert.equal(result.action, "restore_refused");
+      assert.equal(result.summary.by_type.structure_export_file_symlink, 1);
+    } finally {
+      db.close();
+      fs.rmSync(syncDir, { recursive: true, force: true });
+      fs.rmSync(outsideDir, { recursive: true, force: true });
+    }
+  });
+
+  test("refuses restore when the structure export is a symlink", () => {
+    const syncDir = fs.mkdtempSync(path.join(os.tmpdir(), "structure-restore-export-symlink-"));
+    const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), "structure-restore-export-outside-"));
+    const db = openDb(":memory:");
+    try {
+      const { exportPath } = seedTrustedExportFixture(db, syncDir);
+      const outsideExportPath = path.join(outsideDir, "trusted-export.json");
+      fs.copyFileSync(exportPath, outsideExportPath);
+      fs.rmSync(exportPath);
+      fs.symlinkSync(outsideExportPath, exportPath);
+
+      const result = restoreStructureFromExport(db, {
+        syncDir,
+        projectId: "test-novel",
+        dryRun: false,
+      });
+
+      assert.equal(result.ok, false);
+      assert.equal(result.action, "restore_refused");
+      assert.equal(result.summary.by_type.structure_export_symlink, 1);
+    } finally {
+      db.close();
+      fs.rmSync(syncDir, { recursive: true, force: true });
+      fs.rmSync(outsideDir, { recursive: true, force: true });
+    }
+  });
+
   test("refuses extra current chapters that are absent from the export", () => {
     const syncDir = fs.mkdtempSync(path.join(os.tmpdir(), "structure-restore-conflict-"));
     const db = openDb(":memory:");

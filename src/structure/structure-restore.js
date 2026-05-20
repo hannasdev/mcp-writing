@@ -98,7 +98,7 @@ function resolveExportedPath(syncDir, exportedPath, {
 
   let fileStat;
   try {
-    fileStat = fs.statSync(resolvedPath);
+    fileStat = fs.lstatSync(resolvedPath);
   } catch (error) {
     if (error?.code !== "ENOENT") throw error;
     diagnostics.push(createDiagnostic(
@@ -112,6 +112,22 @@ function resolveExportedPath(syncDir, exportedPath, {
         resolved_path: resolvedPath,
       },
       { nextStep: "Run sync after restoring the file, then retry restore_structure_from_export." }
+    ));
+    return null;
+  }
+
+  if (fileStat.isSymbolicLink()) {
+    diagnostics.push(createDiagnostic(
+      "structure_export_file_symlink",
+      `${itemKind} "${itemId}" in project "${projectId}" points to a symlink, which is not trusted restore input.`,
+      {
+        project_id: projectId,
+        item_kind: itemKind,
+        item_id: itemId,
+        exported_path: exportedPath,
+        resolved_path: resolvedPath,
+      },
+      { nextStep: "Replace the symlink with a regular file inside the active sync root, then regenerate the structure export." }
     ));
     return null;
   }
@@ -278,7 +294,11 @@ function validateSnapshotShape(snapshot, { projectId, diagnostics }) {
 }
 
 function readSnapshot(exportPath, { projectId, diagnostics }) {
-  if (!fs.existsSync(exportPath)) {
+  let exportStat;
+  try {
+    exportStat = fs.lstatSync(exportPath);
+  } catch (error) {
+    if (error?.code !== "ENOENT") throw error;
     diagnostics.push(createDiagnostic(
       "structure_export_missing",
       `No structure export exists for project "${projectId}" at the requested path.`,
@@ -287,6 +307,32 @@ function readSnapshot(exportPath, { projectId, diagnostics }) {
         export_path: exportPath,
       },
       { nextStep: "Run export_structure_snapshot before restoring from an export." }
+    ));
+    return null;
+  }
+
+  if (exportStat.isSymbolicLink()) {
+    diagnostics.push(createDiagnostic(
+      "structure_export_symlink",
+      `Structure export for project "${projectId}" is a symlink, which is not trusted restore input.`,
+      {
+        project_id: projectId,
+        export_path: exportPath,
+      },
+      { nextStep: "Use a regular generated structure export file under WRITING_SYNC_DIR." }
+    ));
+    return null;
+  }
+
+  if (!exportStat.isFile()) {
+    diagnostics.push(createDiagnostic(
+      "structure_export_not_regular",
+      `Structure export for project "${projectId}" is not a regular file.`,
+      {
+        project_id: projectId,
+        export_path: exportPath,
+      },
+      { nextStep: "Regenerate the export before using it as repair input." }
     ));
     return null;
   }
