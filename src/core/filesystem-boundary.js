@@ -457,24 +457,27 @@ export function deleteInsideBoundary(targetPath, {
     if (error?.code !== "ENOENT") throw error;
   }
 
-  let target;
-  try {
-    target = resolveExistingPathInsideBoundary(targetPath, {
-      boundaryRoot,
-      boundaryRootReal,
-      errorCode,
-      errorMessage: "Delete target must be inside the configured boundary.",
-      details: { artifact_class: artifactClass },
-    });
-  } catch (error) {
-    if (force && error?.name === "CoreValidationError") {
-      return { deleted: false, missing: true };
+  const candidate = resolveCandidateInsideBoundary(targetPath, {
+    boundaryRoot,
+    boundaryRootReal,
+    errorCode,
+    errorMessage: "Delete target must be inside the configured boundary.",
+    details: { artifact_class: artifactClass },
+  });
+
+  if (!fs.existsSync(candidate.resolvedPath)) {
+    if (force) {
+      return { deleted: false, missing: true, targetPath: candidate.resolvedPath };
     }
-    throw error;
+    throw createCoreValidationError(
+      errorCode,
+      `Delete target does not exist: ${targetPath}`,
+      { path: candidate.resolvedPath, artifact_class: artifactClass }
+    );
   }
 
-  fs.rmSync(target.resolvedPath, { force, recursive });
-  return { deleted: true, targetPath: target.resolvedPath };
+  fs.rmSync(candidate.resolvedPath, { force, recursive });
+  return { deleted: true, targetPath: candidate.resolvedPath };
 }
 
 export function moveInsideBoundary(fromPath, toPath, {

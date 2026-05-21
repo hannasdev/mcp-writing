@@ -4,6 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {
+  assertImportSourcePath,
   cleanupRuntimeTempPath,
   copyFileInsideBoundary,
   createRuntimeTempBoundary,
@@ -12,6 +13,7 @@ import {
   FILESYSTEM_ARTIFACT_CLASSES,
   moveInsideBoundary,
   resolveArtifactPathInsideSyncRoot,
+  resolveExistingPathInsideBoundary,
   resolveGeneratedOutputDirWithinSync,
   resolveGeneratedOutputPath,
   resolveRuntimeTempPath,
@@ -121,6 +123,39 @@ describe("filesystem boundary helpers", () => {
     });
   });
 
+  test("resolves existing paths inside a boundary and rejects existing symlink escapes", () => {
+    withTempDir("fs-boundary-sync-", (syncDir) => {
+      withTempDir("fs-boundary-outside-", (outsideDir) => {
+        const syncDirReal = fs.realpathSync.native(syncDir);
+        const scenePath = path.join(syncDir, "scene.md");
+        fs.writeFileSync(scenePath, "scene", "utf8");
+
+        const result = resolveExistingPathInsideBoundary(scenePath, {
+          boundaryRoot: syncDir,
+          boundaryRootReal: syncDirReal,
+        });
+        assert.equal(result.resolvedPath, fs.realpathSync.native(scenePath));
+        assert.equal(result.relativeToBoundary, "scene.md");
+
+        const outsideFile = path.join(outsideDir, "outside.md");
+        const linkPath = path.join(syncDir, "outside-link.md");
+        fs.writeFileSync(outsideFile, "outside", "utf8");
+        fs.symlinkSync(outsideFile, linkPath);
+
+        assert.throws(
+          () => resolveExistingPathInsideBoundary(linkPath, {
+            boundaryRoot: syncDir,
+            boundaryRootReal: syncDirReal,
+            errorCode: "INVALID_SYNC_PATH",
+          }),
+          (error) => error.name === "CoreValidationError"
+            && error.code === "INVALID_SYNC_PATH"
+            && /inside/.test(error.message)
+        );
+      });
+    });
+  });
+
   test("rejects unsupported sync-root artifact classes", () => {
     withTempDir("fs-boundary-sync-", (syncDir) => {
       assert.throws(
@@ -130,6 +165,33 @@ describe("filesystem boundary helpers", () => {
           artifactClass: FILESYSTEM_ARTIFACT_CLASSES.IMPORT_SOURCE,
         }),
         /Unsupported sync-root artifact class/
+      );
+    });
+  });
+
+  test("classifies import source files and directories outside the sync root", () => {
+    withTempDir("fs-boundary-import-", (importDir) => {
+      const sourceFile = path.join(importDir, "source.txt");
+      fs.writeFileSync(sourceFile, "source", "utf8");
+
+      assert.deepEqual(assertImportSourcePath(importDir), {
+        resolvedPath: fs.realpathSync.native(importDir),
+      });
+      assert.deepEqual(assertImportSourcePath(sourceFile), {
+        resolvedPath: fs.realpathSync.native(sourceFile),
+      });
+    });
+  });
+
+  test("rejects import source paths that are not files or directories", () => {
+    withTempDir("fs-boundary-import-", (importDir) => {
+      const fifoPath = path.join(importDir, "missing-source.txt");
+
+      assert.throws(
+        () => assertImportSourcePath(fifoPath),
+        (error) => error.name === "CoreValidationError"
+          && error.code === "INVALID_IMPORT_SOURCE"
+          && /could not be resolved/.test(error.message)
       );
     });
   });
@@ -339,6 +401,45 @@ describe("filesystem boundary helpers", () => {
           && /target path is a symlink/.test(error.message)
       );
       assert.equal(fs.readFileSync(target, "utf8"), "preserve");
+    });
+  });
+
+  test("delete helper removes regular targets and only ignores missing in-boundary paths", () => {
+    withTempDir("fs-boundary-sync-", (syncDir) => {
+      withTempDir("fs-boundary-outside-", (outsideDir) => {
+        const syncDirReal = fs.realpathSync.native(syncDir);
+        const target = path.join(syncDir, "target.md");
+        fs.writeFileSync(target, "delete", "utf8");
+
+        const deleted = deleteInsideBoundary(target, {
+          boundaryRoot: syncDir,
+          boundaryRootReal: syncDirReal,
+          errorCode: "INVALID_SYNC_PATH",
+        });
+        assert.equal(deleted.deleted, true);
+        assert.equal(fs.existsSync(target), false);
+
+        const missing = deleteInsideBoundary(path.join(syncDir, "missing.md"), {
+          boundaryRoot: syncDir,
+          boundaryRootReal: syncDirReal,
+          force: true,
+          errorCode: "INVALID_SYNC_PATH",
+        });
+        assert.equal(missing.deleted, false);
+        assert.equal(missing.missing, true);
+
+        assert.throws(
+          () => deleteInsideBoundary(path.join(outsideDir, "missing.md"), {
+            boundaryRoot: syncDir,
+            boundaryRootReal: syncDirReal,
+            force: true,
+            errorCode: "INVALID_SYNC_PATH",
+          }),
+          (error) => error.name === "CoreValidationError"
+            && error.code === "INVALID_SYNC_PATH"
+            && /Delete target/.test(error.message)
+        );
+      });
     });
   });
 
