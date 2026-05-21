@@ -1,21 +1,11 @@
-import fs from "node:fs";
 import path from "node:path";
 import { ReviewBundlePlanError } from "./review-bundles-planner.js";
 import { renderReviewBundleMarkdown, renderReviewBundlePdfWithMetadata, renderBetaNoticeMarkdown, renderBetaFeedbackFormMarkdown } from "./review-bundles-renderer.js";
-
-function resolveOutputFilePath(outputDir, fileName) {
-  const normalizedOutputDir = path.resolve(outputDir);
-  const target = path.resolve(normalizedOutputDir, fileName);
-  const rel = path.relative(normalizedOutputDir, target);
-  if (rel.startsWith("..") || path.isAbsolute(rel)) {
-    throw new ReviewBundlePlanError(
-      "INVALID_OUTPUT_PATH",
-      `Output file '${fileName}' resolves outside output_dir.`,
-      { output_dir: normalizedOutputDir, file_name: fileName }
-    );
-  }
-  return target;
-}
+import {
+  ensureDirectoryInsideBoundary,
+  resolveGeneratedOutputPath,
+  writeGeneratedOutputFile,
+} from "../core/filesystem-boundary.js";
 
 export async function createReviewBundleArtifacts(dbHandle, {
   plan,
@@ -28,24 +18,7 @@ export async function createReviewBundleArtifacts(dbHandle, {
   }
 
   const normalizedOutputDir = path.resolve(output_dir);
-  if (fs.existsSync(normalizedOutputDir)) {
-    if (!fs.statSync(normalizedOutputDir).isDirectory()) {
-      throw new ReviewBundlePlanError(
-        "INVALID_OUTPUT_DIR",
-        `output_dir exists but is not a directory: ${normalizedOutputDir}`
-      );
-    }
-  } else {
-    fs.mkdirSync(normalizedOutputDir, { recursive: true });
-  }
-  try {
-    fs.accessSync(normalizedOutputDir, fs.constants.W_OK);
-  } catch {
-    throw new ReviewBundlePlanError(
-      "INVALID_OUTPUT_DIR",
-      `output_dir is not writable: ${normalizedOutputDir}`
-    );
-  }
+  ensureDirectoryInsideBoundary(normalizedOutputDir, { label: "output_dir" });
 
   const noticeFileName = plan.planned_outputs.find(name => name.endsWith(".notice.md")) ?? null;
   const feedbackFileName = plan.planned_outputs.find(name => name.endsWith(".feedback-form.md")) ?? null;
@@ -71,11 +44,11 @@ export async function createReviewBundleArtifacts(dbHandle, {
     );
   }
 
-  const markdownPath = markdownFileName ? resolveOutputFilePath(normalizedOutputDir, markdownFileName) : null;
-  const pdfPath = pdfFileName ? resolveOutputFilePath(normalizedOutputDir, pdfFileName) : null;
-  const manifestPath = resolveOutputFilePath(normalizedOutputDir, manifestFileName);
-  const noticePath = noticeFileName ? resolveOutputFilePath(normalizedOutputDir, noticeFileName) : null;
-  const feedbackPath = feedbackFileName ? resolveOutputFilePath(normalizedOutputDir, feedbackFileName) : null;
+  const markdownPath = markdownFileName ? resolveGeneratedOutputPath(normalizedOutputDir, markdownFileName) : null;
+  const pdfPath = pdfFileName ? resolveGeneratedOutputPath(normalizedOutputDir, pdfFileName) : null;
+  const manifestPath = resolveGeneratedOutputPath(normalizedOutputDir, manifestFileName);
+  const noticePath = noticeFileName ? resolveGeneratedOutputPath(normalizedOutputDir, noticeFileName) : null;
+  const feedbackPath = feedbackFileName ? resolveGeneratedOutputPath(normalizedOutputDir, feedbackFileName) : null;
 
   const generatedAt = new Date().toISOString();
 
@@ -114,43 +87,18 @@ export async function createReviewBundleArtifacts(dbHandle, {
     ...(fingerprintMetadata ? { fingerprint: fingerprintMetadata } : {}),
   };
 
-  for (const outputPath of [markdownPath, pdfPath, manifestPath, noticePath, feedbackPath].filter(Boolean)) {
-    try {
-      const stat = fs.lstatSync(outputPath);
-      if (stat.isSymbolicLink()) {
-        throw new ReviewBundlePlanError(
-          "INVALID_OUTPUT_PATH",
-          `Refusing to write: target path is a symlink: ${outputPath}`
-        );
-      }
-      if (!stat.isFile()) {
-        throw new ReviewBundlePlanError(
-          "INVALID_OUTPUT_PATH",
-          `Refusing to write: target path exists but is not a regular file: ${outputPath}`
-        );
-      }
-    } catch (error) {
-      if (error instanceof ReviewBundlePlanError) throw error;
-      if (error?.code !== "ENOENT") throw error;
-      // ENOENT — file doesn't exist yet, which is the expected case.
-      // Note: there is an inherent TOCTOU window between this lstat check and the
-      // writeFileSync below. This is acceptable for a local tool where the caller
-      // controls the output directory.
-    }
-  }
-
   if (markdownPath && markdown != null) {
-    fs.writeFileSync(markdownPath, markdown, "utf8");
+    writeGeneratedOutputFile(markdownPath, markdown, { encoding: "utf8" });
   }
   if (pdfPath && pdfBuffer != null) {
-    fs.writeFileSync(pdfPath, pdfBuffer);
+    writeGeneratedOutputFile(pdfPath, pdfBuffer);
   }
-  fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n", "utf8");
+  writeGeneratedOutputFile(manifestPath, JSON.stringify(manifest, null, 2) + "\n", { encoding: "utf8" });
   if (noticePath && betaNotice != null) {
-    fs.writeFileSync(noticePath, betaNotice, "utf8");
+    writeGeneratedOutputFile(noticePath, betaNotice, { encoding: "utf8" });
   }
   if (feedbackPath && betaFeedbackForm != null) {
-    fs.writeFileSync(feedbackPath, betaFeedbackForm, "utf8");
+    writeGeneratedOutputFile(feedbackPath, betaFeedbackForm, { encoding: "utf8" });
   }
 
   return {

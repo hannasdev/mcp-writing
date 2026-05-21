@@ -10,14 +10,7 @@ import {
   renderPlaceSheetTemplate,
   renderCharacterArcTemplate,
 } from "../world/world-entity-templates.js";
-
-function createCoreValidationError(code, message, details) {
-  const error = new Error(message);
-  error.name = "CoreValidationError";
-  error.code = code;
-  error.details = details;
-  return error;
-}
+import { resolveGeneratedOutputDirWithinSync } from "./filesystem-boundary.js";
 
 export function deriveLoglineFromProse(prose) {
   const compact = prose.replace(/\s+/g, " ").trim();
@@ -216,48 +209,10 @@ export function createHelpers({ syncDir, syncDirReal, syncDirAbs, db, syncDirWri
   }
 
   function resolveOutputDirWithinSync(outputDir) {
-    let resolvedOutputDir = path.resolve(outputDir);
-    let existingAncestor = resolvedOutputDir;
-
-    while (!fs.existsSync(existingAncestor)) {
-      const parentDir = path.dirname(existingAncestor);
-      if (parentDir === existingAncestor) {
-        throw createCoreValidationError(
-          "INVALID_OUTPUT_DIR",
-          "output_dir must be inside WRITING_SYNC_DIR.",
-          { output_dir: resolvedOutputDir, sync_dir: syncDirAbs }
-        );
-      }
-      existingAncestor = parentDir;
-    }
-
-    let realExistingAncestor;
-    try {
-      realExistingAncestor = fs.realpathSync.native(existingAncestor);
-    } catch (err) {
-      throw createCoreValidationError(
-        "INVALID_OUTPUT_DIR",
-        "output_dir ancestor could not be resolved: path may be inaccessible.",
-        {
-          output_dir: outputDir,
-          existing_ancestor: existingAncestor,
-          cause: err instanceof Error ? err.message : String(err),
-        }
-      );
-    }
-    const relativeFromAncestor = path.relative(existingAncestor, resolvedOutputDir);
-    resolvedOutputDir = path.resolve(realExistingAncestor, relativeFromAncestor);
-
-    const relativeToSyncDir = path.relative(syncDirReal, resolvedOutputDir);
-    if (relativeToSyncDir.startsWith("..") || path.isAbsolute(relativeToSyncDir)) {
-      throw createCoreValidationError(
-        "INVALID_OUTPUT_DIR",
-        "output_dir must be inside WRITING_SYNC_DIR.",
-        { output_dir: resolvedOutputDir, sync_dir: syncDirAbs }
-      );
-    }
-
-    return { resolvedOutputDir, relativeToSyncDir };
+    return resolveGeneratedOutputDirWithinSync(outputDir, {
+      syncDirAbs,
+      syncDirReal,
+    });
   }
 
   function resolveProjectRoot(projectId) {
