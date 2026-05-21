@@ -512,4 +512,66 @@ describe("filesystem boundary helpers", () => {
       }
     });
   });
+
+  test("runtime temp helpers reject traversal attempts", () => {
+    const { tmpDir, tmpDirReal } = createRuntimeTempBoundary({ prefix: "fs-boundary-job-" });
+    try {
+      const escapePath = path.join(tmpDir, "..", "escape.json");
+
+      assert.throws(
+        () => writeRuntimeTempFile(tmpDir, escapePath, "{}", {
+          tempDirReal: tmpDirReal,
+        }),
+        (error) => error.name === "CoreValidationError"
+          && error.code === "INVALID_RUNTIME_TEMP_PATH"
+          && /job temp directory/.test(error.message)
+      );
+
+      assert.throws(
+        () => cleanupRuntimeTempPath(tmpDir, escapePath, {
+          tempDirReal: tmpDirReal,
+          force: true,
+        }),
+        (error) => error.name === "CoreValidationError"
+          && error.code === "INVALID_RUNTIME_TEMP_PATH"
+          && /job temp directory/.test(error.message)
+      );
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  test("runtime temp helpers reject symlink write and cleanup targets", () => {
+    const { tmpDir, tmpDirReal } = createRuntimeTempBoundary({ prefix: "fs-boundary-job-" });
+    try {
+      const targetPath = path.join(tmpDir, "result.json");
+      const linkPath = path.join(tmpDir, "result-link.json");
+      fs.writeFileSync(targetPath, "{\"ok\":true}\n", "utf8");
+      fs.symlinkSync(targetPath, linkPath);
+
+      assert.throws(
+        () => writeRuntimeTempFile(tmpDir, linkPath, "{\"ok\":false}\n", {
+          tempDirReal: tmpDirReal,
+        }),
+        (error) => error.name === "CoreValidationError"
+          && error.code === "INVALID_RUNTIME_TEMP_PATH"
+          && /target path is a symlink/.test(error.message)
+      );
+      assert.equal(fs.readFileSync(targetPath, "utf8"), "{\"ok\":true}\n");
+
+      assert.throws(
+        () => cleanupRuntimeTempPath(tmpDir, linkPath, {
+          tempDirReal: tmpDirReal,
+          force: true,
+        }),
+        (error) => error.name === "CoreValidationError"
+          && error.code === "INVALID_RUNTIME_TEMP_PATH"
+          && /target path is a symlink/.test(error.message)
+      );
+      assert.equal(fs.readFileSync(targetPath, "utf8"), "{\"ok\":true}\n");
+      assert.equal(fs.existsSync(linkPath), true);
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
 });

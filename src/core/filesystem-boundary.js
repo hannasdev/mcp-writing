@@ -652,6 +652,7 @@ export function writeRuntimeTempFile(tempDir, filePath, data, {
   errorCode = "INVALID_RUNTIME_TEMP_PATH",
 } = {}) {
   const { resolvedPath } = resolveRuntimeTempPath(tempDir, filePath, { tempDirReal, errorCode });
+  assertRegularFileWriteTarget(path.resolve(filePath), { errorCode });
   assertRegularFileWriteTarget(resolvedPath, { errorCode });
   if (encoding) {
     fs.writeFileSync(resolvedPath, data, encoding);
@@ -667,6 +668,20 @@ export function cleanupRuntimeTempPath(tempDir, candidatePath, {
   force = true,
   errorCode = "INVALID_RUNTIME_TEMP_PATH",
 } = {}) {
+  try {
+    const stat = fs.lstatSync(path.resolve(candidatePath));
+    if (stat.isSymbolicLink()) {
+      throw createCoreValidationError(
+        errorCode,
+        `Refusing to cleanup runtime temp path: target path is a symlink: ${candidatePath}`,
+        { path: path.resolve(candidatePath), artifact_class: FILESYSTEM_ARTIFACT_CLASSES.RUNTIME_TEMP }
+      );
+    }
+  } catch (error) {
+    if (error?.name === "CoreValidationError") throw error;
+    if (error?.code !== "ENOENT") throw error;
+  }
+
   const { resolvedPath } = resolveRuntimeTempPath(tempDir, candidatePath, { tempDirReal, errorCode });
   fs.rmSync(resolvedPath, { recursive, force });
   return { deleted: true, targetPath: resolvedPath };
