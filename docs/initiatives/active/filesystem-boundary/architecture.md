@@ -32,26 +32,29 @@ This initiative should make filesystem mutation flow through one recognizable bo
 The graph is an orientation map for future implementation and review sessions, not a complete dependency diagram.
 
 ```mermaid
+---
+id: cdf6e500-dc69-429e-85cf-2c59514889c0
+---
 flowchart TD
   tools["MCP tools and workflows"]
 
-  editing["Editing tools\nprose commits"]
-  metadata["Metadata and structure tools\nsidecar updates"]
-  review["Review bundle writer\ngenerated exports"]
-  structure["Structure export and restore\ngenerated transparency"]
-  styleguide["Styleguide setup\nconfig and AI boot files"]
-  importSync["Import and Scrivener merge\nsource reads and relocation"]
-  runtime["Async job runtime\nrequest/result temp files"]
+  editing["Editing tools<br/>prose commits"]
+  metadata["Metadata and structure tools<br/>sidecar updates"]
+  review["Review bundle writer<br/>generated exports"]
+  structure["Structure export and restore<br/>generated transparency"]
+  styleguide["Styleguide setup<br/>config and AI boot files"]
+  importSync["Import and Scrivener merge<br/>source reads and relocation"]
+  runtime["Async job runtime<br/>request/result temp files"]
 
-  boundary["src/core/filesystem-boundary.js\napplication filesystem policy"]
+  boundary["src/core/filesystem-boundary.js<br/>application filesystem policy"]
 
-  syncRoot["WRITING_SYNC_DIR\nprose, sidecars, generated views,\nstyleguide config, AI boot files"]
-  runtimeTemp["Runtime-owned temp dirs\nasync request/result cleanup"]
-  importSource["Import/source paths\nread-only external inputs"]
-  rawFs["node:fs mutation primitives\nallowed behind boundary helpers"]
+  syncRoot["WRITING_SYNC_DIR<br/>prose, sidecars, generated views,<br/>styleguide config, AI boot files"]
+  runtimeTemp["Runtime-owned temp dirs<br/>async request/result cleanup"]
+  importSource["Import/source paths<br/>read-only external inputs"]
+  rawFs["node:fs mutation primitives<br/>allowed behind boundary helpers"]
 
-  git["src/core/git.js\nGit audit operations"]
-  sqlite["src/core/db.js\nSQLite canonical state"]
+  git["src/core/git.js<br/>Git audit operations"]
+  sqlite["src/core/db.js<br/>SQLite canonical state"]
 
   tools --> editing
   tools --> metadata
