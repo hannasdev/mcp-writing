@@ -14,6 +14,7 @@ export const FILESYSTEM_ARTIFACT_CLASSES = Object.freeze({
   IMPORT_DESTINATION: "import_destination",
   RUNTIME_TEMP: "runtime_temp",
   SUPPORT_SCRIPT: "support_script",
+  SYNC_ROOT_PROBE: "sync_root_probe",
   WORLD_ENTITY: "world_entity",
 });
 
@@ -26,6 +27,7 @@ const SYNC_ROOT_ARTIFACT_CLASSES = new Set([
   FILESYSTEM_ARTIFACT_CLASSES.STYLEGUIDE_SKILL,
   FILESYSTEM_ARTIFACT_CLASSES.AI_BOOT_FILE,
   FILESYSTEM_ARTIFACT_CLASSES.IMPORT_DESTINATION,
+  FILESYSTEM_ARTIFACT_CLASSES.SYNC_ROOT_PROBE,
   FILESYSTEM_ARTIFACT_CLASSES.WORLD_ENTITY,
 ]);
 
@@ -685,4 +687,28 @@ export function cleanupRuntimeTempPath(tempDir, candidatePath, {
   const { resolvedPath } = resolveRuntimeTempPath(tempDir, candidatePath, { tempDirReal, errorCode });
   fs.rmSync(resolvedPath, { recursive, force });
   return { deleted: true, targetPath: resolvedPath };
+}
+
+export function probeSyncRootWritable(syncDir, {
+  probeFileName = ".mcp-write-check",
+  errorCode = "INVALID_SYNC_ROOT_PROBE",
+} = {}) {
+  const syncDirAbs = path.resolve(syncDir);
+  const syncDirReal = fs.realpathSync.native(syncDirAbs);
+  const probePath = path.join(syncDirAbs, probeFileName);
+
+  writeTextInsideSyncRoot(probePath, "", {
+    syncDirAbs,
+    syncDirReal,
+    artifactClass: FILESYSTEM_ARTIFACT_CLASSES.SYNC_ROOT_PROBE,
+    errorCode,
+  });
+  deleteInsideBoundary(probePath, {
+    boundaryRoot: syncDirAbs,
+    boundaryRootReal: syncDirReal,
+    artifactClass: FILESYSTEM_ARTIFACT_CLASSES.SYNC_ROOT_PROBE,
+    errorCode,
+  });
+
+  return true;
 }

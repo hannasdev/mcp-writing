@@ -18,6 +18,7 @@ import { indexCanonicalEpigraph } from "../structure/epigraph-indexing.js";
 import {
   FILESYSTEM_ARTIFACT_CLASSES,
   assertRegularFileReadTarget,
+  probeSyncRootWritable,
   resolveArtifactPathInsideSyncRoot,
   writeTextInsideSyncRoot,
 } from "../core/filesystem-boundary.js";
@@ -569,10 +570,7 @@ export function writeMeta(filePath, meta, { syncDir } = {}) {
  */
 export function isSyncDirWritable(syncDir) {
   try {
-    const probe = path.join(syncDir, ".mcp-write-check");
-    fs.writeFileSync(probe, "");
-    fs.unlinkSync(probe);
-    return true;
+    return probeSyncRootWritable(syncDir);
   } catch {
     return false;
   }

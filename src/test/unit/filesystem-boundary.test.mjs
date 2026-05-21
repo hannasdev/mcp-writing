@@ -14,6 +14,7 @@ import {
   ensureDirectoryInsideSyncRoot,
   FILESYSTEM_ARTIFACT_CLASSES,
   moveInsideBoundary,
+  probeSyncRootWritable,
   resolveArtifactPathInsideSyncRoot,
   resolveExistingPathInsideBoundary,
   resolveGeneratedOutputDirWithinSync,
@@ -573,5 +574,34 @@ describe("filesystem boundary helpers", () => {
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
+  });
+
+  test("sync-root writability probe writes and removes a bounded probe file", () => {
+    withTempDir("fs-boundary-sync-", (syncDir) => {
+      const probePath = path.join(syncDir, ".mcp-write-check");
+
+      assert.equal(probeSyncRootWritable(syncDir), true);
+      assert.equal(fs.existsSync(probePath), false);
+    });
+  });
+
+  test("sync-root writability probe rejects symlink probe targets", () => {
+    withTempDir("fs-boundary-sync-", (syncDir) => {
+      withTempDir("fs-boundary-outside-", (outsideDir) => {
+        const outsideTarget = path.join(outsideDir, "outside.txt");
+        const probePath = path.join(syncDir, ".mcp-write-check");
+        fs.writeFileSync(outsideTarget, "keep", "utf8");
+        fs.symlinkSync(outsideTarget, probePath);
+
+        assert.throws(
+          () => probeSyncRootWritable(syncDir),
+          (error) => error.name === "CoreValidationError"
+            && error.code === "INVALID_SYNC_ROOT_PROBE"
+            && /inside|symlink/.test(error.message)
+        );
+        assert.equal(fs.readFileSync(outsideTarget, "utf8"), "keep");
+        assert.equal(fs.existsSync(probePath), true);
+      });
+    });
   });
 });

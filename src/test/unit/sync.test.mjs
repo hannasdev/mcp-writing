@@ -249,6 +249,24 @@ describe("isSyncDirWritable", () => {
   test("returns false for non-existent directory", () => {
     assert.ok(!isSyncDirWritable("/tmp/__nonexistent_dir_xyz__/subdir"));
   });
+
+  test("returns false without mutating a symlinked probe target", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "write-"));
+    const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), "write-outside-"));
+    const outsideTarget = path.join(outsideDir, "outside.txt");
+    const probePath = path.join(dir, ".mcp-write-check");
+    try {
+      fs.writeFileSync(outsideTarget, "keep", "utf8");
+      fs.symlinkSync(outsideTarget, probePath);
+
+      assert.equal(isSyncDirWritable(dir), false);
+      assert.equal(fs.readFileSync(outsideTarget, "utf8"), "keep");
+      assert.equal(fs.existsSync(probePath), true);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+      fs.rmSync(outsideDir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("getSyncOwnershipDiagnostics", () => {
