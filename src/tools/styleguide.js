@@ -23,12 +23,81 @@ import {
   buildProseStyleguideSkill,
 } from "../styleguide/prose-styleguide-skill.js";
 import { validateProjectId } from "../sync/importer.js";
+import {
+  FILESYSTEM_ARTIFACT_CLASSES,
+  assertRegularFileReadTarget,
+  deleteInsideBoundary,
+  resolveArtifactPathInsideSyncRoot,
+  writeTextInsideSyncRoot,
+} from "../core/filesystem-boundary.js";
 
 const CLAUDE_BOOT_BASENAME = "CLAUDE.md";
 const COPILOT_BOOT_RELATIVE_PATH = ".github/copilot-instructions.md";
 const PROSE_STYLEGUIDE_IMPORT_LINE = "@skills/prose-styleguide/SKILL.md";
 const COPILOT_STYLEGUIDE_MARKER_START = "<!-- MCP-WRITING:PROSE-STYLEGUIDE START -->";
 const COPILOT_STYLEGUIDE_MARKER_END = "<!-- MCP-WRITING:PROSE-STYLEGUIDE END -->";
+
+function syncRootBoundary(syncDir) {
+  return {
+    syncDirAbs: path.resolve(syncDir),
+    syncDirReal: fs.realpathSync.native(syncDir),
+  };
+}
+
+function readTextInsideSyncRoot(targetPath, {
+  syncDir,
+  artifactClass,
+  errorCode,
+}) {
+  const boundary = syncRootBoundary(syncDir);
+  const resolved = resolveArtifactPathInsideSyncRoot(targetPath, {
+    ...boundary,
+    artifactClass,
+    requireExisting: true,
+    errorCode,
+  });
+  assertRegularFileReadTarget(path.resolve(targetPath), { errorCode });
+  assertRegularFileReadTarget(resolved.resolvedPath, { errorCode });
+  return fs.readFileSync(resolved.resolvedPath, "utf8");
+}
+
+function writeTextArtifactInsideSyncRoot(targetPath, data, {
+  syncDir,
+  artifactClass,
+  errorCode,
+}) {
+  writeTextInsideSyncRoot(targetPath, data, {
+    ...syncRootBoundary(syncDir),
+    artifactClass,
+    errorCode,
+  });
+}
+
+function validateArtifactPathInsideSyncRoot(targetPath, {
+  syncDir,
+  artifactClass,
+  errorCode,
+}) {
+  return resolveArtifactPathInsideSyncRoot(targetPath, {
+    ...syncRootBoundary(syncDir),
+    artifactClass,
+    errorCode,
+  });
+}
+
+function deleteArtifactInsideSyncRoot(targetPath, {
+  syncDir,
+  artifactClass,
+  errorCode,
+}) {
+  return deleteInsideBoundary(targetPath, {
+    boundaryRoot: path.resolve(syncDir),
+    boundaryRootReal: fs.realpathSync.native(syncDir),
+    artifactClass,
+    force: true,
+    errorCode,
+  });
+}
 
 function buildSafeMarkdownFence(text) {
   const runs = text.match(/`+/g) ?? [];
@@ -78,13 +147,21 @@ function upsertClaudeBootFile({ syncDir, overwrite = false }) {
   const exists = fs.existsSync(targetPath);
 
   if (exists && !overwrite) {
-    const existing = fs.readFileSync(targetPath, "utf8");
+    const existing = readTextInsideSyncRoot(targetPath, {
+      syncDir,
+      artifactClass: FILESYSTEM_ARTIFACT_CLASSES.AI_BOOT_FILE,
+      errorCode: "INVALID_BOOT_FILE_PATH",
+    });
     if (hasStandaloneClaudeImportLine(existing)) {
       return { path: path.resolve(targetPath), status: "unchanged" };
     }
 
     const suffix = existing.endsWith("\n") ? "\n" : "\n\n";
-    fs.writeFileSync(targetPath, `${existing}${suffix}${PROSE_STYLEGUIDE_IMPORT_LINE}\n`, "utf8");
+    writeTextArtifactInsideSyncRoot(targetPath, `${existing}${suffix}${PROSE_STYLEGUIDE_IMPORT_LINE}\n`, {
+      syncDir,
+      artifactClass: FILESYSTEM_ARTIFACT_CLASSES.AI_BOOT_FILE,
+      errorCode: "INVALID_BOOT_FILE_PATH",
+    });
     return { path: path.resolve(targetPath), status: "updated" };
   }
 
@@ -97,8 +174,11 @@ function upsertClaudeBootFile({ syncDir, overwrite = false }) {
     "",
   ].join("\n");
 
-  fs.mkdirSync(path.dirname(targetPath), { recursive: true });
-  fs.writeFileSync(targetPath, content, "utf8");
+  writeTextArtifactInsideSyncRoot(targetPath, content, {
+    syncDir,
+    artifactClass: FILESYSTEM_ARTIFACT_CLASSES.AI_BOOT_FILE,
+    errorCode: "INVALID_BOOT_FILE_PATH",
+  });
   return { path: path.resolve(targetPath), status: exists ? "overwritten" : "created" };
 }
 
@@ -133,12 +213,19 @@ function upsertCopilotBootFile({ syncDir, skillMarkdown, overwrite = false }) {
       "",
       styleguideBlock,
     ].join("\n");
-    fs.mkdirSync(path.dirname(targetPath), { recursive: true });
-    fs.writeFileSync(targetPath, content, "utf8");
+    writeTextArtifactInsideSyncRoot(targetPath, content, {
+      syncDir,
+      artifactClass: FILESYSTEM_ARTIFACT_CLASSES.AI_BOOT_FILE,
+      errorCode: "INVALID_BOOT_FILE_PATH",
+    });
     return { path: path.resolve(targetPath), status: exists ? "overwritten" : "created" };
   }
 
-  const existing = fs.readFileSync(targetPath, "utf8");
+  const existing = readTextInsideSyncRoot(targetPath, {
+    syncDir,
+    artifactClass: FILESYSTEM_ARTIFACT_CLASSES.AI_BOOT_FILE,
+    errorCode: "INVALID_BOOT_FILE_PATH",
+  });
   const markerRegex = new RegExp(
     `${COPILOT_STYLEGUIDE_MARKER_START}[\\s\\S]*?${COPILOT_STYLEGUIDE_MARKER_END}`,
     "m"
@@ -148,7 +235,11 @@ function upsertCopilotBootFile({ syncDir, skillMarkdown, overwrite = false }) {
     ? existing.replace(markerRegex, styleguideBlock.trimEnd())
     : `${existing}${existing.endsWith("\n") ? "\n" : "\n\n"}${styleguideBlock}`;
 
-  fs.writeFileSync(targetPath, next, "utf8");
+  writeTextArtifactInsideSyncRoot(targetPath, next, {
+    syncDir,
+    artifactClass: FILESYSTEM_ARTIFACT_CLASSES.AI_BOOT_FILE,
+    errorCode: "INVALID_BOOT_FILE_PATH",
+  });
   return { path: path.resolve(targetPath), status: markerRegex.test(existing) ? "updated" : "appended" };
 }
 
@@ -269,8 +360,18 @@ export function registerStyleguideTools(s, {
         );
       }
 
-      fs.mkdirSync(path.dirname(targetPath), { recursive: true });
-      fs.writeFileSync(targetPath, yaml.dump(draft.config, { lineWidth: 120 }), "utf8");
+      try {
+        writeTextArtifactInsideSyncRoot(targetPath, yaml.dump(draft.config, { lineWidth: 120 }), {
+          syncDir: SYNC_DIR,
+          artifactClass: FILESYSTEM_ARTIFACT_CLASSES.STYLEGUIDE_CONFIG,
+          errorCode: "INVALID_CONFIG_PATH",
+        });
+      } catch (err) {
+        if (err?.name === "CoreValidationError") {
+          return errorResponse(err.code, err.message, err.details);
+        }
+        throw err;
+      }
 
       return jsonResponse({
         ok: true,
@@ -822,6 +923,18 @@ export function registerStyleguideTools(s, {
           { target_path: path.resolve(skillPath), sync_dir: SYNC_DIR_ABS }
         );
       }
+      try {
+        validateArtifactPathInsideSyncRoot(skillPath, {
+          syncDir: SYNC_DIR,
+          artifactClass: FILESYSTEM_ARTIFACT_CLASSES.STYLEGUIDE_SKILL,
+          errorCode: "INVALID_SKILL_PATH",
+        });
+      } catch (err) {
+        if (err?.name === "CoreValidationError") {
+          return errorResponse(err.code, err.message, err.details);
+        }
+        throw err;
+      }
 
       if (fs.existsSync(skillPath) && !overwrite) {
         return errorResponse(
@@ -865,6 +978,23 @@ export function registerStyleguideTools(s, {
             }
           );
         }
+        try {
+          validateArtifactPathInsideSyncRoot(claudePath, {
+            syncDir: SYNC_DIR,
+            artifactClass: FILESYSTEM_ARTIFACT_CLASSES.AI_BOOT_FILE,
+            errorCode: "INVALID_BOOT_FILE_PATH",
+          });
+          validateArtifactPathInsideSyncRoot(copilotPath, {
+            syncDir: SYNC_DIR,
+            artifactClass: FILESYSTEM_ARTIFACT_CLASSES.AI_BOOT_FILE,
+            errorCode: "INVALID_BOOT_FILE_PATH",
+          });
+        } catch (err) {
+          if (err?.name === "CoreValidationError") {
+            return errorResponse(err.code, err.message, err.details);
+          }
+          throw err;
+        }
 
         const claudePathCheck = validateParentDirectory(claudePath, "CLAUDE boot file");
         if (!claudePathCheck.ok) {
@@ -888,26 +1018,51 @@ export function registerStyleguideTools(s, {
       const mutationTargets = shouldPublishBootFiles
         ? [skillPath, claudePath, copilotPath]
         : [skillPath];
-      const backups = mutationTargets.map((targetPath) => {
-        if (!fs.existsSync(targetPath)) {
-          return { targetPath, existed: false, content: null };
+      let backups;
+      try {
+        backups = mutationTargets.map((targetPath) => {
+          if (!fs.existsSync(targetPath)) {
+            return { targetPath, existed: false, content: null };
+          }
+          return {
+            targetPath,
+            existed: true,
+            content: readTextInsideSyncRoot(targetPath, {
+              syncDir: SYNC_DIR,
+              artifactClass: targetPath === skillPath
+                ? FILESYSTEM_ARTIFACT_CLASSES.STYLEGUIDE_SKILL
+                : FILESYSTEM_ARTIFACT_CLASSES.AI_BOOT_FILE,
+              errorCode: targetPath === skillPath ? "INVALID_SKILL_PATH" : "INVALID_BOOT_FILE_PATH",
+            }),
+          };
+        });
+      } catch (err) {
+        if (err?.name === "CoreValidationError") {
+          return errorResponse(err.code, err.message, err.details);
         }
-        return {
-          targetPath,
-          existed: true,
-          content: fs.readFileSync(targetPath, "utf8"),
-        };
-      });
+        throw err;
+      }
 
       function rollbackMutations() {
         for (let i = backups.length - 1; i >= 0; i -= 1) {
           const backup = backups[i];
+          const artifactClass = backup.targetPath === skillPath
+            ? FILESYSTEM_ARTIFACT_CLASSES.STYLEGUIDE_SKILL
+            : FILESYSTEM_ARTIFACT_CLASSES.AI_BOOT_FILE;
+          const errorCode = backup.targetPath === skillPath ? "INVALID_SKILL_PATH" : "INVALID_BOOT_FILE_PATH";
           if (backup.existed) {
-            fs.mkdirSync(path.dirname(backup.targetPath), { recursive: true });
-            fs.writeFileSync(backup.targetPath, backup.content, "utf8");
+            writeTextArtifactInsideSyncRoot(backup.targetPath, backup.content, {
+              syncDir: SYNC_DIR,
+              artifactClass,
+              errorCode,
+            });
             continue;
           }
-          fs.rmSync(backup.targetPath, { force: true });
+          deleteArtifactInsideSyncRoot(backup.targetPath, {
+            syncDir: SYNC_DIR,
+            artifactClass,
+            errorCode,
+          });
         }
       }
 
@@ -934,8 +1089,11 @@ export function registerStyleguideTools(s, {
         }
 
         failedStep = "skill_file";
-        fs.mkdirSync(path.dirname(skillPath), { recursive: true });
-        fs.writeFileSync(skillPath, generated.markdown, "utf8");
+        writeTextArtifactInsideSyncRoot(skillPath, generated.markdown, {
+          syncDir: SYNC_DIR,
+          artifactClass: FILESYSTEM_ARTIFACT_CLASSES.STYLEGUIDE_SKILL,
+          errorCode: "INVALID_SKILL_PATH",
+        });
       } catch (error) {
         try {
           rollbackMutations();

@@ -201,6 +201,32 @@ describe("setup_prose_styleguide_config tool", () => {
     const persisted = yaml.load(fs.readFileSync(configPath, "utf8"));
     assert.equal(persisted.language, "english_us");
   });
+
+  test("rejects overwrite when the config path is a symlink", async () => {
+    const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), "styleguide-config-outside-"));
+    const configPath = path.join(writeSyncDir, "prose-styleguide.config.yaml");
+    try {
+      fs.rmSync(configPath, { force: true });
+      const outsideConfig = path.join(outsideDir, "prose-styleguide.config.yaml");
+      fs.writeFileSync(outsideConfig, "language: english_us\n", "utf8");
+      fs.symlinkSync(outsideConfig, configPath);
+
+      const text = await callWriteTool("setup_prose_styleguide_config", {
+        scope: "sync_root",
+        language: "english_uk",
+        overwrite: true,
+      });
+      const parsed = JSON.parse(text);
+
+      assert.equal(parsed.ok, false);
+      assert.equal(parsed.error.code, "INVALID_CONFIG_PATH");
+      const persisted = yaml.load(fs.readFileSync(outsideConfig, "utf8"));
+      assert.equal(persisted.language, "english_us");
+    } finally {
+      fs.rmSync(configPath, { force: true });
+      fs.rmSync(outsideDir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("get_prose_styleguide_config tool", () => {
@@ -934,6 +960,40 @@ describe("setup_prose_styleguide_skill tool", () => {
 
     fs.rmSync(githubPath, { force: true });
     fs.mkdirSync(githubPath, { recursive: true });
+  });
+
+  test("rejects AI boot file symlink targets before publishing", async () => {
+    fs.writeFileSync(
+      path.join(writeSyncDir, "prose-styleguide.config.yaml"),
+      [
+        "language: english_us",
+        "dialogue_tags: minimal",
+      ].join("\n"),
+      "utf8"
+    );
+
+    const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), "styleguide-boot-outside-"));
+    const claudePath = path.join(writeSyncDir, "CLAUDE.md");
+    try {
+      const outsideClaude = path.join(outsideDir, "CLAUDE.md");
+      fs.writeFileSync(outsideClaude, "outside sentinel", "utf8");
+      fs.rmSync(claudePath, { force: true });
+      fs.symlinkSync(outsideClaude, claudePath);
+
+      const text = await callWriteTool("setup_prose_styleguide_skill", {
+        overwrite: true,
+        publish_boot_files: true,
+        boot_files_overwrite: true,
+      });
+      const parsed = JSON.parse(text);
+
+      assert.equal(parsed.ok, false);
+      assert.equal(parsed.error.code, "INVALID_BOOT_FILE_PATH");
+      assert.equal(fs.readFileSync(outsideClaude, "utf8"), "outside sentinel");
+    } finally {
+      fs.rmSync(claudePath, { force: true });
+      fs.rmSync(outsideDir, { recursive: true, force: true });
+    }
   });
 
   test("renders copilot snapshot with a safe fence when skill markdown contains triple backticks", async () => {

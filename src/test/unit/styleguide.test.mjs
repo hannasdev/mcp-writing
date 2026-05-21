@@ -334,6 +334,31 @@ describe("updateStyleguideConfig", () => {
     }
   });
 
+  test("rejects updates when the config path is a symlink", () => {
+    const syncDir = fs.mkdtempSync(path.join(os.tmpdir(), "styleguide-update-symlink-"));
+    const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), "styleguide-update-outside-"));
+    try {
+      const outsideConfig = path.join(outsideDir, "prose-styleguide.config.yaml");
+      fs.writeFileSync(outsideConfig, "language: english_us\ndialogue_tags: minimal\n", "utf8");
+      const configPath = path.join(syncDir, "prose-styleguide.config.yaml");
+      fs.symlinkSync(outsideConfig, configPath);
+
+      const result = updateStyleguideConfig({
+        syncDir,
+        scope: "sync_root",
+        updates: { dialogue_tags: "expressive" },
+      });
+
+      assert.equal(result.ok, false);
+      assert.equal(result.error.code, "INVALID_STYLEGUIDE_CONFIG_PATH");
+      const persisted = yaml.load(fs.readFileSync(outsideConfig, "utf8"));
+      assert.equal(persisted.dialogue_tags, "minimal");
+    } finally {
+      fs.rmSync(syncDir, { recursive: true, force: true });
+      fs.rmSync(outsideDir, { recursive: true, force: true });
+    }
+  });
+
   test("fails with PROJECT_ID_REQUIRED when scope is project_root without projectId", () => {
     const syncDir = fs.mkdtempSync(path.join(os.tmpdir(), "styleguide-update-project-guard-"));
     try {
