@@ -606,6 +606,94 @@ describe("Scrivener direct metadata merge", () => {
     }
   });
 
+  test("mergeScrivenerProjectMetadata rejects scenesDir overrides outside the sync root", () => {
+    const scrivDir = createScrivenerProjectFixture({ chapterTitle: "Harbor Arrival" });
+    const { syncRoot } = createSyncSidecarFixture("test-import", [], true);
+    const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), "scriv-merge-outside-scenes-"));
+    fs.writeFileSync(
+      path.join(outsideDir, "001 Scene Arrival [1].meta.yaml"),
+      yaml.dump({ scene_id: "sc-001-arrival" }),
+      "utf8"
+    );
+
+    try {
+      assert.throws(
+        () => mergeScrivenerProjectMetadata({
+          scrivPath: scrivDir,
+          mcpSyncDir: syncRoot,
+          projectId: "test-import",
+          scenesDir: outsideDir,
+          dryRun: false,
+          organizeByChapters: true,
+        }),
+        /Scenes directory not found or not a directory/
+      );
+    } finally {
+      fs.rmSync(scrivDir, { recursive: true, force: true });
+      fs.rmSync(syncRoot, { recursive: true, force: true });
+      fs.rmSync(outsideDir, { recursive: true, force: true });
+    }
+  });
+
+  test("mergeScrivenerProjectMetadata rejects relocation through symlinked destination ancestors", () => {
+    const scrivDir = createScrivenerProjectFixture({ chapterTitle: "Harbor Arrival" });
+    const { syncRoot, scenesDir } = createSyncSidecarFixture("test-import", [], true);
+    const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), "scriv-merge-symlink-target-"));
+    const partPath = path.join(scenesDir, "part-1");
+    fs.symlinkSync(outsideDir, partPath, "dir");
+
+    try {
+      assert.throws(
+        () => mergeScrivenerProjectMetadata({
+          scrivPath: scrivDir,
+          mcpSyncDir: syncRoot,
+          projectId: "test-import",
+          dryRun: false,
+          organizeByChapters: true,
+        }),
+        /Move target must be inside the configured boundary/
+      );
+      assert.equal(fs.existsSync(path.join(outsideDir, "chapter-1-harbor-arrival")), false);
+      assert.equal(fs.existsSync(path.join(scenesDir, "001 Scene Arrival [1].md")), true);
+      assert.equal(fs.existsSync(path.join(scenesDir, "001 Scene Arrival [1].meta.yaml")), true);
+    } finally {
+      fs.rmSync(partPath, { force: true });
+      fs.rmSync(scrivDir, { recursive: true, force: true });
+      fs.rmSync(syncRoot, { recursive: true, force: true });
+      fs.rmSync(outsideDir, { recursive: true, force: true });
+    }
+  });
+
+  test("mergeScrivenerProjectMetadata rejects symlinked prose relocation sources", () => {
+    const scrivDir = createScrivenerProjectFixture({ chapterTitle: "Harbor Arrival" });
+    const { syncRoot, scenesDir } = createSyncSidecarFixture("test-import", [], false);
+    const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), "scriv-merge-source-symlink-"));
+    const outsideProse = path.join(outsideDir, "outside.md");
+    const prosePath = path.join(scenesDir, "001 Scene Arrival [1].md");
+    fs.writeFileSync(outsideProse, "Outside prose should not be moved.\n", "utf8");
+    fs.symlinkSync(outsideProse, prosePath);
+
+    try {
+      assert.throws(
+        () => mergeScrivenerProjectMetadata({
+          scrivPath: scrivDir,
+          mcpSyncDir: syncRoot,
+          projectId: "test-import",
+          dryRun: false,
+          organizeByChapters: true,
+        }),
+        /Refusing to read: target path is a symlink/
+      );
+      assert.equal(fs.readFileSync(outsideProse, "utf8"), "Outside prose should not be moved.\n");
+      assert.equal(fs.existsSync(path.join(scenesDir, "001 Scene Arrival [1].meta.yaml")), true);
+    } finally {
+      fs.rmSync(prosePath, { force: true });
+      fs.rmSync(scrivDir, { recursive: true, force: true });
+      fs.rmSync(syncRoot, { recursive: true, force: true });
+      fs.rmSync(outsideDir, { recursive: true, force: true });
+    }
+  });
+
   test("mergeScrivenerProjectMetadata with organize_by_chapters: false keeps scenes in place and only updates sidecar metadata", () => {
     const scrivDir = createScrivenerProjectFixture({ chapterTitle: "Harbor Arrival" });
     const { syncRoot, scenesDir } = createSyncSidecarFixture();
