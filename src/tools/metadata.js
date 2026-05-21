@@ -366,6 +366,9 @@ export function registerMetadataTools(s, {
 
         return jsonResponse({ ok: true, action: result.created ? "created" : "exists", kind: "character", ...result });
       } catch (err) {
+        if (err?.name === "CoreValidationError") {
+          return errorResponse(err.code, err.message, err.details);
+        }
         return errorResponse("IO_ERROR", `Failed to create character sheet: ${err.message}`);
       }
     }
@@ -415,6 +418,9 @@ export function registerMetadataTools(s, {
 
         return jsonResponse({ ok: true, action: result.created ? "created" : "exists", kind: "place", ...result });
       } catch (err) {
+        if (err?.name === "CoreValidationError") {
+          return errorResponse(err.code, err.message, err.details);
+        }
         return errorResponse("IO_ERROR", `Failed to create place sheet: ${err.message}`);
       }
     }
