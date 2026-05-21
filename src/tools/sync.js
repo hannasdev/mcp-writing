@@ -729,7 +729,7 @@ export function registerSyncTools(s, {
             : {}),
         }).meta;
 
-        writeMeta(scene.file_path, updatedMeta);
+        writeMeta(scene.file_path, updatedMeta, { syncDir: SYNC_DIR });
         indexSceneFile(db, SYNC_DIR, scene.file_path, updatedMeta, prose, {
           managedStructure: isManagedStructureProject(db, scene.project_id),
         });
@@ -748,6 +748,9 @@ export function registerSyncTools(s, {
           metadata_stale: false,
         });
       } catch (err) {
+        if (err?.name === "CoreValidationError") {
+          return errorResponse(err.code, err.message, err.details);
+        }
         return errorResponse("IO_ERROR", `Failed to enrich scene '${scene.scene_id}': ${err.message}`);
       }
     }

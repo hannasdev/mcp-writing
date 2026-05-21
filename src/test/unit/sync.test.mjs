@@ -10,7 +10,7 @@ import {
   deriveReferenceSummary, deriveReferenceTitle, normalizeReferenceTags,
   normalizeReferenceIdList,
   isCanonicalWorldEntityFile, getSyncOwnershipDiagnostics, getFileWriteDiagnostics,
-  isWorldFile, readMeta, isSyncDirWritable, sidecarPath, syncAll,
+  isWorldFile, readMeta, writeMeta, isSyncDirWritable, sidecarPath, syncAll,
   walkFiles, walkSidecars, worldEntityFolderKey, worldEntityKindForPath,
   buildCanonicalIndexPlan, buildWarningSummary, observeOrphanedSidecars,
   observeStructureForFile, readSceneFileForSync, readSceneMetadataForSync,
@@ -170,6 +170,33 @@ describe("readMeta", () => {
     const { meta } = readMeta(path.join(dir, "sc-001.md"), dir);
     assert.equal(meta.scene_id, "new-id");
     fs.rmSync(dir, { recursive: true });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// writeMeta
+// ---------------------------------------------------------------------------
+describe("writeMeta", () => {
+  test("rejects sidecar symlink targets when syncDir is provided", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "meta-write-"));
+    const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), "meta-write-outside-"));
+    const scenePath = path.join(dir, "sc-001.md");
+    const sidecar = path.join(dir, "sc-001.meta.yaml");
+    const outsideSidecar = path.join(outsideDir, "outside.meta.yaml");
+    try {
+      fs.writeFileSync(scenePath, "---\nscene_id: sc-001\n---\nProse.");
+      fs.writeFileSync(outsideSidecar, "scene_id: outside\n");
+      fs.symlinkSync(outsideSidecar, sidecar);
+
+      assert.throws(
+        () => writeMeta(scenePath, { scene_id: "sc-001", title: "Updated" }, { syncDir: dir }),
+        (err) => err?.name === "CoreValidationError" && err?.code === "INVALID_SIDECAR_PATH"
+      );
+      assert.equal(fs.readFileSync(outsideSidecar, "utf8"), "scene_id: outside\n");
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+      fs.rmSync(outsideDir, { recursive: true, force: true });
+    }
   });
 });
 

@@ -15,6 +15,12 @@ import {
   upsertCanonicalChapterRecord,
 } from "../structure/chapter-indexing.js";
 import { indexCanonicalEpigraph } from "../structure/epigraph-indexing.js";
+import {
+  FILESYSTEM_ARTIFACT_CLASSES,
+  assertRegularFileReadTarget,
+  resolveArtifactPathInsideSyncRoot,
+  writeTextInsideSyncRoot,
+} from "../core/filesystem-boundary.js";
 const { load: parseYaml, dump: stringifyYaml } = yaml;
 
 export {
@@ -492,8 +498,21 @@ export function parseFile(filePath) {
  */
 export function readMeta(filePath, syncDir, { writable = false } = {}) {
   const sidecar = sidecarPath(filePath);
+  const syncDirAbs = path.resolve(syncDir);
+  const syncDirReal = fs.realpathSync.native(syncDirAbs);
 
   if (fs.existsSync(sidecar)) {
+    if (writable) {
+      resolveArtifactPathInsideSyncRoot(sidecar, {
+        syncDirAbs,
+        syncDirReal,
+        artifactClass: FILESYSTEM_ARTIFACT_CLASSES.SIDECAR,
+        requireExisting: true,
+        errorCode: "INVALID_SIDECAR_PATH",
+        errorMessage: "Sidecar path must be inside WRITING_SYNC_DIR.",
+      });
+      assertRegularFileReadTarget(sidecar, { errorCode: "INVALID_SIDECAR_PATH" });
+    }
     const raw = fs.readFileSync(sidecar, "utf8");
     const parsed = parseYaml(raw) ?? {};
     return { ...normalizeSceneMetaForPath(syncDir, filePath, parsed), sourceMeta: parsed, sidecarGenerated: false };
@@ -510,7 +529,7 @@ export function readMeta(filePath, syncDir, { writable = false } = {}) {
   // Auto-migrate: write sidecar from frontmatter (only if writable)
   if (writable) {
     try {
-      fs.writeFileSync(sidecar, stringifyYaml(normalized.meta), "utf8");
+      writeMeta(filePath, normalized.meta, { syncDir });
       return { ...normalized, sourceMeta: frontmatter, sidecarGenerated: true };
     } catch { /* empty */ }
   }
@@ -521,8 +540,28 @@ export function readMeta(filePath, syncDir, { writable = false } = {}) {
 /**
  * Write metadata back to the sidecar file for a scene.
  */
-export function writeMeta(filePath, meta) {
-  fs.writeFileSync(sidecarPath(filePath), stringifyYaml(meta), "utf8");
+export function writeMeta(filePath, meta, { syncDir } = {}) {
+  if (!syncDir) {
+    throw new TypeError("syncDir is required for writeMeta.");
+  }
+
+  const sidecar = sidecarPath(filePath);
+  const syncDirAbs = path.resolve(syncDir);
+  const syncDirReal = fs.realpathSync.native(syncDirAbs);
+  resolveArtifactPathInsideSyncRoot(filePath, {
+    syncDirAbs,
+    syncDirReal,
+    artifactClass: FILESYSTEM_ARTIFACT_CLASSES.SIDECAR,
+    requireExisting: true,
+    errorCode: "INVALID_SIDECAR_PATH",
+    errorMessage: "Sidecar source path must be inside WRITING_SYNC_DIR.",
+  });
+  writeTextInsideSyncRoot(sidecar, stringifyYaml(meta), {
+    syncDirAbs,
+    syncDirReal,
+    artifactClass: FILESYSTEM_ARTIFACT_CLASSES.SIDECAR,
+    errorCode: "INVALID_SIDECAR_PATH",
+  });
 }
 
 /**

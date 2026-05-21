@@ -99,7 +99,7 @@ function persistCharacterReferenceLink({ characterPath, syncDir, targetDocId, re
   };
   delete nextMeta.explicit_reference_links;
 
-  writeMeta(characterPath, nextMeta);
+  writeMeta(characterPath, nextMeta, { syncDir });
 }
 
 function persistPlaceReferenceLink({ placePath, syncDir, targetDocId, relation }) {
@@ -118,16 +118,16 @@ function persistPlaceReferenceLink({ placePath, syncDir, targetDocId, relation }
   };
   delete nextMeta.explicit_reference_links;
 
-  writeMeta(placePath, nextMeta);
+  writeMeta(placePath, nextMeta, { syncDir });
 }
 
-function writeStructureSidecarUpdates(updates, { failureCode }) {
+function writeStructureSidecarUpdates(updates, { failureCode, syncDir }) {
   const failures = [];
   let updatedCount = 0;
 
   for (const update of updates) {
     try {
-      writeMeta(update.filePath, update.meta);
+      writeMeta(update.filePath, update.meta, { syncDir });
       updatedCount += 1;
     } catch (err) {
       failures.push({
@@ -778,6 +778,7 @@ export function registerMetadataTools(s, {
 
       const sidecarWriteResult = writeStructureSidecarUpdates(sidecarUpdates, {
         failureCode: "SCENE_SIDECAR_UPDATE_FAILED",
+        syncDir: SYNC_DIR,
       });
 
       return jsonResponse({
@@ -883,6 +884,7 @@ export function registerMetadataTools(s, {
 
       const sidecarWriteResult = writeStructureSidecarUpdates(sidecarUpdates, {
         failureCode: "SCENE_SIDECAR_UPDATE_FAILED",
+        syncDir: SYNC_DIR,
       });
 
       return jsonResponse({
@@ -964,6 +966,7 @@ export function registerMetadataTools(s, {
 
         const sidecarWriteResult = writeStructureSidecarUpdates([sidecarUpdate], {
           failureCode: "EPIGRAPH_SIDECAR_UPDATE_FAILED",
+          syncDir: SYNC_DIR,
         });
 
         return jsonResponse({
@@ -1135,7 +1138,7 @@ export function registerMetadataTools(s, {
         });
         const sidecarMirror = writeStructureSidecarUpdates(
           [{ filePath: scene.file_path, meta: plan.meta }],
-          { failureCode: "SCENE_STRUCTURE_SIDECAR_MIRROR_FAILED" }
+          { failureCode: "SCENE_STRUCTURE_SIDECAR_MIRROR_FAILED", syncDir: SYNC_DIR }
         );
         if (sidecarMirror.updatedCount > 0) {
           indexSceneFile(db, SYNC_DIR, scene.file_path, plan.meta, prose, {
@@ -1253,7 +1256,7 @@ export function registerMetadataTools(s, {
         });
         const sidecarMirror = writeStructureSidecarUpdates(
           [{ filePath: scene.file_path, meta: plan.meta }],
-          { failureCode: "SCENE_STRUCTURE_SIDECAR_MIRROR_FAILED" }
+          { failureCode: "SCENE_STRUCTURE_SIDECAR_MIRROR_FAILED", syncDir: SYNC_DIR }
         );
         if (sidecarMirror.updatedCount > 0) {
           indexSceneFile(db, SYNC_DIR, scene.file_path, plan.meta, prose, {
@@ -1272,6 +1275,9 @@ export function registerMetadataTools(s, {
           diagnostics: sidecarMirror.diagnostics,
         });
       } catch (err) {
+        if (err?.name === "CoreValidationError") {
+          return errorResponse(err.code, err.message, err.details);
+        }
         if (err.code === "ENOENT") {
           return errorResponse("STALE_PATH", `Prose file for scene '${scene_id}' not found at indexed path — the file may have moved. Run sync() to refresh.`, { indexed_path: scene.file_path });
         }
@@ -1328,7 +1334,7 @@ export function registerMetadataTools(s, {
       try {
         const { meta } = readMeta(scene.file_path, SYNC_DIR, { writable: true });
         const updated = { ...meta, ...fields };
-        writeMeta(scene.file_path, updated);
+        writeMeta(scene.file_path, updated, { syncDir: SYNC_DIR });
 
         const { content: prose } = matter(fs.readFileSync(scene.file_path, "utf8"));
         indexSceneFile(db, SYNC_DIR, scene.file_path, updated, prose, {
@@ -1370,7 +1376,7 @@ export function registerMetadataTools(s, {
       try {
         const { meta } = readMeta(char.file_path, SYNC_DIR, { writable: true });
         const updated = { ...meta, ...fields };
-        writeMeta(char.file_path, updated);
+        writeMeta(char.file_path, updated, { syncDir: SYNC_DIR });
 
         db.prepare(`
           UPDATE characters SET name = ?, role = ?, arc_summary = ?, first_appearance = ?
@@ -1389,6 +1395,9 @@ export function registerMetadataTools(s, {
 
         return { content: [{ type: "text", text: `Updated character sheet for '${character_id}'.` }] };
       } catch (err) {
+        if (err?.name === "CoreValidationError") {
+          return errorResponse(err.code, err.message, err.details);
+        }
         if (err.code === "ENOENT") {
           return errorResponse("STALE_PATH", `Character file for '${character_id}' not found at indexed path — the file may have moved. Run sync() to refresh.`, { indexed_path: char.file_path });
         }
@@ -1420,13 +1429,16 @@ export function registerMetadataTools(s, {
       try {
         const { meta } = readMeta(place.file_path, SYNC_DIR, { writable: true });
         const updated = { ...meta, ...fields };
-        writeMeta(place.file_path, updated);
+        writeMeta(place.file_path, updated, { syncDir: SYNC_DIR });
 
         db.prepare(`UPDATE places SET name = ? WHERE place_id = ?`)
           .run(updated.name ?? meta.name ?? place_id, place_id);
 
         return { content: [{ type: "text", text: `Updated place sheet for '${place_id}'.` }] };
       } catch (err) {
+        if (err?.name === "CoreValidationError") {
+          return errorResponse(err.code, err.message, err.details);
+        }
         if (err.code === "ENOENT") {
           return errorResponse("STALE_PATH", `Place file for '${place_id}' not found at indexed path — the file may have moved. Run sync() to refresh.`, { indexed_path: place.file_path });
         }
@@ -1457,9 +1469,12 @@ export function registerMetadataTools(s, {
         const { meta } = readMeta(scene.file_path, SYNC_DIR, { writable: true });
         const flags = meta.flags ?? [];
         flags.push({ note, flagged_at: new Date().toISOString() });
-        writeMeta(scene.file_path, { ...meta, flags });
+        writeMeta(scene.file_path, { ...meta, flags }, { syncDir: SYNC_DIR });
         return { content: [{ type: "text", text: `Flagged scene '${scene_id}': ${note}` }] };
       } catch (err) {
+        if (err?.name === "CoreValidationError") {
+          return errorResponse(err.code, err.message, err.details);
+        }
         if (err.code === "ENOENT") {
           return errorResponse("STALE_PATH", `Prose file for scene '${scene_id}' not found at indexed path — the file may have moved. Run sync() to refresh.`, { indexed_path: scene.file_path });
         }
