@@ -22,7 +22,7 @@ Track the remaining follow-up work around first-class chapters, deferred divisio
 
 **Status:** Deferred backlog (not active). Canonical chapters and epigraphs, `chapter_id` targeting, dedicated chapter/epigraph tools, and chapter-aware bundle rendering have already shipped; remaining follow-up work is available for future prioritization.
 
-### 🔒 [Filesystem Boundary Hardening](docs/initiatives/backlog/filesystem-boundary/prd.md) 📋
+### 🔒 [Filesystem Boundary Hardening](docs/initiatives/active/filesystem-boundary/prd.md) 📋
 
 Centralize filesystem containment, symlink, generated-output, and mutation rules so security checks match Writing MCP's local-file product model instead of warning about expected dynamic path usage.
 

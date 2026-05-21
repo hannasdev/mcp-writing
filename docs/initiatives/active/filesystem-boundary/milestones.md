@@ -1,7 +1,8 @@
 # Filesystem Boundary Milestones
 
 This document tracks implementation sequencing for Filesystem Boundary Hardening.
-Use [prd.md](prd.md) for product framing and [architecture.md](architecture.md) for technical design.
+Use [prd.md](prd.md) for product framing, [architecture.md](architecture.md) for technical design,
+and [inventory.md](inventory.md) for Milestone 1 call-site characterization.
 
 ## Initial High-Risk Surfaces
 
@@ -30,7 +31,7 @@ Functional requirements:
 
 Acceptance criteria:
 
-1. A maintainer can see, in a checked-in inventory table or equivalent initiative artifact, which call sites remain raw and why.
+1. A maintainer can see, in [inventory.md](inventory.md), which call sites remain raw and why.
 2. Existing behavior is characterized before shared helpers change it.
 3. No behavior changes are made in this milestone unless explicitly documented.
 
@@ -128,3 +129,4 @@ Manual verification:
 
 - [prd.md](prd.md)
 - [architecture.md](architecture.md)
+- [inventory.md](inventory.md)
