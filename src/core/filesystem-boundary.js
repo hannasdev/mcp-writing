@@ -11,6 +11,7 @@ export const FILESYSTEM_ARTIFACT_CLASSES = Object.freeze({
   STYLEGUIDE_SKILL: "styleguide_skill",
   AI_BOOT_FILE: "ai_boot_file",
   IMPORT_SOURCE: "import_source",
+  IMPORT_DESTINATION: "import_destination",
   RUNTIME_TEMP: "runtime_temp",
   SUPPORT_SCRIPT: "support_script",
   WORLD_ENTITY: "world_entity",
@@ -24,6 +25,7 @@ const SYNC_ROOT_ARTIFACT_CLASSES = new Set([
   FILESYSTEM_ARTIFACT_CLASSES.STYLEGUIDE_CONFIG,
   FILESYSTEM_ARTIFACT_CLASSES.STYLEGUIDE_SKILL,
   FILESYSTEM_ARTIFACT_CLASSES.AI_BOOT_FILE,
+  FILESYSTEM_ARTIFACT_CLASSES.IMPORT_DESTINATION,
   FILESYSTEM_ARTIFACT_CLASSES.WORLD_ENTITY,
 ]);
 
@@ -271,6 +273,29 @@ export function ensureDirectoryForBoundaryPath(filePath, {
   return dirPath;
 }
 
+export function ensureDirectoryInsideSyncRoot(dirPath, {
+  syncDirAbs,
+  syncDirReal = syncDirAbs,
+  artifactClass,
+  errorCode = "INVALID_SYNC_PATH",
+} = {}) {
+  if (!SYNC_ROOT_ARTIFACT_CLASSES.has(artifactClass)) {
+    throw new TypeError(`Unsupported sync-root artifact class: ${artifactClass}`);
+  }
+
+  const { resolvedPath } = resolveArtifactPathInsideSyncRoot(dirPath, {
+    syncDirAbs,
+    syncDirReal,
+    artifactClass,
+    errorCode,
+  });
+  ensureDirectoryInsideBoundary(resolvedPath, {
+    errorCode,
+    label: "target directory",
+  });
+  return resolvedPath;
+}
+
 export function resolveGeneratedOutputPath(outputDir, fileName, {
   errorCode = "INVALID_OUTPUT_PATH",
 } = {}) {
@@ -431,6 +456,38 @@ export function copyFileInsideBoundary(sourcePath, targetPath, {
     boundaryRootReal: effectiveTargetBoundaryRootReal,
     errorCode,
     label: "copy target parent directory",
+  });
+  assertRegularFileWriteTarget(path.resolve(targetPath), { errorCode });
+  assertRegularFileWriteTarget(target.resolvedPath, { errorCode });
+
+  fs.copyFileSync(source.resolvedPath, target.resolvedPath);
+  return { sourcePath: source.resolvedPath, targetPath: target.resolvedPath };
+}
+
+export function copyImportSourceFileToSyncRoot(sourcePath, targetPath, {
+  syncDirAbs,
+  syncDirReal = syncDirAbs,
+  artifactClass = FILESYSTEM_ARTIFACT_CLASSES.IMPORT_DESTINATION,
+  errorCode = "INVALID_IMPORT_DESTINATION",
+} = {}) {
+  const source = assertImportSourcePath(sourcePath, {
+    errorCode,
+    details: { import_source: path.resolve(sourcePath) },
+  });
+  assertRegularFileReadTarget(source.resolvedPath, { errorCode });
+
+  const target = resolveArtifactPathInsideSyncRoot(targetPath, {
+    syncDirAbs,
+    syncDirReal,
+    artifactClass,
+    errorCode,
+    errorMessage: "Import destination must be inside WRITING_SYNC_DIR.",
+  });
+  ensureDirectoryForBoundaryPath(target.resolvedPath, {
+    boundaryRoot: syncDirAbs,
+    boundaryRootReal: syncDirReal,
+    errorCode,
+    label: "import destination parent directory",
   });
   assertRegularFileWriteTarget(path.resolve(targetPath), { errorCode });
   assertRegularFileWriteTarget(target.resolvedPath, { errorCode });

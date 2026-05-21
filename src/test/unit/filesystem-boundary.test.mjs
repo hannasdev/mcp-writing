@@ -7,9 +7,11 @@ import {
   assertImportSourcePath,
   cleanupRuntimeTempPath,
   copyFileInsideBoundary,
+  copyImportSourceFileToSyncRoot,
   createRuntimeTempBoundary,
   deleteInsideBoundary,
   ensureDirectoryInsideBoundary,
+  ensureDirectoryInsideSyncRoot,
   FILESYSTEM_ARTIFACT_CLASSES,
   moveInsideBoundary,
   resolveArtifactPathInsideSyncRoot,
@@ -193,6 +195,43 @@ describe("filesystem boundary helpers", () => {
           && error.code === "INVALID_IMPORT_SOURCE"
           && /could not be resolved/.test(error.message)
       );
+    });
+  });
+
+  test("copies import source files to bounded sync-root destinations", () => {
+    withTempDir("fs-boundary-sync-", (syncDir) => {
+      withTempDir("fs-boundary-import-", (importDir) => {
+        withTempDir("fs-boundary-outside-", (outsideDir) => {
+          const syncDirReal = fs.realpathSync.native(syncDir);
+          const source = path.join(importDir, "source.txt");
+          const target = path.join(syncDir, "projects", "novel", "scenes", "001 Scene [1].txt");
+          fs.writeFileSync(source, "import prose", "utf8");
+
+          ensureDirectoryInsideSyncRoot(path.dirname(target), {
+            syncDirAbs: syncDir,
+            syncDirReal,
+            artifactClass: FILESYSTEM_ARTIFACT_CLASSES.IMPORT_DESTINATION,
+          });
+          const result = copyImportSourceFileToSyncRoot(source, target, {
+            syncDirAbs: syncDir,
+            syncDirReal,
+          });
+
+          assert.equal(result.sourcePath, fs.realpathSync.native(source));
+          assert.equal(result.targetPath, path.join(syncDirReal, "projects", "novel", "scenes", "001 Scene [1].txt"));
+          assert.equal(fs.readFileSync(target, "utf8"), "import prose");
+
+          assert.throws(
+            () => copyImportSourceFileToSyncRoot(source, path.join(outsideDir, "escape.txt"), {
+              syncDirAbs: syncDir,
+              syncDirReal,
+            }),
+            (error) => error.name === "CoreValidationError"
+              && error.code === "INVALID_IMPORT_DESTINATION"
+              && /inside WRITING_SYNC_DIR/.test(error.message)
+          );
+        });
+      });
     });
   });
 
