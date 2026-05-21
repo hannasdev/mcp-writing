@@ -1,9 +1,16 @@
 import { z } from "zod";
 import fs from "node:fs";
+import path from "node:path";
 import matter from "gray-matter";
 import { readMeta, writeMeta, indexSceneFile, isManagedStructureProject } from "../sync/sync.js";
 import { validateProjectId, validateUniverseId } from "../sync/importer.js";
 import { resolveValidatedChapterFilter } from "../core/chapter-resolution.js";
+import {
+  FILESYSTEM_ARTIFACT_CLASSES,
+  assertRegularFileReadTarget,
+  resolveArtifactPathInsideSyncRoot,
+  writeTextInsideSyncRoot,
+} from "../core/filesystem-boundary.js";
 import { buildMoveScenePlan, buildSceneChapterAssignmentPlan } from "../structure/scene-chapter-assignment.js";
 import {
   buildCreateChapterPlan,
@@ -27,7 +34,19 @@ function getProvidedStructuralSceneMetadataFields(fields) {
   return STRUCTURAL_SCENE_METADATA_FIELDS.filter((field) => Object.hasOwn(fields, field));
 }
 
-function persistReferenceDocLink({ filePath, targetDocId, relation }) {
+function persistReferenceDocLink({ filePath, syncDir, targetDocId, relation }) {
+  const syncDirAbs = path.resolve(syncDir);
+  const syncDirReal = fs.realpathSync.native(syncDirAbs);
+  resolveArtifactPathInsideSyncRoot(filePath, {
+    syncDirAbs,
+    syncDirReal,
+    artifactClass: FILESYSTEM_ARTIFACT_CLASSES.METADATA_FILE,
+    requireExisting: true,
+    errorCode: "INVALID_METADATA_PATH",
+    errorMessage: "Reference metadata path must be inside WRITING_SYNC_DIR.",
+  });
+  assertRegularFileReadTarget(path.resolve(filePath), { errorCode: "INVALID_METADATA_PATH" });
+
   const raw = fs.readFileSync(filePath, "utf8");
   const parsed = matter(raw);
   const data = parsed.data ?? {};
@@ -56,7 +75,12 @@ function persistReferenceDocLink({ filePath, targetDocId, relation }) {
     nextData.related_reference_ids = [...new Set([...existingIds.map((value) => String(value).trim()).filter(Boolean), targetDocId])];
   }
 
-  fs.writeFileSync(filePath, matter.stringify(parsed.content, nextData), "utf8");
+  writeTextInsideSyncRoot(filePath, matter.stringify(parsed.content, nextData), {
+    syncDirAbs,
+    syncDirReal,
+    artifactClass: FILESYSTEM_ARTIFACT_CLASSES.METADATA_FILE,
+    errorCode: "INVALID_METADATA_PATH",
+  });
 }
 
 function persistCharacterReferenceLink({ characterPath, syncDir, targetDocId, relation }) {
@@ -549,6 +573,7 @@ export function registerMetadataTools(s, {
           }
           persistReferenceDocLink({
             filePath: sourceFilePath,
+            syncDir: SYNC_DIR,
             targetDocId: target_doc_id,
             relation: normalizedRelation,
           });
@@ -560,6 +585,9 @@ export function registerMetadataTools(s, {
             `Source file for ${source_kind} '${source_id}' not found at indexed path — run sync() to refresh.`,
             { indexed_path: sourceFilePath }
           );
+        }
+        if (err?.name === "CoreValidationError") {
+          return errorResponse(err.code, err.message, err.details);
         }
         return errorResponse("IO_ERROR", `Failed to persist link metadata: ${err.message}`);
       }

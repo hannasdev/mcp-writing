@@ -6,6 +6,12 @@ import matter from "gray-matter";
 import yaml from "js-yaml";
 import { createSnapshot, listSnapshots } from "../core/git.js";
 import { getFileWriteDiagnostics, readMeta, indexSceneFile, isManagedStructureProject } from "../sync/sync.js";
+import {
+  FILESYSTEM_ARTIFACT_CLASSES,
+  assertRegularFileReadTarget,
+  resolveArtifactPathInsideSyncRoot,
+  writeTextInsideSyncRoot,
+} from "../core/filesystem-boundary.js";
 import { resolveStyleguideConfig } from "../styleguide/prose-styleguide.js";
 import {
   PROSE_STYLEGUIDE_SKILL_BASENAME,
@@ -472,6 +478,18 @@ export function registerEditingTools(s, {
           );
         }
 
+        const syncDirAbs = path.resolve(SYNC_DIR);
+        const syncDirReal = fs.realpathSync.native(syncDirAbs);
+        resolveArtifactPathInsideSyncRoot(proposal.scene_file_path, {
+          syncDirAbs,
+          syncDirReal,
+          artifactClass: FILESYSTEM_ARTIFACT_CLASSES.AUTHORED_PROSE,
+          requireExisting: true,
+          errorCode: "INVALID_PROSE_PATH",
+          errorMessage: "Indexed prose path must be inside WRITING_SYNC_DIR.",
+        });
+        assertRegularFileReadTarget(path.resolve(proposal.scene_file_path), { errorCode: "INVALID_PROSE_PATH" });
+
         const content = proposal.rendered_content ?? renderSceneContent(proposal.metadata, proposal.revised_prose);
         const currentRaw = fs.readFileSync(proposal.scene_file_path, "utf8");
 
@@ -497,7 +515,12 @@ export function registerEditingTools(s, {
 
         const snapshot = createSnapshot(SYNC_DIR, proposal.scene_file_path, scene_id, proposal.instruction);
 
-        fs.writeFileSync(proposal.scene_file_path, content, "utf8");
+        writeTextInsideSyncRoot(proposal.scene_file_path, content, {
+          syncDirAbs,
+          syncDirReal,
+          artifactClass: FILESYSTEM_ARTIFACT_CLASSES.AUTHORED_PROSE,
+          errorCode: "INVALID_PROSE_PATH",
+        });
 
         const { meta: canonicalMeta } = readMeta(proposal.scene_file_path, SYNC_DIR, { writable: false });
         const { content: newProse } = matter(content);
@@ -520,6 +543,9 @@ export function registerEditingTools(s, {
       } catch (err) {
         if (err.code === "ENOENT") {
           return errorResponse("STALE_PATH", `Prose file not found at indexed path.`, { indexed_path: proposal.scene_file_path });
+        }
+        if (err?.name === "CoreValidationError") {
+          return errorResponse(err.code, err.message, err.details);
         }
         return errorResponse("IO_ERROR", `Failed to commit edit: ${err.message}`);
       }
