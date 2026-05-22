@@ -1048,6 +1048,41 @@ describe("upsert_reference_link tool", () => {
     assert.ok(sourceRefFrontmatter.includes("relation: history_of"));
   });
 
+  test("rejects reference metadata writes through a symlink escape", async () => {
+    const sourceRefPath = path.join(writeSyncDir, "projects", "test-novel", "world", "reference", "ref-upsert-symlink-source.md");
+    const targetRefPath = path.join(writeSyncDir, "projects", "test-novel", "world", "reference", "ref-upsert-symlink-target.md");
+    const outsideTargetPath = path.join(path.dirname(writeSyncDir), "mcp-writing-reference-outside-target.md");
+    const outsideBefore = "---\ndoc_id: outside-target\ntitle: Outside\n---\nOutside body.";
+    fs.mkdirSync(path.dirname(sourceRefPath), { recursive: true });
+    fs.writeFileSync(sourceRefPath, "---\ndoc_id: ref-upsert-symlink-source\ntitle: Symlink Source\n---\nSource body.", "utf8");
+    fs.writeFileSync(targetRefPath, "---\ndoc_id: ref-upsert-symlink-target\ntitle: Symlink Target\n---\nTarget body.", "utf8");
+    await callWriteTool("sync");
+
+    try {
+      fs.writeFileSync(outsideTargetPath, outsideBefore, "utf8");
+      fs.unlinkSync(sourceRefPath);
+      fs.symlinkSync(outsideTargetPath, sourceRefPath);
+
+      const text = await callWriteTool("upsert_reference_link", {
+        source_kind: "reference",
+        source_id: "ref-upsert-symlink-source",
+        source_project_id: "test-novel",
+        target_doc_id: "ref-upsert-symlink-target",
+        relation: "related",
+      });
+      const parsed = JSON.parse(text);
+
+      assert.equal(parsed.ok, false);
+      assert.equal(parsed.error.code, "INVALID_METADATA_PATH");
+      assert.equal(fs.readFileSync(outsideTargetPath, "utf8"), outsideBefore);
+    } finally {
+      if (fs.lstatSync(sourceRefPath, { throwIfNoEntry: false })?.isSymbolicLink()) {
+        fs.unlinkSync(sourceRefPath);
+      }
+      fs.rmSync(outsideTargetPath, { force: true });
+    }
+  });
+
   test("canonicalizes legacy explicit link fields on reference upsert", async () => {
     const sourceRefPath = path.join(writeSyncDir, "projects", "test-novel", "world", "reference", "ref-upsert-source.md");
     fs.writeFileSync(

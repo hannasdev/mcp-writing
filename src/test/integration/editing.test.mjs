@@ -292,6 +292,44 @@ describe("commit_edit behavior", { concurrency: 1 }, () => {
     }
   });
 
+  test("returns INVALID_PROSE_PATH when indexed prose path is a symlink escape", async () => {
+    const proposalText = await callWriteTool("propose_edit", {
+      scene_id: "sc-003",
+      instruction: "Try writing through symlink",
+      revised_prose: "Revised prose for symlink path test.",
+    });
+    const proposal = JSON.parse(proposalText);
+    assert.ok(proposal.proposal_id);
+
+    const originalScenePath = path.join(writeSyncDir, "projects", "test-novel", "part-1", "chapter-2", "sc-003.md");
+    const replacementPath = path.join(writeSyncDir, "projects", "test-novel", "part-1", "chapter-2", "sc-003-original.md");
+    const outsideTargetPath = path.join(path.dirname(writeSyncDir), "mcp-writing-edit-outside-target.md");
+    const outsideBefore = "outside sentinel\n";
+    try {
+      fs.writeFileSync(outsideTargetPath, outsideBefore, "utf8");
+      fs.renameSync(originalScenePath, replacementPath);
+      fs.symlinkSync(outsideTargetPath, originalScenePath);
+
+      const commitText = await callWriteTool("commit_edit", {
+        scene_id: "sc-003",
+        proposal_id: proposal.proposal_id,
+      });
+      const commitResult = JSON.parse(commitText);
+
+      assert.equal(commitResult.ok, false);
+      assert.equal(commitResult.error.code, "INVALID_PROSE_PATH");
+      assert.equal(fs.readFileSync(outsideTargetPath, "utf8"), outsideBefore);
+    } finally {
+      if (fs.existsSync(originalScenePath) || fs.lstatSync(originalScenePath, { throwIfNoEntry: false })?.isSymbolicLink()) {
+        fs.unlinkSync(originalScenePath);
+      }
+      if (fs.existsSync(replacementPath) && !fs.existsSync(originalScenePath)) {
+        fs.renameSync(replacementPath, originalScenePath);
+      }
+      fs.rmSync(outsideTargetPath, { force: true });
+    }
+  });
+
   test("propose_edit returns CONFLICT for ambiguous scene_id without project_id", async () => {
     const alphaScenePath = path.join(writeSyncDir, "projects", "alpha-edit", "scenes", "shared.md");
     const betaScenePath = path.join(writeSyncDir, "projects", "beta-edit", "scenes", "shared.md");

@@ -1,10 +1,14 @@
 import fs from "node:fs";
 import path from "node:path";
-import os from "node:os";
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { ASYNC_PROGRESS_PREFIX } from "./async-progress.js";
 import { checkpointJobCreate, checkpointJobFinish, pruneJobCheckpoints } from "../core/db.js";
+import {
+  cleanupRuntimeTempPath,
+  createRuntimeTempBoundary,
+  writeRuntimeTempFile,
+} from "../core/filesystem-boundary.js";
 
 export function readJsonIfExists(filePath) {
   if (!filePath || !fs.existsSync(filePath)) return null;
@@ -23,12 +27,7 @@ export function createAsyncJobManager({ db, asyncJobs, ttlMs, runnerDir }) {
       if (!job.finishedAt) continue;
       if (now - Date.parse(job.finishedAt) > ttlMs) {
         try {
-          if (job.tmpDir && fs.existsSync(job.tmpDir)) {
-            fs.rmSync(job.tmpDir, { recursive: true, force: true });
-          } else {
-            if (job.requestPath && fs.existsSync(job.requestPath)) fs.unlinkSync(job.requestPath);
-            if (job.resultPath && fs.existsSync(job.resultPath)) fs.unlinkSync(job.resultPath);
-          }
+          cleanupAsyncJobFiles(job);
         } catch {
           // best effort cleanup
         }
@@ -60,12 +59,14 @@ export function createAsyncJobManager({ db, asyncJobs, ttlMs, runnerDir }) {
     pruneAsyncJobs();
 
     const id = randomUUID();
-    const tmpPrefix = path.join(os.tmpdir(), "mcp-writing-job-");
-    const tmpDir = fs.mkdtempSync(tmpPrefix);
+    const { tmpDir, tmpDirReal } = createRuntimeTempBoundary();
     const requestPath = path.join(tmpDir, `${id}.request.json`);
     const resultPath = path.join(tmpDir, `${id}.result.json`);
 
-    fs.writeFileSync(requestPath, JSON.stringify(requestPayload, null, 2), "utf8");
+    writeRuntimeTempFile(tmpDir, requestPath, JSON.stringify(requestPayload, null, 2), {
+      tempDirReal: tmpDirReal,
+      encoding: "utf8",
+    });
 
     const runnerPath = path.join(runnerDir, "src", "scripts", "async-job-runner.mjs");
     const child = spawn(
@@ -86,6 +87,7 @@ export function createAsyncJobManager({ db, asyncJobs, ttlMs, runnerDir }) {
       finishedAt: null,
       pid: child.pid,
       tmpDir,
+      tmpDirReal,
       requestPath,
       resultPath,
       result: null,
@@ -215,4 +217,42 @@ export function createAsyncJobManager({ db, asyncJobs, ttlMs, runnerDir }) {
   }
 
   return { pruneAsyncJobs, toPublicJob, startAsyncJob };
+}
+
+function cleanupAsyncJobFiles(job) {
+  if (job.tmpDir) {
+    cleanupRuntimeTempPath(job.tmpDir, job.tmpDir, {
+      tempDirReal: job.tmpDirReal ?? job.tmpDir,
+      recursive: true,
+      force: true,
+    });
+    return;
+  }
+
+  // Legacy in-memory jobs may predate tmpDir tracking; keep cleanup bounded to
+  // each recorded runtime-owned file's parent directory.
+  if (job.requestPath) {
+    const requestDir = path.dirname(job.requestPath);
+    cleanupRuntimeTempPath(requestDir, job.requestPath, {
+      tempDirReal: resolveExistingDirRealPath(requestDir),
+      recursive: false,
+      force: true,
+    });
+  }
+  if (job.resultPath) {
+    const resultDir = path.dirname(job.resultPath);
+    cleanupRuntimeTempPath(resultDir, job.resultPath, {
+      tempDirReal: resolveExistingDirRealPath(resultDir),
+      recursive: false,
+      force: true,
+    });
+  }
+}
+
+function resolveExistingDirRealPath(dirPath) {
+  try {
+    return fs.realpathSync.native(dirPath);
+  } catch {
+    return dirPath;
+  }
 }

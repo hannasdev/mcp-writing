@@ -1,0 +1,112 @@
+# Filesystem Boundary Inventory
+
+This inventory characterizes direct filesystem mutations for Filesystem Boundary
+Hardening Milestone 1.
+
+Scope:
+
+- production application modules under `src/`;
+- support scripts under `src/scripts/`;
+- tests are excluded from the raw-call-site inventory but are referenced in the
+  coverage section;
+- Git and SQLite file mutations remain excluded from this boundary initiative.
+
+This inventory was taken after the initial generated-output helper extraction,
+so review bundle and structure export writes already show the intended helper
+shape.
+
+## Policy Summary
+
+Expected containment by artifact class:
+
+| Artifact class | Boundary | Symlink policy | Mutation policy |
+| --- | --- | --- | --- |
+| Authored prose | `WRITING_SYNC_DIR` | Revalidate before write; reject symlink targets for writes unless a workflow explicitly opts in. | Preserve snapshot/read-only diagnostics; write only sanctioned prose paths. |
+| Sidecars | `WRITING_SYNC_DIR` | Revalidate candidate path and existing ancestors; reject symlink targets for writes. | Write only metadata sidecars derived from validated prose/managed paths. |
+| Generated exports | Output dir inside `WRITING_SYNC_DIR` | Existing output dir and ancestors must resolve inside sync root; target symlink files rejected. | Generated filenames cannot traverse; overwrite behavior remains explicit in helper. |
+| Styleguide config | `WRITING_SYNC_DIR` | Revalidate path and parent directory; reject symlink targets for writes. | Treat as configuration, not prose or generated output. |
+| AI boot/instruction files | `WRITING_SYNC_DIR` | High-risk surface; revalidate parent and target, reject symlink targets, preserve rollback semantics. | Separate helper or explicit artifact option; do not share generic prose-write path silently. |
+| World entity files | `WRITING_SYNC_DIR` | Revalidate entity directory and target files; reject symlink targets for writes. | Directory creation plus prose/meta/arc writes should be one bounded workflow. |
+| Import sources | External read-only source path | May be outside sync root; source symlinks can be followed only as documented import input. | No mutation of source tree. |
+| Import destinations | `WRITING_SYNC_DIR` project/universe scenes subtree | Destination path and ancestors must remain inside expected sync boundary; reject symlink targets. | Copy prose and write sidecar as bounded import transaction. |
+| Scrivener relocation | `WRITING_SYNC_DIR` | Source and destination must resolve inside sync root; reject destination symlink targets. | Move/rename with explicit cross-device copy fallback and cleanup behavior. |
+| Runtime temp | Runtime-owned temp dir under `os.tmpdir()` | Cleanup constrained to temp dir created by job manager; request/result paths must stay inside it. | Best-effort request/result writes and cleanup only for app-owned job files. |
+| Support scripts | Repo or explicit operator-provided path | Script-specific. | Raw mutations may remain when scripts are intentionally outside runtime policy. |
+
+TOCTOU/race-window posture:
+
+- reduce avoidable race windows around overwrite, delete, move, and rollback
+  flows where the code can do so clearly;
+- do not treat this as adversarial same-user sandboxing for the local app;
+- prefer immediate revalidation and target-type checks over broad hardening that
+  obscures workflow intent.
+
+## Production Call Sites
+
+| Area | Call sites | Artifact class | Current behavior | Expected boundary/helper | Coverage status |
+| --- | --- | --- | --- | --- | --- |
+| Generated output boundary | `src/core/filesystem-boundary.js:106`, `src/core/filesystem-boundary.js:168` | Boundary module | Owns guarded directory creation and generated-output writes. | Raw `fs` mutation is allowed here; helper should grow copy/move/delete/runtime variants. | `src/test/unit/filesystem-boundary.test.mjs` covers generated output dir containment, symlink ancestor escape, filename traversal, guarded create/write, and symlink target rejection. |
+| Review bundle artifacts | `src/review-bundles/review-bundles-writer.js:21`, `src/review-bundles/review-bundles-writer.js:47`, `src/review-bundles/review-bundles-writer.js:91` | Generated exports | Already routed through generated-output helpers. | Keep helper usage; add integration tests for traversal and symlink target behavior if not already covered by current outside/symlink output-dir tests. | Unit and integration review-bundle tests cover output generation and outside/symlink output dirs. |
+| Structure export | `src/structure/structure-export.js:215`, `src/structure/structure-export.js:217` | Generated exports | Already routed through generated-output helpers. | Keep helper usage; restore path validation remains a separate read/validation surface. | `src/test/unit/structure-export.test.mjs`; structure restore coverage in `src/test/unit/structure-restore.test.mjs`. |
+| Async jobs | `src/runtime/async-jobs.js:27`, `src/runtime/async-jobs.js:29`, `src/runtime/async-jobs.js:30`, `src/runtime/async-jobs.js:64`, `src/runtime/async-jobs.js:68` | Runtime temp write/cleanup | Creates runtime temp dirs through boundary helpers, writes request JSON through runtime-temp validation, and cleans request/result/temp paths through the same temp-root boundary. | Keep helper usage; cleanup remains best-effort at the async-job layer while helper-level writes and cleanup reject traversal and symlink targets. | `src/test/unit/filesystem-boundary.test.mjs` covers runtime-temp path containment, traversal rejection, symlink write/cleanup rejection, and bounded cleanup; `src/test/unit/async-jobs.test.mjs` covers async prune behavior. |
+| Import cleanup | `src/sync/importer.js` | Import destination cleanup/delete | Deletes old reconciled prose or sidecar files through sync-root import-destination validation. | Keep helper usage; import cleanup is intentionally bounded to the resolved sync root. | `src/test/unit/importer.test.mjs` covers stale symlink cleanup rejection. |
+| Import destination writes | `src/sync/importer.js` | Import destination prose/sidecar | Creates scenes dirs, copies external source prose, and writes sidecars through sync-root import-destination helpers. Import sources remain read-only and may be outside sync root. | Keep helper usage; source reads stay separate from destination mutations. | `src/test/unit/filesystem-boundary.test.mjs` covers import-source copy containment; `src/test/unit/importer.test.mjs` covers symlinked scenes dir and sidecar target rejection. |
+| Scrivener relocation move | `src/sync/scrivener-direct.js` | Move/rename/copy/delete | Prose relocation now routes through the shared guarded move helper scoped to `WRITING_SYNC_DIR`, preserving the explicit cross-device copy/unlink fallback and existing destination-exists skip behavior. | Keep helper usage; source/destination validation remains tied to the sync root while workflow paths stay stable for logs and git snapshots. | `src/test/unit/importer.test.mjs` covers normal relocation, destination-exists behavior, out-of-root `scenesDir` rejection, symlinked source rejection, symlinked destination ancestor rejection, and snapshot staging. |
+| Scrivener sidecar relocation | `src/sync/scrivener-direct.js` | Sidecar write/delete | Final sidecar writes and old-sidecar cleanup now route through sync-root sidecar write/delete helpers. | Keep helper usage; sidecar writes/deletes stay tied to the validated relocation boundary. | `src/test/unit/importer.test.mjs` covers relocated sidecar writes, original sidecar deletion, and symlinked destination ancestor rejection. |
+| Sidecar migration/readMeta | `src/sync/sync.js` | Sidecar writes | `readMeta(..., { writable: true })` and `writeMeta(...)` now route sidecar writes through sync-root sidecar validation. Production callers pass `syncDir` explicitly; unscoped `writeMeta` is rejected. | Keep helper usage; continue migrating delete/move sidecar operations separately. | `src/test/unit/sync.test.mjs` covers sidecar generation and symlink target rejection; broad sync tests cover sidecar generation behavior. |
+| Sync-dir writability probe | `src/sync/sync.js` | Probe write/delete | Writes and unlinks `.mcp-write-check` through the shared sync-root probe helper to detect read-only runtime without mutating symlink probe targets. | Keep helper usage and preserve the boolean read-only diagnostic contract. | `src/test/unit/filesystem-boundary.test.mjs` covers bounded probe write/delete and symlink rejection; `src/test/unit/sync.test.mjs` covers the public boolean wrapper. |
+| Prose edit commit | `src/tools/editing.js` | Authored prose | Routed through authored-prose sync-root validation before reading, snapshotting, and writing accepted proposal content. | Keep helper usage; broader stale-path diagnostics still run before boundary rejection. | `src/test/integration/editing.test.mjs` covers stale path, directory target, and symlink escape rejection. |
+| Metadata reference updates | `src/tools/metadata.js` | Metadata/frontmatter write | Reference-doc frontmatter writes are routed through metadata sync-root validation before read/write. Character/place sidecar writes still route through `writeMeta`. | Continue migrating sidecar writes through sidecar helpers. | `src/test/integration/search.test.mjs` covers reference metadata symlink escape rejection; character/place sidecar focused tests remain pending. |
+| World entity creation | `src/core/helpers.js` | World entity prose/meta/arc | Routed through world-entity sync-root validation for directory creation, sheet writes, character arc writes, and metadata writes. Existing sheet/meta/arc files are regular-file checked before reuse. | Keep helper usage; partial-write rollback is still future hardening if workflow atomicity becomes necessary. | `src/test/integration/metadata.test.mjs` covers create/reuse/backfill and symlink directory escape rejection. |
+| Styleguide config update | `src/styleguide/prose-styleguide.js` | Styleguide config | Routes prepared config writes through sync-root styleguide-config validation and regular-file checks. | Keep helper usage; cascading config reads remain read-only and may still observe symlinked files. | `src/test/unit/styleguide.test.mjs` covers symlink target rejection for update writes. |
+| Styleguide config setup | `src/tools/styleguide.js` | Styleguide config | Routes setup config writes through sync-root styleguide-config validation and regular-file checks. | Keep helper usage. | `src/test/integration/styleguide.test.mjs` covers setup behavior and symlink overwrite rejection. |
+| Claude boot file | `src/tools/styleguide.js` | AI boot/instruction file | Routes `CLAUDE.md` read/append/create/overwrite through AI boot-file validation and regular-file checks. | Keep helper usage. | Styleguide integration tests cover create/overwrite/update behavior and symlink target rejection. |
+| Copilot instruction file | `src/tools/styleguide.js` | AI boot/instruction file | Routes `.github/copilot-instructions.md` read/create/overwrite/append/replace through AI boot-file validation. | Keep helper usage and parent handling. | Styleguide integration tests cover file-vs-dir parent handling, create/overwrite/update behavior, and boot-file symlink target rejection. |
+| Styleguide rollback and skill file | `src/tools/styleguide.js` | Generated styleguide skill, AI boot file, rollback cleanup | Routes backup reads, rollback restores, rollback cleanup, and `skills/prose-styleguide/SKILL.md` writes through styleguide-skill/AI boot-file validation. | Keep helper usage; broaden rollback escape tests if rollback behavior gets more complex. | Styleguide integration tests cover rollback failure, sentinel preservation, and boot-file symlink rejection. |
+
+## Support Script Call Sites
+
+Support scripts are not runtime MCP workflow surfaces. They may keep raw
+filesystem mutation when the script is explicitly operator-facing or repo-local,
+but Milestone 4 linting makes that allowance visible by disabling the
+project-specific raw-mutation rule only for `src/scripts/**`, the shared
+boundary module, and `src/core/git.js`.
+
+| Script | Call sites | Classification | Current/expected handling |
+| --- | --- | --- | --- |
+| `src/scripts/async-job-runner.mjs` | `mkdirSync`, `writeFileSync` | Runtime child process result write | Pair with async job runtime-temp helper or validate request/result paths before runner writes. |
+| `src/scripts/generate-tool-docs.mjs` | `mkdirSync`, `writeFileSync` | Repo docs generation | Repo-local support script; raw writes acceptable with lint exemption. |
+| `src/scripts/manual-validation.mjs` | `rmSync` | Manual fixture cleanup | Manual support script; raw cleanup acceptable with lint exemption. |
+| `src/scripts/manual-scrivener-realtest.mjs` | `rmSync`, `mkdirSync` | Manual fixture setup/cleanup | Manual support script; raw mutation acceptable with lint exemption. |
+| `src/scripts/new-world-entity.js` | `mkdirSync`, `writeFileSync` | Legacy/support world entity creation | Either migrate to shared helper or classify as support script if no longer a runtime path. |
+| `src/scripts/profile-review-bundles.mjs` | `mkdtempSync`, `rmSync` | Benchmark temp setup/cleanup | Support script temp lifecycle; raw mutation acceptable with lint exemption. |
+| `src/scripts/split-versions.js` | `writeFileSync` | Repo maintenance | Repo-local support script; raw write acceptable with lint exemption. |
+| `src/scripts/sync-server-json-version.mjs` | `writeFileSync` | Repo maintenance | Repo-local support script; raw write acceptable with lint exemption. |
+
+## Coverage Notes
+
+Existing tests that characterize current behavior:
+
+- `src/test/unit/filesystem-boundary.test.mjs` covers the generated-output
+  helper behavior already extracted.
+- `src/test/unit/review-bundles.test.mjs` and
+  `src/test/integration/review-bundles.test.mjs` cover generated review bundle
+  planning/writing, outside output dirs, and symlink output dirs.
+- `src/test/unit/structure-export.test.mjs` and
+  `src/test/unit/structure-restore.test.mjs` cover structure export/restore
+  validation surfaces.
+- `src/test/unit/importer.test.mjs` covers Scrivener import behavior before
+  destination write helpers are introduced.
+- `src/test/unit/sync.test.mjs` and `src/test/integration/sync.test.mjs` cover
+  sidecar migration, Scrivener direct merge, and structural sync behavior.
+- `src/test/integration/editing.test.mjs` covers prose edit proposal/commit
+  behavior.
+- `src/test/unit/styleguide.test.mjs` and
+  `src/test/integration/styleguide.test.mjs` cover styleguide config, generated
+  skill files, AI boot files, and rollback behavior.
+- `src/test/integration/runtime.test.mjs` covers async job behavior.
+
+Highest-value gaps before broad migration:
+
+- rollback escape tests can be broadened if styleguide publish rollback grows
+  beyond the current bounded file set.

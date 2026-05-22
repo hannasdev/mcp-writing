@@ -138,6 +138,115 @@ describe("importScrivenerSync", () => {
     fs.rmSync(syncRoot, { recursive: true, force: true });
     fs.rmSync(scrivDir, { recursive: true, force: true });
   });
+
+  test("rejects import when destination scenes directory is a symlink outside sync root", () => {
+    const syncRoot = fs.mkdtempSync(path.join(os.tmpdir(), "sync-root-"));
+    const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), "sync-root-outside-"));
+    const scrivDir = createScrivenerDraftFixture();
+    const projectRoot = path.join(syncRoot, "projects", "book-1-the-lamb");
+    const scenesDir = path.join(projectRoot, "scenes");
+
+    try {
+      fs.mkdirSync(projectRoot, { recursive: true });
+      fs.symlinkSync(outsideDir, scenesDir);
+
+      assert.throws(
+        () => importScrivenerSync({
+          scrivenerDir: scrivDir,
+          mcpSyncDir: syncRoot,
+          projectId: "book-1-the-lamb",
+          dryRun: false,
+        }),
+        /Path must be inside WRITING_SYNC_DIR|Import destination must be inside WRITING_SYNC_DIR|Write target must be inside the configured boundary/
+      );
+
+      assert.equal(
+        fs.existsSync(path.join(outsideDir, "001 Scene The Arrival [1].txt")),
+        false
+      );
+      assert.equal(
+        fs.existsSync(path.join(outsideDir, "001 Scene The Arrival [1].meta.yaml")),
+        false
+      );
+    } finally {
+      fs.rmSync(syncRoot, { recursive: true, force: true });
+      fs.rmSync(outsideDir, { recursive: true, force: true });
+      fs.rmSync(scrivDir, { recursive: true, force: true });
+    }
+  });
+
+  test("rejects import when sidecar destination is a symlink target", () => {
+    const syncRoot = fs.mkdtempSync(path.join(os.tmpdir(), "sync-root-"));
+    const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), "sync-root-outside-"));
+    const scrivDir = createScrivenerDraftFixture();
+    const scenesDir = path.join(syncRoot, "projects", "book-1-the-lamb", "scenes");
+    const sidecarPath = path.join(scenesDir, "001 Scene The Arrival [1].meta.yaml");
+    const outsideSidecar = path.join(outsideDir, "outside.meta.yaml");
+
+    try {
+      fs.mkdirSync(scenesDir, { recursive: true });
+      fs.writeFileSync(outsideSidecar, "sentinel: true\n", "utf8");
+      fs.symlinkSync(outsideSidecar, sidecarPath);
+
+      assert.throws(
+        () => importScrivenerSync({
+          scrivenerDir: scrivDir,
+          mcpSyncDir: syncRoot,
+          projectId: "book-1-the-lamb",
+          dryRun: false,
+        }),
+        /Write target must be inside the configured boundary|Refusing to write: target path is a symlink/
+      );
+
+      assert.equal(fs.readFileSync(outsideSidecar, "utf8"), "sentinel: true\n");
+    } finally {
+      fs.rmSync(syncRoot, { recursive: true, force: true });
+      fs.rmSync(outsideDir, { recursive: true, force: true });
+      fs.rmSync(scrivDir, { recursive: true, force: true });
+    }
+  });
+
+  test("rejects reconciled cleanup when stale prose path is a symlink", () => {
+    const syncRoot = fs.mkdtempSync(path.join(os.tmpdir(), "sync-root-"));
+    const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), "sync-root-outside-"));
+    const scrivDir = createScrivenerDraftFixture();
+    const scenesDir = path.join(syncRoot, "projects", "book-1-the-lamb", "scenes");
+    const oldProsePath = path.join(scenesDir, "000 Old Arrival [1].txt");
+    const oldSidecarPath = path.join(scenesDir, "000 Old Arrival [1].meta.yaml");
+    const outsideProse = path.join(outsideDir, "outside.txt");
+
+    try {
+      fs.mkdirSync(scenesDir, { recursive: true });
+      fs.writeFileSync(outsideProse, "outside sentinel", "utf8");
+      fs.symlinkSync(outsideProse, oldProsePath);
+      fs.writeFileSync(
+        oldSidecarPath,
+        yaml.dump({
+          scene_id: "sc-existing-arrival",
+          external_source: "scrivener",
+          external_id: "1",
+          title: "Old Arrival",
+        }),
+        "utf8"
+      );
+
+      assert.throws(
+        () => importScrivenerSync({
+          scrivenerDir: scrivDir,
+          mcpSyncDir: syncRoot,
+          projectId: "book-1-the-lamb",
+          dryRun: false,
+        }),
+        /Refusing to delete: target path is a symlink/
+      );
+
+      assert.equal(fs.readFileSync(outsideProse, "utf8"), "outside sentinel");
+    } finally {
+      fs.rmSync(syncRoot, { recursive: true, force: true });
+      fs.rmSync(outsideDir, { recursive: true, force: true });
+      fs.rmSync(scrivDir, { recursive: true, force: true });
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -494,6 +603,103 @@ describe("Scrivener direct metadata merge", () => {
     } finally {
       fs.rmSync(scrivDir, { recursive: true, force: true });
       fs.rmSync(syncRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("mergeScrivenerProjectMetadata rejects scenesDir overrides outside the sync root", () => {
+    const scrivDir = createScrivenerProjectFixture({ chapterTitle: "Harbor Arrival" });
+    const { syncRoot } = createSyncSidecarFixture("test-import", [], true);
+    const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), "scriv-merge-outside-scenes-"));
+    fs.writeFileSync(
+      path.join(outsideDir, "001 Scene Arrival [1].meta.yaml"),
+      yaml.dump({ scene_id: "sc-001-arrival" }),
+      "utf8"
+    );
+
+    try {
+      let error;
+      assert.throws(
+        () => {
+          try {
+            mergeScrivenerProjectMetadata({
+              scrivPath: scrivDir,
+              mcpSyncDir: syncRoot,
+              projectId: "test-import",
+              scenesDir: outsideDir,
+              dryRun: false,
+              organizeByChapters: true,
+            });
+          } catch (err) {
+            error = err;
+            throw err;
+          }
+        },
+        /Scenes directory not found or not a directory/
+      );
+      assert.equal(error.cause?.details?.artifact_class, "scrivener_relocation");
+    } finally {
+      fs.rmSync(scrivDir, { recursive: true, force: true });
+      fs.rmSync(syncRoot, { recursive: true, force: true });
+      fs.rmSync(outsideDir, { recursive: true, force: true });
+    }
+  });
+
+  test("mergeScrivenerProjectMetadata rejects relocation through symlinked destination ancestors", () => {
+    const scrivDir = createScrivenerProjectFixture({ chapterTitle: "Harbor Arrival" });
+    const { syncRoot, scenesDir } = createSyncSidecarFixture("test-import", [], true);
+    const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), "scriv-merge-symlink-target-"));
+    const partPath = path.join(scenesDir, "part-1");
+    fs.symlinkSync(outsideDir, partPath, "dir");
+
+    try {
+      assert.throws(
+        () => mergeScrivenerProjectMetadata({
+          scrivPath: scrivDir,
+          mcpSyncDir: syncRoot,
+          projectId: "test-import",
+          dryRun: false,
+          organizeByChapters: true,
+        }),
+        /Move target must be inside the configured boundary/
+      );
+      assert.equal(fs.existsSync(path.join(outsideDir, "chapter-1-harbor-arrival")), false);
+      assert.equal(fs.existsSync(path.join(scenesDir, "001 Scene Arrival [1].md")), true);
+      assert.equal(fs.existsSync(path.join(scenesDir, "001 Scene Arrival [1].meta.yaml")), true);
+    } finally {
+      fs.rmSync(partPath, { force: true });
+      fs.rmSync(scrivDir, { recursive: true, force: true });
+      fs.rmSync(syncRoot, { recursive: true, force: true });
+      fs.rmSync(outsideDir, { recursive: true, force: true });
+    }
+  });
+
+  test("mergeScrivenerProjectMetadata rejects symlinked prose relocation sources", () => {
+    const scrivDir = createScrivenerProjectFixture({ chapterTitle: "Harbor Arrival" });
+    const { syncRoot, scenesDir } = createSyncSidecarFixture("test-import", [], false);
+    const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), "scriv-merge-source-symlink-"));
+    const outsideProse = path.join(outsideDir, "outside.md");
+    const prosePath = path.join(scenesDir, "001 Scene Arrival [1].md");
+    fs.writeFileSync(outsideProse, "Outside prose should not be moved.\n", "utf8");
+    fs.symlinkSync(outsideProse, prosePath);
+
+    try {
+      assert.throws(
+        () => mergeScrivenerProjectMetadata({
+          scrivPath: scrivDir,
+          mcpSyncDir: syncRoot,
+          projectId: "test-import",
+          dryRun: false,
+          organizeByChapters: true,
+        }),
+        /Refusing to read: target path is a symlink/
+      );
+      assert.equal(fs.readFileSync(outsideProse, "utf8"), "Outside prose should not be moved.\n");
+      assert.equal(fs.existsSync(path.join(scenesDir, "001 Scene Arrival [1].meta.yaml")), true);
+    } finally {
+      fs.rmSync(prosePath, { force: true });
+      fs.rmSync(scrivDir, { recursive: true, force: true });
+      fs.rmSync(syncRoot, { recursive: true, force: true });
+      fs.rmSync(outsideDir, { recursive: true, force: true });
     }
   });
 

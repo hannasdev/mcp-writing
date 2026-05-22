@@ -10,6 +10,12 @@ Deploy Writing MCP as a service in the OpenClaw runtime with the Writing World a
 
 **Status:** Deferred backlog (not active). Runtime shape, deployment targets, and agent integration points are defined, but rollout is paused.
 
+### 🐳 [Docker, CI, and Deployment Workflow](docs/initiatives/backlog/docker-ci-deployment/prd.md) 📋
+
+Make Docker a consistently supported workflow for building, testing, running, and deploying Writing MCP across local development, CI, homeserver, and MCP gateway environments.
+
+**Status:** Deferred backlog (not active). General containerization and deployment workflow should be productized separately from OpenClaw-specific integration.
+
 ### 🧭 [Client-Agnostic Setup Contract](docs/initiatives/backlog/client-agnostic-setup/prd.md) 📋
 
 Define a shared setup contract for configuration-driven writing features so setup can live in client-native UI surfaces while the MCP remains focused on durable capabilities.
@@ -22,7 +28,7 @@ Track the remaining follow-up work around first-class chapters, deferred divisio
 
 **Status:** Deferred backlog (not active). Canonical chapters and epigraphs, `chapter_id` targeting, dedicated chapter/epigraph tools, and chapter-aware bundle rendering have already shipped; remaining follow-up work is available for future prioritization.
 
-### 🔒 [Filesystem Boundary Hardening](docs/initiatives/backlog/filesystem-boundary/prd.md) 📋
+### 🔒 [Filesystem Boundary Hardening](docs/initiatives/active/filesystem-boundary/prd.md) 📋
 
 Centralize filesystem containment, symlink, generated-output, and mutation rules so security checks match Writing MCP's local-file product model instead of warning about expected dynamic path usage.
 

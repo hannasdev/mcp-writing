@@ -10,7 +10,7 @@ import {
   deriveReferenceSummary, deriveReferenceTitle, normalizeReferenceTags,
   normalizeReferenceIdList,
   isCanonicalWorldEntityFile, getSyncOwnershipDiagnostics, getFileWriteDiagnostics,
-  isWorldFile, readMeta, isSyncDirWritable, sidecarPath, syncAll,
+  isWorldFile, readMeta, writeMeta, isSyncDirWritable, sidecarPath, syncAll,
   walkFiles, walkSidecars, worldEntityFolderKey, worldEntityKindForPath,
   buildCanonicalIndexPlan, buildWarningSummary, observeOrphanedSidecars,
   observeStructureForFile, readSceneFileForSync, readSceneMetadataForSync,
@@ -163,6 +163,20 @@ describe("readMeta", () => {
     fs.rmSync(dir, { recursive: true });
   });
 
+  test("read-only metadata parsing does not require the sync root to exist", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "meta-"));
+    const missingSyncDir = path.join(dir, "missing-sync-root");
+    const scenePath = path.join(dir, "sc-001.md");
+    fs.writeFileSync(scenePath, "---\nscene_id: sc-001\n---\nsome prose");
+
+    const { meta, sidecarGenerated } = readMeta(scenePath, missingSyncDir, { writable: false });
+
+    assert.equal(meta.scene_id, "sc-001");
+    assert.equal(sidecarGenerated, false);
+    assert.ok(!fs.existsSync(path.join(dir, "sc-001.meta.yaml")));
+    fs.rmSync(dir, { recursive: true });
+  });
+
   test("sidecar wins over frontmatter when both exist", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "meta-"));
     fs.writeFileSync(path.join(dir, "sc-001.md"), "---\nscene_id: old-id\n---\nsome prose");
@@ -170,6 +184,33 @@ describe("readMeta", () => {
     const { meta } = readMeta(path.join(dir, "sc-001.md"), dir);
     assert.equal(meta.scene_id, "new-id");
     fs.rmSync(dir, { recursive: true });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// writeMeta
+// ---------------------------------------------------------------------------
+describe("writeMeta", () => {
+  test("rejects sidecar symlink targets when syncDir is provided", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "meta-write-"));
+    const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), "meta-write-outside-"));
+    const scenePath = path.join(dir, "sc-001.md");
+    const sidecar = path.join(dir, "sc-001.meta.yaml");
+    const outsideSidecar = path.join(outsideDir, "outside.meta.yaml");
+    try {
+      fs.writeFileSync(scenePath, "---\nscene_id: sc-001\n---\nProse.");
+      fs.writeFileSync(outsideSidecar, "scene_id: outside\n");
+      fs.symlinkSync(outsideSidecar, sidecar);
+
+      assert.throws(
+        () => writeMeta(scenePath, { scene_id: "sc-001", title: "Updated" }, { syncDir: dir }),
+        (err) => err?.name === "CoreValidationError" && err?.code === "INVALID_SIDECAR_PATH"
+      );
+      assert.equal(fs.readFileSync(outsideSidecar, "utf8"), "scene_id: outside\n");
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+      fs.rmSync(outsideDir, { recursive: true, force: true });
+    }
   });
 });
 
@@ -221,6 +262,24 @@ describe("isSyncDirWritable", () => {
 
   test("returns false for non-existent directory", () => {
     assert.ok(!isSyncDirWritable("/tmp/__nonexistent_dir_xyz__/subdir"));
+  });
+
+  test("returns false without mutating a symlinked probe target", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "write-"));
+    const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), "write-outside-"));
+    const outsideTarget = path.join(outsideDir, "outside.txt");
+    const probePath = path.join(dir, ".mcp-write-check");
+    try {
+      fs.writeFileSync(outsideTarget, "keep", "utf8");
+      fs.symlinkSync(outsideTarget, probePath);
+
+      assert.equal(isSyncDirWritable(dir), false);
+      assert.equal(fs.readFileSync(outsideTarget, "utf8"), "keep");
+      assert.equal(fs.existsSync(probePath), true);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+      fs.rmSync(outsideDir, { recursive: true, force: true });
+    }
   });
 });
 

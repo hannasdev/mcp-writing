@@ -9,7 +9,7 @@ It supports metadata-first reasoning, explicit prose editing workflows, and revi
 
 ## Product Status
 
-Active initiative: none selected.
+Active initiative: [Filesystem Boundary Hardening](docs/initiatives/active/filesystem-boundary/prd.md).
 
 Most recent completed initiative: [Structural Authority Hardening](docs/initiatives/done/structural-authority-hardening/prd.md).
 

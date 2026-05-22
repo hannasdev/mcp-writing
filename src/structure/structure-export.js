@@ -1,6 +1,10 @@
 import crypto from "node:crypto";
-import fs from "node:fs";
 import path from "node:path";
+import {
+  ensureDirectoryInsideBoundary,
+  resolveGeneratedOutputPath,
+  writeGeneratedOutputFile,
+} from "../core/filesystem-boundary.js";
 
 export const STRUCTURE_EXPORT_SCHEMA_VERSION = 1;
 
@@ -208,37 +212,8 @@ export function renderStructureExport(snapshot) {
 
 export function writeStructureExportFile(snapshot, { outputDir, fileName }) {
   const normalizedOutputDir = path.resolve(outputDir);
-  const targetPath = path.resolve(normalizedOutputDir, fileName);
-  const relative = path.relative(normalizedOutputDir, targetPath);
-  if (relative.startsWith("..") || path.isAbsolute(relative)) {
-    throw new Error(`Output file '${fileName}' resolves outside output_dir.`);
-  }
-
-  if (!fs.existsSync(normalizedOutputDir)) {
-    fs.mkdirSync(normalizedOutputDir, { recursive: true });
-  } else {
-    const outputDirStat = fs.lstatSync(normalizedOutputDir);
-    if (!outputDirStat.isDirectory()) {
-      throw new Error(`output_dir exists but is not a directory: ${normalizedOutputDir}`);
-    }
-  }
-  fs.accessSync(normalizedOutputDir, fs.constants.W_OK);
-
-  const stat = (() => {
-    try {
-      return fs.lstatSync(targetPath);
-    } catch (error) {
-      if (error?.code === "ENOENT") return null;
-      throw error;
-    }
-  })();
-  if (stat?.isSymbolicLink()) {
-    throw new Error(`Refusing to write: target path is a symlink: ${targetPath}`);
-  }
-  if (stat && !stat.isFile()) {
-    throw new Error(`Refusing to write: target path exists but is not a regular file: ${targetPath}`);
-  }
-
-  fs.writeFileSync(targetPath, renderStructureExport(snapshot), "utf8");
+  ensureDirectoryInsideBoundary(normalizedOutputDir, { label: "output_dir" });
+  const targetPath = resolveGeneratedOutputPath(normalizedOutputDir, fileName);
+  writeGeneratedOutputFile(targetPath, renderStructureExport(snapshot), { encoding: "utf8" });
   return targetPath;
 }

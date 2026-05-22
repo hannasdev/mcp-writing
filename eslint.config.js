@@ -1,12 +1,14 @@
 import js from "@eslint/js";
 import globals from "globals";
 import security from "eslint-plugin-security";
+import filesystemBoundary from "./eslint-rules/no-raw-filesystem-mutations.js";
 
 export default [
   js.configs.recommended,
   security.configs.recommended,
   {
     plugins: {
+      "filesystem-boundary": filesystemBoundary,
       security,
     },
     languageOptions: {
@@ -31,6 +33,18 @@ export default [
       "security/detect-non-literal-fs-filename": "off",
       "security/detect-non-literal-regexp": "off",
       "security/detect-object-injection": "off",
+      "filesystem-boundary/no-raw-filesystem-mutations": "error",
+    },
+  },
+  {
+    files: [
+      "src/core/filesystem-boundary.js",
+      "src/core/git.js",
+      "src/scripts/**/*.js",
+      "src/scripts/**/*.mjs",
+    ],
+    rules: {
+      "filesystem-boundary/no-raw-filesystem-mutations": "off",
     },
   },
   {

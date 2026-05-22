@@ -38,7 +38,7 @@ function makeToolHarness(db, { writable = true } = {}) {
 
   registerMetadataTools(server, {
     db,
-    SYNC_DIR: "",
+    SYNC_DIR: SEED_TMP_DIR,
     SYNC_DIR_WRITABLE: writable,
     errorResponse,
     jsonResponse,

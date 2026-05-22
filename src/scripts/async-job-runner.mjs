@@ -4,12 +4,16 @@ import { importScrivenerSync } from "../sync/importer.js";
 import { mergeScrivenerProjectMetadata } from "../sync/scrivener-direct.js";
 import { runSceneCharacterBatch } from "../sync/scene-character-batch.js";
 import { ASYNC_PROGRESS_PREFIX } from "../runtime/async-progress.js";
+import { writeRuntimeTempFile } from "../core/filesystem-boundary.js";
 
 const PROGRESS_PREFIX = ASYNC_PROGRESS_PREFIX;
 
-function writeResult(resultPath, payload) {
-  fs.mkdirSync(path.dirname(resultPath), { recursive: true });
-  fs.writeFileSync(resultPath, JSON.stringify(payload, null, 2), "utf8");
+function writeResult(requestPath, resultPath, payload) {
+  const tempDir = requestPath ? path.dirname(requestPath) : path.dirname(resultPath);
+  writeRuntimeTempFile(tempDir, resultPath, JSON.stringify(payload, null, 2), {
+    tempDirReal: resolveExistingDirRealPath(tempDir),
+    encoding: "utf8",
+  });
 }
 
 function writeProgress(payload) {
@@ -110,7 +114,7 @@ async function main() {
       preflight: Boolean(request.args?.preflight),
       ignorePatterns: request.args?.ignore_patterns ?? [],
     });
-    writeResult(resultPath, normalizeImportResult(result));
+    writeResult(requestPath, resultPath, normalizeImportResult(result));
     return;
   }
 
@@ -123,7 +127,7 @@ async function main() {
       dryRun: Boolean(request.args?.dry_run),
       organizeByChapters: Boolean(request.args?.organize_by_chapters),
     });
-    writeResult(resultPath, normalizeMergeResult(result));
+    writeResult(requestPath, resultPath, normalizeMergeResult(result));
     return;
   }
 
@@ -149,7 +153,7 @@ async function main() {
       shouldCancel: () => cancellationRequested,
     });
     process.off("SIGTERM", handleSigterm);
-    writeResult(resultPath, normalizeSceneCharacterBatchResult(result));
+    writeResult(requestPath, resultPath, normalizeSceneCharacterBatchResult(result));
     return;
   }
 
@@ -188,7 +192,7 @@ try {
         }
         : {}),
     };
-    writeResult(resultPath, {
+    writeResult(requestPath, resultPath, {
       ok: false,
       error: {
         code: errorCode,
@@ -198,4 +202,12 @@ try {
     });
   }
   process.exit(1);
+}
+
+function resolveExistingDirRealPath(dirPath) {
+  try {
+    return fs.realpathSync.native(dirPath);
+  } catch {
+    return dirPath;
+  }
 }

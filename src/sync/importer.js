@@ -1,6 +1,14 @@
 import fs from "node:fs";
 import path from "node:path";
 import yaml from "js-yaml";
+import {
+  FILESYSTEM_ARTIFACT_CLASSES,
+  copyImportSourceFileToSyncRoot,
+  deleteInsideBoundary,
+  ensureDirectoryInsideSyncRoot,
+  resolveBoundaryRootReal,
+  writeTextInsideSyncRoot,
+} from "../core/filesystem-boundary.js";
 
 export function validateProjectId(projectId) {
   if (typeof projectId !== "string" || projectId.trim().length === 0) {
@@ -165,8 +173,26 @@ function buildExistingSceneIndex(dir) {
   return byBinderId;
 }
 
-function removeIfExists(filePath) {
-  if (filePath && fs.existsSync(filePath)) fs.unlinkSync(filePath);
+function syncRootBoundary(syncRoot) {
+  const syncDirAbs = path.resolve(syncRoot);
+  return {
+    syncDirAbs,
+    syncDirReal: resolveBoundaryRootReal(syncDirAbs),
+  };
+}
+
+function removeImportDestinationIfExists(filePath, {
+  syncRoot,
+}) {
+  if (!filePath || !fs.existsSync(filePath)) return;
+  const boundary = syncRootBoundary(syncRoot);
+  deleteInsideBoundary(filePath, {
+    boundaryRoot: boundary.syncDirAbs,
+    boundaryRootReal: boundary.syncDirReal,
+    artifactClass: FILESYSTEM_ARTIFACT_CLASSES.IMPORT_DESTINATION,
+    force: true,
+    errorCode: "INVALID_IMPORT_DESTINATION",
+  });
 }
 
 function resolveSyncRootFromPrefix(prefix, syncDirAbs) {
@@ -255,13 +281,16 @@ export function importScrivenerSync({
 
   let scenesDir;
   let scenesBoundaryRoot;
+  let syncBoundaryRoot;
   if (scopedSyncDir) {
+    syncBoundaryRoot = scopedSyncDir.syncRoot;
     scenesBoundaryRoot = path.join(
       scopedSyncDir.syncRoot,
       scopedSyncDir.scope === "universe" ? "universes" : "projects"
     );
     scenesDir = path.join(scopedSyncDir.projectRoot, "scenes");
   } else {
+    syncBoundaryRoot = mcpSyncDirAbs;
     // Route universe/project IDs to universes/<universe>/<project>/scenes,
     // matching the convention used by inferProjectAndUniverse in sync.js.
     const segments = resolvedProjectId.split("/");
@@ -324,7 +353,11 @@ export function importScrivenerSync({
   }
 
   if (!dryRun) {
-    fs.mkdirSync(scenesDir, { recursive: true });
+    ensureDirectoryInsideSyncRoot(scenesDir, {
+      ...syncRootBoundary(syncBoundaryRoot),
+      artifactClass: FILESYSTEM_ARTIFACT_CLASSES.IMPORT_DESTINATION,
+      errorCode: "INVALID_IMPORT_DESTINATION",
+    });
   }
 
   logger(`Project:   ${resolvedProjectId}`);
@@ -396,13 +429,24 @@ export function importScrivenerSync({
       }
       logger(`        scene_id: ${sceneId}, beat: ${beatCarry ?? "(none)"}`);
     } else {
-      fs.mkdirSync(path.dirname(destFile), { recursive: true });
-      fs.copyFileSync(file, destFile);
-      fs.writeFileSync(sidecar, yaml.dump(meta, { lineWidth: 120 }), "utf8");
+      copyImportSourceFileToSyncRoot(file, destFile, {
+        ...syncRootBoundary(syncBoundaryRoot),
+        artifactClass: FILESYSTEM_ARTIFACT_CLASSES.IMPORT_DESTINATION,
+        errorCode: "INVALID_IMPORT_DESTINATION",
+      });
+      writeTextInsideSyncRoot(sidecar, yaml.dump(meta, { lineWidth: 120 }), {
+        ...syncRootBoundary(syncBoundaryRoot),
+        artifactClass: FILESYSTEM_ARTIFACT_CLASSES.IMPORT_DESTINATION,
+        errorCode: "INVALID_IMPORT_DESTINATION",
+      });
 
       if (existingScene) {
-        if (existingScene.prosePath && existingScene.prosePath !== destFile) removeIfExists(existingScene.prosePath);
-        if (existingScene.sidecarPath && existingScene.sidecarPath !== sidecar) removeIfExists(existingScene.sidecarPath);
+        if (existingScene.prosePath && existingScene.prosePath !== destFile) {
+          removeImportDestinationIfExists(existingScene.prosePath, { syncRoot: syncBoundaryRoot });
+        }
+        if (existingScene.sidecarPath && existingScene.sidecarPath !== sidecar) {
+          removeImportDestinationIfExists(existingScene.sidecarPath, { syncRoot: syncBoundaryRoot });
+        }
         logger(`  OK    ${path.basename(sidecar)}  [reconciled binder ${binderId}, beat: ${beatCarry ?? "-"}]`);
       } else {
         logger(`  OK    ${path.basename(sidecar)}  [beat: ${beatCarry ?? "-"}]`);

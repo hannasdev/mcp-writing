@@ -1052,6 +1052,43 @@ describe("create_character_sheet tool", () => {
     assert.ok(parsed.error.message.includes("YAML mapping"));
     assert.equal(fs.readFileSync(metaPath, "utf8"), "- one\n- two\n");
   });
+
+  test("rejects character sheet creation when entity directory is a symlink escape", async () => {
+    const entityDir = path.join(
+      writeSyncDir,
+      "projects",
+      "test-novel",
+      "world",
+      "characters",
+      "leah-symlink"
+    );
+    const outsideDir = path.join(path.dirname(writeSyncDir), "mcp-writing-world-entity-outside");
+    const outsideSheet = path.join(outsideDir, "sheet.md");
+    try {
+      fs.mkdirSync(path.dirname(entityDir), { recursive: true });
+      fs.mkdirSync(outsideDir, { recursive: true });
+      fs.writeFileSync(outsideSheet, "outside sentinel\n", "utf8");
+      fs.symlinkSync(outsideDir, entityDir);
+
+      const text = await callWriteTool("create_character_sheet", {
+        name: "Leah Symlink",
+        project_id: "test-novel",
+        notes: "This should not cross the boundary.",
+      });
+      const parsed = JSON.parse(text);
+
+      assert.equal(parsed.ok, false);
+      assert.equal(parsed.error.code, "INVALID_WORLD_ENTITY_PATH");
+      assert.equal(fs.readFileSync(outsideSheet, "utf8"), "outside sentinel\n");
+      assert.equal(fs.existsSync(path.join(outsideDir, "sheet.meta.yaml")), false);
+      assert.equal(fs.existsSync(path.join(outsideDir, "arc.md")), false);
+    } finally {
+      if (fs.lstatSync(entityDir, { throwIfNoEntry: false })?.isSymbolicLink()) {
+        fs.unlinkSync(entityDir);
+      }
+      fs.rmSync(outsideDir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("create_place_sheet tool", () => {

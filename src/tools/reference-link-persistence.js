@@ -37,7 +37,7 @@ export function persistSceneReferenceLink({ scenePath, syncDir, targetDocId, rel
     nextMeta.reference_ids = [...new Set([...existingIds.map((value) => String(value).trim()).filter(Boolean), targetDocId])];
   }
 
-  writeMeta(scenePath, nextMeta);
+  writeMeta(scenePath, nextMeta, { syncDir });
 }
 
 export function upsertExplicitReferenceLinkRow(

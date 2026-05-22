@@ -1,6 +1,11 @@
 import fs from "node:fs";
 import path from "node:path";
 import yaml from "js-yaml";
+import {
+  FILESYSTEM_ARTIFACT_CLASSES,
+  resolveBoundaryRootReal,
+  writeTextInsideSyncRoot,
+} from "../core/filesystem-boundary.js";
 
 export const STYLEGUIDE_CONFIG_BASENAME = "prose-styleguide.config.yaml";
 
@@ -612,8 +617,30 @@ export function updateStyleguideConfig({ syncDir, scope, projectId, updates = {}
     };
   }
 
-  fs.mkdirSync(path.dirname(prepared.file_path), { recursive: true });
-  fs.writeFileSync(prepared.file_path, yaml.dump(prepared.config, { lineWidth: 120 }), "utf8");
+  try {
+    writeTextInsideSyncRoot(
+      prepared.file_path,
+      yaml.dump(prepared.config, { lineWidth: 120 }),
+      {
+        syncDirAbs: path.resolve(syncDir),
+        syncDirReal: resolveBoundaryRootReal(syncDir),
+        artifactClass: FILESYSTEM_ARTIFACT_CLASSES.STYLEGUIDE_CONFIG,
+        errorCode: "INVALID_STYLEGUIDE_CONFIG_PATH",
+      }
+    );
+  } catch (error) {
+    if (error?.name === "CoreValidationError") {
+      return {
+        ok: false,
+        error: {
+          code: error.code,
+          message: error.message,
+          details: error.details,
+        },
+      };
+    }
+    throw error;
+  }
 
   return {
     ok: true,

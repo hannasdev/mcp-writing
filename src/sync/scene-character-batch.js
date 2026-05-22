@@ -174,7 +174,7 @@ export async function runSceneCharacterBatch({ syncDir, args, onProgress, should
           characters: after_characters,
         }).meta;
 
-        writeMeta(scene.file_path, updatedMeta);
+        writeMeta(scene.file_path, updatedMeta, { syncDir });
       }
 
       scenes_changed += changed ? 1 : 0;

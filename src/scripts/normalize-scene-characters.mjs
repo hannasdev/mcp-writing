@@ -142,7 +142,7 @@ function runNormalization({ syncDir, projectId, write, limit }) {
           ...meta,
           characters: normalized.after,
         }).meta;
-        writeMeta(scene.file_path, updatedMeta);
+        writeMeta(scene.file_path, updatedMeta, { syncDir });
       }
 
       changed.push({

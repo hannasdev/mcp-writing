@@ -4,6 +4,14 @@ import { DOMParser } from "@xmldom/xmldom";
 import yaml from "js-yaml";
 import { validateProjectId } from "./importer.js";
 import { createSnapshot, isGitRepository, isGitAvailable } from "../core/git.js";
+import {
+  deleteInsideBoundary,
+  FILESYSTEM_ARTIFACT_CLASSES,
+  moveInsideBoundary,
+  resolveBoundaryRootReal,
+  resolveArtifactPathInsideSyncRoot,
+  writeTextInsideSyncRoot,
+} from "../core/filesystem-boundary.js";
 
 function attr(el, name) {
   return el?.getAttribute?.(name) ?? null;
@@ -73,9 +81,11 @@ function findProsePathForSidecar(sidecarPath) {
   return proseCandidates.find(candidate => fs.existsSync(candidate)) ?? null;
 }
 
-function moveFileIfNeeded(fromPath, toPath) {
+function moveFileIfNeeded(fromPath, toPath, {
+  syncDirAbs,
+  syncDirReal = syncDirAbs,
+} = {}) {
   if (!fromPath || fromPath === toPath) return;
-  fs.mkdirSync(path.dirname(toPath), { recursive: true });
   if (fs.existsSync(toPath)) {
     return {
       moved: false,
@@ -88,66 +98,29 @@ function moveFileIfNeeded(fromPath, toPath) {
     };
   }
 
-  try {
-    fs.renameSync(fromPath, toPath);
-  } catch (error) {
-    if (!error || typeof error !== "object" || error.code !== "EXDEV") {
-      throw error;
-    }
-    // Cross-filesystem: copy then verify before unlink
-    try {
-      fs.copyFileSync(fromPath, toPath);
-      // Verify copy succeeded before deleting source
-      if (!fs.existsSync(toPath)) {
-        return {
-          moved: false,
-          warning: {
-            code: "relocate_copy_verification_failed",
-            message: "Failed to verify file copy to destination; source file preserved.",
-            from_path: fromPath,
-            to_path: toPath,
-          },
-        };
-      }
-      try {
-        fs.unlinkSync(fromPath);
-      } catch (unlinkErr) {
-        if (fs.existsSync(toPath)) {
-          try {
-            fs.unlinkSync(toPath);
-          } catch {
-            // Best effort; already in error state
-          }
-        }
-        return {
-          moved: false,
-          warning: {
-            code: "relocate_cross_filesystem_unlink_failed",
-            message: `Copied prose file but failed to remove source file: ${unlinkErr.message}. Source file preserved.`,
-            from_path: fromPath,
-            to_path: toPath,
-          },
-        };
-      }
-    } catch (copyErr) {
-      // Copy failed; ensure we don't leave partial destination files
-      if (fs.existsSync(toPath)) {
-        try {
-          fs.unlinkSync(toPath);
-        } catch {
-          // Best effort; already in error state
-        }
-      }
-      return {
-        moved: false,
-        warning: {
-          code: "relocate_cross_filesystem_copy_failed",
-          message: `Failed to copy prose file across filesystem: ${copyErr.message}. Source file preserved.`,
-          from_path: fromPath,
-          to_path: toPath,
-        },
-      };
-    }
+  const moveResult = moveInsideBoundary(fromPath, toPath, {
+    boundaryRoot: syncDirAbs,
+    boundaryRootReal: syncDirReal,
+    artifactClass: FILESYSTEM_ARTIFACT_CLASSES.AUTHORED_PROSE,
+    allowCrossDeviceCopyFallback: true,
+    errorCode: "INVALID_SCRIVENER_RELOCATION_PATH",
+  });
+
+  if (moveResult?.warning) {
+    const warningCodeMap = {
+      move_copy_verification_failed: "relocate_copy_verification_failed",
+      move_cross_device_copy_failed: "relocate_cross_filesystem_copy_failed",
+      move_cross_device_unlink_failed: "relocate_cross_filesystem_unlink_failed",
+    };
+    return {
+      moved: false,
+      warning: {
+        ...moveResult.warning,
+        code: warningCodeMap[moveResult.warning.code] ?? moveResult.warning.code,
+        from_path: fromPath,
+        to_path: toPath,
+      },
+    };
   }
 
   return { moved: true };
@@ -555,6 +528,7 @@ export function mergeScrivenerProjectMetadata({
   logger = () => {},
 }) {
   const mcpSyncDirAbs = path.resolve(mcpSyncDir);
+  const mcpSyncDirReal = resolveBoundaryRootReal(mcpSyncDirAbs);
   const resolvedProjectId = projectId
     ?? path.basename(mcpSyncDirAbs).replace(/[^a-z0-9-]/gi, "-").toLowerCase();
 
@@ -574,12 +548,21 @@ export function mergeScrivenerProjectMetadata({
   const scenesDir = scenesDirOverride
     ?? path.join(deriveProjectRoot(resolvedProjectId), "scenes");
 
-  let scenesDirStat;
+  let resolvedScenesDir;
   try {
-    scenesDirStat = fs.statSync(scenesDir);
-  } catch {
-    throw new Error(`Scenes directory not found or not a directory: ${scenesDir}`);
+    ({ resolvedPath: resolvedScenesDir } = resolveArtifactPathInsideSyncRoot(scenesDir, {
+      syncDirAbs: mcpSyncDirAbs,
+      syncDirReal: mcpSyncDirReal,
+      artifactClass: FILESYSTEM_ARTIFACT_CLASSES.SCRIVENER_RELOCATION,
+      requireExisting: true,
+      errorCode: "INVALID_SCRIVENER_RELOCATION_PATH",
+      errorMessage: "Scenes directory must be inside WRITING_SYNC_DIR.",
+    }));
+  } catch (error) {
+    if (error?.name !== "CoreValidationError") throw error;
+    throw new Error(`Scenes directory not found or not a directory: ${scenesDir}`, { cause: error });
   }
+  const scenesDirStat = fs.statSync(resolvedScenesDir);
   if (!scenesDirStat.isDirectory()) {
     throw new Error(`Scenes directory not found or not a directory: ${scenesDir}`);
   }
@@ -749,7 +732,10 @@ export function mergeScrivenerProjectMetadata({
       }
 
       if (shouldRelocateSidecar && prosePath && targetProsePath) {
-        const moveResult = moveFileIfNeeded(prosePath, targetProsePath);
+        const moveResult = moveFileIfNeeded(prosePath, targetProsePath, {
+          syncDirAbs: mcpSyncDirAbs,
+          syncDirReal: mcpSyncDirReal,
+        });
         if (moveResult?.warning) {
           proseMoveWarning = moveResult.warning;
           shouldRelocateSidecar = false;
@@ -765,14 +751,23 @@ export function mergeScrivenerProjectMetadata({
       }
 
       const finalSidecarPath = shouldRelocateSidecar ? targetSidecarPath : sidecarPath;
-      fs.mkdirSync(path.dirname(finalSidecarPath), { recursive: true });
-      fs.writeFileSync(finalSidecarPath, yaml.dump(effective, { lineWidth: 120 }), "utf8");
+      writeTextInsideSyncRoot(finalSidecarPath, yaml.dump(effective, { lineWidth: 120 }), {
+        syncDirAbs: mcpSyncDirAbs,
+        syncDirReal: mcpSyncDirReal,
+        artifactClass: FILESYSTEM_ARTIFACT_CLASSES.SIDECAR,
+        errorCode: "INVALID_SCRIVENER_RELOCATION_PATH",
+      });
       if (
         shouldRelocateSidecar
         && path.resolve(sidecarPath) !== path.resolve(targetSidecarPath)
         && fs.existsSync(sidecarPath)
       ) {
-        fs.unlinkSync(sidecarPath);
+        deleteInsideBoundary(sidecarPath, {
+          boundaryRoot: mcpSyncDirAbs,
+          boundaryRootReal: mcpSyncDirReal,
+          artifactClass: FILESYSTEM_ARTIFACT_CLASSES.SIDECAR,
+          errorCode: "INVALID_SCRIVENER_RELOCATION_PATH",
+        });
       }
 
       // Create git snapshot for audit trail (only on actual writes, not dry-run)

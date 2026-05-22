@@ -10,14 +10,14 @@ import {
   renderPlaceSheetTemplate,
   renderCharacterArcTemplate,
 } from "../world/world-entity-templates.js";
-
-function createCoreValidationError(code, message, details) {
-  const error = new Error(message);
-  error.name = "CoreValidationError";
-  error.code = code;
-  error.details = details;
-  return error;
-}
+import {
+  FILESYSTEM_ARTIFACT_CLASSES,
+  assertRegularFileReadTarget,
+  ensureDirectoryInsideBoundary,
+  resolveArtifactPathInsideSyncRoot,
+  resolveGeneratedOutputDirWithinSync,
+  writeTextInsideSyncRoot,
+} from "./filesystem-boundary.js";
 
 export function deriveLoglineFromProse(prose) {
   const compact = prose.replace(/\s+/g, " ").trim();
@@ -216,48 +216,10 @@ export function createHelpers({ syncDir, syncDirReal, syncDirAbs, db, syncDirWri
   }
 
   function resolveOutputDirWithinSync(outputDir) {
-    let resolvedOutputDir = path.resolve(outputDir);
-    let existingAncestor = resolvedOutputDir;
-
-    while (!fs.existsSync(existingAncestor)) {
-      const parentDir = path.dirname(existingAncestor);
-      if (parentDir === existingAncestor) {
-        throw createCoreValidationError(
-          "INVALID_OUTPUT_DIR",
-          "output_dir must be inside WRITING_SYNC_DIR.",
-          { output_dir: resolvedOutputDir, sync_dir: syncDirAbs }
-        );
-      }
-      existingAncestor = parentDir;
-    }
-
-    let realExistingAncestor;
-    try {
-      realExistingAncestor = fs.realpathSync.native(existingAncestor);
-    } catch (err) {
-      throw createCoreValidationError(
-        "INVALID_OUTPUT_DIR",
-        "output_dir ancestor could not be resolved: path may be inaccessible.",
-        {
-          output_dir: outputDir,
-          existing_ancestor: existingAncestor,
-          cause: err instanceof Error ? err.message : String(err),
-        }
-      );
-    }
-    const relativeFromAncestor = path.relative(existingAncestor, resolvedOutputDir);
-    resolvedOutputDir = path.resolve(realExistingAncestor, relativeFromAncestor);
-
-    const relativeToSyncDir = path.relative(syncDirReal, resolvedOutputDir);
-    if (relativeToSyncDir.startsWith("..") || path.isAbsolute(relativeToSyncDir)) {
-      throw createCoreValidationError(
-        "INVALID_OUTPUT_DIR",
-        "output_dir must be inside WRITING_SYNC_DIR.",
-        { output_dir: resolvedOutputDir, sync_dir: syncDirAbs }
-      );
-    }
-
-    return { resolvedOutputDir, relativeToSyncDir };
+    return resolveGeneratedOutputDirWithinSync(outputDir, {
+      syncDirAbs,
+      syncDirReal,
+    });
   }
 
   function resolveProjectRoot(projectId) {
@@ -287,10 +249,24 @@ export function createHelpers({ syncDir, syncDirReal, syncDirAbs, db, syncDirWri
     if (!slug) throw new Error("Name must contain at least one alphanumeric character.");
 
     const { dir } = resolveWorldEntityDir({ kind, projectId, universeId, name });
+    resolveArtifactPathInsideSyncRoot(dir, {
+      syncDirAbs,
+      syncDirReal,
+      artifactClass: FILESYSTEM_ARTIFACT_CLASSES.WORLD_ENTITY,
+      errorCode: "INVALID_WORLD_ENTITY_PATH",
+      errorMessage: "World entity directory must be inside WRITING_SYNC_DIR.",
+    });
     const prosePath = path.join(dir, "sheet.md");
     const metaPath = sidecarPath(prosePath);
     const hadProse = fs.existsSync(prosePath);
     const hadMeta = fs.existsSync(metaPath);
+
+    if (hadProse) {
+      assertRegularFileReadTarget(prosePath, { errorCode: "INVALID_WORLD_ENTITY_PATH" });
+    }
+    if (hadMeta) {
+      assertRegularFileReadTarget(metaPath, { errorCode: "INVALID_WORLD_ENTITY_PATH" });
+    }
 
     let shouldWriteMeta = !hadMeta;
     let payload;
@@ -330,25 +306,45 @@ export function createHelpers({ syncDir, syncDirReal, syncDirAbs, db, syncDirWri
       };
     }
 
-    fs.mkdirSync(dir, { recursive: true });
+    ensureDirectoryInsideBoundary(dir, {
+      errorCode: "INVALID_WORLD_ENTITY_PATH",
+      label: "world entity directory",
+    });
 
     if (!hadProse) {
       const defaultSheet = kind === "character"
         ? renderCharacterSheetTemplate(name)
         : renderPlaceSheetTemplate(name);
       const body = notes?.trim() ?? defaultSheet;
-      fs.writeFileSync(prosePath, `${body}${body ? "\n" : ""}`, "utf8");
+      writeTextInsideSyncRoot(prosePath, `${body}${body ? "\n" : ""}`, {
+        syncDirAbs,
+        syncDirReal,
+        artifactClass: FILESYSTEM_ARTIFACT_CLASSES.WORLD_ENTITY,
+        errorCode: "INVALID_WORLD_ENTITY_PATH",
+      });
     }
 
     if (kind === "character") {
       const arcPath = path.join(dir, "arc.md");
-      if (!fs.existsSync(arcPath)) {
-        fs.writeFileSync(arcPath, `${renderCharacterArcTemplate(name)}\n`, "utf8");
+      if (fs.existsSync(arcPath)) {
+        assertRegularFileReadTarget(arcPath, { errorCode: "INVALID_WORLD_ENTITY_PATH" });
+      } else {
+        writeTextInsideSyncRoot(arcPath, `${renderCharacterArcTemplate(name)}\n`, {
+          syncDirAbs,
+          syncDirReal,
+          artifactClass: FILESYSTEM_ARTIFACT_CLASSES.WORLD_ENTITY,
+          errorCode: "INVALID_WORLD_ENTITY_PATH",
+        });
       }
     }
 
     if (shouldWriteMeta) {
-      fs.writeFileSync(metaPath, yaml.dump(payload, { lineWidth: 120 }), "utf8");
+      writeTextInsideSyncRoot(metaPath, yaml.dump(payload, { lineWidth: 120 }), {
+        syncDirAbs,
+        syncDirReal,
+        artifactClass: FILESYSTEM_ARTIFACT_CLASSES.WORLD_ENTITY,
+        errorCode: "INVALID_WORLD_ENTITY_PATH",
+      });
     }
 
     syncAll(db, syncDir, { writable: syncDirWritable });
