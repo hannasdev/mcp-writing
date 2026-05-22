@@ -109,6 +109,7 @@ function moveFileIfNeeded(fromPath, toPath, {
   if (moveResult?.warning) {
     const warningCodeMap = {
       move_copy_verification_failed: "relocate_copy_verification_failed",
+      move_cross_device_copy_failed: "relocate_cross_filesystem_copy_failed",
       move_cross_device_unlink_failed: "relocate_cross_filesystem_unlink_failed",
     };
     return {

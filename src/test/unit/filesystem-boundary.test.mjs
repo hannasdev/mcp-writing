@@ -492,6 +492,49 @@ describe("filesystem boundary helpers", () => {
     });
   });
 
+  test("reports and cleans up partial cross-device moves when copy fails", () => {
+    withTempDir("fs-boundary-sync-", (syncDir) => {
+      const syncDirReal = fs.realpathSync.native(syncDir);
+      const source = path.join(syncDir, "source.md");
+      const target = path.join(syncDir, "target.md");
+      const targetReal = path.join(syncDirReal, "target.md");
+      fs.writeFileSync(source, "move me", "utf8");
+      let targetCleanupUsedInjectedUnlink = false;
+
+      const operations = {
+        renameSync() {
+          const error = new Error("cross-device move");
+          error.code = "EXDEV";
+          throw error;
+        },
+        copyFileSync(_sourcePath, targetPath) {
+          fs.writeFileSync(targetPath, "partial copy", "utf8");
+          throw new Error("copy failed after partial destination write");
+        },
+        existsSync: fs.existsSync,
+        unlinkSync(filePath) {
+          if (filePath === targetReal) {
+            targetCleanupUsedInjectedUnlink = true;
+          }
+          fs.unlinkSync(filePath);
+        },
+      };
+
+      const result = moveInsideBoundary(source, target, {
+        boundaryRoot: syncDir,
+        boundaryRootReal: syncDirReal,
+        operations,
+      });
+
+      assert.equal(result.moved, false);
+      assert.equal(result.warning.code, "move_cross_device_copy_failed");
+      assert.match(result.warning.cause, /partial destination/);
+      assert.equal(fs.readFileSync(source, "utf8"), "move me");
+      assert.equal(fs.existsSync(target), false);
+      assert.equal(targetCleanupUsedInjectedUnlink, true);
+    });
+  });
+
   test("delete helper refuses symlink targets and does not remove the symlink destination", () => {
     withTempDir("fs-boundary-sync-", (syncDir) => {
       const syncDirReal = fs.realpathSync.native(syncDir);

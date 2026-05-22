@@ -617,7 +617,26 @@ export function moveInsideBoundary(fromPath, toPath, {
     }
   }
 
-  operations.copyFileSync(source.resolvedPath, target.resolvedPath);
+  try {
+    operations.copyFileSync(source.resolvedPath, target.resolvedPath);
+  } catch (copyError) {
+    try {
+      if (existsSync(target.resolvedPath)) operations.unlinkSync(target.resolvedPath);
+    } catch {
+      // Best effort cleanup; report the original copy failure.
+    }
+    return {
+      moved: false,
+      method: "copy_unlink",
+      warning: {
+        code: "move_cross_device_copy_failed",
+        message: "Failed to copy file to destination; source file preserved and destination cleanup was attempted.",
+        from_path: source.resolvedPath,
+        to_path: target.resolvedPath,
+        cause: copyError instanceof Error ? copyError.message : String(copyError),
+      },
+    };
+  }
   if (!existsSync(target.resolvedPath)) {
     return {
       moved: false,
