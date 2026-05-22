@@ -10,6 +10,12 @@ Deploy Writing MCP as a service in the OpenClaw runtime with the Writing World a
 
 **Status:** Deferred backlog (not active). Runtime shape, deployment targets, and agent integration points are defined, but rollout is paused.
 
+### 🐳 [Docker, CI, and Deployment Workflow](docs/initiatives/backlog/docker-ci-deployment/prd.md) 📋
+
+Make Docker a consistently supported workflow for building, testing, running, and deploying Writing MCP across local development, CI, homeserver, and MCP gateway environments.
+
+**Status:** Deferred backlog (not active). General containerization and deployment workflow should be productized separately from OpenClaw-specific integration.
+
 ### 🧭 [Client-Agnostic Setup Contract](docs/initiatives/backlog/client-agnostic-setup/prd.md) 📋
 
 Define a shared setup contract for configuration-driven writing features so setup can live in client-native UI surfaces while the MCP remains focused on durable capabilities.
