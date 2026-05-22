@@ -551,7 +551,7 @@ export function mergeScrivenerProjectMetadata({
     ({ resolvedPath: resolvedScenesDir } = resolveArtifactPathInsideSyncRoot(scenesDir, {
       syncDirAbs: mcpSyncDirAbs,
       syncDirReal: mcpSyncDirReal,
-      artifactClass: FILESYSTEM_ARTIFACT_CLASSES.SIDECAR,
+      artifactClass: FILESYSTEM_ARTIFACT_CLASSES.SCRIVENER_RELOCATION,
       requireExisting: true,
       errorCode: "INVALID_SCRIVENER_RELOCATION_PATH",
       errorMessage: "Scenes directory must be inside WRITING_SYNC_DIR.",

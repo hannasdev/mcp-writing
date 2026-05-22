@@ -617,17 +617,26 @@ describe("Scrivener direct metadata merge", () => {
     );
 
     try {
+      let error;
       assert.throws(
-        () => mergeScrivenerProjectMetadata({
-          scrivPath: scrivDir,
-          mcpSyncDir: syncRoot,
-          projectId: "test-import",
-          scenesDir: outsideDir,
-          dryRun: false,
-          organizeByChapters: true,
-        }),
+        () => {
+          try {
+            mergeScrivenerProjectMetadata({
+              scrivPath: scrivDir,
+              mcpSyncDir: syncRoot,
+              projectId: "test-import",
+              scenesDir: outsideDir,
+              dryRun: false,
+              organizeByChapters: true,
+            });
+          } catch (err) {
+            error = err;
+            throw err;
+          }
+        },
         /Scenes directory not found or not a directory/
       );
+      assert.equal(error.cause?.details?.artifact_class, "scrivener_relocation");
     } finally {
       fs.rmSync(scrivDir, { recursive: true, force: true });
       fs.rmSync(syncRoot, { recursive: true, force: true });

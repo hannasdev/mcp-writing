@@ -3,7 +3,6 @@
 **Status:** 🚧 Active implementation
 
 This initiative captures follow-up work discovered while adding security linting to the development workflow.
-It is not part of the current ESLint plugin setup branch unless explicitly selected as active implementation scope.
 
 ## Document Relationship
 
