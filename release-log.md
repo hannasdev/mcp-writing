@@ -6,6 +6,14 @@ This complements `CHANGELOG.md`:
 - `CHANGELOG.md` is technical and release-oriented.
 - This log is plain-language and outcome-oriented.
 
+### 2026-05-22 — Enforce filesystem boundary writes in lint
+
+- What changed: Added a project-specific lint rule that rejects new raw filesystem writes, copies, directory creation, deletes, and moves in feature modules unless they go through the approved boundary or support-script surfaces.
+- Why it matters: Maintainers and AI-assisted contributors get a low-noise guardrail that keeps future filesystem workflows aligned with the boundary hardening work without enabling broad generic path warnings.
+- Who is affected: Maintainers and contributors preparing pull requests that touch filesystem workflows.
+- Action needed: Route new application filesystem mutations through `src/core/filesystem-boundary.js`; keep raw mutations only in approved low-level modules or explicit support scripts.
+- PR: TBD
+
 ### 2026-05-20 — Add security linting to the PR gate
 
 - What changed: Added Node security linting to the existing ESLint workflow, with high-confidence unsafe patterns failing lint, noisy project-specific hotspot rules tuned out, and a deferred filesystem-boundary hardening initiative documented for follow-up.

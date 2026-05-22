@@ -84,6 +84,12 @@ flowchart TD
 Git and SQLite are shown as side lanes because this initiative does not try to wrap their internal file mutations.
 The boundary module should instead keep direct application filesystem operations explicit, searchable, and artifact-aware.
 
+Lint enforcement makes this boundary durable after migration. Feature modules
+may read from `node:fs`, but raw filesystem mutations such as writes, copies,
+directory creation, deletes, and moves should fail lint unless they live in the
+boundary module, a focused low-level module such as Git, or an explicit
+support-script exemption.
+
 ## Candidate Helper Shape
 
 ```js
@@ -119,7 +125,7 @@ Implementation should answer these explicitly before broad migration:
 - Should indexed `scene.file_path` values be revalidated before every write, or only when stale/path diagnostics are present?
 - How should helpers preserve existing `WRITING_SYNC_DIR` read-only and permission guidance instead of surfacing generic filesystem errors?
 - How should helper errors map to existing MCP error envelopes?
-- Which low-level modules are allowed to perform raw filesystem mutation after the migration?
+- Which low-level modules are allowed to perform raw filesystem mutation after the migration? Current lint enforcement allows `src/core/filesystem-boundary.js`, `src/core/git.js`, and explicitly scoped support scripts under `src/scripts/`.
 
 ## Related
 

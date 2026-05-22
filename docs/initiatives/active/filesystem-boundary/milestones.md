@@ -75,6 +75,16 @@ Acceptance criteria:
 
 ## Milestone 4: Application-Aware Lint Enforcement
 
+Implementation status:
+
+- Added a local `filesystem-boundary/no-raw-filesystem-mutations` ESLint rule.
+- Enabled it in the normal `npm run lint` path while keeping
+  `security/detect-non-literal-fs-filename` disabled.
+- Exempted `src/core/filesystem-boundary.js`, `src/core/git.js`, and
+  intentionally scoped support scripts under `src/scripts/`.
+- Added focused rule coverage for namespace, destructured, aliased,
+  `fs.promises`, `node:fs/promises`, and CommonJS `require` mutation forms.
+
 Functional requirements:
 
 1. Add a local lint rule or `no-restricted-syntax` configuration for raw filesystem mutation calls.

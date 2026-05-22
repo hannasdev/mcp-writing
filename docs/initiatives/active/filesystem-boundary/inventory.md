@@ -68,7 +68,9 @@ TOCTOU/race-window posture:
 
 Support scripts are not runtime MCP workflow surfaces. They may keep raw
 filesystem mutation when the script is explicitly operator-facing or repo-local,
-but Milestone 4 linting should make that allowance visible.
+but Milestone 4 linting makes that allowance visible by disabling the
+project-specific raw-mutation rule only for `src/scripts/**`, the shared
+boundary module, and `src/core/git.js`.
 
 | Script | Call sites | Classification | Current/expected handling |
 | --- | --- | --- | --- |
