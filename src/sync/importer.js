@@ -185,9 +185,10 @@ function removeImportDestinationIfExists(filePath, {
   syncRoot,
 }) {
   if (!filePath || !fs.existsSync(filePath)) return;
+  const boundary = syncRootBoundary(syncRoot);
   deleteInsideBoundary(filePath, {
-    boundaryRoot: path.resolve(syncRoot),
-    boundaryRootReal: fs.realpathSync.native(syncRoot),
+    boundaryRoot: boundary.syncDirAbs,
+    boundaryRootReal: boundary.syncDirReal,
     artifactClass: FILESYSTEM_ARTIFACT_CLASSES.IMPORT_DESTINATION,
     force: true,
     errorCode: "INVALID_IMPORT_DESTINATION",

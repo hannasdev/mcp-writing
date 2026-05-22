@@ -19,6 +19,7 @@ import {
   FILESYSTEM_ARTIFACT_CLASSES,
   assertRegularFileReadTarget,
   probeSyncRootWritable,
+  resolveBoundaryRootReal,
   resolveArtifactPathInsideSyncRoot,
   writeTextInsideSyncRoot,
 } from "../core/filesystem-boundary.js";
@@ -500,10 +501,10 @@ export function parseFile(filePath) {
 export function readMeta(filePath, syncDir, { writable = false } = {}) {
   const sidecar = sidecarPath(filePath);
   const syncDirAbs = path.resolve(syncDir);
-  const syncDirReal = fs.realpathSync.native(syncDirAbs);
 
   if (fs.existsSync(sidecar)) {
     if (writable) {
+      const syncDirReal = resolveBoundaryRootReal(syncDirAbs);
       resolveArtifactPathInsideSyncRoot(sidecar, {
         syncDirAbs,
         syncDirReal,
@@ -548,7 +549,7 @@ export function writeMeta(filePath, meta, { syncDir } = {}) {
 
   const sidecar = sidecarPath(filePath);
   const syncDirAbs = path.resolve(syncDir);
-  const syncDirReal = fs.realpathSync.native(syncDirAbs);
+  const syncDirReal = resolveBoundaryRootReal(syncDirAbs);
   resolveArtifactPathInsideSyncRoot(filePath, {
     syncDirAbs,
     syncDirReal,

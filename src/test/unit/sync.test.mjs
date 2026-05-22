@@ -163,6 +163,20 @@ describe("readMeta", () => {
     fs.rmSync(dir, { recursive: true });
   });
 
+  test("read-only metadata parsing does not require the sync root to exist", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "meta-"));
+    const missingSyncDir = path.join(dir, "missing-sync-root");
+    const scenePath = path.join(dir, "sc-001.md");
+    fs.writeFileSync(scenePath, "---\nscene_id: sc-001\n---\nsome prose");
+
+    const { meta, sidecarGenerated } = readMeta(scenePath, missingSyncDir, { writable: false });
+
+    assert.equal(meta.scene_id, "sc-001");
+    assert.equal(sidecarGenerated, false);
+    assert.ok(!fs.existsSync(path.join(dir, "sc-001.meta.yaml")));
+    fs.rmSync(dir, { recursive: true });
+  });
+
   test("sidecar wins over frontmatter when both exist", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "meta-"));
     fs.writeFileSync(path.join(dir, "sc-001.md"), "---\nscene_id: old-id\n---\nsome prose");
