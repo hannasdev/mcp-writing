@@ -57,6 +57,20 @@ function propertyName(property) {
   return null;
 }
 
+function unwrapChainExpression(node) {
+  let current = node;
+  while (current?.type === "ChainExpression") {
+    current = current.expression;
+  }
+  return current;
+}
+
+function localIdentifierName(node) {
+  if (node?.type === "Identifier") return node.name;
+  if (node?.type === "AssignmentPattern" && node.left.type === "Identifier") return node.left.name;
+  return null;
+}
+
 function report(context, node, operation) {
   context.report({
     node,
@@ -81,6 +95,54 @@ export const noRawFilesystemMutations = {
     const fsMutationLocals = new Map();
     const fsPromiseMutationLocals = new Map();
     const promisesLocals = new Set();
+
+    function trackPromiseObjectPattern(pattern) {
+      for (const property of pattern.properties) {
+        if (property.type !== "Property") continue;
+        const importedName = propertyName(property.key);
+        const localName = localIdentifierName(property.value);
+        if (localName && FS_PROMISE_MUTATIONS.has(importedName)) {
+          fsPromiseMutationLocals.set(localName, importedName);
+        }
+      }
+    }
+
+    function trackFsObjectPattern(pattern) {
+      for (const property of pattern.properties) {
+        if (property.type !== "Property") continue;
+        const importedName = propertyName(property.key);
+        const localName = localIdentifierName(property.value);
+        if (localName && FS_SYNC_MUTATIONS.has(importedName)) {
+          fsMutationLocals.set(localName, importedName);
+        }
+        if (importedName === "promises") {
+          if (localName) {
+            promisesLocals.add(localName);
+          } else if (property.value.type === "ObjectPattern") {
+            trackPromiseObjectPattern(property.value);
+          }
+        }
+      }
+    }
+
+    function isFsNamespaceExpression(node) {
+      const expression = unwrapChainExpression(node);
+      return expression?.type === "Identifier" && fsNamespaces.has(expression.name);
+    }
+
+    function isFsPromisesExpression(node) {
+      const expression = unwrapChainExpression(node);
+      if (expression?.type === "Identifier") {
+        return fsPromiseNamespaces.has(expression.name) || promisesLocals.has(expression.name);
+      }
+      if (expression?.type !== "MemberExpression") return false;
+      const object = unwrapChainExpression(expression.object);
+      return (
+        propertyName(expression.property) === "promises" &&
+        object?.type === "Identifier" &&
+        fsNamespaces.has(object.name)
+      );
+    }
 
     function trackImport(node) {
       const source = node.source?.value;
@@ -126,62 +188,50 @@ export const noRawFilesystemMutations = {
 
       if (node.id.type !== "ObjectPattern") return;
       if (isRequireCall(node.init, FS_MODULES)) {
-        for (const property of node.id.properties) {
-          if (property.type !== "Property") continue;
-          const importedName = propertyName(property.key);
-          if (property.value.type !== "Identifier") continue;
-          if (FS_SYNC_MUTATIONS.has(importedName)) {
-            fsMutationLocals.set(property.value.name, importedName);
-          }
-          if (importedName === "promises") {
-            promisesLocals.add(property.value.name);
-          }
-        }
+        trackFsObjectPattern(node.id);
       }
       if (isRequireCall(node.init, FS_PROMISES_MODULES)) {
-        for (const property of node.id.properties) {
-          if (property.type !== "Property") continue;
-          const importedName = propertyName(property.key);
-          if (property.value.type !== "Identifier") continue;
-          if (FS_PROMISE_MUTATIONS.has(importedName)) {
-            fsPromiseMutationLocals.set(property.value.name, importedName);
-          }
-        }
+        trackPromiseObjectPattern(node.id);
+      }
+      if (isFsNamespaceExpression(node.init)) {
+        trackFsObjectPattern(node.id);
+      }
+      if (isFsPromisesExpression(node.init)) {
+        trackPromiseObjectPattern(node.id);
       }
     }
 
     function checkCall(node) {
-      if (node.callee.type === "Identifier") {
-        const syncOperation = fsMutationLocals.get(node.callee.name);
-        if (syncOperation) report(context, node.callee, syncOperation);
-        const promiseOperation = fsPromiseMutationLocals.get(node.callee.name);
-        if (promiseOperation) report(context, node.callee, promiseOperation);
+      const callee = unwrapChainExpression(node.callee);
+      if (callee.type === "Identifier") {
+        const syncOperation = fsMutationLocals.get(callee.name);
+        if (syncOperation) report(context, callee, syncOperation);
+        const promiseOperation = fsPromiseMutationLocals.get(callee.name);
+        if (promiseOperation) report(context, callee, promiseOperation);
         return;
       }
 
-      if (node.callee.type !== "MemberExpression") return;
-      const member = node.callee;
+      if (callee.type !== "MemberExpression") return;
+      const member = callee;
       const operation = propertyName(member.property);
       if (!operation) return;
+      const object = unwrapChainExpression(member.object);
 
-      if (member.object.type === "Identifier") {
-        if (fsNamespaces.has(member.object.name) && FS_SYNC_MUTATIONS.has(operation)) {
+      if (object.type === "Identifier") {
+        if (fsNamespaces.has(object.name) && FS_SYNC_MUTATIONS.has(operation)) {
           report(context, member.property, operation);
         }
-        if (
-          (fsPromiseNamespaces.has(member.object.name) || promisesLocals.has(member.object.name)) &&
-          FS_PROMISE_MUTATIONS.has(operation)
-        ) {
+        if ((fsPromiseNamespaces.has(object.name) || promisesLocals.has(object.name)) && FS_PROMISE_MUTATIONS.has(operation)) {
           report(context, member.property, operation);
         }
         return;
       }
 
       if (
-        member.object.type === "MemberExpression" &&
-        propertyName(member.object.property) === "promises" &&
-        member.object.object.type === "Identifier" &&
-        fsNamespaces.has(member.object.object.name) &&
+        object.type === "MemberExpression" &&
+        propertyName(object.property) === "promises" &&
+        unwrapChainExpression(object.object)?.type === "Identifier" &&
+        fsNamespaces.has(unwrapChainExpression(object.object).name) &&
         FS_PROMISE_MUTATIONS.has(operation)
       ) {
         report(context, member.property, `promises.${operation}`);

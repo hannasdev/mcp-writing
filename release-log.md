@@ -12,7 +12,7 @@ This complements `CHANGELOG.md`:
 - Why it matters: Maintainers and AI-assisted contributors get a low-noise guardrail that keeps future filesystem workflows aligned with the boundary hardening work without enabling broad generic path warnings.
 - Who is affected: Maintainers and contributors preparing pull requests that touch filesystem workflows.
 - Action needed: Route new application filesystem mutations through `src/core/filesystem-boundary.js`; keep raw mutations only in approved low-level modules or explicit support scripts.
-- PR: TBD
+- PR: [#212](https://github.com/hannasdev/mcp-writing/pull/212)
 
 ### 2026-05-20 — Add security linting to the PR gate
 

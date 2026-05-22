@@ -81,6 +81,35 @@ describe("filesystem boundary lint rule", () => {
     assert.match(messages[2].message, /copyFile/);
   });
 
+  test("rejects optional chaining filesystem mutation forms", async () => {
+    const messages = await lintSnippet(`
+      import fs from "node:fs";
+      fs?.writeFileSync?.(targetPath, "content", "utf8");
+      await fs.promises?.writeFile?.(targetPath, "content", "utf8");
+    `);
+
+    assert.deepEqual(messages.map((message) => message.ruleId), [ruleId, ruleId]);
+    assert.match(messages[0].message, /writeFileSync/);
+    assert.match(messages[1].message, /promises\.writeFile/);
+  });
+
+  test("rejects mutations destructured from filesystem namespaces after import", async () => {
+    const messages = await lintSnippet(`
+      import fs from "node:fs";
+      const { writeFileSync: writeNow } = fs;
+      const { writeFile: writeAsync } = fs.promises;
+      const { promises: { rename: renameAsync } } = fs;
+      writeNow(targetPath, "content", "utf8");
+      await writeAsync(targetPath, "content", "utf8");
+      await renameAsync(sourcePath, targetPath);
+    `);
+
+    assert.deepEqual(messages.map((message) => message.ruleId), [ruleId, ruleId, ruleId]);
+    assert.match(messages[0].message, /writeFileSync/);
+    assert.match(messages[1].message, /writeFile/);
+    assert.match(messages[2].message, /rename/);
+  });
+
   test("rejects CommonJS aliases so require-based bypasses do not slip through", async () => {
     const messages = await lintSnippet(`
       const rawFs = require("node:fs");

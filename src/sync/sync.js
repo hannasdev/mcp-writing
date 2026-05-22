@@ -552,7 +552,7 @@ export function writeMeta(filePath, meta, { syncDir } = {}) {
   resolveArtifactPathInsideSyncRoot(filePath, {
     syncDirAbs,
     syncDirReal,
-    artifactClass: FILESYSTEM_ARTIFACT_CLASSES.SIDECAR,
+    artifactClass: FILESYSTEM_ARTIFACT_CLASSES.METADATA_FILE,
     requireExisting: true,
     errorCode: "INVALID_SIDECAR_PATH",
     errorMessage: "Sidecar source path must be inside WRITING_SYNC_DIR.",
