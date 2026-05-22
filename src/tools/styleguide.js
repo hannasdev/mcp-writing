@@ -27,6 +27,7 @@ import {
   FILESYSTEM_ARTIFACT_CLASSES,
   assertRegularFileReadTarget,
   deleteInsideBoundary,
+  resolveBoundaryRootReal,
   resolveArtifactPathInsideSyncRoot,
   writeTextInsideSyncRoot,
 } from "../core/filesystem-boundary.js";
@@ -38,9 +39,10 @@ const COPILOT_STYLEGUIDE_MARKER_START = "<!-- MCP-WRITING:PROSE-STYLEGUIDE START
 const COPILOT_STYLEGUIDE_MARKER_END = "<!-- MCP-WRITING:PROSE-STYLEGUIDE END -->";
 
 function syncRootBoundary(syncDir) {
+  const syncDirAbs = path.resolve(syncDir);
   return {
-    syncDirAbs: path.resolve(syncDir),
-    syncDirReal: fs.realpathSync.native(syncDir),
+    syncDirAbs,
+    syncDirReal: resolveBoundaryRootReal(syncDirAbs),
   };
 }
 
@@ -92,7 +94,7 @@ function deleteArtifactInsideSyncRoot(targetPath, {
 }) {
   return deleteInsideBoundary(targetPath, {
     boundaryRoot: path.resolve(syncDir),
-    boundaryRootReal: fs.realpathSync.native(syncDir),
+    boundaryRootReal: resolveBoundaryRootReal(syncDir),
     artifactClass,
     force: true,
     errorCode,

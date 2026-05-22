@@ -6,6 +6,7 @@ import {
   copyImportSourceFileToSyncRoot,
   deleteInsideBoundary,
   ensureDirectoryInsideSyncRoot,
+  resolveBoundaryRootReal,
   writeTextInsideSyncRoot,
 } from "../core/filesystem-boundary.js";
 
@@ -173,9 +174,10 @@ function buildExistingSceneIndex(dir) {
 }
 
 function syncRootBoundary(syncRoot) {
+  const syncDirAbs = path.resolve(syncRoot);
   return {
-    syncDirAbs: path.resolve(syncRoot),
-    syncDirReal: fs.realpathSync.native(syncRoot),
+    syncDirAbs,
+    syncDirReal: resolveBoundaryRootReal(syncDirAbs),
   };
 }
 

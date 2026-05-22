@@ -56,6 +56,26 @@ function normalizeBoundaryRoot(boundaryRoot, boundaryRootReal = boundaryRoot) {
   };
 }
 
+export function resolveBoundaryRootReal(boundaryRoot) {
+  const boundaryRootAbs = path.resolve(boundaryRoot);
+  try {
+    return fs.realpathSync.native(boundaryRootAbs);
+  } catch {
+    let existingAncestor = boundaryRootAbs;
+    while (!fs.existsSync(existingAncestor)) {
+      const parentDir = path.dirname(existingAncestor);
+      if (parentDir === existingAncestor) return boundaryRootAbs;
+      existingAncestor = parentDir;
+    }
+    try {
+      const realExistingAncestor = fs.realpathSync.native(existingAncestor);
+      return path.resolve(realExistingAncestor, path.relative(existingAncestor, boundaryRootAbs));
+    } catch {
+      return boundaryRootAbs;
+    }
+  }
+}
+
 export function resolveCandidateInsideBoundary(candidatePath, {
   boundaryRoot,
   boundaryRootReal = boundaryRoot,

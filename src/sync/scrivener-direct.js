@@ -8,6 +8,7 @@ import {
   deleteInsideBoundary,
   FILESYSTEM_ARTIFACT_CLASSES,
   moveInsideBoundary,
+  resolveBoundaryRootReal,
   resolveArtifactPathInsideSyncRoot,
   writeTextInsideSyncRoot,
 } from "../core/filesystem-boundary.js";
@@ -526,7 +527,7 @@ export function mergeScrivenerProjectMetadata({
   logger = () => {},
 }) {
   const mcpSyncDirAbs = path.resolve(mcpSyncDir);
-  const mcpSyncDirReal = fs.realpathSync.native(mcpSyncDirAbs);
+  const mcpSyncDirReal = resolveBoundaryRootReal(mcpSyncDirAbs);
   const resolvedProjectId = projectId
     ?? path.basename(mcpSyncDirAbs).replace(/[^a-z0-9-]/gi, "-").toLowerCase();
 

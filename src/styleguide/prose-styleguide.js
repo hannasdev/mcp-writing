@@ -3,6 +3,7 @@ import path from "node:path";
 import yaml from "js-yaml";
 import {
   FILESYSTEM_ARTIFACT_CLASSES,
+  resolveBoundaryRootReal,
   writeTextInsideSyncRoot,
 } from "../core/filesystem-boundary.js";
 
@@ -622,7 +623,7 @@ export function updateStyleguideConfig({ syncDir, scope, projectId, updates = {}
       yaml.dump(prepared.config, { lineWidth: 120 }),
       {
         syncDirAbs: path.resolve(syncDir),
-        syncDirReal: fs.realpathSync.native(syncDir),
+        syncDirReal: resolveBoundaryRootReal(syncDir),
         artifactClass: FILESYSTEM_ARTIFACT_CLASSES.STYLEGUIDE_CONFIG,
         errorCode: "INVALID_STYLEGUIDE_CONFIG_PATH",
       }

@@ -15,6 +15,7 @@ import {
   FILESYSTEM_ARTIFACT_CLASSES,
   moveInsideBoundary,
   probeSyncRootWritable,
+  resolveBoundaryRootReal,
   resolveArtifactPathInsideSyncRoot,
   resolveExistingPathInsideBoundary,
   resolveGeneratedOutputDirWithinSync,
@@ -35,6 +36,26 @@ function withTempDir(prefix, fn) {
 }
 
 describe("filesystem boundary helpers", () => {
+  test("resolves a missing boundary root through its nearest existing ancestor", () => {
+    withTempDir("fs-boundary-missing-root-", (root) => {
+      const missingSyncDir = path.join(root, "not-created-yet");
+      const expectedSyncDirReal = path.join(fs.realpathSync.native(root), "not-created-yet");
+
+      assert.equal(resolveBoundaryRootReal(missingSyncDir), expectedSyncDirReal);
+
+      writeTextInsideSyncRoot(path.join(missingSyncDir, "projects", "novel", "scene.txt"), "hello\n", {
+        syncDirAbs: missingSyncDir,
+        syncDirReal: resolveBoundaryRootReal(missingSyncDir),
+        artifactClass: FILESYSTEM_ARTIFACT_CLASSES.AUTHORED_PROSE,
+      });
+
+      assert.equal(
+        fs.readFileSync(path.join(missingSyncDir, "projects", "novel", "scene.txt"), "utf8"),
+        "hello\n"
+      );
+    });
+  });
+
   test("resolves a missing generated output directory inside the sync root", () => {
     withTempDir("fs-boundary-sync-", (syncDir) => {
       const syncDirReal = fs.realpathSync.native(syncDir);
