@@ -9,6 +9,7 @@ import { getFileWriteDiagnostics, readMeta, indexSceneFile, isManagedStructurePr
 import {
   FILESYSTEM_ARTIFACT_CLASSES,
   assertRegularFileReadTarget,
+  resolveBoundaryRootReal,
   resolveArtifactPathInsideSyncRoot,
   writeTextInsideSyncRoot,
 } from "../core/filesystem-boundary.js";
@@ -479,7 +480,7 @@ export function registerEditingTools(s, {
         }
 
         const syncDirAbs = path.resolve(SYNC_DIR);
-        const syncDirReal = fs.realpathSync.native(syncDirAbs);
+        const syncDirReal = resolveBoundaryRootReal(syncDirAbs);
         resolveArtifactPathInsideSyncRoot(proposal.scene_file_path, {
           syncDirAbs,
           syncDirReal,

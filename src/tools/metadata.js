@@ -8,6 +8,7 @@ import { resolveValidatedChapterFilter } from "../core/chapter-resolution.js";
 import {
   FILESYSTEM_ARTIFACT_CLASSES,
   assertRegularFileReadTarget,
+  resolveBoundaryRootReal,
   resolveArtifactPathInsideSyncRoot,
   writeTextInsideSyncRoot,
 } from "../core/filesystem-boundary.js";
@@ -36,7 +37,7 @@ function getProvidedStructuralSceneMetadataFields(fields) {
 
 function persistReferenceDocLink({ filePath, syncDir, targetDocId, relation }) {
   const syncDirAbs = path.resolve(syncDir);
-  const syncDirReal = fs.realpathSync.native(syncDirAbs);
+  const syncDirReal = resolveBoundaryRootReal(syncDirAbs);
   resolveArtifactPathInsideSyncRoot(filePath, {
     syncDirAbs,
     syncDirReal,

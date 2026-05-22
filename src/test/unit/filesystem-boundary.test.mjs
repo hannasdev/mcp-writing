@@ -415,7 +415,9 @@ describe("filesystem boundary helpers", () => {
       const syncDirReal = fs.realpathSync.native(syncDir);
       const source = path.join(syncDir, "source.md");
       const target = path.join(syncDir, "target.md");
+      const targetReal = path.join(syncDirReal, "target.md");
       fs.writeFileSync(source, "move me", "utf8");
+      let existsChecks = 0;
 
       const operations = {
         renameSync() {
@@ -425,6 +427,10 @@ describe("filesystem boundary helpers", () => {
         },
         copyFileSync: fs.copyFileSync,
         unlinkSync: fs.unlinkSync,
+        existsSync(filePath) {
+          if (filePath === targetReal) existsChecks += 1;
+          return fs.existsSync(filePath);
+        },
       };
 
       const result = moveInsideBoundary(source, target, {
@@ -439,6 +445,7 @@ describe("filesystem boundary helpers", () => {
       );
       assert.equal(fs.existsSync(source), false);
       assert.equal(fs.readFileSync(target, "utf8"), "move me");
+      assert.equal(existsChecks, 1);
     });
   });
 
@@ -447,8 +454,10 @@ describe("filesystem boundary helpers", () => {
       const syncDirReal = fs.realpathSync.native(syncDir);
       const source = path.join(syncDir, "source.md");
       const target = path.join(syncDir, "target.md");
+      const targetReal = path.join(syncDirReal, "target.md");
       fs.writeFileSync(source, "move me", "utf8");
       const sourceReal = fs.realpathSync.native(source);
+      let targetCleanupUsedInjectedUnlink = false;
 
       const operations = {
         renameSync() {
@@ -457,9 +466,13 @@ describe("filesystem boundary helpers", () => {
           throw error;
         },
         copyFileSync: fs.copyFileSync,
+        existsSync: fs.existsSync,
         unlinkSync(filePath) {
           if (filePath === sourceReal) {
             throw new Error("source is locked");
+          }
+          if (filePath === targetReal) {
+            targetCleanupUsedInjectedUnlink = true;
           }
           fs.unlinkSync(filePath);
         },
@@ -475,6 +488,7 @@ describe("filesystem boundary helpers", () => {
       assert.equal(result.warning.code, "move_cross_device_unlink_failed");
       assert.equal(fs.existsSync(source), true);
       assert.equal(fs.existsSync(target), false);
+      assert.equal(targetCleanupUsedInjectedUnlink, true);
     });
   });
 

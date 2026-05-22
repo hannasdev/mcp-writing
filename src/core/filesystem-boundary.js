@@ -581,6 +581,7 @@ export function moveInsideBoundary(fromPath, toPath, {
   errorCode = "INVALID_PATH",
   operations = fs,
 } = {}) {
+  const existsSync = operations.existsSync ?? fs.existsSync;
   assertRegularFileReadTarget(path.resolve(fromPath), { errorCode });
   const source = resolveExistingPathInsideBoundary(fromPath, {
     boundaryRoot,
@@ -617,7 +618,7 @@ export function moveInsideBoundary(fromPath, toPath, {
   }
 
   operations.copyFileSync(source.resolvedPath, target.resolvedPath);
-  if (!fs.existsSync(target.resolvedPath)) {
+  if (!existsSync(target.resolvedPath)) {
     return {
       moved: false,
       method: "copy_unlink",
@@ -634,7 +635,7 @@ export function moveInsideBoundary(fromPath, toPath, {
     operations.unlinkSync(source.resolvedPath);
   } catch (unlinkError) {
     try {
-      if (fs.existsSync(target.resolvedPath)) fs.unlinkSync(target.resolvedPath);
+      if (existsSync(target.resolvedPath)) operations.unlinkSync(target.resolvedPath);
     } catch {
       // Best effort cleanup; report the original unlink failure.
     }
