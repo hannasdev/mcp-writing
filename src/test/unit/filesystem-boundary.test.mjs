@@ -93,6 +93,22 @@ describe("filesystem boundary helpers", () => {
     });
   });
 
+  test("reports symlinked directories explicitly", () => {
+    withTempDir("fs-boundary-output-", (root) => {
+      const targetDir = path.join(root, "real-output");
+      const linkDir = path.join(root, "linked-output");
+      fs.mkdirSync(targetDir);
+      fs.symlinkSync(targetDir, linkDir, "dir");
+
+      assert.throws(
+        () => ensureDirectoryInsideBoundary(linkDir, { label: "output_dir" }),
+        (error) => error.name === "CoreValidationError"
+          && error.code === "INVALID_OUTPUT_DIR"
+          && /exists but is a symlink/.test(error.message)
+      );
+    });
+  });
+
   test("rejects writes to symlink targets", () => {
     withTempDir("fs-boundary-output-", (root) => {
       const outsideTarget = path.join(root, "outside.md");
@@ -107,6 +123,25 @@ describe("filesystem boundary helpers", () => {
           && /target path is a symlink/.test(error.message)
       );
       assert.equal(fs.readFileSync(outsideTarget, "utf8"), "outside");
+    });
+  });
+
+  test("writes sync-root text through the canonical resolved target", () => {
+    withTempDir("fs-boundary-sync-", (syncDir) => {
+      const syncDirReal = fs.realpathSync.native(syncDir);
+      const realDir = path.join(syncDir, "real-scenes");
+      const linkDir = path.join(syncDir, "linked-scenes");
+      fs.mkdirSync(realDir);
+      fs.symlinkSync(realDir, linkDir, "dir");
+
+      const targetPath = path.join(linkDir, "scene.md");
+      writeTextInsideSyncRoot(targetPath, "hello\n", {
+        syncDirAbs: syncDir,
+        syncDirReal,
+        artifactClass: FILESYSTEM_ARTIFACT_CLASSES.AUTHORED_PROSE,
+      });
+
+      assert.equal(fs.readFileSync(path.join(realDir, "scene.md"), "utf8"), "hello\n");
     });
   });
 

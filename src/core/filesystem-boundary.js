@@ -238,6 +238,13 @@ export function ensureDirectoryInsideBoundary(dirPath, {
 } = {}) {
   if (fs.existsSync(dirPath)) {
     const stat = fs.lstatSync(dirPath);
+    if (stat.isSymbolicLink()) {
+      throw createCoreValidationError(
+        errorCode,
+        `${label} exists but is a symlink: ${dirPath}`,
+        { path: dirPath }
+      );
+    }
     if (!stat.isDirectory()) {
       throw createCoreValidationError(
         errorCode,
@@ -374,24 +381,25 @@ export function writeFileInsideBoundary(filePath, data, {
   encoding,
   errorCode = "INVALID_PATH",
 } = {}) {
-  resolveCandidateInsideBoundary(filePath, {
+  const { resolvedPath } = resolveCandidateInsideBoundary(filePath, {
     boundaryRoot,
     boundaryRootReal,
     errorCode,
     errorMessage: "Write target must be inside the configured boundary.",
     details: { artifact_class: artifactClass },
   });
-  ensureDirectoryForBoundaryPath(filePath, {
+  ensureDirectoryForBoundaryPath(resolvedPath, {
     boundaryRoot,
     boundaryRootReal,
     errorCode,
     label: "target parent directory",
   });
-  assertRegularFileWriteTarget(filePath, { errorCode });
+  assertRegularFileWriteTarget(path.resolve(filePath), { errorCode });
+  assertRegularFileWriteTarget(resolvedPath, { errorCode });
   if (encoding) {
-    fs.writeFileSync(filePath, data, encoding);
+    fs.writeFileSync(resolvedPath, data, encoding);
   } else {
-    fs.writeFileSync(filePath, data);
+    fs.writeFileSync(resolvedPath, data);
   }
 }
 
