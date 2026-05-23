@@ -6,6 +6,14 @@ This complements `CHANGELOG.md`:
 - `CHANGELOG.md` is technical and release-oriented.
 - This log is plain-language and outcome-oriented.
 
+### 2026-05-23 — Support a runnable Docker workflow
+
+- What changed: Made Docker a supported way to build and run Writing MCP in HTTP/SSE mode, with generic Compose configuration, `/sync` and `/data` mount guidance, container health checks, and CI image smoke coverage.
+- Why it matters: Maintainers and operators can validate the container path before release and run the service with fewer local Node, Git, SQLite, and SSH environment surprises.
+- Who is affected: Maintainers, contributors, and operators running Writing MCP through Docker or an MCP gateway.
+- Action needed: Use `docs/guides/docker.md` for the generic Docker workflow; keep OpenClaw-specific setup layered on top of the generic container contract.
+- PR: [#213](https://github.com/hannasdev/mcp-writing/pull/213)
+
 ### 2026-05-22 — Enforce filesystem boundary writes in lint
 
 - What changed: Added a project-specific lint rule that rejects new raw filesystem writes, copies, directory creation, deletes, and moves in feature modules unless they go through the approved boundary or support-script surfaces.
