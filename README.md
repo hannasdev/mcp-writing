@@ -31,7 +31,7 @@ Instead of feeding an entire manuscript to an AI and hoping it fits in the conte
 - **Recently completed:** Docker, CI, and Deployment Workflow made Docker a supported way to build, run, smoke-test, and deploy Writing MCP.
 - **Previous milestone:** Filesystem Boundary Hardening centralized local file mutation through application-aware helpers and lint guardrails.
 - **Active development:** No active initiative is currently selected.
-- **Deferred backlog:** OpenClaw integration, client-agnostic setup, chapter-structure follow-up, and embeddings search.
+- **Deferred backlog:** OpenClaw integration, client-agnostic setup, divisions, database backup/recovery, and embeddings search.
 - **Ideas and open questions:** tracked separately so future exploration does not distort the active roadmap.
 
 ## Who it is for

@@ -137,6 +137,7 @@ This contract refines existing ownership principles:
 - [Product Overview](../../PRODUCT.md)
 - [Conceptual Target Architecture](./target-architecture.md)
 - [Data Ownership](../history/data-ownership.md)
-- [Chapter Structure Follow-up](../initiatives/backlog/chapter-structure/prd.md)
+- [Chapter and Epigraph Structure](../initiatives/done/chapter-structure/prd.md)
+- [Divisions](../initiatives/backlog/divisions/prd.md)
 - [Metadata Architecture & Ownership](../initiatives/done/metadata-architecture/prd.md)
 - [Import & Sync Operations](../initiatives/done/import-sync/prd.md)

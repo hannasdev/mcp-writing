@@ -17,6 +17,7 @@ Docker, CI, and Deployment Workflow made Docker a supported way to build, run, s
 Target Architecture Migration completed the structural manuscript state consolidation scope.
 SQLite is the durable canonical model for structural manuscript state, while prose remains file-based and generated structure exports provide Git-reviewable transparency and future recovery input.
 Filesystem Boundary Hardening centralized local file mutation through application-aware helpers so sync-root writes, generated outputs, imports, runtime temp files, moves, deletes, and lint guardrails share one filesystem policy.
+Chapter and Epigraph Structure delivered first-class canonical chapters and epigraphs, explicit chapter/scene/epigraph structure workflows, managed-sync guardrails, chapter-aware read ordering, and read-scope numeric chapter compatibility aliases.
 
 ---
 
@@ -50,4 +51,5 @@ For structural manuscript state, use [Managed Structure Contract](docs/foundatio
 - [Docker, CI, and Deployment Workflow](docs/initiatives/done/docker-ci-deployment/prd.md) — completed milestone for supported container build, run, smoke-test, and deployment operations
 - [Filesystem Boundary Hardening](docs/initiatives/done/filesystem-boundary/prd.md) — completed milestone for centralizing local filesystem mutation policy and lint guardrails
 - [Structural Authority Hardening](docs/initiatives/done/structural-authority-hardening/prd.md) — completed milestone for tightening remaining target-architecture discrepancies
+- [Chapter and Epigraph Structure](docs/initiatives/done/chapter-structure/prd.md) — completed milestone for first-class chapter and epigraph structure
 - [Agent Tool Reference](docs/agents/tools.md) — generated tool catalog including `describe_workflows`, the main AI navigation entry-point

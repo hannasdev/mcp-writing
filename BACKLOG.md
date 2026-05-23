@@ -22,11 +22,11 @@ Define a shared setup contract for configuration-driven writing features so setu
 
 **Status:** Deferred backlog (not active). Product direction remains useful and is available for future prioritization.
 
-### 📚 [Chapter Structure Follow-up](docs/initiatives/backlog/chapter-structure/prd.md) 📋
+### 🧱 [Divisions](docs/initiatives/backlog/divisions/prd.md) 📋
 
-Track the remaining follow-up work around first-class chapters, deferred divisions, and final documentation cleanup after the initial chapter/epigraph rollout.
+Add optional project-scoped Parts, Acts, or other larger structural sections above completed first-class chapters.
 
-**Status:** Deferred backlog (not active). Canonical chapters and epigraphs, `chapter_id` targeting, dedicated chapter/epigraph tools, and chapter-aware bundle rendering have already shipped; remaining follow-up work is available for future prioritization.
+**Status:** Deferred backlog (not active). Chapter and epigraph structure is complete; this follow-up captures the optional division layer without reopening shipped chapter behavior.
 
 ### 📊 [Embedding-Based Search](docs/initiatives/backlog/embeddings-search/prd.md) 📋
 

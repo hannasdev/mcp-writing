@@ -6,6 +6,14 @@ This complements `CHANGELOG.md`:
 - `CHANGELOG.md` is technical and release-oriented.
 - This log is plain-language and outcome-oriented.
 
+### 2026-05-23 — Complete chapter and epigraph structure alignment
+
+- What changed: Moved the chapter/epigraph initiative to completed status, documented canonical read ordering through chapter `sort_index`, aligned metadata lint with shipped scene structure fields, and split larger division support into its own backlog item.
+- Why it matters: Maintainers and AI-assisted contributors now have one consistent story for shipped chapter/epigraph behavior while keeping future Parts/Acts work out of the completed initiative.
+- Who is affected: Authors, maintainers, and AI agents using chapter-scoped search, arc retrieval, review bundles, or structure planning docs.
+- Action needed: Prefer canonical `chapter_id` and explicit structure workflows for mutations; use numeric chapter aliases only as read-scope compatibility selectors.
+- PR: TBD
+
 ### 2026-05-23 — Support a runnable Docker workflow
 
 - What changed: Made Docker a supported way to build and run Writing MCP in HTTP/SSE mode, with generic Compose configuration, `/sync` and `/data` mount guidance, container health checks, and CI image smoke coverage.

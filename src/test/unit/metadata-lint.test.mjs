@@ -101,6 +101,8 @@ describe("metadata lint", () => {
       external_source: "scrivener",
       external_id: "10",
       title: "Arrival",
+      chapter_id: "ch-01-arrival",
+      scene_role: "prologue",
       part: 1,
       chapter: 1,
       characters: ["char-elena"],
