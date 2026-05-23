@@ -143,7 +143,7 @@ Check it when debugging sync path, database path, Git, or ownership issues.
 
 ## Troubleshooting
 
-### "Open `healthz` works, but scene indexing is empty"
+### "Opening `/healthz` works, but scene indexing is empty"
 
 You are likely running `sync` on raw Scrivener `Draft/` output that has not been imported yet.
 

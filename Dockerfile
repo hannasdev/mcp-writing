@@ -15,7 +15,7 @@ COPY --chown=node:node bin ./bin
 COPY --chown=node:node src ./src
 COPY --chown=node:node README.md CHANGELOG.md ./
 
-# Path to the Scrivener external sync folder, mounted as a volume
+# Path to the manuscript sync folder, mounted as a volume
 ENV WRITING_SYNC_DIR=/sync
 # Path to the SQLite index database
 ENV DB_PATH=/data/writing.db
