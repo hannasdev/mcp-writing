@@ -28,8 +28,9 @@ Instead of feeding an entire manuscript to an AI and hoping it fits in the conte
 
 **Current status:**
 - **Core platform complete:** Metadata-first analysis, sidecar-backed metadata maintenance, AI-assisted prose editing with confirmation + git history, review bundles, and Scrivener Direct extraction are all implemented.
-- **Recently completed:** Filesystem Boundary Hardening centralized local file mutation through application-aware helpers and lint guardrails.
-- **Active development:** Docker, CI, and Deployment Workflow is making Docker a supported way to build, run, smoke-test, and deploy Writing MCP.
+- **Recently completed:** Docker, CI, and Deployment Workflow made Docker a supported way to build, run, smoke-test, and deploy Writing MCP.
+- **Previous milestone:** Filesystem Boundary Hardening centralized local file mutation through application-aware helpers and lint guardrails.
+- **Active development:** No active initiative is currently selected.
 - **Deferred backlog:** OpenClaw integration, client-agnostic setup, chapter-structure follow-up, and embeddings search.
 - **Ideas and open questions:** tracked separately so future exploration does not distort the active roadmap.
 

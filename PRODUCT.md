@@ -9,10 +9,11 @@ It supports metadata-first reasoning, explicit prose editing workflows, and revi
 
 ## Product Status
 
-Active initiative: [Docker, CI, and Deployment Workflow](docs/initiatives/active/docker-ci-deployment/prd.md).
+Active initiative: none currently selected.
 
-Most recent completed initiative: [Filesystem Boundary Hardening](docs/initiatives/done/filesystem-boundary/prd.md).
+Most recent completed initiative: [Docker, CI, and Deployment Workflow](docs/initiatives/done/docker-ci-deployment/prd.md).
 
+Docker, CI, and Deployment Workflow made Docker a supported way to build, run, smoke-test, and deploy Writing MCP, with a documented container contract, Compose workflow, CI smoke coverage, and deployment-readiness guidance.
 Target Architecture Migration completed the structural manuscript state consolidation scope.
 SQLite is the durable canonical model for structural manuscript state, while prose remains file-based and generated structure exports provide Git-reviewable transparency and future recovery input.
 Filesystem Boundary Hardening centralized local file mutation through application-aware helpers so sync-root writes, generated outputs, imports, runtime temp files, moves, deletes, and lint guardrails share one filesystem policy.
@@ -46,6 +47,7 @@ For structural manuscript state, use [Managed Structure Contract](docs/foundatio
 - [Backlog](BACKLOG.md) — deferred product work that is not currently active
 - [Conceptual Target Architecture](docs/foundations/target-architecture.md) — idealized architectural model for evaluating future structure, tooling, and workflow decisions
 - [Managed Structure Contract](docs/foundations/managed-structure-contract.md) — design boundaries for structural mutation, generated transparency, import, and maintenance workflows
+- [Docker, CI, and Deployment Workflow](docs/initiatives/done/docker-ci-deployment/prd.md) — completed milestone for supported container build, run, smoke-test, and deployment operations
 - [Filesystem Boundary Hardening](docs/initiatives/done/filesystem-boundary/prd.md) — completed milestone for centralizing local filesystem mutation policy and lint guardrails
 - [Structural Authority Hardening](docs/initiatives/done/structural-authority-hardening/prd.md) — completed milestone for tightening remaining target-architecture discrepancies
 - [Agent Tool Reference](docs/agents/tools.md) — generated tool catalog including `describe_workflows`, the main AI navigation entry-point

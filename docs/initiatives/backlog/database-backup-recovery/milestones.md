@@ -8,6 +8,7 @@ Each milestone should leave the system in a releasable state and preserve the ta
 ## Objective
 
 Add a trustworthy backup and restore story for SQLite-canonical project state without making generated files a daily mutation surface.
+Docker volume backup and rollback guidance already lives in the completed Docker initiative; this plan covers app-level backup artifacts, diagnostics, and restore behavior.
 
 ## Guardrails
 
@@ -253,15 +254,16 @@ Out of scope:
 
 ## M8 — Deployment, Documentation, and Release Readiness
 
-Goal: make the backup system understandable and operationally safe for local, Docker, and homeserver workflows.
+Goal: make the app-level backup system understandable and operationally safe across local, Docker, and homeserver workflows without duplicating deployment volume-backup guidance.
 
 Deliverables:
 
 - Update user and maintainer documentation for backup location, Git expectations, restore workflow, and failure handling.
-- Document Docker volume backup expectations for `/sync`, `/data`, and Git remotes.
+- Link to the completed Docker deployment guidance for `/sync`, `/data`, Git remotes, upgrade, and rollback expectations.
+- Document how app-level backup artifacts complement, but do not replace, deployment volume backups.
 - Update generated tool docs and workflow discovery text.
 - Add release-log guidance if the implementation changes user-facing backup or restore behavior.
-- Run manual validation on representative local and containerized projects.
+- Run manual validation on representative local and containerized projects for backup artifact generation, freshness diagnostics, and restore workflows.
 
 Acceptance criteria:
 
@@ -274,7 +276,8 @@ Test strategy:
 
 - Documentation link checks where practical.
 - Generated tool docs drift check.
-- Manual Docker/local restore walkthrough.
+- Manual local restore walkthrough.
+- Manual Docker or homeserver smoke focused on app-level backup paths and diagnostics with separate `/sync` and `/data` mounts.
 
 Out of scope:
 
@@ -287,4 +290,4 @@ Out of scope:
 - [prd.md](prd.md)
 - [Target Architecture Migration](../../done/target-architecture-migration/prd.md)
 - [Structural Authority Hardening](../../done/structural-authority-hardening/prd.md)
-- [Docker, CI, and Deployment Workflow](../../active/docker-ci-deployment/prd.md)
+- [Docker, CI, and Deployment Workflow](../../done/docker-ci-deployment/prd.md)
