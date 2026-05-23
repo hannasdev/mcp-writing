@@ -63,7 +63,7 @@ docker run --rm \
 Start from `docker-compose.example.yml`:
 
 ```sh
-mkdir -p ./sync
+mkdir -p ./sync ./data
 docker compose -f docker-compose.example.yml up --build
 ```
 
@@ -74,10 +74,11 @@ WRITING_UID=1000
 WRITING_GID=1000
 WRITING_HTTP_PORT=3000
 WRITING_SYNC_DIR_HOST=/absolute/path/to/manuscript-sync
+WRITING_DATA_DIR_HOST=/absolute/path/to/writing-data
 OWNERSHIP_GUARD_MODE=warn
 ```
 
-Use `WRITING_UID` and `WRITING_GID` to match the host owner for Linux bind mounts. On Docker Desktop for macOS, the default values are usually enough.
+Use `WRITING_UID` and `WRITING_GID` to match the host owner for Linux bind mounts. The Compose example uses bind mounts for both `/sync` and `/data` so the configured runtime user can write manuscript files and the SQLite database. On Docker Desktop for macOS, the default values are usually enough.
 
 ## Runtime Contract
 

@@ -79,7 +79,7 @@ jobs:
       - name: Start container
         run: |
           mkdir -p "$RUNNER_TEMP/mcp-writing-sync" "$RUNNER_TEMP/mcp-writing-data"
-          docker run --rm -d \
+          docker run -d \
             --name mcp-writing-ci \
             --user "$(id -u):$(id -g)" \
             -p 127.0.0.1:3000:3000 \
@@ -101,4 +101,4 @@ jobs:
 
       - name: Stop container
         if: always()
-        run: docker stop mcp-writing-ci || true
+        run: docker rm -f mcp-writing-ci || true
