@@ -7,6 +7,9 @@ The need is clear now because structural manuscript state has moved away from fi
 
 Implementation slices are tracked in [milestones.md](milestones.md).
 
+Docker and homeserver volume backup expectations for `/sync` and `/data` are covered by the completed [Docker, CI, and Deployment Workflow](../../done/docker-ci-deployment/prd.md).
+This backlog item is about the separate application-level recovery surface: Git-reviewable backup artifacts generated from SQLite-canonical state, diagnostics, and explicit restore workflows.
+
 ## Problem Statement
 
 Writing MCP now treats SQLite as the durable canonical model for structural manuscript state, while prose remains file-based.
@@ -48,7 +51,7 @@ Those tools remain useful as structure-specific workflows, while the project bac
 8. As a maintainer, I want deterministic backup output, so that Git diffs are reviewable and testable.
 9. As a maintainer, I want checksums and schema versions in backup artifacts, so that tampering, partial writes, and incompatible restores are refused.
 10. As a maintainer, I want restore to be transactional, so that failed recovery cannot leave the canonical database half-restored.
-11. As a Docker or homeserver user, I want the runtime to report backup location and freshness, so that volume backup and upgrade instructions are grounded in actual state.
+11. As a Docker or homeserver user, I want runtime diagnostics to report app-level backup artifact location and freshness, so that I can pair deployment volume backups with trustworthy project recovery artifacts.
 12. As a project owner, I want Git commits to remain an explicit user or agent decision, so that automatic backup refresh does not create noisy commit history.
 13. As a project owner, I want a semantic operation history for canonical mutations, so that Git review explains what changed and why, not only what the final database snapshot contains.
 14. As a developer, I want existing structure export and restore behavior preserved, so that shipped recovery workflows do not regress while broader backup coverage is added.
@@ -121,8 +124,7 @@ Manual validation should cover:
 
 - representative Scrivener-imported projects;
 - local Git repositories with and without remotes;
-- Docker or homeserver deployments with separate `/sync` and `/data` mounts;
-- upgrade and rollback documentation paths.
+- Docker or homeserver deployments only to verify the app-level backup directory, freshness diagnostics, and restore workflows behave correctly with separate `/sync` and `/data` mounts.
 
 ## Out of Scope
 
@@ -136,8 +138,8 @@ Manual validation should cover:
 
 ## Further Notes
 
-This initiative should be coordinated with Docker and deployment documentation because mounted volume layout changes the operational backup story.
-The app-level backup bundle protects canonical project state, while deployment docs must still explain backing up the live SQLite volume, the sync Git repository, and any configured remote.
+This initiative should link to the completed Docker deployment documentation rather than re-owning volume backup guidance.
+The app-level backup bundle protects canonical project state, while deployment docs explain backing up the live SQLite volume, the sync Git repository, and any configured remote.
 
 The key product constraint is that backup handling must not undo the target architecture.
 Generated backup files make SQLite-canonical state reviewable and recoverable, but they do not become the primary control plane for manuscript structure.

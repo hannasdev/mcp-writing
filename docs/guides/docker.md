@@ -5,6 +5,7 @@
 - [Runtime Contract](#runtime-contract)
 - [Git and SSH](#git-and-ssh)
 - [Health and Logs](#health-and-logs)
+- [Deployment Operations](#deployment-operations)
 - [Troubleshooting](#troubleshooting)
 - [MCP Gateway Notes](#mcp-gateway-notes)
 
@@ -75,10 +76,13 @@ WRITING_GID=1000
 WRITING_HTTP_PORT=3000
 WRITING_SYNC_DIR_HOST=/absolute/path/to/manuscript-sync
 WRITING_DATA_DIR_HOST=/absolute/path/to/writing-data
+WRITING_SSH_DIR_HOST=/absolute/path/to/ssh-material
 OWNERSHIP_GUARD_MODE=warn
 ```
 
 Use `WRITING_UID` and `WRITING_GID` to match the host owner for Linux bind mounts. The Compose example uses bind mounts for both `/sync` and `/data` so the configured runtime user can write manuscript files and the SQLite database. On Docker Desktop for macOS, the default values are usually enough.
+
+For private Git remotes, uncomment the `/ssh:ro` volume and `GIT_SSH_COMMAND` lines in `docker-compose.example.yml`, then point `WRITING_SSH_DIR_HOST` at a directory containing `id_ed25519` and `known_hosts`.
 
 ## Runtime Contract
 
@@ -140,6 +144,77 @@ docker logs <container-name>
 
 Runtime diagnostics are available through the MCP tool `get_runtime_config`.
 Check it when debugging sync path, database path, Git, or ownership issues.
+
+## Deployment Operations
+
+### Upgrade Checklist
+
+Before upgrading:
+
+1. Confirm `/sync` is clean or intentionally dirty in Git.
+2. Back up `/sync` and `/data`.
+3. Note the currently running image tag or commit.
+4. Review release notes for setup, database, or workflow changes.
+
+For local image upgrades from a checkout:
+
+```sh
+git pull --ff-only
+docker compose -f docker-compose.example.yml build --pull
+docker compose -f docker-compose.example.yml up -d
+curl http://localhost:3000/healthz
+```
+
+For tagged-image deployments, use a Compose file that sets `image:` instead of `build: .`; pull the new tag, update that image tag, start the service, then verify `/healthz` and `get_runtime_config`.
+
+### Backup Checklist
+
+Back up both durable mounts:
+
+| Path | Why it matters |
+| --- | --- |
+| `/sync` | Manuscript files, sidecars, generated exports, and Git state |
+| `/data` | SQLite runtime database and other durable service data |
+
+`/sync` should normally also be protected by a Git remote, but Git is not a full replacement for volume backups. The `/data` mount is not expected to be recoverable from Git.
+
+At minimum, keep a recent filesystem backup before image upgrades. For homeserver deployments, prefer scheduled snapshots or volume backups that include both host paths used by `WRITING_SYNC_DIR_HOST` and `WRITING_DATA_DIR_HOST`.
+
+### Rollback
+
+Rollback means restoring both the container image and durable state to a compatible point.
+
+1. Stop the current container.
+2. Restore the previous image tag or rebuild the previous commit.
+3. Restore `/data` from the backup taken before upgrade if the new version wrote incompatible database changes.
+4. Restore or reset `/sync` only if manuscript files, sidecars, or generated outputs were changed incorrectly.
+5. Start the service and verify `/healthz`, `get_runtime_config`, and a small read-only MCP call before resuming edits.
+
+### Logs and Diagnostics
+
+Use container logs for startup and fatal runtime errors:
+
+```sh
+docker compose -f docker-compose.example.yml logs writing-mcp
+```
+
+Use `get_runtime_config` for runtime paths, ownership warnings, Git availability, database path, transport mode, and setup recommendations. Treat ownership warnings as deployment issues before running write tools.
+
+### Supported Deployment Targets
+
+Supported:
+
+- local Docker Engine or Docker Desktop using `docker run`
+- Docker Compose on a workstation or homeserver
+- MCP gateways that can reach the HTTP/SSE endpoint
+- private Git remotes when SSH material is mounted read-only under `/ssh`
+
+Unsupported:
+
+- running the container without persistent `/sync` and `/data` mounts
+- treating the image as a security sandbox for untrusted manuscript data or untrusted tools
+- cloud-provider-specific templates that are not maintained in this repository
+- multi-writer deployments that edit the same `/sync` tree concurrently
 
 ## Troubleshooting
 
@@ -224,3 +299,7 @@ When the gateway runs in the same Docker network, use the Compose service name:
   }
 }
 ```
+
+### OpenClaw Adapter Note
+
+OpenClaw should use the same generic Docker service contract described above. Run the container or Compose service with persistent `/sync` and `/data` mounts, verify `/healthz`, then register either `http://localhost:3000/sse` or the same-network `http://writing-mcp:3000/sse` URL with OpenClaw.

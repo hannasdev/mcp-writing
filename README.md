@@ -28,8 +28,9 @@ Instead of feeding an entire manuscript to an AI and hoping it fits in the conte
 
 **Current status:**
 - **Core platform complete:** Metadata-first analysis, sidecar-backed metadata maintenance, AI-assisted prose editing with confirmation + git history, review bundles, and Scrivener Direct extraction are all implemented.
-- **Recently completed:** Filesystem Boundary Hardening centralized local file mutation through application-aware helpers and lint guardrails.
-- **Active development:** Docker, CI, and Deployment Workflow is making Docker a supported way to build, run, smoke-test, and deploy Writing MCP.
+- **Recently completed:** Docker, CI, and Deployment Workflow made Docker a supported way to build, run, smoke-test, and deploy Writing MCP.
+- **Previous milestone:** Filesystem Boundary Hardening centralized local file mutation through application-aware helpers and lint guardrails.
+- **Active development:** No active initiative is currently selected.
 - **Deferred backlog:** OpenClaw integration, client-agnostic setup, chapter-structure follow-up, and embeddings search.
 - **Ideas and open questions:** tracked separately so future exploration does not distort the active roadmap.
 
@@ -45,7 +46,7 @@ Instead of feeding an entire manuscript to an AI and hoping it fits in the conte
 |---|---|
 | [docs/guides/setup.md](docs/guides/setup.md) | Prerequisites, first-time setup, Scrivener import, native sync format |
 | [mcp-writing-vscode](https://github.com/hannasdev/mcp-writing-vscode) | VS Code extension for client-native setup flows |
-| [docs/guides/docker.md](docs/guides/docker.md) | Docker Compose, OpenClaw integration, SSH hardening |
+| [docs/guides/docker.md](docs/guides/docker.md) | Docker Compose, deployment operations, MCP gateway notes |
 | [docs/foundations/managed-structure-contract.md](docs/foundations/managed-structure-contract.md) | Design boundaries for structural mutation, generated views, import, and maintenance workflows |
 | [docs/agents/tools.md](docs/agents/tools.md) | Full tool reference — auto-generated from source |
 | [docs/agents/README.md](docs/agents/README.md) | Index of agent-focused guidance, examples, and boot files |
