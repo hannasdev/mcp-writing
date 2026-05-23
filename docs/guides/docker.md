@@ -165,7 +165,7 @@ docker compose -f docker-compose.example.yml up -d
 curl http://localhost:3000/healthz
 ```
 
-For tagged images, pull the new tag, update the Compose image reference, start the service, then verify `/healthz` and `get_runtime_config`.
+For tagged-image deployments, use a Compose file that sets `image:` instead of `build: .`; pull the new tag, update that image tag, start the service, then verify `/healthz` and `get_runtime_config`.
 
 ### Backup Checklist
 
