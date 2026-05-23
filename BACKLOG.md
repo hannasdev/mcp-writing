@@ -4,12 +4,6 @@ Deferred product work that is not currently active.
 
 ## Deferred Backlog (Not Active)
 
-### 🧯 [Database Backup and Recovery](docs/initiatives/backlog/database-backup-recovery/prd.md) 📋
-
-Preserve Git-backed auditability and restore safety as canonical manuscript state moves into SQLite.
-
-**Status:** Deferred backlog (not active). Product direction is defined for deterministic backup artifacts, backup freshness diagnostics, and explicit restore from trusted backups.
-
 ### 🚀 [OpenClaw Integration](docs/initiatives/backlog/openclaw-integration/prd.md) 📋
 
 Deploy Writing MCP as a service in the OpenClaw runtime with the Writing World agent.
