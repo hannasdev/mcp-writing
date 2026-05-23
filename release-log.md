@@ -12,7 +12,7 @@ This complements `CHANGELOG.md`:
 - Why it matters: Maintainers and AI-assisted contributors now have one consistent story for shipped chapter/epigraph behavior while keeping future Parts/Acts work out of the completed initiative.
 - Who is affected: Authors, maintainers, and AI agents using chapter-scoped search, arc retrieval, review bundles, or structure planning docs.
 - Action needed: Prefer canonical `chapter_id` and explicit structure workflows for mutations; use numeric chapter aliases only as read-scope compatibility selectors.
-- PR: TBD
+- PR: [#217](https://github.com/hannasdev/mcp-writing/pull/217)
 
 ### 2026-05-23 — Support a runnable Docker workflow
 
