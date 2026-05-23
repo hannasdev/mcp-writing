@@ -59,6 +59,9 @@ jobs:
       - name: Check for legacy root-module imports
         run: npm run guard:legacy-root-imports
 
+      - name: Check Docker docs drift
+        run: npm run guard:docker-docs
+
       - name: Regenerate tool reference
         run: npm run docs
 
