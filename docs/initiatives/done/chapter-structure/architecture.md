@@ -2,9 +2,9 @@
 
 ## Status
 
-The initial epigraph implementation is already shipped alongside canonical chapter indexing.
-This follow-up document is deferred while structural manuscript state boundaries are clarified.
-It remains relevant because it defines constraints and follow-up alignment for the remaining chapter-structure work, but it should not be read as if epigraph support is still entirely speculative.
+The epigraph implementation shipped alongside canonical chapter indexing and explicit structure workflows.
+This document is retained as completed design context for the epigraph side of the chapter-structure rollout.
+It should be read with [prd.md](prd.md) and [milestones.md](milestones.md) as historical delivery evidence, not as an active backlog plan.
 
 Implemented baseline:
 
@@ -15,7 +15,7 @@ Implemented baseline:
 Remaining value in this document:
 
 - clarify the intended source contract and validation behavior
-- keep epigraph-specific constraints aligned with the remaining chapter follow-up gates
+- keep epigraph-specific constraints aligned with the completed chapter-structure gates
 - document what should happen if compatibility behavior is tightened later
 
 For milestone accounting of the shipped chapter/epigraph rollout, use [milestones.md](milestones.md).
@@ -77,12 +77,12 @@ This enables better author workflows, not just cleaner data modeling:
 
 ## Milestone Alignment
 
-Shared migration gates are defined in `chapters.md`.
+Shared migration gates are defined in `prd.md`.
 This section defines epigraph-specific requirements that must be satisfied within those shared gates.
 
 ### Gate 1 Alignment: Canonical Model
 
-Cross-reference: `chapters.md` -> `Gate 1: Canonical Domain Model and Schema`.
+Cross-reference: `prd.md` -> `Gate 1: Canonical Domain Model and Schema`.
 
 1. Epigraph is represented as a first-class entity in schema, not as a scene subtype.
 2. Epigraph requires `project_id`, `epigraph_id`, and `chapter_id`.
@@ -90,7 +90,7 @@ Cross-reference: `chapters.md` -> `Gate 1: Canonical Domain Model and Schema`.
 
 ### Gate 2 Alignment: Explicit Sync Contract and Validation
 
-Cross-reference: `chapters.md` -> `Gate 2: Explicit Sync Contract and Validation`.
+Cross-reference: `prd.md` -> `Gate 2: Explicit Sync Contract and Validation`.
 
 1. Sync imports epigraph source files into epigraph entities only when chapter linkage is explicit.
 2. Re-sync updates epigraph staleness when prose changes.
@@ -99,14 +99,14 @@ Cross-reference: `chapters.md` -> `Gate 2: Explicit Sync Contract and Validation
 
 ### Gate 3 Alignment: Conservative Scrivener Import Canonicalization
 
-Cross-reference: `chapters.md` -> `Gate 3: Conservative Scrivener Import Canonicalization`.
+Cross-reference: `prd.md` -> `Gate 3: Conservative Scrivener Import Canonicalization`.
 
 1. Scrivener-derived epigraph inference is accepted only when the containing chapter relationship is unambiguous.
 2. Ambiguous epigraph-like scene/title/tag heuristics are reported, not silently converted.
 
 ### Gate 4 Alignment: Query Contracts
 
-Cross-reference: `chapters.md` -> `Gate 4: Search and Query Contract Refactor`.
+Cross-reference: `prd.md` -> `Gate 4: Search and Query Contract Refactor`.
 
 1. Epigraph discovery is exposed via dedicated epigraph query tooling.
 2. Scene discovery remains scene-only (`find_scenes` does not return epigraphs).
@@ -115,7 +115,7 @@ Cross-reference: `chapters.md` -> `Gate 4: Search and Query Contract Refactor`.
 
 ### Gate 5 Alignment: Rendering and Bundles
 
-Cross-reference: `chapters.md` -> `Gate 5: Rendering and Review Bundle Rewrite`.
+Cross-reference: `prd.md` -> `Gate 5: Rendering and Review Bundle Rewrite`.
 
 1. Rendering order is chapter title, then epigraph, then scenes.
 2. Epigraph content is rendered in full, not summarized as a logline.
@@ -123,14 +123,14 @@ Cross-reference: `chapters.md` -> `Gate 5: Rendering and Review Bundle Rewrite`.
 
 ### Gate 6 Alignment: Metadata and Lint
 
-Cross-reference: `chapters.md` -> `Gate 6: Metadata, Lint, and Editing Tool Alignment`.
+Cross-reference: `prd.md` -> `Gate 6: Metadata, Lint, and Editing Tool Alignment`.
 
 1. Epigraph metadata schema is validated by lint/tooling.
 2. Character associations and optional tags are validated and indexed.
 
 ### Gate 8 Alignment: Release Readiness
 
-Cross-reference: `chapters.md` -> `Gate 8: Consolidation and Breaking Release Readiness`.
+Cross-reference: `prd.md` -> `Gate 8: Consolidation and Release Readiness`.
 
 1. Tool docs and behavior accurately describe epigraphs as first-class entities.
 2. Manual validation confirms end-user outcomes:

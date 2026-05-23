@@ -30,6 +30,8 @@ const sceneSchema = z.object({
   external_source: z.string().min(1).optional(),
   external_id: z.string().min(1).optional(),
   title: z.string().min(1).optional(),
+  chapter_id: z.string().min(1).nullable().optional(),
+  scene_role: z.enum(["prologue", "epilogue"]).nullable().optional(),
   part: z.number().int().positive().optional(),
   chapter: z.number().int().positive().optional(),
   chapter_title: z.string().min(1).optional(),

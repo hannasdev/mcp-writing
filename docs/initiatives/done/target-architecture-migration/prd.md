@@ -152,4 +152,5 @@ Manual verification:
 - [milestones.md](milestones.md)
 - [Conceptual Target Architecture](../../../foundations/target-architecture.md)
 - [Managed Structure Contract](../../../foundations/managed-structure-contract.md)
-- [Chapter Structure Follow-up](../../backlog/chapter-structure/prd.md)
+- [Chapter and Epigraph Structure](../chapter-structure/prd.md)
+- [Divisions](../../backlog/divisions/prd.md)

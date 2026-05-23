@@ -1,38 +1,32 @@
-# Chapters
+# Chapter and Epigraph Structure
 
 ## Status
 
-This document no longer describes a purely future migration.
-The initial chapter/epigraph rollout is already implemented in the codebase:
+Completed.
+Chapter and epigraph structure is implemented and aligned with the Managed Structure Contract:
 
 - canonical `chapters` and `epigraphs` tables exist
 - scenes support canonical `chapter_id`
 - `list_chapters` and `find_epigraphs` are available
 - chapter-aware search, prose retrieval, and review-bundle rendering are shipped
-- numeric chapter targeting remains as a compatibility layer in some tools
+- explicit structure workflows exist for chapter creation, chapter rename/reorder, scene movement, scene-to-chapter assignment, and epigraph attachment
+- managed sync reports file-derived chapter/epigraph drift for already managed projects instead of silently adopting it
+- numeric chapter targeting remains as a read-scope compatibility layer in some tools
 
-This initiative now lives in `docs/initiatives/backlog/chapter-structure/` because the remaining chapter, epigraph, and division follow-up work is deferred while structural manuscript state boundaries are clarified.
+The optional larger-section work has been extracted to [Divisions](../../backlog/divisions/prd.md).
 
-It still captures follow-up work that is not fully settled or completed:
-
-- deferred division support
-- final cleanup of compatibility behavior and release-readiness documentation
-- confirmation that the remaining gates still match the implementation path
-
-Read this document as a follow-up and consolidation plan for chapter structure, not as a statement that none of the chapter work has shipped yet.
-
-For milestone accounting of what is already delivered, use [milestones.md](milestones.md).
+For milestone accounting, use [milestones.md](milestones.md).
 
 ## Document Relationship
 
-This document is the canonical migration plan for structure changes in the manuscript domain.
+This document records the completed migration plan for chapter and epigraph structure in the manuscript domain.
 It defines the shared milestone gates and cross-cutting functional requirements for chapters, epigraphs, search, sync, rendering, and release readiness.
 
-Use [Managed Structure Contract](../../../foundations/managed-structure-contract.md) as the design arbiter for whether chapter, epigraph, and future division workflows should mutate canonical state through MCP tools, generated views, import workflows, or maintenance/repair paths.
+Use [Managed Structure Contract](../../../foundations/managed-structure-contract.md) as the design arbiter for whether chapter and epigraph workflows should mutate canonical state through MCP tools, generated views, import workflows, or maintenance/repair paths.
 
 Use this file when:
 
-- Planning or sequencing implementation work.
+- Understanding the completed implementation and its original sequencing.
 - Determining gate pass/fail criteria.
 - Resolving scope questions across multiple entities.
 
@@ -64,7 +58,7 @@ This is not just data architecture. It enables author-facing workflow improvemen
 ## Decisions
 
 - Chapters are first-class entities.
-- Chapter, division, and epigraph identities are scoped to a single project/book.
+- Chapter and epigraph identities are scoped to a single project/book.
 - Database identity should follow existing project scoping patterns rather than assuming globally unique chapter-like IDs.
 - Chapter entity includes:
 	- `chapter_id`
@@ -77,9 +71,10 @@ This is not just data architecture. It enables author-facing workflow improvemen
 - Scenes may exist outside chapters for conventional front/back matter such as prologue and epilogue.
 - Prologue and epilogue are scenes, not separate prose entity types in v1.
 - A project may have at most one prologue scene and at most one epilogue scene.
-- Existing scene chapter metadata is replaced by chapter references.
+- Existing scene chapter metadata is replaced by chapter references for structural authority.
+- Numeric scene chapter fields may still exist as compatibility/presentation fields, but they are not identity or mutation targets.
 - Chapters are flat. No child chapters.
-- Divisions are deferred from the first implementation slice unless needed to preserve existing behavior.
+- Divisions are outside this completed scope and tracked separately in [Divisions](../../backlog/divisions/prd.md).
 
 ## Source Contract Direction
 
@@ -106,18 +101,11 @@ Initial source contract:
 Full Scrivener structure inference is valuable, but it is a separate feature from first-class chapter support.
 The v1 migration should avoid guessing relationships that cannot be validated from explicit folders or metadata.
 
-## Divisions (Parent Sections)
+## Divisions (Extracted Follow-up)
 
-Books may use Parts, Acts, or other major section conventions.
-To support this flexibly:
-
-- Introduce a generic division container.
-- Division has a type/label (for example Part or Act).
-- Chapter may reference `division_id`.
-- Divisions are optional.
-
-Divisions are not required for the first chapter migration gate.
-They should be implemented after chapter identity, scene linkage, epigraphs, and core tool contracts are stable.
+Books may use Parts, Acts, or other major section conventions above chapters.
+That optional parent-section layer is not part of the completed chapter/epigraph scope.
+It is tracked in [Divisions](../../backlog/divisions/prd.md) so it can be designed without reopening shipped chapter identity, ordering, or epigraph placement behavior.
 
 ## Ordering Rules
 
@@ -134,7 +122,8 @@ They should be implemented after chapter identity, scene linkage, epigraphs, and
 
 ## Migration Approach
 
-This is a breaking migration branch, but it still needs an explicit source-to-target mapping so implementation can proceed without guesswork.
+The original implementation was planned as a breaking migration branch.
+The current shipped path keeps an explicit source-to-target mapping while retaining numeric chapter inputs as read-scope compatibility aliases under the Managed Structure Contract.
 
 - Existing scene-level `part`, `chapter`, and `chapter_title` values are treated as migration inputs, not long-term identity fields.
 - During import and sync, chapter identity is derived into canonical `chapters` records first, then scenes are linked via nullable `chapter_id` when the relationship is clear.
@@ -144,12 +133,12 @@ This is a breaking migration branch, but it still needs an explicit source-to-ta
 	- reject strict migration/sync when chapter structure is required by the caller,
 	- report validation guidance explaining the expected folder or metadata contract.
 - Prologue and epilogue should be represented as scenes with explicit structural role metadata, not inferred from scene number offsets.
-- Any helper or rendering path that still depends on scene-local numeric chapter fields must be updated in the same migration slice as the schema change.
+- Any helper or rendering path should prefer canonical chapter identity/order and use scene-local numeric chapter fields only as compatibility fallback when canonical chapter identity is absent.
 
 ## Acceptance Criteria
 
 1. Chapters exist as standalone entities with required IDs and titles.
-2. Chapter, division, and epigraph identities are project-scoped.
+2. Chapter and epigraph identities are project-scoped.
 3. Scene schema stores nullable `chapter_id` and no longer depends on numeric chapter metadata for chapter identity.
 4. Scenes can exist outside chapters for prologue, epilogue, or small/simple projects.
 5. Validation allows at most one prologue scene and at most one epilogue scene per project.
@@ -159,17 +148,17 @@ This is a breaking migration branch, but it still needs an explicit source-to-ta
 9. Sync pipeline indexes chapter entities from explicit sync-folder sources or unambiguous metadata.
 10. Chapter records participate in metadata staleness tracking.
 11. Tooling can list and retrieve chapters independent of scenes.
-12. Divisions are first-class optional entities in a later gate and can be assigned to chapters once implemented.
+12. Division follow-up scope is extracted to [Divisions](../../backlog/divisions/prd.md).
 
 ## Milestone Gates
 
-These gates are intended for a single breaking migration branch.
-No backwards-compatibility layer is required between milestones.
-Each gate must pass before moving to the next milestone.
+These gates were originally intended for a single breaking migration branch.
+Because the chapter/epigraph baseline has since shipped, read these gates as historical sequencing and completed delivery evidence.
+The current compatibility policy is defined by the Managed Structure Contract: numeric chapter aliases are allowed for read scopes and rejected as structural mutation targets.
 
 ### Gate 1: Canonical Domain Model and Schema
 
-Epigraph linkage: see `epigraphs.md` -> `Gate 1 Alignment: Canonical Model`.
+Epigraph linkage: see `architecture.md` -> `Gate 1 Alignment: Canonical Model`.
 
 Functional requirements:
 
@@ -203,7 +192,7 @@ Test strategy:
 
 ### Gate 2: Explicit Sync Contract and Validation
 
-Epigraph linkage: see `epigraphs.md` -> `Gate 2 Alignment: Explicit Sync Contract and Validation`.
+Epigraph linkage: see `architecture.md` -> `Gate 2 Alignment: Explicit Sync Contract and Validation`.
 
 Functional requirements:
 
@@ -236,7 +225,7 @@ Test strategy:
 
 ### Gate 3: Conservative Scrivener Import Canonicalization
 
-Epigraph linkage: see `epigraphs.md` -> `Gate 3 Alignment: Conservative Scrivener Import Canonicalization`.
+Epigraph linkage: see `architecture.md` -> `Gate 3 Alignment: Conservative Scrivener Import Canonicalization`.
 
 Functional requirements:
 
@@ -266,17 +255,17 @@ Test strategy:
 
 ### Gate 4: Search and Query Contract Refactor
 
-Epigraph linkage: see `epigraphs.md` -> `Gate 4 Alignment: Query Contracts`.
+Epigraph linkage: see `architecture.md` -> `Gate 4 Alignment: Query Contracts`.
 
 Functional requirements:
 
 1. `find_scenes` remains scene-only and filters by chapter identity through the new model.
 2. Add dedicated epigraph discovery/query tooling.
-3. Replace numeric chapter prose retrieval with chapter-entity based retrieval.
+3. Add chapter-entity based retrieval and resolve numeric prose retrieval through canonical chapter identity when compatibility aliases are used.
 4. Update arc and thread ordering to use canonical chapter order.
 5. Update helper targeting logic to resolve scenes by chapter identity, not `part/chapter` integers.
 6. Define final public API parameters for chapter targeting, including `project_id` + `chapter_id`.
-7. Decide whether numeric chapter filters are removed, deprecated as presentation aliases, or rejected in this breaking release.
+7. Keep numeric chapter filters as read-scope compatibility aliases unless a later compatibility-policy initiative intentionally removes them.
 
 Design decisions:
 
@@ -299,7 +288,7 @@ Test strategy:
 
 ### Gate 5: Rendering and Review Bundle Rewrite
 
-Epigraph linkage: see `epigraphs.md` -> `Gate 5 Alignment: Rendering and Bundles`.
+Epigraph linkage: see `architecture.md` -> `Gate 5 Alignment: Rendering and Bundles`.
 
 Functional requirements:
 
@@ -328,7 +317,10 @@ Test strategy:
 
 ### Gate 6: Metadata, Lint, and Editing Tool Alignment
 
-Epigraph linkage: see `epigraphs.md` -> `Gate 6 Alignment: Metadata and Lint`.
+Epigraph linkage: see `architecture.md` -> `Gate 6 Alignment: Metadata and Lint`.
+
+Current status: delivered for chapter/epigraph scope.
+Future division work is tracked separately.
 
 Functional requirements:
 
@@ -358,46 +350,24 @@ Test strategy:
 
 Epigraph linkage: none.
 
-Functional requirements:
+Current status: extracted to [Divisions](../../backlog/divisions/prd.md).
+Chapter and epigraph structure is complete without divisions, and existing chapter-only workflows must remain stable when division support is later added.
 
-1. Add project-scoped `divisions` as optional parent sections for chapters.
-2. Support division type/label values such as Part or Act.
-3. Allow chapters to reference `division_id`.
-4. Ensure division ordering and chapter ordering compose deterministically.
-5. Update rendering and query surfaces only where division grouping is explicitly useful.
+### Gate 8: Consolidation and Release Readiness
 
-Design decisions:
-
-- Divisions are optional project-scoped containers above chapters.
-- Chapters must remain fully usable without divisions.
-- Division support should not reopen v1 chapter identity or epigraph placement decisions.
-
-Gate checks:
-
-1. Division schema and migration tests pass.
-2. Chapter queries and bundles remain stable with and without divisions.
-3. No existing chapter-only workflow requires divisions to be present.
-
-Test strategy:
-
-- Unit: division schema, project-scoped division identity, chapter-to-division references, and division ordering.
-- Integration: chapter listing, rendering, and bundles with no divisions, with Parts, and with Acts.
-
-### Gate 8: Consolidation and Breaking Release Readiness
-
-Epigraph linkage: see `epigraphs.md` -> `Gate 8 Alignment: Release Readiness`.
+Epigraph linkage: see `architecture.md` -> `Gate 8 Alignment: Release Readiness`.
 
 Functional requirements:
 
-1. Remove obsolete references to numeric chapter identity from production code paths.
+1. Remove obsolete references to numeric chapter identity from production code paths, while preserving documented read-scope numeric aliases unless a later policy change removes them.
 2. Regenerate tool documentation to reflect final contracts.
 3. Update setup/development docs and release log with migration behavior.
 4. Provide migration notes for maintainers and users.
 
 Design decisions:
 
-- This remains a breaking release; no long-term compatibility layer is required.
-- Release notes must explain the explicit source contract, nullable chapter membership, and project-scoped chapter identifiers.
+- Numeric chapter aliases remain a deliberate read-scope compatibility layer, not a structural authority.
+- Release notes must explain the explicit source contract, nullable chapter membership, project-scoped chapter identifiers, and the read-only nature of numeric aliases.
 - Docs should make clear that richer Scrivener inference is future work, not a hidden promise in v1.
 
 Gate checks:
@@ -408,7 +378,7 @@ Gate checks:
 	- chapter rename/edit once propagates consistently
 	- chapter ordering changes are deterministic
 	- epigraph search and rendering are first-class
-4. Branch is ready for a single breaking release cut.
+4. Completed implementation is represented in shipped docs, generated tool docs, and milestone accounting.
 
 Test strategy:
 

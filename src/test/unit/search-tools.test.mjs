@@ -94,6 +94,13 @@ function seedScene(db, {
   );
 }
 
+function seedSceneCharacter(db, { projectId, sceneId, characterId }) {
+  db.prepare(`
+    INSERT INTO scene_characters (scene_id, project_id, character_id)
+    VALUES (?, ?, ?)
+  `).run(sceneId, projectId, characterId);
+}
+
 describe("search tools chapter compatibility filters", () => {
   test("find_scenes resolves project-scoped chapter filters through canonical chapter identity", async () => {
     const db = openDb(":memory:");
@@ -143,6 +150,102 @@ describe("search tools chapter compatibility filters", () => {
       assert.deepEqual(parsed.results.map(row => row.scene_id), ["sc-canonical-match"]);
       assert.equal(parsed.results[0].chapter_id, "ch-01-canonical");
       assert.equal(parsed.results[0].chapter, 99);
+    } finally {
+      db.close();
+    }
+  });
+
+  test("find_scenes orders canonical chapters by chapter sort_index before compatibility fields", async () => {
+    const db = openDb(":memory:");
+    try {
+      seedProject(db, "test-novel");
+      seedChapter(db, {
+        projectId: "test-novel",
+        chapterId: "ch-01-canonical",
+        sortIndex: 1,
+        title: "Canonical One",
+      });
+      seedChapter(db, {
+        projectId: "test-novel",
+        chapterId: "ch-02-canonical",
+        sortIndex: 2,
+        title: "Canonical Two",
+      });
+      seedScene(db, {
+        projectId: "test-novel",
+        sceneId: "sc-second-canonical",
+        chapterId: "ch-02-canonical",
+        chapter: 1,
+        timelinePosition: 1,
+      });
+      seedScene(db, {
+        projectId: "test-novel",
+        sceneId: "sc-first-canonical",
+        chapterId: "ch-01-canonical",
+        chapter: 99,
+        timelinePosition: 1,
+      });
+
+      const tools = makeToolHarness(db);
+      const parsed = await tools.call("find_scenes", { project_id: "test-novel" });
+
+      assert.deepEqual(
+        parsed.results.map(row => row.scene_id),
+        ["sc-first-canonical", "sc-second-canonical"]
+      );
+    } finally {
+      db.close();
+    }
+  });
+
+  test("get_arc orders by canonical chapter sort_index before compatibility fields", async () => {
+    const db = openDb(":memory:");
+    try {
+      seedProject(db, "test-novel");
+      seedChapter(db, {
+        projectId: "test-novel",
+        chapterId: "ch-01-canonical",
+        sortIndex: 1,
+        title: "Canonical One",
+      });
+      seedChapter(db, {
+        projectId: "test-novel",
+        chapterId: "ch-02-canonical",
+        sortIndex: 2,
+        title: "Canonical Two",
+      });
+      seedScene(db, {
+        projectId: "test-novel",
+        sceneId: "sc-arc-second-canonical",
+        chapterId: "ch-02-canonical",
+        chapter: 1,
+        timelinePosition: 1,
+      });
+      seedScene(db, {
+        projectId: "test-novel",
+        sceneId: "sc-arc-first-canonical",
+        chapterId: "ch-01-canonical",
+        chapter: 99,
+        timelinePosition: 1,
+      });
+      seedSceneCharacter(db, {
+        projectId: "test-novel",
+        sceneId: "sc-arc-second-canonical",
+        characterId: "char-elena",
+      });
+      seedSceneCharacter(db, {
+        projectId: "test-novel",
+        sceneId: "sc-arc-first-canonical",
+        characterId: "char-elena",
+      });
+
+      const tools = makeToolHarness(db);
+      const parsed = await tools.call("get_arc", { character_id: "char-elena" });
+
+      assert.deepEqual(
+        parsed.results.map(row => row.scene_id),
+        ["sc-arc-first-canonical", "sc-arc-second-canonical"]
+      );
     } finally {
       db.close();
     }

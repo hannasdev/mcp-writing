@@ -112,6 +112,7 @@ export function registerSearchTools(s, {
                s.save_the_cat_beat, s.timeline_position, s.story_time,
                s.word_count, s.metadata_stale
         FROM scenes s
+        LEFT JOIN chapters c ON c.project_id = s.project_id AND c.chapter_id = s.chapter_id
       `;
       const joins = [];
       const conditions = [];
@@ -139,7 +140,7 @@ export function registerSearchTools(s, {
 
       if (joins.length)      query += " " + joins.join(" ");
       if (conditions.length) query += " WHERE " + conditions.join(" AND ");
-      query += " ORDER BY s.part, s.chapter, s.timeline_position, s.scene_id";
+      query += " ORDER BY s.part, COALESCE(c.sort_index, s.chapter), s.timeline_position, s.scene_id";
 
       const rows = db.prepare(query).all(...params);
       if (rows.length === 0) {
@@ -424,7 +425,7 @@ export function registerSearchTools(s, {
   // ---- get_arc -------------------------------------------------------------
   s.tool(
     "get_arc",
-    "Get every scene a character appears in, ordered by part/chapter/position. Returns scene metadata only — no prose. Use this as the primary structural entry point when the question is about a character's progression through the manuscript. Supports pagination via page/page_size and auto-paginates large result sets with total_count. Use list_characters only when you need help finding a character_id. Response shape note: always returns a structured envelope (`results`, `total_count`, with pagination fields when paging is active).",
+    "Get every scene a character appears in, ordered by part, canonical chapter order, and scene position. Returns scene metadata only — no prose. Use this as the primary structural entry point when the question is about a character's progression through the manuscript. Supports pagination via page/page_size and auto-paginates large result sets with total_count. Use list_characters only when you need help finding a character_id. Response shape note: always returns a structured envelope (`results`, `total_count`, with pagination fields when paging is active).",
     {
       character_id: z.string().describe("The character_id to trace (e.g. 'char-mira-nystrom'). Use list_characters to find valid IDs."),
       project_id:   z.string().optional().describe("Limit to a specific project (e.g. 'the-lamb')."),
@@ -438,11 +439,12 @@ export function registerSearchTools(s, {
                s.save_the_cat_beat, s.timeline_position, s.story_time, s.pov, s.metadata_stale
         FROM scenes s
         JOIN scene_characters sc ON sc.scene_id = s.scene_id AND sc.project_id = s.project_id
+        LEFT JOIN chapters c ON c.project_id = s.project_id AND c.chapter_id = s.chapter_id
         WHERE sc.character_id = ?
       `;
       const params = [character_id];
       if (project_id) { query += ` AND s.project_id = ?`; params.push(project_id); }
-      query += ` ORDER BY s.part, s.chapter, s.timeline_position`;
+      query += ` ORDER BY s.part, COALESCE(c.sort_index, s.chapter), s.timeline_position, s.scene_id`;
 
       const rows = db.prepare(query).all(...params);
       if (rows.length === 0) {
@@ -1000,7 +1002,8 @@ export function registerSearchTools(s, {
                st.beat AS thread_beat, s.timeline_position, s.story_time, s.metadata_stale
         FROM scenes s
         JOIN scene_threads st ON st.scene_id = s.scene_id AND st.project_id = s.project_id AND st.thread_id = ?
-        ORDER BY s.part, s.chapter, s.timeline_position, s.scene_id
+        LEFT JOIN chapters c ON c.project_id = s.project_id AND c.chapter_id = s.chapter_id
+        ORDER BY s.part, COALESCE(c.sort_index, s.chapter), s.timeline_position, s.scene_id
       `).all(thread_id);
       const staleCount = rows.filter(r => r.metadata_stale).length;
       const warning = staleCount > 0 ? `${staleCount} scene(s) have stale metadata.` : undefined;
@@ -1047,11 +1050,12 @@ export function registerSearchTools(s, {
         FROM character_relationships r
         LEFT JOIN scenes s ON s.scene_id = r.scene_id
           AND (r.scene_id IS NULL OR s.project_id = COALESCE(?, s.project_id))
+        LEFT JOIN chapters c ON c.project_id = s.project_id AND c.chapter_id = s.chapter_id
         WHERE r.from_character = ? AND r.to_character = ?
       `;
       const params = [project_id ?? null, from_character, to_character];
       if (project_id) { query += ` AND (s.project_id = ? OR r.scene_id IS NULL)`; params.push(project_id); }
-      query += ` ORDER BY s.part, s.chapter, s.timeline_position, s.scene_id`;
+      query += ` ORDER BY s.part, COALESCE(c.sort_index, s.chapter), s.timeline_position, s.scene_id`;
 
       const rows = db.prepare(query).all(...params);
       if (rows.length === 0) {

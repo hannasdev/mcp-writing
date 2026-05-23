@@ -118,9 +118,9 @@ Highlights:
 - SQLite is documented as canonical for structural manuscript state while prose remains file-based
 - `export_structure_snapshot` generates deterministic SQLite-derived structure exports for Git review and future recovery workflows
 
-### 📚 Chapter and Epigraph Indexing
+### 📚 [Chapter and Epigraph Structure](docs/initiatives/done/chapter-structure/prd.md)
 
-First-class chapters and epigraphs with canonical `chapter_id` targeting, chapter-aware retrieval, and chapter-linked rendering.
+First-class chapters and epigraphs with canonical `chapter_id` targeting, explicit structure workflows, chapter-aware retrieval, and chapter-linked rendering.
 
 Highlights:
 
@@ -128,10 +128,15 @@ Highlights:
 - `list_chapters` and `find_epigraphs` as dedicated discovery tools
 - `find_scenes`, `get_chapter_prose`, styleguide flows, and review bundles updated for `chapter_id`
 - Explicit chapter-folder and `epigraph.md` indexing path, with numeric chapter filters retained as read-scope compatibility aliases resolved through canonical chapter identity
+- Explicit chapter/scene/epigraph structure workflows and managed-sync guardrails keep SQLite canonical structure authoritative
 
 Implementation status:
 
-- [milestones.md](docs/initiatives/backlog/chapter-structure/milestones.md) — delivered milestones vs remaining follow-up work
+- [milestones.md](docs/initiatives/done/chapter-structure/milestones.md) — delivered milestone accounting
+
+Follow-up work:
+
+- [Divisions](docs/initiatives/backlog/divisions/prd.md)
 
 ### 🪄 [Guideline Generation](docs/initiatives/done/guideline-generation/prd.md)
 

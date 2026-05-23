@@ -125,7 +125,7 @@ export function resolveBatchTargetScenes(dbHandle, {
     }
   }
 
-  const conditions = ["project_id = ?"];
+  const conditions = ["s.project_id = ?"];
   const params = [projectId];
   const resolvedChapterFilter = (chapter !== undefined || chapterId !== undefined)
     ? resolveValidatedChapterFilter(dbHandle, { projectId, chapterNumber: chapter, chapterId })
@@ -146,26 +146,27 @@ export function resolveBatchTargetScenes(dbHandle, {
 
   if (sceneIds?.length) {
     const placeholders = sceneIds.map(() => "?").join(",");
-    conditions.push(`scene_id IN (${placeholders})`);
+    conditions.push(`s.scene_id IN (${placeholders})`);
     params.push(...sceneIds);
   }
   if (part !== undefined) {
-    conditions.push("part = ?");
+    conditions.push("s.part = ?");
     params.push(part);
   }
   if (resolvedChapterFilter.chapter) {
-    conditions.push("chapter_id = ?");
+    conditions.push("s.chapter_id = ?");
     params.push(resolvedChapterFilter.chapter.chapter_id);
   }
   if (onlyStale) {
-    conditions.push("metadata_stale = 1");
+    conditions.push("s.metadata_stale = 1");
   }
 
   const query = `
-    SELECT scene_id, project_id, file_path
-    FROM scenes
+    SELECT s.scene_id, s.project_id, s.file_path
+    FROM scenes s
+    LEFT JOIN chapters c ON c.project_id = s.project_id AND c.chapter_id = s.chapter_id
     WHERE ${conditions.join(" AND ")}
-    ORDER BY part, chapter, timeline_position, scene_id
+    ORDER BY s.part, COALESCE(c.sort_index, s.chapter), s.timeline_position, s.scene_id
   `;
 
   return {

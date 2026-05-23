@@ -294,7 +294,7 @@ List canonical epigraphs for a project, optionally narrowed to a canonical chapt
 
 ## get_arc
 
-Get every scene a character appears in, ordered by part/chapter/position. Returns scene metadata only — no prose. Use this as the primary structural entry point when the question is about a character's progression through the manuscript. Supports pagination via page/page_size and auto-paginates large result sets with total_count. Use list_characters only when you need help finding a character_id. Response shape note: always returns a structured envelope (`results`, `total_count`, with pagination fields when paging is active).
+Get every scene a character appears in, ordered by part, canonical chapter order, and scene position. Returns scene metadata only — no prose. Use this as the primary structural entry point when the question is about a character's progression through the manuscript. Supports pagination via page/page_size and auto-paginates large result sets with total_count. Use list_characters only when you need help finding a character_id. Response shape note: always returns a structured envelope (`results`, `total_count`, with pagination fields when paging is active).
 
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |

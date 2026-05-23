@@ -149,4 +149,5 @@ Manual verification:
 - [Managed Structure Contract](../../../foundations/managed-structure-contract.md)
 - [Target Architecture Migration](../target-architecture-migration/prd.md)
 - [M8 Canonical Storage Direction](../target-architecture-migration/m8-canonical-storage-decision.md)
-- [Chapter Structure Follow-up](../../backlog/chapter-structure/prd.md)
+- [Chapter and Epigraph Structure](../chapter-structure/prd.md)
+- [Divisions](../../backlog/divisions/prd.md)
