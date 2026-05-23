@@ -28,9 +28,9 @@ Instead of feeding an entire manuscript to an AI and hoping it fits in the conte
 
 **Current status:**
 - **Core platform complete:** Metadata-first analysis, sidecar-backed metadata maintenance, AI-assisted prose editing with confirmation + git history, review bundles, and Scrivener Direct extraction are all implemented.
-- **Recently completed:** Structural Authority Hardening tightened remaining structure-authority paths so scene placement and ordering go through explicit structure workflows, ordinary sync reports drift instead of adopting it, and trusted structure exports can be diagnosed and restored explicitly.
-- **Active development:** none selected.
-- **Deferred backlog:** embeddings search.
+- **Recently completed:** Filesystem Boundary Hardening centralized local file mutation through application-aware helpers and lint guardrails.
+- **Active development:** Docker, CI, and Deployment Workflow is making Docker a supported way to build, run, smoke-test, and deploy Writing MCP.
+- **Deferred backlog:** OpenClaw integration, client-agnostic setup, chapter-structure follow-up, and embeddings search.
 - **Ideas and open questions:** tracked separately so future exploration does not distort the active roadmap.
 
 ## Who it is for

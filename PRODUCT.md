@@ -9,13 +9,13 @@ It supports metadata-first reasoning, explicit prose editing workflows, and revi
 
 ## Product Status
 
-Active initiative: [Filesystem Boundary Hardening](docs/initiatives/active/filesystem-boundary/prd.md).
+Active initiative: [Docker, CI, and Deployment Workflow](docs/initiatives/active/docker-ci-deployment/prd.md).
 
-Most recent completed initiative: [Structural Authority Hardening](docs/initiatives/done/structural-authority-hardening/prd.md).
+Most recent completed initiative: [Filesystem Boundary Hardening](docs/initiatives/done/filesystem-boundary/prd.md).
 
 Target Architecture Migration completed the structural manuscript state consolidation scope.
 SQLite is the durable canonical model for structural manuscript state, while prose remains file-based and generated structure exports provide Git-reviewable transparency and future recovery input.
-Structural Authority Hardening tightened the remaining authority leaks so daily structural changes route through explicit MCP workflows instead of generic metadata, sidecar, or folder-derived paths.
+Filesystem Boundary Hardening centralized local file mutation through application-aware helpers so sync-root writes, generated outputs, imports, runtime temp files, moves, deletes, and lint guardrails share one filesystem policy.
 
 ---
 
@@ -46,5 +46,6 @@ For structural manuscript state, use [Managed Structure Contract](docs/foundatio
 - [Backlog](BACKLOG.md) — deferred product work that is not currently active
 - [Conceptual Target Architecture](docs/foundations/target-architecture.md) — idealized architectural model for evaluating future structure, tooling, and workflow decisions
 - [Managed Structure Contract](docs/foundations/managed-structure-contract.md) — design boundaries for structural mutation, generated transparency, import, and maintenance workflows
+- [Filesystem Boundary Hardening](docs/initiatives/done/filesystem-boundary/prd.md) — completed milestone for centralizing local filesystem mutation policy and lint guardrails
 - [Structural Authority Hardening](docs/initiatives/done/structural-authority-hardening/prd.md) — completed milestone for tightening remaining target-architecture discrepancies
 - [Agent Tool Reference](docs/agents/tools.md) — generated tool catalog including `describe_workflows`, the main AI navigation entry-point
