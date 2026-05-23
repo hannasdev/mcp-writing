@@ -2,10 +2,11 @@
 
 **Status:** Active
 
-Current focus: M1 — Backup Domain Model and Manifest.
+Current focus: M2 — Manual Project Backup Export Tool.
 
 The product is ready to extend the SQLite-canonical architecture with a complete backup and recovery story.
-The need is clear because structural manuscript state has moved away from files-first authority, and the next implementation slice should establish the backup artifact shape before exposing public tools or restore behavior.
+The need is clear because structural manuscript state has moved away from files-first authority.
+The internal backup artifact shape is implemented; the next implementation slice should expose explicit project backup generation without restore behavior or automatic mutation hooks.
 
 Implementation slices are tracked in [milestones.md](milestones.md).
 

@@ -5,7 +5,7 @@
 This milestone plan breaks the PRD into independently reviewable slices.
 Each milestone should leave the system in a releasable state and preserve the target architecture rule that SQLite remains canonical while generated backup artifacts provide transparency and explicit recovery input.
 
-Current focus: M1 — Backup Domain Model and Manifest.
+Current focus: M2 — Manual Project Backup Export Tool.
 
 ## Objective
 
@@ -22,6 +22,8 @@ Docker volume backup and rollback guidance already lives in the completed Docker
 - Keep restore explicit, dry-run-first, and transactional.
 
 ## M1 — Backup Domain Model and Manifest
+
+Status: Delivered.
 
 Goal: define the backup bundle shape before wiring it into mutation workflows.
 
@@ -79,7 +81,14 @@ Out of scope:
 - Restore application.
 - Automatic refresh after mutations.
 
+Evidence:
+
+- [src/structure/project-backup.js](../../../../src/structure/project-backup.js)
+- [src/test/unit/project-backup.test.mjs](../../../../src/test/unit/project-backup.test.mjs)
+
 ## M2 — Manual Project Backup Export Tool
+
+Status: Current focus.
 
 Goal: expose project backup generation as an explicit workflow.
 
