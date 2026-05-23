@@ -9,7 +9,9 @@ It supports metadata-first reasoning, explicit prose editing workflows, and revi
 
 ## Product Status
 
-Active initiative: none currently selected.
+Active initiative: [Database Backup and Recovery](docs/initiatives/backlog/database-backup-recovery/prd.md).
+
+Current focus: M1 — Backup Domain Model and Manifest. This slice defines deterministic in-memory project backup artifacts for SQLite-canonical state before adding public tools, disk writes, mutation hooks, diagnostics, or restore behavior.
 
 Most recent completed initiative: [Docker, CI, and Deployment Workflow](docs/initiatives/done/docker-ci-deployment/prd.md).
 
@@ -46,6 +48,7 @@ For structural manuscript state, use [Managed Structure Contract](docs/foundatio
 
 - [Features](FEATURES.md) — shipped product capabilities and links to completed initiative docs
 - [Backlog](BACKLOG.md) — deferred product work that is not currently active
+- [Database Backup and Recovery](docs/initiatives/backlog/database-backup-recovery/prd.md) — active initiative for Git-reviewable recovery artifacts for SQLite-canonical state
 - [Conceptual Target Architecture](docs/foundations/target-architecture.md) — idealized architectural model for evaluating future structure, tooling, and workflow decisions
 - [Managed Structure Contract](docs/foundations/managed-structure-contract.md) — design boundaries for structural mutation, generated transparency, import, and maintenance workflows
 - [Docker, CI, and Deployment Workflow](docs/initiatives/done/docker-ci-deployment/prd.md) — completed milestone for supported container build, run, smoke-test, and deployment operations

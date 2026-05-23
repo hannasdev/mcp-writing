@@ -1,9 +1,11 @@
 # Database Backup and Recovery — Milestones
 
-**Status:** Deferred backlog (not active)
+**Status:** Active
 
 This milestone plan breaks the PRD into independently reviewable slices.
 Each milestone should leave the system in a releasable state and preserve the target architecture rule that SQLite remains canonical while generated backup artifacts provide transparency and explicit recovery input.
+
+Current focus: M1 — Backup Domain Model and Manifest.
 
 ## Objective
 
@@ -28,7 +30,7 @@ Deliverables:
 - Introduce a versioned project backup schema with `manifest.json` and `canonical.snapshot.json`.
 - Define canonical coverage for v1:
   - projects and universes;
-  - scenes and durable scene metadata;
+  - scenes and durable SQLite-canonical scene metadata that cannot be safely reconstructed from prose, sidecars, or sync reindexing alone;
   - chapters, epigraphs, scene placement, and timeline positions;
   - characters, places, threads, reference docs, and explicit reference links.
 - Define excluded derived state:
@@ -38,24 +40,42 @@ Deliverables:
   - transient caches;
   - authored prose bodies.
 - Add deterministic serialization, stable ordering, and checksum calculation.
+- Define full deterministic snapshots as restore authority; do not introduce custom delta chains or event replay as the v1 recovery mechanism.
 - Choose the default generated backup location: `project-backups/<project_id>/`.
+- Record backup schema version, application package version, and SQLite schema version separately.
+- Reserve manifest space for future operation-log support without implementing `operations.jsonl`.
+- Document the explicit v1 table/domain inventory:
+  - include `projects`, owning `universes`, `scenes`, `chapters`, `epigraphs`, `epigraph_characters`, `epigraph_tags`, `scene_characters`, `scene_places`, `scene_tags`, `scene_threads`, `characters`, `character_traits`, `character_relationships`, `places`, `threads`, `reference_docs`, `reference_doc_tags`, and `reference_links` when they belong to or are required by the target project;
+  - exclude `scenes_fts`, `reference_docs_fts`, `async_jobs`, and raw `schema_version` rows from restore authority.
+- Add manifest metadata that warns backup artifacts are Git-trackable but manuscript-sensitive.
+- Keep the snapshot schema open to future deterministic domain-file splitting if one monolithic JSON file becomes too noisy for review.
 
 Acceptance criteria:
 
 - A project backup can be built in memory from SQLite canonical state with deterministic output.
 - The manifest records project identity, backup schema version, app/schema compatibility metadata, coverage summary, and checksums.
+- Snapshot checksums can identify no-op exports so later workflows can avoid rewriting unchanged artifacts.
 - Backup artifacts clearly identify themselves as generated transparency and recovery input, not mutation surfaces.
+- Backup artifacts clearly identify privacy expectations: no authored prose bodies in v1, but metadata and summaries may still be sensitive.
+- Cross-project or universe-level references are represented conservatively enough for diagnostics without granting restore authority over unrelated projects.
+- M1 remains internal-only: no public MCP tool, no generated files on disk, no automatic backup refresh, and no restore application.
 - Existing structure export tests continue to pass unchanged.
 
 Test strategy:
 
 - Unit tests for deterministic serialization and stable ordering.
 - Unit tests for manifest checksum behavior.
+- Unit tests proving equivalent canonical state produces the same snapshot checksum.
 - Unit tests proving excluded tables or rebuildable state are not represented as restore authority.
+- Unit tests proving operation history is advertised as unsupported or absent until M4.
+- Unit tests for project-scoped filtering and conservative cross-scope relationship representation.
 
 Out of scope:
 
 - Public MCP tools.
+- Filesystem writes.
+- Operation history.
+- Freshness diagnostics beyond artifact checksums.
 - Restore application.
 - Automatic refresh after mutations.
 
@@ -101,6 +121,7 @@ Deliverables:
 - Compare current SQLite canonical state to the latest backup using checksums or a database revision marker.
 - Report backup directory, trust status, freshness status, and actionable next steps.
 - Surface backup freshness in runtime or workflow discovery where useful.
+- Decide whether freshness is computed by rebuilding the canonical snapshot and comparing checksums, by introducing a database revision marker, or by combining both. Timestamp-only freshness is not sufficient.
 
 Acceptance criteria:
 
@@ -125,6 +146,9 @@ Out of scope:
 
 Goal: make canonical mutations reviewable as a human-readable event stream.
 
+This milestone supports future audit, provenance, authorship credibility, progress analytics, and tool/agent accountability.
+It must remain separate from restore authority: the current snapshot plus manifest is the recovery source of truth, while operation history explains how the project changed over time.
+
 Deliverables:
 
 - Add an append-only `operations.jsonl` artifact to the backup bundle.
@@ -138,11 +162,13 @@ Deliverables:
   - backup schema and app version metadata.
 - Emit operation records from sanctioned canonical mutation workflows.
 - Keep operation history advisory for audit and review; restore authority remains the canonical snapshot plus manifest.
+- Document rotation, checkpointing, or snapshot-boundary compaction options if operation history becomes too large for practical review.
 
 Acceptance criteria:
 
 - Representative structural mutations append deterministic, meaningful operation records.
 - Operation records are useful in Git review without requiring users to inspect SQLite.
+- Operation records can support later progress and provenance analytics without requiring restore replay.
 - Failure to append the operation log is reported as a backup warning without silently hiding backup drift.
 - Operation log behavior does not make generated files authoritative.
 
@@ -199,6 +225,7 @@ Deliverables:
 - Validate manifest, schema compatibility, project identity, checksums, file references, and conflicts.
 - Produce a restore plan that summarizes rows/entities to create, update, delete, or leave unchanged.
 - Refuse tampered, stale, partial, wrong-project, or incompatible backup bundles.
+- Treat records present in SQLite but absent from the backup as destructive restore candidates that require explicit dry-run reporting and later confirmation.
 - Preserve existing `restore_structure_from_export` behavior as a narrower structure repair workflow.
 
 Acceptance criteria:
@@ -206,6 +233,7 @@ Acceptance criteria:
 - Dry run is the default.
 - Dry run never mutates SQLite or generated files.
 - Restore plans are deterministic and reviewable by a user or AI agent.
+- Restore plans distinguish create, update, delete, unchanged, and refused/conflict cases.
 - Invalid backup bundles return actionable diagnostics rather than partial plans.
 
 Test strategy:
@@ -231,6 +259,7 @@ Deliverables:
 - Regenerate or prompt regeneration of derived indexes after restore.
 - Return a reviewable summary of applied changes and recommended follow-up checks.
 - Ensure failed restore leaves the database unchanged.
+- Require explicit confirmation for destructive deletes or cross-scope changes identified during dry-run planning.
 
 Acceptance criteria:
 
@@ -270,7 +299,7 @@ Acceptance criteria:
 - Users can explain what must be backed up: prose/Git sync root, generated backup artifacts, and live SQLite volume where applicable.
 - Users know that app-level backup artifacts are Git-reviewable recovery input, not a substitute for normal volume backups.
 - Agents are routed toward `export_project_backup`, diagnostics, and dry-run restore instead of editing backup files.
-- The initiative is ready to move from backlog to active implementation when prioritized.
+- The initiative is ready to move to completed status once backup export, diagnostics, restore, and documentation behavior are delivered and validated.
 
 Test strategy:
 
