@@ -64,3 +64,60 @@ jobs:
 
       - name: Verify generated docs are committed
         run: git diff --exit-code -- docs/agents/tools.md
+
+  docker:
+    name: Docker
+    if: github.event_name != 'push' || !startsWith(github.event.head_commit.message, 'Release ')
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Build image
+        run: docker build -t mcp-writing:ci .
+
+      - name: Start container
+        run: |
+          mkdir -p "$RUNNER_TEMP/mcp-writing-sync" "$RUNNER_TEMP/mcp-writing-data"
+          docker run -d \
+            --name mcp-writing-ci \
+            --user "$(id -u):$(id -g)" \
+            -p 127.0.0.1:3000:3000 \
+            -v "$RUNNER_TEMP/mcp-writing-sync:/sync" \
+            -v "$RUNNER_TEMP/mcp-writing-data:/data" \
+            -e OWNERSHIP_GUARD_MODE=warn \
+            mcp-writing:ci
+
+      - name: Wait for health check
+        run: |
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent --show-error http://127.0.0.1:3000/healthz; then
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs mcp-writing-ci
+          exit 1
+
+      - name: Smoke MCP runtime config
+        run: |
+          docker exec mcp-writing-ci node --input-type=module -e "
+            import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+            import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
+
+            const client = new Client({ name: 'mcp-writing-ci-smoke', version: '0.0.0' });
+            await client.connect(new SSEClientTransport(new URL('http://127.0.0.1:3000/sse')));
+            const result = await client.callTool({ name: 'get_runtime_config', arguments: {} });
+            const text = result.content?.[0]?.text ?? '';
+            const config = JSON.parse(text);
+
+            if (config.sync_dir !== '/sync' || config.db_path !== '/data/writing.db') {
+              throw new Error('Unexpected runtime config: ' + text);
+            }
+
+            await client.close();
+          "
+
+      - name: Stop container
+        if: always()
+        run: docker rm -f mcp-writing-ci || true

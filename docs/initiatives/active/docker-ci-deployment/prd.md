@@ -1,6 +1,6 @@
 # PRD: Docker, CI, and Deployment Workflow
 
-**Status:** 📋 Deferred backlog (not active)
+**Status:** 🚧 Active implementation
 
 This initiative defines a general containerized development, validation, and deployment workflow for `mcp-writing`.
 It is separate from OpenClaw-specific integration work: Docker should become a reliable product delivery path for local development, CI, homeserver use, and MCP gateways, while OpenClaw remains one possible consumer.
