@@ -1,0 +1,16 @@
+.git
+.github
+.vscode
+.claude
+node_modules
+npm-debug.log*
+Dockerfile
+docker-compose*.yml
+*.db
+*.sqlite
+*.sqlite3
+tmp
+sync
+data
+coverage
+.DS_Store

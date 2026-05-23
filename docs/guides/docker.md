@@ -1,223 +1,225 @@
-# Docker & OpenClaw Setup
+# Docker Setup
 
-- [Docker Compose snippet](#docker-compose-snippet)
-- [Environment setup script](#environment-setup-script)
-- [Register with OpenClaw](#register-with-openclaw)
-- [Advanced integration notes](#advanced-openclaw--docker-integration-notes)
-  - [Required environment and mounts](#required-environment-and-mounts)
-  - [Git ownership trust for mounted repos](#git-ownership-trust-for-mounted-repos)
-  - [SSH transport hardening](#ssh-transport-hardening)
-  - [Separate auth and signing keys](#separate-auth-and-signing-keys)
-  - [Git identity and GitHub email privacy](#git-identity-and-github-email-privacy)
-  - [Branch safety for automation](#branch-safety-for-automation)
-  - [Quick validation](#quick-validation)
+- [Quick Start](#quick-start)
+- [Docker Compose](#docker-compose)
+- [Runtime Contract](#runtime-contract)
+- [Git and SSH](#git-and-ssh)
+- [Health and Logs](#health-and-logs)
 - [Troubleshooting](#troubleshooting)
+- [MCP Gateway Notes](#mcp-gateway-notes)
 
 ---
 
-## Docker Compose snippet
+## Quick Start
 
-```yaml
-# docker-compose.yml snippet
-writing-mcp:
-  build: .
-  user: "${OPENCLAW_UID:-1000}:${OPENCLAW_GID:-1000}"
-  environment:
-    WRITING_SYNC_DIR: /sync
-    DB_PATH: /data/writing.db
-    HTTP_PORT: "3000"
-    OWNERSHIP_GUARD_MODE: "${OWNERSHIP_GUARD_MODE:-warn}"
-    GIT_SSH_COMMAND: "ssh -i /ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/ssh/known_hosts"
-  volumes:
-    - ${OPENCLAW_WORKSPACE_DIR:?run src/scripts/setup-openclaw-env.sh first}/sync:/sync
-    - ${OPENCLAW_SSH_DIR:?run src/scripts/setup-openclaw-env.sh first}:/ssh:ro
-    - writing-mcp-data:/data
-  healthcheck:
-    test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
-    interval: 30s
-    timeout: 5s
-    retries: 5
-
-volumes:
-  writing-mcp-data:
-```
-
----
-
-## Environment setup script
-
-Start from `docker-compose.example.yml` and generate `.env` with machine-specific values:
+Build the image from a checkout:
 
 ```sh
-sh src/scripts/setup-openclaw-env.sh
+docker build -t mcp-writing .
 ```
 
-That script writes `OPENCLAW_UID`, `OPENCLAW_GID`, `OPENCLAW_WORKSPACE_DIR`, and `OPENCLAW_SSH_DIR` to `.env`.
-Running Compose without these values is unsupported and may create invalid mount definitions.
-It also normalizes `OWNERSHIP_GUARD_MODE` to `warn` or `fail` and preserves an existing valid value when rerun.
+Create host directories for manuscript sync files and durable SQLite data:
 
----
-
-## Register with OpenClaw
-
-```json
-"mcp": {
-  "servers": {
-    "writing": { "url": "http://writing-mcp:3000/sse" }
-  }
-}
+```sh
+mkdir -p ./sync ./data
 ```
 
----
+Run the server in HTTP/SSE mode:
 
-## Advanced OpenClaw / Docker integration notes
+```sh
+docker run --rm \
+  -p 3000:3000 \
+  -v "$PWD/sync:/sync" \
+  -v "$PWD/data:/data" \
+  -e WRITING_SYNC_DIR=/sync \
+  -e DB_PATH=/data/writing.db \
+  mcp-writing
+```
 
-When `mcp-writing` runs behind OpenClaw (or any Docker MCP gateway), these details prevent common runtime failures.
+Verify the server:
 
-### Required environment and mounts
+```sh
+curl http://localhost:3000/healthz
+```
 
-- Set `WRITING_SYNC_DIR=/sync`
-- Set `DB_PATH=/data/writing.db`
-- Set `OWNERSHIP_GUARD_MODE=warn` (or `fail` to block startup on ownership drift)
-- Mount your manuscript sync repo to `/sync`
-- Mount a persistent path for SQLite data at `/data`
-- Mount SSH materials read-only at `/ssh` and use `GIT_SSH_COMMAND` with `/ssh` paths
-
-Debug/test-only runtime override knobs:
-
-- `RUNTIME_UID_OVERRIDE` — test helper to simulate runtime UID during ownership diagnostics
-- `ALLOW_RUNTIME_UID_OVERRIDE=1` — explicitly enables the override outside `NODE_ENV=test`
-
-Do not set these in normal production or desktop deployments.
+The response should be `ok`.
+MCP clients and gateways should connect to `http://localhost:3000/sse`.
 
 If `/sync` contains raw Scrivener external-sync output, run the importer once before normal `sync` usage:
 
 ```sh
-node src/scripts/import.js /path/to/scrivener-export /sync --project my-novel
+docker run --rm \
+  -v "$PWD/scrivener-export:/import:ro" \
+  -v "$PWD/sync:/sync" \
+  -v "$PWD/data:/data" \
+  mcp-writing \
+  node src/scripts/import.js /import /sync --project my-novel
 ```
 
-`sync` indexes files that already contain scene metadata. It does not convert Scrivener `Draft/` filenames into scene sidecars by itself.
+`sync` indexes files that already contain scene metadata. It does not convert raw Scrivener `Draft/` filenames into scene sidecars by itself.
 
-### Git ownership trust for mounted repos
+## Docker Compose
 
-If host and container ownership differ, git can fail with:
+Start from `docker-compose.example.yml`:
 
-- `fatal: detected dubious ownership in repository`
+```sh
+mkdir -p ./sync
+docker compose -f docker-compose.example.yml up --build
+```
 
-Mark the mounted repo path as safe in the container image:
+Optional `.env` values:
+
+```sh
+WRITING_UID=1000
+WRITING_GID=1000
+WRITING_HTTP_PORT=3000
+WRITING_SYNC_DIR_HOST=/absolute/path/to/manuscript-sync
+OWNERSHIP_GUARD_MODE=warn
+```
+
+Use `WRITING_UID` and `WRITING_GID` to match the host owner for Linux bind mounts. On Docker Desktop for macOS, the default values are usually enough.
+
+## Runtime Contract
+
+The image expects these paths and environment variables:
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `WRITING_SYNC_DIR` | `/sync` | Manuscript sync folder mounted read-write |
+| `DB_PATH` | `/data/writing.db` | SQLite index database path |
+| `HTTP_PORT` | `3000` | HTTP/SSE and `/healthz` port |
+| `MCP_TRANSPORT` | `http` | Docker default transport |
+| `OWNERSHIP_GUARD_MODE` | `warn` | `warn` logs ownership drift; `fail` exits on sampled non-runtime-owned files |
+
+Mounts:
+
+| Container Path | Purpose |
+| --- | --- |
+| `/sync` | Authored manuscript files, metadata sidecars, generated exports, and Git repo state |
+| `/data` | Durable runtime data, including the SQLite index |
+| `/ssh` | Optional read-only SSH material for private Git remotes |
+
+The image includes Node, production npm dependencies, SQLite support through Node's built-in `node:sqlite`, Git, OpenSSH client, and CA certificates.
+
+## Git and SSH
+
+The image marks `/sync` as a Git safe directory:
 
 ```sh
 git config --system --add safe.directory /sync
 ```
 
-### SSH transport hardening
-
-For private remotes, mount SSH materials read-only and enforce strict host checks:
-
-- Auth key for fetch/pull/push
-- `known_hosts` with GitHub host key
-- `StrictHostKeyChecking=yes`
-
-Example:
+For private remotes, mount SSH materials read-only and use strict host checking:
 
 ```sh
-export GIT_SSH_COMMAND="ssh -i /ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/ssh/known_hosts"
+docker run --rm \
+  -p 3000:3000 \
+  -v "$PWD/sync:/sync" \
+  -v "$PWD/data:/data" \
+  -v "$HOME/.ssh/writing-mcp:/ssh:ro" \
+  -e GIT_SSH_COMMAND="ssh -i /ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/ssh/known_hosts" \
+  mcp-writing
 ```
 
-### Separate auth and signing keys
+Use separate keys for repository transport and commit signing when signing is required.
 
-Use dedicated keys for transport and signing:
+## Health and Logs
 
-- Auth key: repository transport (`fetch` / `pull` / `push`)
-- Signing key: commit/tag signatures
-
-Recommended git config:
+Health check:
 
 ```sh
-git config gpg.format ssh
-git config user.signingkey /ssh/id_ed25519_signing
-git config commit.gpgsign true
-git config pull.ff only
+curl http://localhost:3000/healthz
 ```
 
-### Git identity and GitHub email privacy
-
-If GitHub email privacy is enabled, pushes can fail unless `user.email` is a GitHub noreply address:
+Container logs:
 
 ```sh
-git config user.name "Edda"
-git config user.email "<id>+<username>@users.noreply.github.com"
+docker logs <container-name>
 ```
 
-### Branch safety for automation
-
-For bot-driven edits, prefer branch-per-change flow:
-
-- Push to `edda/*` or `bot/*`
-- Merge via pull request
-- Protect `main` from direct automation pushes
-
-### Quick validation
-
-```sh
-ssh -T git@github.com
-git -C /sync fetch origin
-git -C /sync pull --ff-only
-```
-
-Then create and push a signed smoke commit on a temporary branch.
-
----
+Runtime diagnostics are available through the MCP tool `get_runtime_config`.
+Check it when debugging sync path, database path, Git, or ownership issues.
 
 ## Troubleshooting
 
-### "OpenClaw can read tools, but scene indexing is empty or incomplete"
+### "Open `healthz` works, but scene indexing is empty"
 
 You are likely running `sync` on raw Scrivener `Draft/` output that has not been imported yet.
 
 Fix:
 
-1. Run importer once to create scene metadata sidecars:
+1. Run the importer once to create scene metadata sidecars.
+2. Restart the service if needed.
+3. Call `sync` again.
 
-```sh
-node src/scripts/import.js /path/to/scrivener-export /path/to/sync-dir --project my-novel
-```
+### "Write access to repository denied" or Git push/pull fails
 
-2. Restart the service (if needed), then call `sync` again.
+Check `get_runtime_config`:
 
-Note: importer behavior is Draft-aware (`<source>/Draft` if present, else source root), but plain `sync` only indexes already-normalized scene files.
+- `sync_dir_writable` should be `true`
+- `runtime_warnings` should be empty for normal editing flows
 
-### "Write access to repository denied" (or git push/pull fails in container)
+Then verify:
 
-Your container can start and read files, but cannot write metadata, create snapshots, or push branches.
+- `/sync` is mounted read-write, not `:ro`
+- the runtime UID/GID can write to the host sync directory
+- SSH keys and `known_hosts` are mounted under `/ssh` when private remotes are used
+- the remote allows the mounted key to fetch or push
 
-Fix:
+### "Blocked: file is root-owned"
 
-1. Check runtime diagnostics via `get_runtime_config`:
-  - `sync_dir_writable` must be `true`
-  - `runtime_warnings` should be empty for normal editing flows
-2. Ensure `/sync` is mounted read-write (no `:ro`) and owned by the container user.
-3. For mounted git repos with UID mismatch, mark safe directory:
+The runtime user can read but cannot overwrite files in `/sync`.
 
-```sh
-git config --system --add safe.directory /sync
-```
-
-4. Verify SSH key has write access to the remote and `known_hosts` is mounted.
-5. Prefer branch-per-change workflow (`bot/*` or `edda/*`) if `main` is protected.
-
-### "Blocked: file is root-owned" (EACCES / ownership drift)
-
-The runtime user can read but cannot overwrite prose files.
-
-Fix:
-
-1. Repair host ownership once:
+Fix host ownership once:
 
 ```sh
 sudo chown -R "$(id -u):$(id -g)" /path/to/sync-dir
 ```
 
-2. Ensure container user mapping is set from `.env` (`OPENCLAW_UID` / `OPENCLAW_GID`).
-3. Optionally set `OWNERSHIP_GUARD_MODE=fail` to catch mismatches at startup.
-4. Re-check `get_runtime_config` and confirm ownership warnings are gone.
+Then rerun with matching IDs:
+
+```sh
+docker run --rm \
+  --user "$(id -u):$(id -g)" \
+  -p 3000:3000 \
+  -v "/path/to/sync-dir:/sync" \
+  -v "$PWD/data:/data" \
+  mcp-writing
+```
+
+### "Database cannot be opened"
+
+The `/data` mount may not exist or may not be writable by the runtime user.
+
+Fix:
+
+```sh
+mkdir -p ./data
+sudo chown -R "$(id -u):$(id -g)" ./data
+```
+
+## MCP Gateway Notes
+
+Any MCP gateway that supports HTTP/SSE can register the Docker service URL:
+
+```json
+{
+  "mcp": {
+    "servers": {
+      "writing": { "url": "http://localhost:3000/sse" }
+    }
+  }
+}
+```
+
+When the gateway runs in the same Docker network, use the Compose service name:
+
+```json
+{
+  "mcp": {
+    "servers": {
+      "writing": { "url": "http://writing-mcp:3000/sse" }
+    }
+  }
+}
+```
