@@ -258,14 +258,18 @@ Out of scope:
 Evidence:
 
 - [src/structure/project-backup-refresh.js](../../../../src/structure/project-backup-refresh.js)
+- [src/tools/editing.js](../../../../src/tools/editing.js)
 - [src/tools/metadata.js](../../../../src/tools/metadata.js)
+- [src/tools/sync.js](../../../../src/tools/sync.js)
 - [src/test/unit/project-backup-refresh.test.mjs](../../../../src/test/unit/project-backup-refresh.test.mjs)
+- [src/test/integration/editing.test.mjs](../../../../src/test/integration/editing.test.mjs)
 - [src/test/integration/metadata.test.mjs](../../../../src/test/integration/metadata.test.mjs)
 - [src/test/integration/search.test.mjs](../../../../src/test/integration/search.test.mjs)
+- [src/test/integration/sync.test.mjs](../../../../src/test/integration/sync.test.mjs)
 
 Notes:
 
-- Project-scoped chapter structure, scene metadata, world-entity, thread, and reference-link mutation workflows now refresh project backup artifacts and append advisory operation history after successful canonical changes.
+- Project-scoped chapter structure, scene metadata, prose edit commit, enrichment, world-entity, thread, and reference-link mutation workflows now refresh project backup artifacts and append advisory operation history after successful canonical changes.
 - Generated backup refresh remains separate from Git commits and reports warnings without rolling back the successful canonical mutation.
 
 ## M6 — Restore Planning and Dry Run

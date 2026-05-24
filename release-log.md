@@ -9,8 +9,8 @@ This complements `CHANGELOG.md`:
 ### 2026-05-24 — Refresh project backups after canonical mutations
 
 - What changed: Sanctioned project-scoped canonical mutation tools now append advisory operation history and refresh generated project backup artifacts after successful database changes.
-- Why it matters: Authors and AI agents get fresh `manifest.json`, `canonical.snapshot.json`, and `operations.jsonl` during normal structure, metadata, thread, and reference-link workflows without needing a separate manual export step.
-- Who is affected: Authors, maintainers, and AI agents using project-scoped chapter, epigraph, scene, world-entity, thread, and reference-link mutation tools.
+- Why it matters: Authors and AI agents get fresh `manifest.json`, `canonical.snapshot.json`, and `operations.jsonl` during normal structure, metadata, editing, enrichment, thread, and reference-link workflows without needing a separate manual export step.
+- Who is affected: Authors, maintainers, and AI agents using project-scoped chapter, epigraph, scene, edit, enrichment, world-entity, thread, and reference-link mutation tools.
 - Action needed: Review or commit generated backup artifact diffs after canonical changes; if a tool returns `backup_warnings`, run `diagnose_project_backups` or `export_project_backup`.
 - PR: [#219](https://github.com/hannasdev/mcp-writing/pull/219)
 

@@ -159,7 +159,12 @@ describe("sync tool", () => {
     assert.equal(snapshot.project.project_id, "test-novel");
     assert.equal(snapshot.operation_history.supported, true);
     assert.equal(snapshot.operation_history.artifact, "operations.jsonl");
-    assert.equal(fs.readFileSync(operationsPath, "utf8"), "");
+    const firstOperations = fs.readFileSync(operationsPath, "utf8");
+    for (const line of firstOperations.trim().split("\n").filter(Boolean)) {
+      const operation = JSON.parse(line);
+      assert.equal(operation.artifact_kind, "project_backup_operation");
+      assert.equal(operation.project_id, "test-novel");
+    }
     assert.ok(snapshot.scenes.some(scene => scene.scene_id === "sc-001"));
     assert.equal(firstSnapshot.includes("This authored epigraph body must not enter"), false);
 
@@ -174,6 +179,7 @@ describe("sync tool", () => {
     });
     assert.equal(fs.readFileSync(manifestPath, "utf8"), firstManifest);
     assert.equal(fs.readFileSync(snapshotPath, "utf8"), firstSnapshot);
+    assert.equal(fs.readFileSync(operationsPath, "utf8"), firstOperations);
   });
 
   test("export_project_backup records custom output_dir in manifest", async () => {
@@ -1014,6 +1020,8 @@ describe("enrich_scene_characters_batch tool", () => {
       assert.equal(done.job.result.ok, true);
       assert.equal(done.job.result.scenes_changed, 1);
       assert.equal(done.job.result.links_added >= 1, true);
+      assert.equal(done.job.result.backup_refresh.ok, true);
+      assert.deepEqual(done.job.result.backup_warnings, []);
 
       // Ensure parent index is refreshed before asserting link visibility.
       await callWriteTool("sync");
@@ -1276,6 +1284,8 @@ describe("enrich_scene tool", () => {
     assert.equal(enrich.ok, true);
     assert.equal(enrich.action, "enriched");
     assert.equal(enrich.scene_id, "sc-001");
+    assert.equal(enrich.backup_refresh.ok, true);
+    assert.deepEqual(enrich.backup_warnings, []);
 
     const freshArcText = await callWriteTool("get_arc", { character_id: "elena" });
     const freshArc = JSON.parse(freshArcText);

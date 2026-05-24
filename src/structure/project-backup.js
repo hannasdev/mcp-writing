@@ -115,17 +115,81 @@ function collectScopedWorldRows(db, table, {
   universeId,
   idColumn,
   orderBy,
+  includeUniverseIds = new Set(),
 }) {
+  const universeIds = [...includeUniverseIds];
   const rows = db.prepare(`
     SELECT *
     FROM ${table}
     WHERE project_id = ?
-       OR (? IS NOT NULL AND project_id IS NULL AND universe_id = ?)
+       OR (
+         ? IS NOT NULL
+         AND project_id IS NULL
+         AND universe_id = ?
+         AND ${idColumn} IN (${universeIds.map(() => "?").join(",") || "NULL"})
+       )
     ORDER BY ${orderBy}
-  `).all(projectId, universeId, universeId);
+  `).all(projectId, universeId, universeId, ...universeIds);
   return {
     rows,
     ids: new Set(rows.map(row => row[idColumn])),
+  };
+}
+
+function collectReferenceDocsForBackup(db, {
+  projectId,
+  universeId,
+}) {
+  let rows = collectProjectScopedRows(db, "reference_docs", projectId, "doc_id");
+  const ids = new Set(rows.map(row => row.doc_id));
+
+  let changed = true;
+  while (changed) {
+    changed = false;
+    const sourceIds = [...ids];
+    const links = db.prepare(`
+      SELECT *
+      FROM reference_links
+      WHERE source_project_id = ?
+         OR (
+           source_project_id = ''
+           AND source_kind = 'reference'
+           AND source_id IN (${sourceIds.map(() => "?").join(",") || "NULL"})
+         )
+      ORDER BY source_kind, source_project_id, source_id, target_doc_id, relation
+    `).all(projectId, ...sourceIds);
+
+    const targetIds = sortedUnique(links.map(row => row.target_doc_id).filter(id => !ids.has(id)));
+    if (!targetIds.length) continue;
+
+    const universeRows = universeId
+      ? db.prepare(`
+        SELECT *
+        FROM reference_docs
+        WHERE project_id IS NULL
+          AND universe_id = ?
+          AND doc_id IN (${targetIds.map(() => "?").join(",")})
+        ORDER BY doc_id
+      `).all(universeId, ...targetIds)
+      : [];
+
+    for (const row of universeRows) {
+      if (ids.has(row.doc_id)) continue;
+      ids.add(row.doc_id);
+      rows.push(row);
+      changed = true;
+    }
+  }
+
+  rows = rows.sort((a, b) => {
+    const projectOrder = Number(a.project_id === null) - Number(b.project_id === null);
+    if (projectOrder !== 0) return projectOrder;
+    return a.doc_id.localeCompare(b.doc_id);
+  });
+
+  return {
+    rows,
+    ids,
   };
 }
 
@@ -157,12 +221,17 @@ function collectProjectBackupSnapshot(db, { project, syncDir }) {
   const sceneTags = collectProjectScopedRows(db, "scene_tags", projectId, "scene_id, tag");
   const sceneThreads = collectProjectScopedRows(db, "scene_threads", projectId, "scene_id, thread_id");
   const threads = collectProjectScopedRows(db, "threads", projectId, "thread_id");
+  const directlyReferencedCharacterIds = new Set([
+    ...sceneCharacters.map(row => row.character_id),
+    ...epigraphCharacters.map(row => row.character_id),
+  ]);
 
   const characters = collectScopedWorldRows(db, "characters", {
     projectId,
     universeId: project.universe_id,
     idColumn: "character_id",
     orderBy: "project_id IS NULL, character_id",
+    includeUniverseIds: directlyReferencedCharacterIds,
   });
   const characterTraits = characters.ids.size
     ? db.prepare(`
@@ -187,13 +256,12 @@ function collectProjectBackupSnapshot(db, { project, syncDir }) {
     universeId: project.universe_id,
     idColumn: "place_id",
     orderBy: "project_id IS NULL, place_id",
+    includeUniverseIds: new Set(scenePlaces.map(row => row.place_id)),
   });
 
-  const referenceDocs = collectScopedWorldRows(db, "reference_docs", {
+  const referenceDocs = collectReferenceDocsForBackup(db, {
     projectId,
     universeId: project.universe_id,
-    idColumn: "doc_id",
-    orderBy: "project_id IS NULL, doc_id",
   });
   const referenceDocTags = referenceDocs.ids.size
     ? db.prepare(`

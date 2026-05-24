@@ -172,6 +172,19 @@ function seedProjectBackupFixture(db) {
     INSERT INTO characters (character_id, project_id, universe_id, name, role, arc_summary, first_appearance, file_path)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
+    "char-unreferenced",
+    null,
+    "shared-universe",
+    "Unreferenced Figure",
+    "background",
+    "Should not enter a project backup without a direct reference.",
+    null,
+    `${SYNC_DIR}/universes/shared-universe/world/characters/unreferenced.md`
+  );
+  db.prepare(`
+    INSERT INTO characters (character_id, project_id, universe_id, name, role, arc_summary, first_appearance, file_path)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
     "char-other",
     "other-novel",
     null,
@@ -210,6 +223,26 @@ function seedProjectBackupFixture(db) {
     "Other Place",
     `${SYNC_DIR}/projects/other-novel/world/places/other.md`
   );
+  db.prepare(`
+    INSERT INTO places (place_id, project_id, universe_id, name, file_path)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(
+    "place-shared",
+    null,
+    "shared-universe",
+    "Shared Harbor",
+    `${SYNC_DIR}/universes/shared-universe/world/places/shared-harbor.md`
+  );
+  db.prepare(`
+    INSERT INTO places (place_id, project_id, universe_id, name, file_path)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(
+    "place-unreferenced",
+    null,
+    "shared-universe",
+    "Unreferenced Place",
+    `${SYNC_DIR}/universes/shared-universe/world/places/unreferenced.md`
+  );
 
   db.prepare(`
     INSERT INTO scene_characters (scene_id, project_id, character_id)
@@ -218,11 +251,19 @@ function seedProjectBackupFixture(db) {
   db.prepare(`
     INSERT INTO scene_characters (scene_id, project_id, character_id)
     VALUES (?, ?, ?)
+  `).run("sc-first", "test-novel", "char-shared");
+  db.prepare(`
+    INSERT INTO scene_characters (scene_id, project_id, character_id)
+    VALUES (?, ?, ?)
   `).run("sc-first", "test-novel", "char-other");
   db.prepare(`
     INSERT INTO scene_places (scene_id, project_id, place_id)
     VALUES (?, ?, ?)
   `).run("sc-first", "test-novel", "place-other");
+  db.prepare(`
+    INSERT INTO scene_places (scene_id, project_id, place_id)
+    VALUES (?, ?, ?)
+  `).run("sc-first", "test-novel", "place-shared");
   db.prepare(`
     INSERT INTO scene_tags (scene_id, project_id, tag)
     VALUES (?, ?, ?)
@@ -261,13 +302,61 @@ function seedProjectBackupFixture(db) {
     `${SYNC_DIR}/projects/other-novel/world/reference/other.md`
   );
   db.prepare(`
+    INSERT INTO reference_docs (doc_id, project_id, universe_id, type, title, summary, file_path)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    "ref-shared",
+    null,
+    "shared-universe",
+    "lore",
+    "Shared Lore",
+    "Directly referenced universe lore.",
+    `${SYNC_DIR}/universes/shared-universe/world/reference/shared.md`
+  );
+  db.prepare(`
+    INSERT INTO reference_docs (doc_id, project_id, universe_id, type, title, summary, file_path)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    "ref-shared-chain",
+    null,
+    "shared-universe",
+    "lore",
+    "Shared Lore Chain",
+    "Referenced by another included reference doc.",
+    `${SYNC_DIR}/universes/shared-universe/world/reference/shared-chain.md`
+  );
+  db.prepare(`
+    INSERT INTO reference_docs (doc_id, project_id, universe_id, type, title, summary, file_path)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    "ref-unreferenced",
+    null,
+    "shared-universe",
+    "lore",
+    "Unreferenced Lore",
+    "Should not enter a project backup without a reference.",
+    `${SYNC_DIR}/universes/shared-universe/world/reference/unreferenced.md`
+  );
+  db.prepare(`
     INSERT INTO reference_doc_tags (doc_id, tag)
     VALUES (?, ?)
   `).run("ref-law", "legal");
   db.prepare(`
+    INSERT INTO reference_doc_tags (doc_id, tag)
+    VALUES (?, ?)
+  `).run("ref-shared", "shared");
+  db.prepare(`
     INSERT INTO reference_links (source_kind, source_project_id, source_id, target_doc_id, relation, origin)
     VALUES (?, ?, ?, ?, ?, ?)
   `).run("scene", "test-novel", "sc-first", "ref-other", "mentions", "explicit");
+  db.prepare(`
+    INSERT INTO reference_links (source_kind, source_project_id, source_id, target_doc_id, relation, origin)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run("scene", "test-novel", "sc-first", "ref-shared", "mentions", "explicit");
+  db.prepare(`
+    INSERT INTO reference_links (source_kind, source_project_id, source_id, target_doc_id, relation, origin)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run("reference", "", "ref-shared", "ref-shared-chain", "expands", "explicit");
   db.prepare(`
     INSERT INTO reference_links (source_kind, source_project_id, source_id, target_doc_id, relation, origin)
     VALUES (?, ?, ?, ?, ?, ?)
@@ -325,6 +414,13 @@ describe("buildProjectBackup", () => {
       assert.equal(first.snapshot.chapters[0].source_path, "projects/test-novel/chapters/ch-01");
       assert.equal(first.snapshot.scenes[0].file_path, "projects/test-novel/chapters/ch-01/sc-first.md");
       assert.equal(first.snapshot.characters.find(row => row.character_id === "char-shared").file_path, "universes/shared-universe/world/characters/shared.md");
+      assert.equal(first.snapshot.characters.some(row => row.character_id === "char-unreferenced"), false);
+      assert.equal(first.snapshot.places.some(row => row.place_id === "place-shared"), true);
+      assert.equal(first.snapshot.places.some(row => row.place_id === "place-unreferenced"), false);
+      assert.equal(first.snapshot.reference_docs.some(row => row.doc_id === "ref-shared"), true);
+      assert.equal(first.snapshot.reference_docs.some(row => row.doc_id === "ref-shared-chain"), true);
+      assert.equal(first.snapshot.reference_docs.some(row => row.doc_id === "ref-unreferenced"), false);
+      assert.equal(first.snapshot.reference_doc_tags.some(row => row.doc_id === "ref-shared"), true);
     } finally {
       db.close();
     }

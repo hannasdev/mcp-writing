@@ -15,6 +15,10 @@ import {
   writeProjectBackupFiles,
 } from "../structure/project-backup.js";
 import { runProjectBackupDiagnostics } from "../structure/project-backup-diagnostics.js";
+import {
+  createToolActor,
+  refreshProjectBackupAfterMutation,
+} from "../structure/project-backup-refresh.js";
 import { restoreStructureFromExport } from "../structure/structure-restore.js";
 
 export function registerSyncTools(s, {
@@ -39,6 +43,14 @@ export function registerSyncTools(s, {
   deriveLoglineFromProse,
   inferCharacterIdsFromProse,
 }) {
+  function backupMutationFields(backupResult) {
+    return {
+      operation_history: backupResult.operation_history,
+      backup_refresh: backupResult.backup_refresh,
+      backup_warnings: backupResult.backup_warnings,
+    };
+  }
+
   s.tool("sync", "Re-scan the sync folder and update derived scene/character/place indexes from disk. For already managed projects, sync reports file-derived chapter or epigraph drift without adopting it as canonical structure; use explicit import, repair, or structure tools for structural changes.", {}, async () => {
     const result = syncAll(db, SYNC_DIR, { writable: SYNC_DIR_WRITABLE });
     const parts = [`Sync complete. ${result.indexed} scenes indexed. ${result.staleMarked} scenes marked stale.`];
@@ -716,6 +728,28 @@ export function registerSyncTools(s, {
             db.prepare(`UPDATE scenes SET metadata_stale = 0 WHERE scene_id = ? AND project_id = ?`)
               .run(sceneId, project_id);
           }
+
+          if (changedScenes.length > 0) {
+            const backupResult = refreshProjectBackupAfterMutation(db, {
+              syncDir: SYNC_DIR,
+              projectId: project_id,
+              applicationVersion: MCP_SERVER_VERSION,
+              operation: "enrich_scene_characters_batch",
+              actor: createToolActor("enrich_scene_characters_batch"),
+              affected: {
+                scenes: changedScenes,
+              },
+              summary: `Applied batch character enrichment to ${changedScenes.length} scene(s).`,
+              before: null,
+              after: {
+                scenes_changed: changedScenes.length,
+              },
+            });
+            completedJob.result = {
+              ...completedJob.result,
+              ...backupMutationFields(backupResult),
+            };
+          }
         },
       });
 
@@ -878,6 +912,28 @@ export function registerSyncTools(s, {
         });
         db.prepare(`UPDATE scenes SET metadata_stale = 0 WHERE scene_id = ? AND project_id = ?`)
           .run(scene.scene_id, scene.project_id);
+        const backupResult = refreshProjectBackupAfterMutation(db, {
+          syncDir: SYNC_DIR,
+          projectId: scene.project_id,
+          applicationVersion: MCP_SERVER_VERSION,
+          operation: "enrich_scene",
+          actor: createToolActor("enrich_scene"),
+          affected: {
+            scenes: [scene.scene_id],
+          },
+          summary: `Enriched scene "${scene.scene_id}".`,
+          before: null,
+          after: {
+            scene: {
+              scene_id: scene.scene_id,
+              project_id: scene.project_id,
+              updated_fields: {
+                logline: Boolean(inferredLogline),
+                characters: inferredCharacters.length,
+              },
+            },
+          },
+        });
 
         return jsonResponse({
           ok: true,
@@ -889,6 +945,7 @@ export function registerSyncTools(s, {
             characters: inferredCharacters.length,
           },
           metadata_stale: false,
+          ...backupMutationFields(backupResult),
         });
       } catch (err) {
         if (err?.name === "CoreValidationError") {
