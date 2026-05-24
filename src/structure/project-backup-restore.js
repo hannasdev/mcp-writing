@@ -50,6 +50,10 @@ const NULLABLE_IDENTITY_FIELDS = new Map([
   ["character_relationships", new Set(["scene_id", "note"])],
 ]);
 
+const EMPTY_STRING_IDENTITY_FIELDS = new Map([
+  ["reference_links", new Set(["source_project_id"])],
+]);
+
 const PROJECT_SCOPE_FIELDS = new Map([
   ["characters", ["project_id"]],
   ["places", ["project_id"]],
@@ -67,12 +71,23 @@ function isRecord(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
-function identityFieldIsInvalid(row, field, nullableFields) {
+function identityFieldError(row, field, nullableFields, emptyStringFields) {
   const hasField = Object.hasOwn(row, field);
   const value = row[field];
-  return nullableFields.has(field)
-    ? !hasField || value === undefined
-    : !hasField || value === null || value === undefined || value === "";
+  if (!hasField || value === undefined) return { reason: "missing_identity" };
+  if (value === null) {
+    return nullableFields.has(field) ? null : { reason: "missing_identity" };
+  }
+  if (typeof value !== "string") {
+    return {
+      reason: "non_string_identity",
+      actual_type: Array.isArray(value) ? "array" : typeof value,
+    };
+  }
+  if (value === "" && !nullableFields.has(field) && !emptyStringFields.has(field)) {
+    return { reason: "empty_identity" };
+  }
+  return null;
 }
 
 function createDiagnostic(type, message, details = {}, {
@@ -453,6 +468,7 @@ function validateBundleShape({ manifest, snapshot, backupDir, projectId }) {
 
   for (const [domain, keyFields] of SNAPSHOT_ARRAY_DOMAINS) {
     const nullableFields = NULLABLE_IDENTITY_FIELDS.get(domain) ?? new Set();
+    const emptyStringFields = EMPTY_STRING_IDENTITY_FIELDS.get(domain) ?? new Set();
     const projectScopeFields = PROJECT_SCOPE_FIELDS.get(domain) ?? [];
     if (!(domain in snapshot)) {
       diagnostics.push(createDiagnostic(
@@ -492,16 +508,18 @@ function validateBundleShape({ manifest, snapshot, backupDir, projectId }) {
 
         let hasValidIdentity = true;
         for (const field of keyFields) {
-          if (identityFieldIsInvalid(row, field, nullableFields)) {
+          const identityError = identityFieldError(row, field, nullableFields, emptyStringFields);
+          if (identityError) {
             hasValidIdentity = false;
             diagnostics.push(createDiagnostic(
               "project_restore_invalid_snapshot",
-              `Backup canonical snapshot row ${index} in domain "${domain}" is missing required identity field "${field}".`,
+              `Backup canonical snapshot row ${index} in domain "${domain}" has invalid identity field "${field}".`,
               {
                 backup_dir: backupDir,
                 domain,
                 index,
                 field,
+                ...identityError,
               },
               { nextStep: "Regenerate the backup with export_project_backup before using it for recovery." }
             ));

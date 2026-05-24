@@ -399,6 +399,64 @@ describe("restoreProjectFromBackup", () => {
     assert.equal(result.plan, null);
   }));
 
+  test("allows empty source_project_id identity for universe-scoped reference links", () => withFixture(({ db, syncDir, backupDir }) => {
+    const built = exportBackup(db, syncDir, backupDir);
+    writeMalformedSnapshotWithValidChecksums(backupDir, {
+      ...built.snapshot,
+      reference_links: [
+        {
+          source_kind: "reference",
+          source_project_id: "",
+          source_id: "ref-universe",
+          target_doc_id: "ref-target",
+          relation: "mentions",
+          origin: "explicit",
+        },
+      ],
+    });
+
+    const result = restorePlan(db, syncDir, backupDir);
+
+    assert.equal(result.ok, true);
+    assert.ok(result.plan.changes.some(change => (
+      change.domain === "reference_links" &&
+      change.action === "create" &&
+      change.identity.source_project_id === ""
+    )));
+  }));
+
+  test("refuses non-string identity field values before planning", () => withFixture(({ db, syncDir, backupDir }) => {
+    const built = exportBackup(db, syncDir, backupDir);
+    writeMalformedSnapshotWithValidChecksums(backupDir, {
+      ...built.snapshot,
+      scene_tags: [
+        {
+          ...built.snapshot.scene_tags[0],
+          tag: {},
+        },
+      ],
+      character_relationships: [
+        {
+          ...built.snapshot.character_relationships[0],
+          note: {},
+        },
+      ],
+    });
+
+    const result = restorePlan(db, syncDir, backupDir);
+
+    assert.equal(result.ok, false);
+    assert.equal(result.action, "restore_refused");
+    assert.deepEqual(
+      result.diagnostics.map(diagnostic => [diagnostic.details.domain, diagnostic.details.field, diagnostic.details.reason]),
+      [
+        ["character_relationships", "note", "non_string_identity"],
+        ["scene_tags", "tag", "non_string_identity"],
+      ]
+    );
+    assert.equal(result.plan, null);
+  }));
+
   test("refuses project-scoped rows whose project_id does not match the backup project", () => withFixture(({ db, syncDir, backupDir }) => {
     const built = exportBackup(db, syncDir, backupDir);
     writeMalformedSnapshotWithValidChecksums(backupDir, {
