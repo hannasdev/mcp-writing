@@ -484,7 +484,7 @@ function validateBundleShape({ manifest, snapshot, backupDir, projectId }) {
         {
           backup_dir: backupDir,
           domain,
-          actual_type: typeof snapshot[domain],
+          actual_type: snapshot[domain] === null ? "null" : typeof snapshot[domain],
         },
         { nextStep: "Regenerate the backup with export_project_backup before using it for recovery." }
       ));
@@ -756,7 +756,7 @@ export function restoreProjectFromBackup(db, {
   return {
     ok: true,
     action: "planned",
-    dry_run: true,
+    dry_run: Boolean(dryRun),
     project_id: projectId,
     backup_dir: resolvedBackupDir,
     backup: {

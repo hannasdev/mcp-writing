@@ -331,6 +331,23 @@ describe("restoreProjectFromBackup", () => {
     assert.equal(result.plan, null);
   }));
 
+  test("reports null canonical snapshot array domains with a clear actual type", () => withFixture(({ db, syncDir, backupDir }) => {
+    const built = exportBackup(db, syncDir, backupDir);
+    writeMalformedSnapshotWithValidChecksums(backupDir, {
+      ...built.snapshot,
+      scenes: null,
+    });
+
+    const result = restorePlan(db, syncDir, backupDir);
+
+    assert.equal(result.ok, false);
+    assert.equal(result.action, "restore_refused");
+    assert.deepEqual(result.diagnostics.map(diagnostic => diagnostic.type), ["project_restore_invalid_snapshot"]);
+    assert.equal(result.diagnostics[0].details.domain, "scenes");
+    assert.equal(result.diagnostics[0].details.actual_type, "null");
+    assert.equal(result.plan, null);
+  }));
+
   test("refuses non-object rows in file-reference domains before file-reference validation", () => withFixture(({ db, syncDir, backupDir }) => {
     const built = exportBackup(db, syncDir, backupDir);
     writeMalformedSnapshotWithValidChecksums(backupDir, {
