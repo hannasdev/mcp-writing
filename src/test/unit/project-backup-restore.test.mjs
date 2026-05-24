@@ -6,6 +6,8 @@ import path from "node:path";
 import { openDb } from "../../core/db.js";
 import {
   buildProjectBackup,
+  computeProjectBackupBundleChecksum,
+  computeProjectBackupSnapshotChecksum,
   renderProjectBackupArtifact,
   writeProjectBackupFiles,
 } from "../../structure/project-backup.js";
@@ -97,6 +99,30 @@ function exportBackup(db, syncDir, backupDir) {
   assert.equal(built.ok, true);
   writeProjectBackupFiles(built, { outputDir: backupDir });
   return built;
+}
+
+function writeBundle(backupDir, { manifest, snapshot }) {
+  fs.writeFileSync(path.join(backupDir, "manifest.json"), renderProjectBackupArtifact(manifest), "utf8");
+  fs.writeFileSync(path.join(backupDir, "canonical.snapshot.json"), renderProjectBackupArtifact(snapshot), "utf8");
+}
+
+function writeMalformedSnapshotWithValidChecksums(backupDir, snapshot) {
+  const manifest = JSON.parse(fs.readFileSync(path.join(backupDir, "manifest.json"), "utf8"));
+  const nextManifestBase = {
+    ...manifest,
+    checksums: {
+      ...manifest.checksums,
+      canonical_snapshot_sha256: computeProjectBackupSnapshotChecksum(snapshot),
+    },
+  };
+  const nextManifest = {
+    ...nextManifestBase,
+    checksums: {
+      ...nextManifestBase.checksums,
+      bundle_sha256: computeProjectBackupBundleChecksum({ manifest: nextManifestBase, snapshot }),
+    },
+  };
+  writeBundle(backupDir, { manifest: nextManifest, snapshot });
 }
 
 function restorePlan(db, syncDir, backupDir, options = {}) {
@@ -191,6 +217,61 @@ describe("restoreProjectFromBackup", () => {
 
     assert.equal(result.ok, false);
     assert.deepEqual(result.diagnostics.map(diagnostic => diagnostic.type), ["project_restore_file_reference_missing"]);
+  }));
+
+  test("refuses non-object manifests with restore diagnostics", () => withFixture(({ db, syncDir, backupDir }) => {
+    exportBackup(db, syncDir, backupDir);
+    const snapshot = JSON.parse(fs.readFileSync(path.join(backupDir, "canonical.snapshot.json"), "utf8"));
+    writeBundle(backupDir, { manifest: null, snapshot });
+
+    const result = restorePlan(db, syncDir, backupDir);
+
+    assert.equal(result.ok, false);
+    assert.equal(result.action, "restore_refused");
+    assert.deepEqual(result.diagnostics.map(diagnostic => diagnostic.type), ["project_restore_invalid_manifest"]);
+    assert.equal(result.plan, null);
+  }));
+
+  test("refuses non-object canonical snapshots before planning", () => withFixture(({ db, syncDir, backupDir }) => {
+    exportBackup(db, syncDir, backupDir);
+    writeMalformedSnapshotWithValidChecksums(backupDir, []);
+
+    const result = restorePlan(db, syncDir, backupDir);
+
+    assert.equal(result.ok, false);
+    assert.equal(result.action, "restore_refused");
+    assert.deepEqual(result.diagnostics.map(diagnostic => diagnostic.type), ["project_restore_invalid_snapshot"]);
+    assert.equal(result.plan, null);
+  }));
+
+  test("refuses incomplete canonical snapshots before treating missing domains as deletes", () => withFixture(({ db, syncDir, backupDir }) => {
+    const built = exportBackup(db, syncDir, backupDir);
+    const { scenes: _scenes, ...incompleteSnapshot } = built.snapshot;
+    writeMalformedSnapshotWithValidChecksums(backupDir, incompleteSnapshot);
+
+    const result = restorePlan(db, syncDir, backupDir);
+
+    assert.equal(result.ok, false);
+    assert.equal(result.action, "restore_refused");
+    assert.deepEqual(result.diagnostics.map(diagnostic => diagnostic.type), ["project_restore_incomplete_snapshot"]);
+    assert.equal(result.diagnostics[0].details.domain, "scenes");
+    assert.equal(result.plan, null);
+  }));
+
+  test("refuses wrong-type canonical snapshot domains before file-reference validation", () => withFixture(({ db, syncDir, backupDir }) => {
+    const built = exportBackup(db, syncDir, backupDir);
+    writeMalformedSnapshotWithValidChecksums(backupDir, {
+      ...built.snapshot,
+      scenes: {},
+    });
+
+    const result = restorePlan(db, syncDir, backupDir);
+
+    assert.equal(result.ok, false);
+    assert.equal(result.action, "restore_refused");
+    assert.deepEqual(result.diagnostics.map(diagnostic => diagnostic.type), ["project_restore_invalid_snapshot"]);
+    assert.equal(result.diagnostics[0].details.domain, "scenes");
+    assert.equal(result.plan, null);
   }));
 
   test("keeps apply mode unavailable until the transactional restore milestone", () => withFixture(({ db, syncDir, backupDir }) => {

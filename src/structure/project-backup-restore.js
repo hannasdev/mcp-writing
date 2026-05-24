@@ -39,10 +39,21 @@ const FILE_REFERENCE_FIELDS = [
   ["reference_docs", "file_path", "required"],
 ];
 
+const SNAPSHOT_SINGLETON_DOMAINS = [
+  ["project", "object"],
+  ["universe", "nullable_object"],
+  ["external_references", "object"],
+  ["operation_history", "object"],
+];
+
 function stableStringify(value) {
   if (value === null || typeof value !== "object") return JSON.stringify(value);
   if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
   return `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${stableStringify(value[key])}`).join(",")}}`;
+}
+
+function isRecord(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
 function createDiagnostic(type, message, details = {}, {
@@ -347,6 +358,79 @@ function validateBundle({ manifest, snapshot, projectId, backupDir }) {
   return diagnostics;
 }
 
+function validateBundleShape({ manifest, snapshot, backupDir }) {
+  const diagnostics = [];
+  if (!isRecord(manifest)) {
+    diagnostics.push(createDiagnostic(
+      "project_restore_invalid_manifest",
+      "Backup manifest must be a JSON object.",
+      { backup_dir: backupDir, actual_type: Array.isArray(manifest) ? "array" : typeof manifest },
+      { nextStep: "Regenerate the backup with export_project_backup before using it for recovery." }
+    ));
+  } else if (!isRecord(manifest.checksums)) {
+    diagnostics.push(createDiagnostic(
+      "project_restore_invalid_manifest",
+      "Backup manifest is missing its checksum object.",
+      { backup_dir: backupDir, field: "checksums" },
+      { nextStep: "Regenerate the backup with export_project_backup before using it for recovery." }
+    ));
+  }
+
+  if (!isRecord(snapshot)) {
+    diagnostics.push(createDiagnostic(
+      "project_restore_invalid_snapshot",
+      "Backup canonical snapshot must be a JSON object.",
+      { backup_dir: backupDir, actual_type: Array.isArray(snapshot) ? "array" : typeof snapshot },
+      { nextStep: "Regenerate the backup with export_project_backup before using it for recovery." }
+    ));
+    return diagnostics;
+  }
+
+  for (const [domain, expected] of SNAPSHOT_SINGLETON_DOMAINS) {
+    const value = snapshot[domain];
+    const valid = expected === "nullable_object"
+      ? value === null || isRecord(value)
+      : isRecord(value);
+    if (!valid) {
+      diagnostics.push(createDiagnostic(
+        "project_restore_invalid_snapshot",
+        `Backup canonical snapshot field "${domain}" has an invalid shape.`,
+        {
+          backup_dir: backupDir,
+          domain,
+          expected,
+          actual_type: Array.isArray(value) ? "array" : typeof value,
+        },
+        { nextStep: "Regenerate the backup with export_project_backup before using it for recovery." }
+      ));
+    }
+  }
+
+  for (const [domain] of SNAPSHOT_ARRAY_DOMAINS) {
+    if (!(domain in snapshot)) {
+      diagnostics.push(createDiagnostic(
+        "project_restore_incomplete_snapshot",
+        `Backup canonical snapshot is missing required domain "${domain}".`,
+        { backup_dir: backupDir, domain },
+        { nextStep: "Regenerate the backup with export_project_backup before using it for recovery." }
+      ));
+    } else if (!Array.isArray(snapshot[domain])) {
+      diagnostics.push(createDiagnostic(
+        "project_restore_invalid_snapshot",
+        `Backup canonical snapshot domain "${domain}" must be an array.`,
+        {
+          backup_dir: backupDir,
+          domain,
+          actual_type: typeof snapshot[domain],
+        },
+        { nextStep: "Regenerate the backup with export_project_backup before using it for recovery." }
+      ));
+    }
+  }
+
+  return diagnostics;
+}
+
 function buildRestorePlan(currentSnapshot, backupSnapshot) {
   const changes = [
     ...compareSingleton("projects", currentSnapshot.project, backupSnapshot.project, ["project_id"]),
@@ -398,9 +482,13 @@ export function restoreProjectFromBackup(db, {
 
   const manifest = manifestRead.ok ? manifestRead.value : null;
   const snapshot = snapshotRead.ok ? snapshotRead.value : null;
-  if (manifest && snapshot) {
-    diagnostics.push(...validateBundle({ manifest, snapshot, projectId, backupDir: resolvedBackupDir }));
-    diagnostics.push(...validateFileReferences(snapshot, { syncDir }));
+  if (manifestRead.ok && snapshotRead.ok) {
+    const shapeDiagnostics = validateBundleShape({ manifest, snapshot, backupDir: resolvedBackupDir });
+    diagnostics.push(...shapeDiagnostics);
+    if (shapeDiagnostics.length === 0) {
+      diagnostics.push(...validateBundle({ manifest, snapshot, projectId, backupDir: resolvedBackupDir }));
+      diagnostics.push(...validateFileReferences(snapshot, { syncDir }));
+    }
   }
 
   diagnostics.sort((a, b) => {
