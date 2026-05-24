@@ -166,6 +166,33 @@ describe("runProjectBackupDiagnostics", () => {
     assert.deepEqual(diagnosticTypes(result), ["project_backup_unreadable"]);
   }));
 
+  test("refuses symlinked backup files as untrusted", () => withFixture(({ db, syncDir, backupDir }) => {
+    exportFixtureBackup(db, syncDir, backupDir);
+    const manifestPath = path.join(backupDir, "manifest.json");
+    const manifestTargetPath = path.join(backupDir, "manifest-target.json");
+    fs.renameSync(manifestPath, manifestTargetPath);
+    fs.symlinkSync(manifestTargetPath, manifestPath);
+
+    const result = diagnose(db, syncDir, backupDir);
+
+    assert.equal(result.ok, false);
+    assert.deepEqual(diagnosticTypes(result), ["project_backup_unreadable"]);
+    assert.equal(result.diagnostics[0].details.reason, "symlink");
+  }));
+
+  test("refuses non-regular backup files as untrusted", () => withFixture(({ db, syncDir, backupDir }) => {
+    exportFixtureBackup(db, syncDir, backupDir);
+    const snapshotPath = path.join(backupDir, "canonical.snapshot.json");
+    fs.rmSync(snapshotPath);
+    fs.mkdirSync(snapshotPath);
+
+    const result = diagnose(db, syncDir, backupDir);
+
+    assert.equal(result.ok, false);
+    assert.deepEqual(diagnosticTypes(result), ["project_backup_unreadable"]);
+    assert.equal(result.diagnostics[0].details.reason, "not_regular");
+  }));
+
   test("reports wrong-project backup bundles", () => withFixture(({ db, syncDir, backupDir }) => {
     exportFixtureBackup(db, syncDir, backupDir, "test-novel");
 
