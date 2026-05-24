@@ -35,12 +35,12 @@ const SNAPSHOT_ARRAY_DOMAINS = [
 ];
 
 const FILE_REFERENCE_FIELDS = [
-  ["chapters", "source_path", "optional"],
-  ["scenes", "file_path", "required"],
-  ["epigraphs", "file_path", "required"],
-  ["characters", "file_path", "optional"],
-  ["places", "file_path", "optional"],
-  ["reference_docs", "file_path", "required"],
+  ["chapters", "source_path", "optional", "directory"],
+  ["scenes", "file_path", "required", "file"],
+  ["epigraphs", "file_path", "required", "file"],
+  ["characters", "file_path", "optional", "file"],
+  ["places", "file_path", "optional", "file"],
+  ["reference_docs", "file_path", "required", "file"],
 ];
 
 const SNAPSHOT_SINGLETON_DOMAINS = [
@@ -299,7 +299,7 @@ function validateFileReferences(snapshot, { syncDir }) {
   const diagnostics = [];
   const syncRoot = path.resolve(syncDir);
   const syncRootReal = resolveBoundaryRootReal(syncRoot);
-  for (const [domain, field, requirement] of FILE_REFERENCE_FIELDS) {
+  for (const [domain, field, requirement, expectedKind] of FILE_REFERENCE_FIELDS) {
     for (const row of snapshot[domain] ?? []) {
       const value = row[field];
       const hasValue = value !== null && value !== undefined && value !== "";
@@ -365,19 +365,22 @@ function validateFileReferences(snapshot, { syncDir }) {
           { domain, field, path: value, resolved_path: resolved, reason: "symlink" },
           { nextStep: "Restore the referenced prose file as a regular file, then retry the dry run." }
         ));
-      } else if (requirement === "required" && !state.exists) {
+      } else if (!state.exists) {
         diagnostics.push(createDiagnostic(
           "project_restore_file_reference_missing",
-          `Backup ${domain} record points to a missing file.`,
+          `Backup ${domain} record points to a missing ${expectedKind}.`,
           { domain, field, path: value, resolved_path: boundaryResolvedPath },
-          { nextStep: "Restore the referenced prose file, then retry the dry run." }
+          { nextStep: "Restore the referenced path, then retry the dry run." }
         ));
-      } else if (requirement === "required" && !state.regular) {
+      } else if (
+        (expectedKind === "file" && !state.regular) ||
+        (expectedKind === "directory" && !state.directory)
+      ) {
         diagnostics.push(createDiagnostic(
           "project_restore_file_reference_invalid",
-          `Backup ${domain} record does not point to a regular file.`,
-          { domain, field, path: value, resolved_path: boundaryResolvedPath, reason: state.error ?? "not_regular" },
-          { nextStep: "Restore the referenced prose file as a regular file, then retry the dry run." }
+          `Backup ${domain} record does not point to a ${expectedKind}.`,
+          { domain, field, path: value, resolved_path: boundaryResolvedPath, expected_kind: expectedKind, reason: state.error ?? `not_${expectedKind}` },
+          { nextStep: "Restore the referenced path with the expected kind, then retry the dry run." }
         ));
       }
     }
@@ -594,7 +597,21 @@ function validateBundleShape({ manifest, snapshot, backupDir, projectId }) {
         }
 
         for (const field of projectScopeFields) {
-          if (!Object.hasOwn(row, field)) continue;
+          if (!Object.hasOwn(row, field)) {
+            diagnostics.push(createDiagnostic(
+              "project_restore_invalid_snapshot",
+              `Backup canonical snapshot row ${index} in domain "${domain}" is missing required project scope field "${field}".`,
+              {
+                backup_dir: backupDir,
+                domain,
+                index,
+                field,
+                reason: "missing_project_scope",
+              },
+              { nextStep: "Regenerate the backup with export_project_backup before using it for recovery." }
+            ));
+            continue;
+          }
           const value = row[field];
           if (value !== null && value !== undefined && value !== "" && value !== projectId) {
             diagnostics.push(createDiagnostic(

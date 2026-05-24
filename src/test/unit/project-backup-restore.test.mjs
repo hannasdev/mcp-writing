@@ -17,7 +17,9 @@ const UPDATED_AT = "2026-05-24T12:00:00.000Z";
 
 function seedFixture(db, syncDir) {
   const scenePath = path.join(syncDir, "projects/test-novel/scenes/sc-first.md");
+  const chapterPath = path.join(syncDir, "projects/test-novel/chapters/ch-01");
   fs.mkdirSync(path.dirname(scenePath), { recursive: true });
+  fs.mkdirSync(chapterPath, { recursive: true });
   fs.writeFileSync(scenePath, "# First Scene\n", "utf8");
 
   db.prepare(`
@@ -310,6 +312,28 @@ describe("restoreProjectFromBackup", () => {
     }
   }));
 
+  test("refuses optional file references when present but missing", () => withFixture(({ db, syncDir, backupDir }) => {
+    const built = exportBackup(db, syncDir, backupDir);
+    writeMalformedSnapshotWithValidChecksums(backupDir, {
+      ...built.snapshot,
+      characters: built.snapshot.characters.map(row => row.character_id === "char-elena"
+        ? {
+            ...row,
+            file_path: "projects/test-novel/world/characters/elena.md",
+          }
+        : row),
+    });
+
+    const result = restorePlan(db, syncDir, backupDir);
+
+    assert.equal(result.ok, false);
+    assert.equal(result.action, "restore_refused");
+    assert.deepEqual(result.diagnostics.map(diagnostic => diagnostic.type), ["project_restore_file_reference_missing"]);
+    assert.equal(result.diagnostics[0].details.domain, "characters");
+    assert.equal(result.diagnostics[0].details.field, "file_path");
+    assert.equal(result.plan, null);
+  }));
+
   test("refuses non-object manifests with restore diagnostics", () => withFixture(({ db, syncDir, backupDir }) => {
     exportBackup(db, syncDir, backupDir);
     const snapshot = JSON.parse(fs.readFileSync(path.join(backupDir, "canonical.snapshot.json"), "utf8"));
@@ -587,6 +611,31 @@ describe("restoreProjectFromBackup", () => {
         .sort((a, b) => a[0].localeCompare(b[0])),
       [["characters", "other-project"], ["places", "other-project"]]
     );
+    assert.equal(result.plan, null);
+  }));
+
+  test("refuses scoped world rows missing project scope fields", () => withFixture(({ db, syncDir, backupDir }) => {
+    const built = exportBackup(db, syncDir, backupDir);
+    const scopedCharacter = {
+      ...built.snapshot.characters.find(row => row.character_id === "char-elena"),
+    };
+    delete scopedCharacter.project_id;
+    writeMalformedSnapshotWithValidChecksums(backupDir, {
+      ...built.snapshot,
+      characters: [
+        scopedCharacter,
+        ...built.snapshot.characters.filter(row => row.character_id !== "char-elena"),
+      ],
+    });
+
+    const result = restorePlan(db, syncDir, backupDir);
+
+    assert.equal(result.ok, false);
+    assert.equal(result.action, "restore_refused");
+    assert.deepEqual(result.diagnostics.map(diagnostic => diagnostic.type), ["project_restore_invalid_snapshot"]);
+    assert.equal(result.diagnostics[0].details.domain, "characters");
+    assert.equal(result.diagnostics[0].details.field, "project_id");
+    assert.equal(result.diagnostics[0].details.reason, "missing_project_scope");
     assert.equal(result.plan, null);
   }));
 
