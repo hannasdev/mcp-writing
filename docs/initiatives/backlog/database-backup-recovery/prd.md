@@ -2,11 +2,11 @@
 
 **Status:** Active
 
-Current focus: M4 — Semantic Operation History.
+Current focus: M5 — Automatic Backup Refresh After Canonical Mutations.
 
 The product is ready to extend the SQLite-canonical architecture with a complete backup and recovery story.
 The need is clear because structural manuscript state has moved away from files-first authority.
-The internal backup artifact shape, explicit project backup export tool, and project backup diagnostics are implemented; the next implementation slice should add advisory operation history for provenance, progress analysis, and tool accountability without making restore depend on event replay.
+The internal backup artifact shape, explicit project backup export tool, project backup diagnostics, and initial advisory operation-history path are implemented; the next implementation slice should refresh generated backup artifacts after sanctioned canonical mutations without creating Git commits or making generated files authoritative.
 
 Implementation slices are tracked in [milestones.md](milestones.md).
 
@@ -66,7 +66,7 @@ Those tools remain useful as structure-specific workflows, while the project bac
 - Generate deterministic backup artifacts:
   - `manifest.json` for project identity, schema/app versions, covered domains, checksums, and restore compatibility.
   - `canonical.snapshot.json` for durable canonical state needed to rebuild the project database.
-- Defer `operations.jsonl` to the semantic operation history milestone. M1 may reserve the manifest field names needed to describe future operation-log support, but it should not implement operation logging.
+  - `operations.jsonl` for advisory semantic mutation history, provenance, progress analysis, and tool accountability.
 - Treat full deterministic snapshots as restore authority. Hash comparison should avoid no-op rewrites, and Git should provide storage/review deltas for changed snapshot content.
 - Do not use custom delta chains or event replay as the primary v1 recovery mechanism.
 - Refresh backup artifacts after successful canonical database mutations.
@@ -139,7 +139,7 @@ Those concerns can be revisited later for audit or analytics, but not as the rec
 
 ### Future Audit and Provenance
 
-The future `operations.jsonl` scope is valuable for provenance, accountability, and project analytics.
+The `operations.jsonl` scope is valuable for provenance, accountability, and project analytics.
 It may support questions such as who or what changed a project, when changes happened, how much structure or metadata changed during a period, and whether a sudden bulk rewrite deserves review.
 
 That audit trail should be advisory.

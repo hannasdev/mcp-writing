@@ -285,11 +285,29 @@ describe("create_chapter tool", () => {
     assert.equal(createParsed.chapter.title, "M7 New Crossing");
     assert.equal(createParsed.chapter.sort_index, 99);
     assert.equal(createParsed.diagnostics[0].code, "REPRESENTATION_DEFERRED");
+    assert.deepEqual(createParsed.backup_warnings, []);
+    assert.equal(createParsed.operation_history.appended, true);
+    assert.equal(createParsed.operation_history.relative_path, "project-backups/test-novel/operations.jsonl");
+    assert.equal(createParsed.operation_history.advisory, true);
+    assert.equal(createParsed.operation_history.restore_authority, false);
     assert.ok(createParsed.next_steps.some((step) => step.includes("assign_scene_to_chapter")));
 
     const chaptersText = await callWriteTool("list_chapters", { project_id: "test-novel" });
     const chaptersParsed = JSON.parse(chaptersText);
     assert.ok(chaptersParsed.results.some((row) => row.chapter_id === "ch-99-m7-new-crossing"));
+
+    const operationLines = fs.readFileSync(
+      path.join(writeSyncDir, "project-backups", "test-novel", "operations.jsonl"),
+      "utf8"
+    ).trimEnd().split("\n");
+    const operationRecord = JSON.parse(operationLines.at(-1));
+    assert.equal(operationRecord.operation, "create_chapter");
+    assert.equal(operationRecord.project_id, "test-novel");
+    assert.deepEqual(operationRecord.affected.chapters, ["ch-99-m7-new-crossing"]);
+    assert.equal(operationRecord.actor.id, "create_chapter");
+    assert.equal(operationRecord.after.chapter.title, "M7 New Crossing");
+    assert.equal(operationRecord.advisory, true);
+    assert.equal(operationRecord.restore_authority, false);
   });
 
   test("rejects creating a chapter at an occupied sort index", async () => {

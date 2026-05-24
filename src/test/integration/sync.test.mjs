@@ -134,6 +134,7 @@ describe("sync tool", () => {
     assert.equal(parsed.relative_output_dir, "project-backups/test-novel");
     assert.equal(parsed.relative_files.manifest, "project-backups/test-novel/manifest.json");
     assert.equal(parsed.relative_files.canonical_snapshot, "project-backups/test-novel/canonical.snapshot.json");
+    assert.equal(parsed.relative_files.operations, "project-backups/test-novel/operations.jsonl");
     assert.equal(parsed.manifest.canonical_source, "sqlite");
     assert.equal(parsed.manifest.generated_transparency, true);
     assert.equal(parsed.manifest.mutation_surface, false);
@@ -146,6 +147,7 @@ describe("sync tool", () => {
 
     const manifestPath = path.join(writeSyncDir, "project-backups", "test-novel", "manifest.json");
     const snapshotPath = path.join(writeSyncDir, "project-backups", "test-novel", "canonical.snapshot.json");
+    const operationsPath = path.join(writeSyncDir, "project-backups", "test-novel", "operations.jsonl");
     const firstManifest = fs.readFileSync(manifestPath, "utf8");
     const firstSnapshot = fs.readFileSync(snapshotPath, "utf8");
     const manifest = JSON.parse(firstManifest);
@@ -155,7 +157,9 @@ describe("sync tool", () => {
     assert.equal(manifest.backup_location, "project-backups/test-novel/");
     assert.equal(manifest.checksums.canonical_snapshot_sha256, parsed.manifest.checksums.canonical_snapshot_sha256);
     assert.equal(snapshot.project.project_id, "test-novel");
-    assert.equal(snapshot.operation_history.supported, false);
+    assert.equal(snapshot.operation_history.supported, true);
+    assert.equal(snapshot.operation_history.artifact, "operations.jsonl");
+    assert.equal(fs.readFileSync(operationsPath, "utf8"), "");
     assert.ok(snapshot.scenes.some(scene => scene.scene_id === "sc-001"));
     assert.equal(firstSnapshot.includes("This authored epigraph body must not enter"), false);
 
@@ -166,6 +170,7 @@ describe("sync tool", () => {
     assert.deepEqual(secondParsed.written, {
       manifest: false,
       canonical_snapshot: false,
+      operations: false,
     });
     assert.equal(fs.readFileSync(manifestPath, "utf8"), firstManifest);
     assert.equal(fs.readFileSync(snapshotPath, "utf8"), firstSnapshot);
@@ -184,6 +189,7 @@ describe("sync tool", () => {
     assert.deepEqual(parsed.written, {
       manifest: true,
       canonical_snapshot: true,
+      operations: true,
     });
 
     const manifestPath = path.join(writeSyncDir, "manual-backups", "test-novel", "manifest.json");

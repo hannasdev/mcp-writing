@@ -28,6 +28,10 @@ import {
   upsertExplicitReferenceLinkRow,
   upsertSerializedReferenceLinks,
 } from "./reference-link-persistence.js";
+import {
+  appendProjectBackupOperationRecord,
+  buildProjectBackupOperationRecord,
+} from "../structure/project-backup-operations.js";
 
 const STRUCTURAL_SCENE_METADATA_FIELDS = ["part", "chapter", "chapter_id", "timeline_position"];
 
@@ -317,6 +321,7 @@ export function registerMetadataTools(s, {
   db,
   SYNC_DIR,
   SYNC_DIR_WRITABLE,
+  MCP_SERVER_VERSION = "0.0.0",
   errorResponse,
   jsonResponse,
   createCanonicalWorldEntity,
@@ -683,6 +688,53 @@ export function registerMetadataTools(s, {
         return errorResponse("IO_ERROR", `Failed to create chapter '${plan.chapter.chapter_id}': ${err.message}`);
       }
 
+      const backupWarnings = [];
+      let operationHistory = null;
+      try {
+        const backupDir = path.join(path.resolve(SYNC_DIR), "project-backups", project_id);
+        const operationRecord = buildProjectBackupOperationRecord({
+          operation: "create_chapter",
+          projectId: project_id,
+          applicationVersion: MCP_SERVER_VERSION,
+          actor: {
+            type: "tool",
+            id: "create_chapter",
+          },
+          affected: {
+            chapters: [plan.chapter.chapter_id],
+          },
+          summary: `Created chapter "${plan.chapter.title}" at sort_index ${plan.chapter.sort_index}.`,
+          before: null,
+          after: {
+            chapter: {
+              chapter_id: plan.chapter.chapter_id,
+              project_id: plan.chapter.project_id,
+              title: plan.chapter.title,
+              sort_index: plan.chapter.sort_index,
+              logline: plan.chapter.logline,
+              metadata_stale: plan.chapter.metadata_stale,
+            },
+          },
+        });
+        const appended = appendProjectBackupOperationRecord(operationRecord, { outputDir: backupDir });
+        operationHistory = {
+          appended: appended.appended,
+          path: appended.operationLogPath,
+          relative_path: path.relative(path.resolve(SYNC_DIR), appended.operationLogPath).split(path.sep).join("/"),
+          advisory: true,
+          restore_authority: false,
+        };
+      } catch (err) {
+        backupWarnings.push({
+          code: "OPERATION_LOG_APPEND_FAILED",
+          message: `Chapter was created, but the advisory backup operation log could not be updated: ${err.message}`,
+          details: {
+            project_id,
+            chapter_id: plan.chapter.chapter_id,
+          },
+        });
+      }
+
       return jsonResponse({
         ok: true,
         action: "created",
@@ -695,6 +747,8 @@ export function registerMetadataTools(s, {
           metadata_stale: plan.chapter.metadata_stale,
         },
         diagnostics: plan.diagnostics,
+        operation_history: operationHistory,
+        backup_warnings: backupWarnings,
         next_steps: [
           "Use assign_scene_to_chapter to place unchaptered scenes in this chapter.",
           "Run diagnose_structure if existing folders or sidecars may imply conflicting structure.",

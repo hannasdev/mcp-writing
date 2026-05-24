@@ -8,6 +8,10 @@ import {
   writeGeneratedOutputFile,
 } from "../core/filesystem-boundary.js";
 import { CURRENT_SCHEMA_VERSION } from "../core/db.js";
+import {
+  ensureProjectBackupOperationLog,
+  PROJECT_BACKUP_OPERATION_LOG_FILE,
+} from "./project-backup-operations.js";
 
 export const PROJECT_BACKUP_SCHEMA_VERSION = 1;
 
@@ -254,9 +258,10 @@ function collectProjectBackupSnapshot(db, { project, syncDir }) {
     reference_links: referenceLinks,
     external_references: externalReferences,
     operation_history: {
-      supported: false,
+      supported: true,
       authority: false,
-      planned_artifact: "operations.jsonl",
+      advisory: true,
+      artifact: PROJECT_BACKUP_OPERATION_LOG_FILE,
     },
   };
 }
@@ -298,13 +303,16 @@ export function writeProjectBackupFiles(bundle, { outputDir }) {
 
   const manifestWritten = writeGeneratedOutputFileIfChanged(manifestPath, renderedManifest);
   const snapshotWritten = writeGeneratedOutputFileIfChanged(snapshotPath, renderedSnapshot);
+  const operationLog = ensureProjectBackupOperationLog({ outputDir: normalizedOutputDir });
 
   return {
     manifestPath,
     snapshotPath,
+    operationLogPath: operationLog.operationLogPath,
     written: {
       manifest: manifestWritten,
       canonical_snapshot: snapshotWritten,
+      operations: operationLog.written,
     },
   };
 }
@@ -353,8 +361,10 @@ export function buildProjectBackup(db, {
       operation_history_authority: false,
     },
     operation_history: {
-      supported: false,
-      planned_artifact: "operations.jsonl",
+      supported: true,
+      advisory: true,
+      artifact: PROJECT_BACKUP_OPERATION_LOG_FILE,
+      authority: false,
       purpose: "future audit, provenance, progress analytics, and tool accountability",
     },
     privacy: {

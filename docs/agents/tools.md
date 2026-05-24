@@ -111,12 +111,12 @@ Generate a deterministic JSON structure export from SQLite canonical state for G
 
 ## export_project_backup
 
-Generate a deterministic project backup bundle from SQLite canonical state. Writes manifest.json and canonical.snapshot.json under WRITING_SYNC_DIR for explicit review and future restore workflows; this is generated transparency only and does not mutate canonical state.
+Generate a deterministic project backup bundle from SQLite canonical state. Writes manifest.json, canonical.snapshot.json, and operations.jsonl under WRITING_SYNC_DIR for explicit review and future restore workflows; this is generated transparency only and does not mutate canonical state.
 
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |
 | `project_id` | `string` | Yes | Project ID to back up (e.g. 'test-novel' or 'universe-1/book-1-the-lamb'). |
-| `output_dir` | `string` | No | Directory under WRITING_SYNC_DIR where manifest.json and canonical.snapshot.json should be written. Defaults to project-backups/<project_id>. |
+| `output_dir` | `string` | No | Directory under WRITING_SYNC_DIR where manifest.json, canonical.snapshot.json, and operations.jsonl should be written. Defaults to project-backups/<project_id>. |
 
 ---
 

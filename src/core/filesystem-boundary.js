@@ -454,6 +454,18 @@ export function writeGeneratedOutputFile(filePath, data, {
   }
 }
 
+export function appendGeneratedOutputFile(filePath, data, {
+  encoding,
+  errorCode = "INVALID_OUTPUT_PATH",
+} = {}) {
+  assertRegularFileWriteTarget(filePath, { errorCode });
+  if (encoding) {
+    fs.appendFileSync(filePath, data, encoding);
+  } else {
+    fs.appendFileSync(filePath, data);
+  }
+}
+
 export function copyFileInsideBoundary(sourcePath, targetPath, {
   sourceBoundaryRoot,
   sourceBoundaryRootReal = sourceBoundaryRoot,

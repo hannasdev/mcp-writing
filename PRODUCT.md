@@ -11,7 +11,7 @@ It supports metadata-first reasoning, explicit prose editing workflows, and revi
 
 Active initiative: [Database Backup and Recovery](docs/initiatives/backlog/database-backup-recovery/prd.md).
 
-Current focus: M4 — Semantic Operation History. Project backup diagnostics and freshness checks are implemented; the next step is an advisory operation history that supports provenance and progress analysis without becoming restore authority.
+Current focus: M5 — Automatic Backup Refresh After Canonical Mutations. Project backup export, diagnostics, freshness checks, and the initial advisory operation-history path are implemented; the next step is refreshing generated backup artifacts after sanctioned canonical mutations without creating Git commits or making generated files authoritative.
 
 Most recent completed initiative: [Docker, CI, and Deployment Workflow](docs/initiatives/done/docker-ci-deployment/prd.md).
 

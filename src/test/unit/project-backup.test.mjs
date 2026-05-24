@@ -310,10 +310,14 @@ describe("buildProjectBackup", () => {
       assert.equal(first.manifest.restore_policy.authority, "full_snapshot");
       assert.equal(first.manifest.restore_policy.custom_delta_chains, false);
       assert.equal(first.manifest.restore_policy.event_replay_required, false);
-      assert.equal(first.manifest.operation_history.supported, false);
+      assert.equal(first.manifest.operation_history.supported, true);
+      assert.equal(first.manifest.operation_history.artifact, "operations.jsonl");
+      assert.equal(first.manifest.operation_history.authority, false);
 
       assert.deepEqual(first.snapshot.chapters.map(row => row.chapter_id), ["ch-01-first", "ch-02-second"]);
       assert.deepEqual(first.snapshot.scenes.map(row => row.scene_id), ["sc-first", "sc-second"]);
+      assert.equal(first.snapshot.operation_history.supported, true);
+      assert.equal(first.snapshot.operation_history.authority, false);
       assert.equal(first.snapshot.chapters[0].source_path, "projects/test-novel/chapters/ch-01");
       assert.equal(first.snapshot.scenes[0].file_path, "projects/test-novel/chapters/ch-01/sc-first.md");
       assert.equal(first.snapshot.characters.find(row => row.character_id === "char-shared").file_path, "universes/shared-universe/world/characters/shared.md");
@@ -401,17 +405,22 @@ describe("buildProjectBackup", () => {
       assert.deepEqual(firstWrite.written, {
         manifest: true,
         canonical_snapshot: true,
+        operations: true,
       });
+      assert.equal(fs.readFileSync(firstWrite.operationLogPath, "utf8"), "");
       const manifestBefore = fs.statSync(firstWrite.manifestPath).mtimeMs;
       const snapshotBefore = fs.statSync(firstWrite.snapshotPath).mtimeMs;
+      const operationsBefore = fs.statSync(firstWrite.operationLogPath).mtimeMs;
 
       const secondWrite = writeProjectBackupFiles(result, { outputDir });
       assert.deepEqual(secondWrite.written, {
         manifest: false,
         canonical_snapshot: false,
+        operations: false,
       });
       assert.equal(fs.statSync(secondWrite.manifestPath).mtimeMs, manifestBefore);
       assert.equal(fs.statSync(secondWrite.snapshotPath).mtimeMs, snapshotBefore);
+      assert.equal(fs.statSync(secondWrite.operationLogPath).mtimeMs, operationsBefore);
     } finally {
       db.close();
       fs.rmSync(outputDir, { recursive: true, force: true });

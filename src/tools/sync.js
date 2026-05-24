@@ -159,10 +159,10 @@ export function registerSyncTools(s, {
 
   s.tool(
     "export_project_backup",
-    "Generate a deterministic project backup bundle from SQLite canonical state. Writes manifest.json and canonical.snapshot.json under WRITING_SYNC_DIR for explicit review and future restore workflows; this is generated transparency only and does not mutate canonical state.",
+    "Generate a deterministic project backup bundle from SQLite canonical state. Writes manifest.json, canonical.snapshot.json, and operations.jsonl under WRITING_SYNC_DIR for explicit review and future restore workflows; this is generated transparency only and does not mutate canonical state.",
     {
       project_id: z.string().describe("Project ID to back up (e.g. 'test-novel' or 'universe-1/book-1-the-lamb')."),
-      output_dir: z.string().optional().describe("Directory under WRITING_SYNC_DIR where manifest.json and canonical.snapshot.json should be written. Defaults to project-backups/<project_id>."),
+      output_dir: z.string().optional().describe("Directory under WRITING_SYNC_DIR where manifest.json, canonical.snapshot.json, and operations.jsonl should be written. Defaults to project-backups/<project_id>."),
     },
     async ({ project_id, output_dir }) => {
       if (!SYNC_DIR_WRITABLE) {
@@ -214,11 +214,13 @@ export function registerSyncTools(s, {
           files: {
             manifest: written.manifestPath,
             canonical_snapshot: written.snapshotPath,
+            operations: written.operationLogPath,
           },
           written: written.written,
           relative_files: {
             manifest: relativePath("manifest.json"),
             canonical_snapshot: relativePath("canonical.snapshot.json"),
+            operations: relativePath("operations.jsonl"),
           },
           manifest: {
             schema_version: built.manifest.schema_version,

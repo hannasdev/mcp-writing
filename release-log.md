@@ -6,6 +6,14 @@ This complements `CHANGELOG.md`:
 - `CHANGELOG.md` is technical and release-oriented.
 - This log is plain-language and outcome-oriented.
 
+### 2026-05-24 — Add advisory project operation history
+
+- What changed: Project backup bundles now include `operations.jsonl`, and `create_chapter` appends an advisory semantic operation record after the canonical database mutation succeeds.
+- Why it matters: Authors and AI agents can review how SQLite-canonical structure changed over time, while restore still depends on the manifest and deterministic snapshot rather than event replay.
+- Who is affected: Authors, maintainers, and AI agents reviewing generated project backup artifacts or auditing chapter-creation workflows.
+- Action needed: Review `operations.jsonl` alongside `manifest.json` and `canonical.snapshot.json`; treat it as provenance and analytics context, not a mutation or restore authority.
+- PR: Pending
+
 ### 2026-05-24 — Diagnose project backup trust and freshness
 
 - What changed: Added `diagnose_project_backups`, a read-only check for missing, partial, wrong-project, incompatible, tampered, unreadable, and stale project backup bundles.

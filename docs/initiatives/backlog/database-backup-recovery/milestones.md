@@ -5,7 +5,7 @@
 This milestone plan breaks the PRD into independently reviewable slices.
 Each milestone should leave the system in a releasable state and preserve the target architecture rule that SQLite remains canonical while generated backup artifacts provide transparency and explicit recovery input.
 
-Current focus: M4 — Semantic Operation History.
+Current focus: M5 — Automatic Backup Refresh After Canonical Mutations.
 
 ## Objective
 
@@ -167,7 +167,7 @@ Evidence:
 
 ## M4 — Semantic Operation History
 
-Status: Current focus.
+Status: Delivered.
 
 Goal: make canonical mutations reviewable as a human-readable event stream.
 
@@ -209,7 +209,22 @@ Out of scope:
 - Rewriting old operation records.
 - Automatic Git commits.
 
+Evidence:
+
+- [src/structure/project-backup-operations.js](../../../../src/structure/project-backup-operations.js)
+- [src/structure/project-backup.js](../../../../src/structure/project-backup.js)
+- [src/tools/metadata.js](../../../../src/tools/metadata.js)
+- [src/test/unit/project-backup-operations.test.mjs](../../../../src/test/unit/project-backup-operations.test.mjs)
+- [src/test/integration/metadata.test.mjs](../../../../src/test/integration/metadata.test.mjs)
+
+Notes:
+
+- Initial mutation coverage is deliberately narrow: `create_chapter` proves the event envelope, append-only artifact, and warning behavior on a representative sanctioned structural workflow.
+- M5 should generalize the post-mutation path so backup refresh and operation-history emission are applied consistently across canonical mutation tools.
+
 ## M5 — Automatic Backup Refresh After Canonical Mutations
+
+Status: Current focus.
 
 Goal: keep generated backup artifacts fresh during ordinary sanctioned workflows.
 
