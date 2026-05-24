@@ -274,6 +274,74 @@ describe("restoreProjectFromBackup", () => {
     assert.equal(result.plan, null);
   }));
 
+  test("refuses non-object rows in file-reference domains before file-reference validation", () => withFixture(({ db, syncDir, backupDir }) => {
+    const built = exportBackup(db, syncDir, backupDir);
+    writeMalformedSnapshotWithValidChecksums(backupDir, {
+      ...built.snapshot,
+      scenes: [null],
+    });
+
+    const result = restorePlan(db, syncDir, backupDir);
+
+    assert.equal(result.ok, false);
+    assert.equal(result.action, "restore_refused");
+    assert.deepEqual(result.diagnostics.map(diagnostic => diagnostic.type), ["project_restore_invalid_snapshot"]);
+    assert.equal(result.diagnostics[0].details.domain, "scenes");
+    assert.equal(result.diagnostics[0].details.index, 0);
+    assert.equal(result.plan, null);
+  }));
+
+  test("refuses rows missing identity fields before planning", () => withFixture(({ db, syncDir, backupDir }) => {
+    const built = exportBackup(db, syncDir, backupDir);
+    writeMalformedSnapshotWithValidChecksums(backupDir, {
+      ...built.snapshot,
+      scenes: [{}],
+    });
+
+    const result = restorePlan(db, syncDir, backupDir);
+
+    assert.equal(result.ok, false);
+    assert.equal(result.action, "restore_refused");
+    assert.deepEqual(
+      result.diagnostics.map(diagnostic => [diagnostic.details.domain, diagnostic.details.field]),
+      [["scenes", "project_id"], ["scenes", "scene_id"]]
+    );
+    assert.equal(result.plan, null);
+  }));
+
+  test("refuses non-object rows in non-file domains before planning", () => withFixture(({ db, syncDir, backupDir }) => {
+    const built = exportBackup(db, syncDir, backupDir);
+    writeMalformedSnapshotWithValidChecksums(backupDir, {
+      ...built.snapshot,
+      scene_tags: [null],
+    });
+
+    const result = restorePlan(db, syncDir, backupDir);
+
+    assert.equal(result.ok, false);
+    assert.equal(result.action, "restore_refused");
+    assert.deepEqual(result.diagnostics.map(diagnostic => diagnostic.type), ["project_restore_invalid_snapshot"]);
+    assert.equal(result.diagnostics[0].details.domain, "scene_tags");
+    assert.equal(result.plan, null);
+  }));
+
+  test("refuses join rows missing one required identity key", () => withFixture(({ db, syncDir, backupDir }) => {
+    const built = exportBackup(db, syncDir, backupDir);
+    writeMalformedSnapshotWithValidChecksums(backupDir, {
+      ...built.snapshot,
+      scene_tags: [{ project_id: "test-novel", tag: "opening" }],
+    });
+
+    const result = restorePlan(db, syncDir, backupDir);
+
+    assert.equal(result.ok, false);
+    assert.equal(result.action, "restore_refused");
+    assert.deepEqual(result.diagnostics.map(diagnostic => diagnostic.type), ["project_restore_invalid_snapshot"]);
+    assert.equal(result.diagnostics[0].details.domain, "scene_tags");
+    assert.equal(result.diagnostics[0].details.field, "scene_id");
+    assert.equal(result.plan, null);
+  }));
+
   test("keeps apply mode unavailable until the transactional restore milestone", () => withFixture(({ db, syncDir, backupDir }) => {
     exportBackup(db, syncDir, backupDir);
 

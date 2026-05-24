@@ -406,7 +406,7 @@ function validateBundleShape({ manifest, snapshot, backupDir }) {
     }
   }
 
-  for (const [domain] of SNAPSHOT_ARRAY_DOMAINS) {
+  for (const [domain, keyFields] of SNAPSHOT_ARRAY_DOMAINS) {
     if (!(domain in snapshot)) {
       diagnostics.push(createDiagnostic(
         "project_restore_incomplete_snapshot",
@@ -425,6 +425,39 @@ function validateBundleShape({ manifest, snapshot, backupDir }) {
         },
         { nextStep: "Regenerate the backup with export_project_backup before using it for recovery." }
       ));
+    } else {
+      snapshot[domain].forEach((row, index) => {
+        if (!isRecord(row)) {
+          diagnostics.push(createDiagnostic(
+            "project_restore_invalid_snapshot",
+            `Backup canonical snapshot row ${index} in domain "${domain}" must be an object.`,
+            {
+              backup_dir: backupDir,
+              domain,
+              index,
+              actual_type: Array.isArray(row) ? "array" : typeof row,
+            },
+            { nextStep: "Regenerate the backup with export_project_backup before using it for recovery." }
+          ));
+          return;
+        }
+
+        for (const field of keyFields) {
+          if (row[field] === null || row[field] === undefined || row[field] === "") {
+            diagnostics.push(createDiagnostic(
+              "project_restore_invalid_snapshot",
+              `Backup canonical snapshot row ${index} in domain "${domain}" is missing required identity field "${field}".`,
+              {
+                backup_dir: backupDir,
+                domain,
+                index,
+                field,
+              },
+              { nextStep: "Regenerate the backup with export_project_backup before using it for recovery." }
+            ));
+          }
+        }
+      });
     }
   }
 
