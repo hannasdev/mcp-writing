@@ -253,6 +253,29 @@ describe("restoreProjectFromBackup", () => {
     assert.deepEqual(result.diagnostics.map(diagnostic => diagnostic.type), ["project_restore_file_reference_missing"]);
   }));
 
+  test("refuses non-string file reference fields without throwing", () => withFixture(({ db, syncDir, backupDir }) => {
+    const built = exportBackup(db, syncDir, backupDir);
+    writeMalformedSnapshotWithValidChecksums(backupDir, {
+      ...built.snapshot,
+      scenes: [
+        {
+          ...built.snapshot.scenes[0],
+          file_path: {},
+        },
+      ],
+    });
+
+    const result = restorePlan(db, syncDir, backupDir);
+
+    assert.equal(result.ok, false);
+    assert.equal(result.action, "restore_refused");
+    assert.deepEqual(result.diagnostics.map(diagnostic => diagnostic.type), ["project_restore_file_reference_invalid"]);
+    assert.equal(result.diagnostics[0].details.domain, "scenes");
+    assert.equal(result.diagnostics[0].details.field, "file_path");
+    assert.equal(result.diagnostics[0].details.reason, "non_string_file_reference");
+    assert.equal(result.plan, null);
+  }));
+
   test("refuses non-object manifests with restore diagnostics", () => withFixture(({ db, syncDir, backupDir }) => {
     exportBackup(db, syncDir, backupDir);
     const snapshot = JSON.parse(fs.readFileSync(path.join(backupDir, "canonical.snapshot.json"), "utf8"));

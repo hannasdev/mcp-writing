@@ -276,7 +276,8 @@ function validateFileReferences(snapshot, { syncDir }) {
   for (const [domain, field, requirement] of FILE_REFERENCE_FIELDS) {
     for (const row of snapshot[domain] ?? []) {
       const value = row[field];
-      if (!value) {
+      const hasValue = value !== null && value !== undefined && value !== "";
+      if (!hasValue) {
         if (requirement === "required") {
           diagnostics.push(createDiagnostic(
             "project_restore_file_reference_invalid",
@@ -285,6 +286,21 @@ function validateFileReferences(snapshot, { syncDir }) {
             { nextStep: "Regenerate the backup before using it for recovery." }
           ));
         }
+        continue;
+      }
+
+      if (typeof value !== "string") {
+        diagnostics.push(createDiagnostic(
+          "project_restore_file_reference_invalid",
+          `Backup ${domain} record has non-string ${field}.`,
+          {
+            domain,
+            field,
+            actual_type: Array.isArray(value) ? "array" : typeof value,
+            reason: "non_string_file_reference",
+          },
+          { nextStep: "Regenerate the backup before using it for recovery." }
+        ));
         continue;
       }
 
