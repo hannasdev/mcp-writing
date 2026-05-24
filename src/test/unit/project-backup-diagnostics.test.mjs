@@ -224,6 +224,23 @@ describe("runProjectBackupDiagnostics", () => {
     assert.deepEqual(new Set(diagnosticTypes(result)), new Set(["project_backup_wrong_project"]));
   }));
 
+  test("reports current snapshot build failures without throwing", () => withFixture(({ db, syncDir, backupDir }) => {
+    exportFixtureBackup(db, syncDir, backupDir);
+    db.prepare(`
+      UPDATE scenes
+      SET file_path = ?
+      WHERE project_id = ? AND scene_id = ?
+    `).run(path.join(path.dirname(syncDir), "outside.md"), "test-novel", "sc-first");
+
+    const result = diagnose(db, syncDir, backupDir);
+
+    assert.equal(result.ok, false);
+    assert.deepEqual(diagnosticTypes(result), ["project_backup_current_snapshot_failed"]);
+    assert.equal(result.diagnostics[0].severity, "error");
+    assert.match(result.diagnostics[0].message, /outside sync_dir/);
+    assert.equal(result.diagnostics[0].details.phase, "current_snapshot");
+  }));
+
   test("reports incompatible schema versions", () => withFixture(({ db, syncDir, backupDir }) => {
     exportFixtureBackup(db, syncDir, backupDir);
     const manifestPath = path.join(backupDir, "manifest.json");

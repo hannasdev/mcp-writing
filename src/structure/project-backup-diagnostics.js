@@ -159,12 +159,27 @@ export function runProjectBackupDiagnostics(db, {
     }
   }
 
-  const built = buildProjectBackup(db, {
-    projectId,
-    syncDir,
-    applicationVersion,
-    backupLocation,
-  });
+  let built;
+  try {
+    built = buildProjectBackup(db, {
+      projectId,
+      syncDir,
+      applicationVersion,
+      backupLocation,
+    });
+  } catch (error) {
+    built = {
+      ok: false,
+      error: {
+        message: error instanceof Error ? error.message : String(error),
+        details: {
+          project_id: projectId,
+          backup_dir: resolvedBackupDir,
+          phase: "current_snapshot",
+        },
+      },
+    };
+  }
   if (!built.ok) {
     addDiagnostic(
       diagnostics,
