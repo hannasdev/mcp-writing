@@ -286,18 +286,37 @@ describe("restoreProjectFromBackup", () => {
     assert.equal(result.ok, false);
     assert.equal(result.action, "restore_refused");
     assert.deepEqual(result.diagnostics.map(diagnostic => diagnostic.type), ["project_restore_invalid_manifest"]);
+    assert.equal(result.diagnostics[0].details.actual_type, "null");
     assert.equal(result.plan, null);
   }));
 
   test("refuses non-object canonical snapshots before planning", () => withFixture(({ db, syncDir, backupDir }) => {
     exportBackup(db, syncDir, backupDir);
-    writeMalformedSnapshotWithValidChecksums(backupDir, []);
+    writeMalformedSnapshotWithValidChecksums(backupDir, null);
 
     const result = restorePlan(db, syncDir, backupDir);
 
     assert.equal(result.ok, false);
     assert.equal(result.action, "restore_refused");
     assert.deepEqual(result.diagnostics.map(diagnostic => diagnostic.type), ["project_restore_invalid_snapshot"]);
+    assert.equal(result.diagnostics[0].details.actual_type, "null");
+    assert.equal(result.plan, null);
+  }));
+
+  test("reports null singleton snapshot fields with a clear actual type", () => withFixture(({ db, syncDir, backupDir }) => {
+    const built = exportBackup(db, syncDir, backupDir);
+    writeMalformedSnapshotWithValidChecksums(backupDir, {
+      ...built.snapshot,
+      project: null,
+    });
+
+    const result = restorePlan(db, syncDir, backupDir);
+
+    assert.equal(result.ok, false);
+    assert.equal(result.action, "restore_refused");
+    assert.deepEqual(result.diagnostics.map(diagnostic => diagnostic.type), ["project_restore_invalid_snapshot"]);
+    assert.equal(result.diagnostics[0].details.domain, "project");
+    assert.equal(result.diagnostics[0].details.actual_type, "null");
     assert.equal(result.plan, null);
   }));
 

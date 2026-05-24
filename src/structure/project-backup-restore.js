@@ -71,6 +71,12 @@ function isRecord(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
+function jsonType(value) {
+  if (value === null) return "null";
+  if (Array.isArray(value)) return "array";
+  return typeof value;
+}
+
 function identityFieldError(row, field, nullableFields, emptyStringFields) {
   const hasField = Object.hasOwn(row, field);
   const value = row[field];
@@ -81,7 +87,7 @@ function identityFieldError(row, field, nullableFields, emptyStringFields) {
   if (typeof value !== "string") {
     return {
       reason: "non_string_identity",
-      actual_type: Array.isArray(value) ? "array" : typeof value,
+      actual_type: jsonType(value),
     };
   }
   if (value === "" && !nullableFields.has(field) && !emptyStringFields.has(field)) {
@@ -311,7 +317,7 @@ function validateFileReferences(snapshot, { syncDir }) {
           {
             domain,
             field,
-            actual_type: Array.isArray(value) ? "array" : typeof value,
+            actual_type: jsonType(value),
             reason: "non_string_file_reference",
           },
           { nextStep: "Regenerate the backup before using it for recovery." }
@@ -424,7 +430,7 @@ function validateBundleShape({ manifest, snapshot, backupDir, projectId }) {
     diagnostics.push(createDiagnostic(
       "project_restore_invalid_manifest",
       "Backup manifest must be a JSON object.",
-      { backup_dir: backupDir, actual_type: Array.isArray(manifest) ? "array" : typeof manifest },
+      { backup_dir: backupDir, actual_type: jsonType(manifest) },
       { nextStep: "Regenerate the backup with export_project_backup before using it for recovery." }
     ));
   } else if (!isRecord(manifest.checksums)) {
@@ -440,7 +446,7 @@ function validateBundleShape({ manifest, snapshot, backupDir, projectId }) {
     diagnostics.push(createDiagnostic(
       "project_restore_invalid_snapshot",
       "Backup canonical snapshot must be a JSON object.",
-      { backup_dir: backupDir, actual_type: Array.isArray(snapshot) ? "array" : typeof snapshot },
+      { backup_dir: backupDir, actual_type: jsonType(snapshot) },
       { nextStep: "Regenerate the backup with export_project_backup before using it for recovery." }
     ));
     return diagnostics;
@@ -459,7 +465,7 @@ function validateBundleShape({ manifest, snapshot, backupDir, projectId }) {
           backup_dir: backupDir,
           domain,
           expected,
-          actual_type: Array.isArray(value) ? "array" : typeof value,
+          actual_type: jsonType(value),
         },
         { nextStep: "Regenerate the backup with export_project_backup before using it for recovery." }
       ));
@@ -484,7 +490,7 @@ function validateBundleShape({ manifest, snapshot, backupDir, projectId }) {
         {
           backup_dir: backupDir,
           domain,
-          actual_type: snapshot[domain] === null ? "null" : typeof snapshot[domain],
+          actual_type: jsonType(snapshot[domain]),
         },
         { nextStep: "Regenerate the backup with export_project_backup before using it for recovery." }
       ));
@@ -499,7 +505,7 @@ function validateBundleShape({ manifest, snapshot, backupDir, projectId }) {
               backup_dir: backupDir,
               domain,
               index,
-              actual_type: Array.isArray(row) ? "array" : typeof row,
+              actual_type: jsonType(row),
             },
             { nextStep: "Regenerate the backup with export_project_backup before using it for recovery." }
           ));
