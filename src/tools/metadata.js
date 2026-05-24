@@ -545,6 +545,10 @@ export function registerMetadataTools(s, {
       if (!SYNC_DIR_WRITABLE) {
         return errorResponse("READ_ONLY", "Cannot write thread links: sync dir is read-only.");
       }
+      const projectIdCheck = validateProjectId(project_id);
+      if (!projectIdCheck.ok) {
+        return errorResponse("INVALID_PROJECT_ID", projectIdCheck.reason, { project_id });
+      }
 
       const existingThread = db.prepare(`SELECT thread_id, project_id FROM threads WHERE thread_id = ?`).get(thread_id);
       if (existingThread && existingThread.project_id !== project_id) {

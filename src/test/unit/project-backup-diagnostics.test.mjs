@@ -193,6 +193,28 @@ describe("runProjectBackupDiagnostics", () => {
     assert.equal(result.diagnostics[0].details.reason, "not_regular");
   }));
 
+  test("reports lstat failures as unreadable backup files", () => withFixture(({ db, syncDir, backupDir }) => {
+    exportFixtureBackup(db, syncDir, backupDir);
+    const originalLstatSync = fs.lstatSync;
+    const manifestPath = path.join(backupDir, "manifest.json");
+    fs.lstatSync = (filePath, ...args) => {
+      if (filePath === manifestPath) {
+        throw new Error("permission denied");
+      }
+      return originalLstatSync.call(fs, filePath, ...args);
+    };
+    try {
+      const result = diagnose(db, syncDir, backupDir);
+
+      assert.equal(result.ok, false);
+      assert.deepEqual(diagnosticTypes(result), ["project_backup_unreadable"]);
+      assert.equal(result.diagnostics[0].details.reason, "lstat_failed");
+      assert.equal(result.diagnostics[0].details.message, "permission denied");
+    } finally {
+      fs.lstatSync = originalLstatSync;
+    }
+  }));
+
   test("reports wrong-project backup bundles", () => withFixture(({ db, syncDir, backupDir }) => {
     exportFixtureBackup(db, syncDir, backupDir, "test-novel");
 

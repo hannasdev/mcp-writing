@@ -23,7 +23,7 @@ export function registerSyncTools(s, {
   SYNC_DIR_ABS,
   SYNC_DIR_REAL,
   SYNC_DIR_WRITABLE,
-  MCP_SERVER_VERSION,
+  MCP_SERVER_VERSION = "0.0.0",
   asyncJobs,
   errorResponse,
   jsonResponse,

@@ -1,4 +1,5 @@
 import path from "node:path";
+import { validateProjectId } from "../sync/importer.js";
 import { buildProjectBackup, writeProjectBackupFiles } from "./project-backup.js";
 import {
   appendProjectBackupOperationRecord,
@@ -68,6 +69,10 @@ export function refreshProjectBackupAfterMutation(db, {
   if (!syncDir) throw new TypeError("syncDir is required.");
   if (!projectId) throw new TypeError("projectId is required.");
   if (!operation) throw new TypeError("operation is required.");
+  const projectIdCheck = validateProjectId(projectId);
+  if (!projectIdCheck.ok) {
+    throw new TypeError(projectIdCheck.reason);
+  }
 
   const syncDirAbs = path.resolve(syncDir);
   const outputDir = path.join(syncDirAbs, "project-backups", projectId);

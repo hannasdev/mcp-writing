@@ -94,6 +94,17 @@ describe("project backup post-mutation refresh", () => {
     assert.equal(result.backup_warnings[0].details.phase, "operation_history");
   });
 
+  test("rejects invalid project ids before deriving backup paths", () => {
+    assert.throws(
+      () => refreshProjectBackupAfterMutation(null, {
+        syncDir: "/tmp/mcp-writing-sync",
+        projectId: "../outside",
+        operation: "create_chapter",
+      }),
+      /project_id must not contain/
+    );
+  });
+
   test("reports backup write failures without hiding operation history", () => {
     const result = refreshProjectBackupAfterMutation(null, {
       syncDir: "/tmp/mcp-writing-sync",

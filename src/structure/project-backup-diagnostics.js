@@ -44,7 +44,19 @@ function fileState(filePath) {
   if (!fs.existsSync(filePath)) {
     return { exists: false, readable: false, regular: false, symlink: false };
   }
-  const stat = fs.lstatSync(filePath);
+  let stat;
+  try {
+    stat = fs.lstatSync(filePath);
+  } catch (error) {
+    return {
+      exists: true,
+      readable: false,
+      regular: false,
+      symlink: false,
+      error: "lstat_failed",
+      message: error instanceof Error ? error.message : String(error),
+    };
+  }
   return {
     exists: true,
     readable: true,
@@ -59,7 +71,7 @@ function readJsonFile(filePath) {
     return { ok: false, state, error: "missing" };
   }
   if (state.symlink || !state.regular) {
-    return { ok: false, state, error: state.symlink ? "symlink" : "not_regular" };
+    return { ok: false, state, error: state.error ?? (state.symlink ? "symlink" : "not_regular"), message: state.message };
   }
   try {
     return {

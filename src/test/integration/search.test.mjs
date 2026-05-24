@@ -863,6 +863,18 @@ describe("upsert_thread_link tool", () => {
     assert.deepEqual(parsed.backup_warnings, []);
   });
 
+  test("rejects invalid project id before writing thread links", async () => {
+    const text = await callWriteTool("upsert_thread_link", {
+      project_id: "../outside",
+      thread_id: "thread-invalid-project",
+      thread_name: "Invalid Project",
+      scene_id: "sc-001",
+    });
+    const parsed = JSON.parse(text);
+    assert.equal(parsed.ok, false);
+    assert.equal(parsed.error.code, "INVALID_PROJECT_ID");
+  });
+
   test("updates existing link beat idempotently", async () => {
     const text = await callWriteTool("upsert_thread_link", {
       project_id: "test-novel",
