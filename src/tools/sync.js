@@ -19,6 +19,7 @@ import {
   createToolActor,
   refreshProjectBackupAfterMutation,
 } from "../structure/project-backup-refresh.js";
+import { restoreProjectFromBackup } from "../structure/project-backup-restore.js";
 import { restoreStructureFromExport } from "../structure/structure-restore.js";
 
 export function registerSyncTools(s, {
@@ -332,6 +333,57 @@ export function registerSyncTools(s, {
         structureExportDir: structure_export_dir ?? null,
         dryRun: dry_run,
       }));
+    }
+  );
+
+  s.tool(
+    "restore_project_from_backup",
+    "Dry-run an explicit project restore from a trusted generated project backup bundle. Validates manifest, schema, checksums, project identity, and file references, then returns a deterministic create/update/delete/unchanged plan without mutating SQLite or generated files.",
+    {
+      project_id: z.string().describe("Project ID to restore (e.g. 'test-novel' or 'universe-1/book-1-the-lamb')."),
+      backup_path: z.string().optional().describe("Path under WRITING_SYNC_DIR to a project backup directory, manifest.json, or canonical.snapshot.json. Defaults to project-backups/<project_id>."),
+      dry_run: z.boolean().optional().describe("If true (default), validate and summarize the restore plan without writing SQLite state. dry_run=false is reserved for a later transactional restore milestone."),
+    },
+    async ({ project_id, backup_path, dry_run = true } = {}) => {
+      if (!SYNC_DIR_WRITABLE && dry_run === false) {
+        return errorResponse("READ_ONLY", "Cannot restore project from backup: server is in read-only mode for canonical structure mutations.");
+      }
+
+      const projectIdCheck = validateProjectId(project_id);
+      if (!projectIdCheck.ok) {
+        return errorResponse("INVALID_PROJECT_ID", projectIdCheck.reason, { project_id });
+      }
+
+      try {
+        const requestedBackupPath = backup_path
+          ? (path.isAbsolute(backup_path) ? backup_path : path.join(SYNC_DIR_ABS, backup_path))
+          : path.join(SYNC_DIR_ABS, "project-backups", project_id);
+        const backupPathForBoundary = ["manifest.json", "canonical.snapshot.json"].includes(path.basename(requestedBackupPath))
+          ? path.dirname(requestedBackupPath)
+          : requestedBackupPath;
+        resolveOutputDirWithinSync(backupPathForBoundary);
+
+        return jsonResponse(restoreProjectFromBackup(db, {
+          syncDir: SYNC_DIR_ABS,
+          projectId: project_id,
+          backupPath: requestedBackupPath,
+          dryRun: dry_run,
+          applicationVersion: MCP_SERVER_VERSION,
+        }));
+      } catch (error) {
+        if (
+          error &&
+          typeof error === "object" &&
+          error.name === "CoreValidationError" &&
+          typeof error.code === "string"
+        ) {
+          return errorResponse(error.code, error.message ?? "Request failed.", error.details);
+        }
+        return errorResponse(
+          "RESTORE_PROJECT_FROM_BACKUP_FAILED",
+          error instanceof Error ? error.message : "Failed to plan project restore from backup."
+        );
+      }
     }
   );
 

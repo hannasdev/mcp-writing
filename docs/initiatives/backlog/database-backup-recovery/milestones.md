@@ -283,7 +283,7 @@ Deliverables:
 - Add `restore_project_from_backup(project_id, backup_path?, dry_run=true)` in dry-run mode.
 - Validate manifest, schema compatibility, project identity, checksums, file references, and conflicts.
 - Produce a restore plan that summarizes rows/entities to create, update, delete, or leave unchanged.
-- Refuse tampered, stale, partial, wrong-project, or incompatible backup bundles.
+- Refuse tampered, partial, wrong-project, or incompatible backup bundles. In restore planning, `stale` means the backup differs from current SQLite state and should be surfaced as create/update/delete/unchanged plan output, not treated as invalid solely because it is older than the current database.
 - Treat records present in SQLite but absent from the backup as destructive restore candidates that require explicit dry-run reporting and later confirmation.
 - Preserve existing `restore_structure_from_export` behavior as a narrower structure repair workflow.
 
