@@ -9,6 +9,7 @@
 - [`sync`](#sync)
 - [`diagnose_structure`](#diagnose_structure)
 - [`export_structure_snapshot`](#export_structure_snapshot)
+- [`export_project_backup`](#export_project_backup)
 - [`restore_structure_from_export`](#restore_structure_from_export)
 - [`import_scrivener_sync`](#import_scrivener_sync)
 - [`import_scrivener_sync_async`](#import_scrivener_sync_async)
@@ -104,6 +105,17 @@ Generate a deterministic JSON structure export from SQLite canonical state for G
 | --- | --- | :---: | --- |
 | `project_id` | `string` | Yes | Project ID to export (e.g. 'test-novel'). |
 | `output_dir` | `string` | No | Directory under WRITING_SYNC_DIR where the export JSON should be written. Defaults to structure-exports. |
+
+---
+
+## export_project_backup
+
+Generate a deterministic project backup bundle from SQLite canonical state. Writes manifest.json and canonical.snapshot.json under WRITING_SYNC_DIR for explicit review and future restore workflows; this is generated transparency only and does not mutate canonical state.
+
+| Parameter | Type | Required | Description |
+| --- | --- | :---: | --- |
+| `project_id` | `string` | Yes | Project ID to back up (e.g. 'test-novel' or 'universe-1/book-1-the-lamb'). |
+| `output_dir` | `string` | No | Directory under WRITING_SYNC_DIR where manifest.json and canonical.snapshot.json should be written. Defaults to project-backups/<project_id>. |
 
 ---
 

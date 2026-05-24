@@ -6,6 +6,14 @@ This complements `CHANGELOG.md`:
 - `CHANGELOG.md` is technical and release-oriented.
 - This log is plain-language and outcome-oriented.
 
+### 2026-05-23 — Export project backup bundles
+
+- What changed: Added `export_project_backup`, which writes a deterministic `manifest.json` and `canonical.snapshot.json` backup bundle under the sync root for a project.
+- Why it matters: Authors and AI agents can review and commit broader SQLite-canonical project state before restore workflows exist, without making generated backup files a mutation surface.
+- Who is affected: Authors, maintainers, and AI agents preparing recovery artifacts for SQLite-canonical projects.
+- Action needed: Run `export_project_backup` when you want a manual backup checkpoint; review or commit the generated files, but do not edit them as canonical changes.
+- PR: Pending
+
 ### 2026-05-23 — Complete chapter and epigraph structure alignment
 
 - What changed: Moved the chapter/epigraph initiative to completed status, documented canonical read ordering through chapter `sort_index`, aligned metadata lint with shipped scene structure fields, and split larger division support into its own backlog item.

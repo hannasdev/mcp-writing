@@ -91,6 +91,7 @@ export const WORKFLOW_CATALOGUE = [
       { tool: "diagnose_structure", note: "Run when the assignment is part of a drift repair workflow, when folder-derived structure may disagree with the requested link, or before trusting an export for recovery." },
       { tool: "restore_structure_from_export", note: "Use only as an explicit repair workflow after diagnostics show a trusted generated export can recover canonical SQLite structure." },
       { tool: "export_structure_snapshot", note: "Generate a deterministic SQLite-derived structure export for Git review after canonical structure changes; editing the export does not mutate structure." },
+      { tool: "export_project_backup", note: "Generate the broader deterministic project backup bundle for Git review and future recovery input; editing it does not mutate canonical state." },
     ],
   },
   {

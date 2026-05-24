@@ -1,5 +1,10 @@
 import crypto from "node:crypto";
 import path from "node:path";
+import {
+  ensureDirectoryInsideBoundary,
+  resolveGeneratedOutputPath,
+  writeGeneratedOutputFile,
+} from "../core/filesystem-boundary.js";
 import { CURRENT_SCHEMA_VERSION } from "../core/db.js";
 
 export const PROJECT_BACKUP_SCHEMA_VERSION = 1;
@@ -269,6 +274,22 @@ export function computeProjectBackupBundleChecksum(bundle) {
 
 export function renderProjectBackupArtifact(value) {
   return `${stableStringify(value, 2)}\n`;
+}
+
+export function writeProjectBackupFiles(bundle, { outputDir }) {
+  const normalizedOutputDir = path.resolve(outputDir);
+  ensureDirectoryInsideBoundary(normalizedOutputDir, { label: "backup output_dir" });
+
+  const manifestPath = resolveGeneratedOutputPath(normalizedOutputDir, "manifest.json");
+  const snapshotPath = resolveGeneratedOutputPath(normalizedOutputDir, "canonical.snapshot.json");
+
+  writeGeneratedOutputFile(manifestPath, renderProjectBackupArtifact(bundle.manifest), { encoding: "utf8" });
+  writeGeneratedOutputFile(snapshotPath, renderProjectBackupArtifact(bundle.snapshot), { encoding: "utf8" });
+
+  return {
+    manifestPath,
+    snapshotPath,
+  };
 }
 
 export function buildProjectBackup(db, {

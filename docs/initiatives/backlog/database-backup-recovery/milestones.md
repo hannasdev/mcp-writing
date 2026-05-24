@@ -5,7 +5,7 @@
 This milestone plan breaks the PRD into independently reviewable slices.
 Each milestone should leave the system in a releasable state and preserve the target architecture rule that SQLite remains canonical while generated backup artifacts provide transparency and explicit recovery input.
 
-Current focus: M2 — Manual Project Backup Export Tool.
+Current focus: M3 — Backup Diagnostics and Freshness.
 
 ## Objective
 
@@ -88,7 +88,7 @@ Evidence:
 
 ## M2 — Manual Project Backup Export Tool
 
-Status: Current focus.
+Status: Delivered.
 
 Goal: expose project backup generation as an explicit workflow.
 
@@ -119,7 +119,15 @@ Out of scope:
 - Operation history.
 - Restore.
 
+Evidence:
+
+- [src/tools/sync.js](../../../../src/tools/sync.js)
+- [src/structure/project-backup.js](../../../../src/structure/project-backup.js)
+- [src/test/integration/sync.test.mjs](../../../../src/test/integration/sync.test.mjs)
+
 ## M3 — Backup Diagnostics and Freshness
+
+Status: Current focus.
 
 Goal: make backup trust visible before backup artifacts are needed for recovery.
 

@@ -11,7 +11,7 @@ It supports metadata-first reasoning, explicit prose editing workflows, and revi
 
 Active initiative: [Database Backup and Recovery](docs/initiatives/backlog/database-backup-recovery/prd.md).
 
-Current focus: M2 — Manual Project Backup Export Tool. The internal deterministic backup domain model and manifest slice is implemented; the next step is exposing explicit backup generation without adding restore or mutation hooks yet.
+Current focus: M3 — Backup Diagnostics and Freshness. The manual project backup export tool is implemented; the next step is making backup trust, freshness, and tamper status visible before restore workflows depend on it.
 
 Most recent completed initiative: [Docker, CI, and Deployment Workflow](docs/initiatives/done/docker-ci-deployment/prd.md).
 

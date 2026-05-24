@@ -123,6 +123,58 @@ describe("sync tool", () => {
     assert.equal(secondContent, firstContent);
   });
 
+  test("export_project_backup writes stable generated backup bundle", async () => {
+    const text = await callWriteTool("export_project_backup", {
+      project_id: "test-novel",
+    });
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.action, "exported");
+    assert.equal(parsed.relative_output_dir, "project-backups/test-novel");
+    assert.equal(parsed.relative_files.manifest, "project-backups/test-novel/manifest.json");
+    assert.equal(parsed.relative_files.canonical_snapshot, "project-backups/test-novel/canonical.snapshot.json");
+    assert.equal(parsed.manifest.canonical_source, "sqlite");
+    assert.equal(parsed.manifest.generated_transparency, true);
+    assert.equal(parsed.manifest.mutation_surface, false);
+    assert.equal(parsed.manifest.restore_policy.authority, "full_snapshot");
+    assert.equal(parsed.manifest.restore_policy.custom_delta_chains, false);
+    assert.equal(parsed.manifest.privacy.includes_authored_prose_bodies, false);
+    assert.match(parsed.manifest.checksums.canonical_snapshot_sha256, /^[a-f0-9]{64}$/);
+    assert.match(parsed.manifest.checksums.bundle_sha256, /^[a-f0-9]{64}$/);
+
+    const manifestPath = path.join(writeSyncDir, "project-backups", "test-novel", "manifest.json");
+    const snapshotPath = path.join(writeSyncDir, "project-backups", "test-novel", "canonical.snapshot.json");
+    const firstManifest = fs.readFileSync(manifestPath, "utf8");
+    const firstSnapshot = fs.readFileSync(snapshotPath, "utf8");
+    const manifest = JSON.parse(firstManifest);
+    const snapshot = JSON.parse(firstSnapshot);
+
+    assert.equal(manifest.project_id, "test-novel");
+    assert.equal(manifest.checksums.canonical_snapshot_sha256, parsed.manifest.checksums.canonical_snapshot_sha256);
+    assert.equal(snapshot.project.project_id, "test-novel");
+    assert.equal(snapshot.operation_history.supported, false);
+    assert.ok(snapshot.scenes.some(scene => scene.scene_id === "sc-001"));
+    assert.equal(firstSnapshot.includes("This authored epigraph body must not enter"), false);
+
+    await callWriteTool("export_project_backup", {
+      project_id: "test-novel",
+    });
+    assert.equal(fs.readFileSync(manifestPath, "utf8"), firstManifest);
+    assert.equal(fs.readFileSync(snapshotPath, "utf8"), firstSnapshot);
+  });
+
+  test("export_project_backup refuses output outside the sync directory", async () => {
+    const text = await callWriteTool("export_project_backup", {
+      project_id: "test-novel",
+      output_dir: os.tmpdir(),
+    });
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.ok, false);
+    assert.equal(parsed.error.code, "INVALID_OUTPUT_DIR");
+  });
+
   test("restore_structure_from_export dry-run validates current export", async () => {
     await callWriteTool("export_structure_snapshot", {
       project_id: "test-novel",
@@ -975,6 +1027,16 @@ describe("enrich_scene_characters_batch tool", () => {
       const parsed = JSON.parse(result.content?.[0]?.text ?? "{}");
       assert.equal(parsed.ok, false);
       assert.equal(parsed.error.code, "READ_ONLY");
+
+      const backupResult = await roClient.callTool({
+        name: "export_project_backup",
+        arguments: {
+          project_id: "test-novel",
+        },
+      });
+      const backupParsed = JSON.parse(backupResult.content?.[0]?.text ?? "{}");
+      assert.equal(backupParsed.ok, false);
+      assert.equal(backupParsed.error.code, "READ_ONLY");
     } finally {
       try { await roClient?.close(); } catch {}
       if (roProc) roProc.kill();
