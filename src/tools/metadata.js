@@ -28,16 +28,12 @@ import {
   upsertExplicitReferenceLinkRow,
   upsertSerializedReferenceLinks,
 } from "./reference-link-persistence.js";
-import { refreshProjectBackupAfterMutation } from "../structure/project-backup-refresh.js";
+import {
+  createToolActor,
+  refreshProjectBackupAfterMutation,
+} from "../structure/project-backup-refresh.js";
 
 const STRUCTURAL_SCENE_METADATA_FIELDS = ["part", "chapter", "chapter_id", "timeline_position"];
-
-function createToolActor(id) {
-  return {
-    type: "tool",
-    id,
-  };
-}
 
 function emptyBackupMutationResult() {
   return {

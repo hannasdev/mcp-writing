@@ -209,6 +209,7 @@ function collectProjectBackupSnapshot(db, { project, syncDir }) {
     WHERE source_project_id = ?
        OR (
          source_project_id = ''
+         AND source_kind = 'reference'
          AND source_id IN (${[...referenceDocs.ids].map(() => "?").join(",") || "NULL"})
        )
     ORDER BY source_kind, source_project_id, source_id, target_doc_id, relation

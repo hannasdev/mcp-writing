@@ -18,6 +18,13 @@ function createBackupWarning(code, message, details = {}) {
   };
 }
 
+export function createToolActor(id) {
+  return {
+    type: "tool",
+    id,
+  };
+}
+
 export function buildPostMutationBackupWarning({
   projectId,
   operation,

@@ -272,6 +272,10 @@ function seedProjectBackupFixture(db) {
     INSERT INTO reference_links (source_kind, source_project_id, source_id, target_doc_id, relation, origin)
     VALUES (?, ?, ?, ?, ?, ?)
   `).run("scene", "other-novel", "sc-other", "ref-law", "mentions", "explicit");
+  db.prepare(`
+    INSERT INTO reference_links (source_kind, source_project_id, source_id, target_doc_id, relation, origin)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run("scene", "", "ref-law", "ref-other", "mentions", "explicit");
 
   db.prepare(`
     INSERT INTO async_jobs (job_id, kind, status, created_at)
@@ -368,6 +372,10 @@ describe("buildProjectBackup", () => {
       assert.equal(result.snapshot.places.some(row => row.place_id === "place-other"), false);
       assert.equal(result.snapshot.reference_docs.some(row => row.doc_id === "ref-other"), false);
       assert.equal(result.snapshot.reference_links.some(row => row.source_project_id === "other-novel"), false);
+      assert.equal(
+        result.snapshot.reference_links.some(row => row.source_kind === "scene" && row.source_project_id === ""),
+        false
+      );
       assert.equal(result.manifest.coverage.counts.external_character_references, 1);
     } finally {
       db.close();

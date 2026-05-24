@@ -4,7 +4,10 @@ import matter from "gray-matter";
 import { readMeta } from "../sync/sync.js";
 import { persistSceneReferenceLink, upsertExplicitReferenceLinkRow } from "./reference-link-persistence.js";
 import { resolveValidatedChapterFilter } from "../core/chapter-resolution.js";
-import { refreshProjectBackupAfterMutation } from "../structure/project-backup-refresh.js";
+import {
+  createToolActor,
+  refreshProjectBackupAfterMutation,
+} from "../structure/project-backup-refresh.js";
 
 function accumulateSuggestionScore(scoreMap, rows, sourceLabel) {
   for (const row of rows) {
@@ -54,13 +57,6 @@ function selectApplyCandidates(enrichedCandidates, selectedDocIds, maxApply) {
 
   const uniqueCandidates = Array.from(chosenByDocId.values());
   return uniqueCandidates.slice(0, maxApply ?? uniqueCandidates.length);
-}
-
-function createToolActor(id) {
-  return {
-    type: "tool",
-    id,
-  };
 }
 
 export function registerSearchTools(s, {
