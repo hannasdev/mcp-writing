@@ -50,6 +50,13 @@ const NULLABLE_IDENTITY_FIELDS = new Map([
   ["character_relationships", new Set(["scene_id", "note"])],
 ]);
 
+const PROJECT_SCOPE_FIELDS = new Map([
+  ["characters", ["project_id"]],
+  ["places", ["project_id"]],
+  ["reference_docs", ["project_id"]],
+  ["reference_links", ["source_project_id"]],
+]);
+
 function stableStringify(value) {
   if (value === null || typeof value !== "object") return JSON.stringify(value);
   if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
@@ -58,6 +65,14 @@ function stableStringify(value) {
 
 function isRecord(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function identityFieldIsInvalid(row, field, nullableFields) {
+  const hasField = Object.hasOwn(row, field);
+  const value = row[field];
+  return nullableFields.has(field)
+    ? !hasField || value === undefined
+    : !hasField || value === null || value === undefined || value === "";
 }
 
 function createDiagnostic(type, message, details = {}, {
@@ -412,6 +427,7 @@ function validateBundleShape({ manifest, snapshot, backupDir, projectId }) {
 
   for (const [domain, keyFields] of SNAPSHOT_ARRAY_DOMAINS) {
     const nullableFields = NULLABLE_IDENTITY_FIELDS.get(domain) ?? new Set();
+    const projectScopeFields = PROJECT_SCOPE_FIELDS.get(domain) ?? [];
     if (!(domain in snapshot)) {
       diagnostics.push(createDiagnostic(
         "project_restore_incomplete_snapshot",
@@ -431,6 +447,7 @@ function validateBundleShape({ manifest, snapshot, backupDir, projectId }) {
         { nextStep: "Regenerate the backup with export_project_backup before using it for recovery." }
       ));
     } else {
+      const seenKeys = new Set();
       snapshot[domain].forEach((row, index) => {
         if (!isRecord(row)) {
           diagnostics.push(createDiagnostic(
@@ -447,13 +464,10 @@ function validateBundleShape({ manifest, snapshot, backupDir, projectId }) {
           return;
         }
 
+        let hasValidIdentity = true;
         for (const field of keyFields) {
-          const hasField = Object.hasOwn(row, field);
-          const value = row[field];
-          const invalidIdentity = nullableFields.has(field)
-            ? !hasField || value === undefined
-            : !hasField || value === null || value === undefined || value === "";
-          if (invalidIdentity) {
+          if (identityFieldIsInvalid(row, field, nullableFields)) {
+            hasValidIdentity = false;
             diagnostics.push(createDiagnostic(
               "project_restore_invalid_snapshot",
               `Backup canonical snapshot row ${index} in domain "${domain}" is missing required identity field "${field}".`,
@@ -465,6 +479,25 @@ function validateBundleShape({ manifest, snapshot, backupDir, projectId }) {
               },
               { nextStep: "Regenerate the backup with export_project_backup before using it for recovery." }
             ));
+          }
+        }
+
+        if (hasValidIdentity) {
+          const key = rowKey(row, keyFields);
+          if (seenKeys.has(key)) {
+            diagnostics.push(createDiagnostic(
+              "project_restore_duplicate_identity",
+              `Backup canonical snapshot domain "${domain}" contains duplicate identity values.`,
+              {
+                backup_dir: backupDir,
+                domain,
+                index,
+                identity: Object.fromEntries(keyFields.map(field => [field, row[field] ?? null])),
+              },
+              { nextStep: "Regenerate the backup with export_project_backup before using it for recovery." }
+            ));
+          } else {
+            seenKeys.add(key);
           }
         }
 
@@ -488,6 +521,26 @@ function validateBundleShape({ manifest, snapshot, backupDir, projectId }) {
             },
             { nextStep: "Choose the backup directory for the requested project or regenerate the backup." }
           ));
+        }
+
+        for (const field of projectScopeFields) {
+          if (!Object.hasOwn(row, field)) continue;
+          const value = row[field];
+          if (value !== null && value !== undefined && value !== "" && value !== projectId) {
+            diagnostics.push(createDiagnostic(
+              "project_restore_wrong_project",
+              `Backup canonical snapshot row ${index} in domain "${domain}" has ${field} "${value}", not "${projectId}".`,
+              {
+                backup_dir: backupDir,
+                domain,
+                index,
+                field,
+                row_project_id: value,
+                expected_project_id: projectId,
+              },
+              { nextStep: "Choose the backup directory for the requested project or regenerate the backup." }
+            ));
+          }
         }
       });
     }

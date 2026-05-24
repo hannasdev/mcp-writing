@@ -398,6 +398,112 @@ describe("restoreProjectFromBackup", () => {
     assert.equal(result.plan, null);
   }));
 
+  test("refuses nullable-scope world rows that belong to another project", () => withFixture(({ db, syncDir, backupDir }) => {
+    const built = exportBackup(db, syncDir, backupDir);
+    writeMalformedSnapshotWithValidChecksums(backupDir, {
+      ...built.snapshot,
+      characters: [
+        ...built.snapshot.characters,
+        {
+          character_id: "char-other",
+          project_id: "other-project",
+          universe_id: null,
+          name: "Other",
+          role: null,
+          arc_summary: null,
+          first_appearance: null,
+          file_path: null,
+        },
+      ],
+      places: [
+        {
+          place_id: "place-other",
+          project_id: "other-project",
+          universe_id: null,
+          name: "Other Place",
+          file_path: null,
+        },
+      ],
+    });
+
+    const result = restorePlan(db, syncDir, backupDir);
+
+    assert.equal(result.ok, false);
+    assert.equal(result.action, "restore_refused");
+    assert.deepEqual(
+      result.diagnostics
+        .map(diagnostic => [diagnostic.details.domain, diagnostic.details.row_project_id])
+        .sort((a, b) => a[0].localeCompare(b[0])),
+      [["characters", "other-project"], ["places", "other-project"]]
+    );
+    assert.equal(result.plan, null);
+  }));
+
+  test("refuses nullable-scope reference rows that belong to another project", () => withFixture(({ db, syncDir, backupDir }) => {
+    const built = exportBackup(db, syncDir, backupDir);
+    writeMalformedSnapshotWithValidChecksums(backupDir, {
+      ...built.snapshot,
+      reference_docs: [
+        {
+          doc_id: "ref-other",
+          project_id: "other-project",
+          universe_id: null,
+          type: "note",
+          title: "Other Reference",
+          summary: null,
+          file_path: "projects/other-project/world/reference/other.md",
+        },
+      ],
+      reference_links: [
+        {
+          source_kind: "scene",
+          source_project_id: "other-project",
+          source_id: "sc-first",
+          target_doc_id: "ref-other",
+          relation: "mentions",
+          origin: "explicit",
+        },
+      ],
+    });
+
+    const result = restorePlan(db, syncDir, backupDir);
+
+    assert.equal(result.ok, false);
+    assert.equal(result.action, "restore_refused");
+    assert.deepEqual(
+      result.diagnostics.map(diagnostic => [diagnostic.details.domain, diagnostic.details.field, diagnostic.details.row_project_id]),
+      [["reference_docs", "project_id", "other-project"], ["reference_links", "source_project_id", "other-project"]]
+    );
+    assert.equal(result.plan, null);
+  }));
+
+  test("refuses duplicate identities before planning can collapse rows", () => withFixture(({ db, syncDir, backupDir }) => {
+    const built = exportBackup(db, syncDir, backupDir);
+    writeMalformedSnapshotWithValidChecksums(backupDir, {
+      ...built.snapshot,
+      scenes: [built.snapshot.scenes[0], built.snapshot.scenes[0]],
+      scene_tags: [built.snapshot.scene_tags[0], built.snapshot.scene_tags[0]],
+      character_relationships: [
+        built.snapshot.character_relationships[0],
+        built.snapshot.character_relationships[0],
+      ],
+    });
+
+    const result = restorePlan(db, syncDir, backupDir);
+
+    assert.equal(result.ok, false);
+    assert.equal(result.action, "restore_refused");
+    assert.deepEqual(
+      result.diagnostics.map(diagnostic => diagnostic.details.domain),
+      ["character_relationships", "scene_tags", "scenes"]
+    );
+    assert.deepEqual(
+      new Set(result.diagnostics.map(diagnostic => diagnostic.type)),
+      new Set(["project_restore_duplicate_identity"])
+    );
+    assert.equal(result.plan, null);
+  }));
+
   test("keeps apply mode unavailable until the transactional restore milestone", () => withFixture(({ db, syncDir, backupDir }) => {
     exportBackup(db, syncDir, backupDir);
 
