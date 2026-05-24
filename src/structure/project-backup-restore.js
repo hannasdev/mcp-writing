@@ -46,6 +46,10 @@ const SNAPSHOT_SINGLETON_DOMAINS = [
   ["operation_history", "object"],
 ];
 
+const NULLABLE_IDENTITY_FIELDS = new Map([
+  ["character_relationships", new Set(["scene_id", "note"])],
+]);
+
 function stableStringify(value) {
   if (value === null || typeof value !== "object") return JSON.stringify(value);
   if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
@@ -358,7 +362,7 @@ function validateBundle({ manifest, snapshot, projectId, backupDir }) {
   return diagnostics;
 }
 
-function validateBundleShape({ manifest, snapshot, backupDir }) {
+function validateBundleShape({ manifest, snapshot, backupDir, projectId }) {
   const diagnostics = [];
   if (!isRecord(manifest)) {
     diagnostics.push(createDiagnostic(
@@ -407,6 +411,7 @@ function validateBundleShape({ manifest, snapshot, backupDir }) {
   }
 
   for (const [domain, keyFields] of SNAPSHOT_ARRAY_DOMAINS) {
+    const nullableFields = NULLABLE_IDENTITY_FIELDS.get(domain) ?? new Set();
     if (!(domain in snapshot)) {
       diagnostics.push(createDiagnostic(
         "project_restore_incomplete_snapshot",
@@ -443,7 +448,12 @@ function validateBundleShape({ manifest, snapshot, backupDir }) {
         }
 
         for (const field of keyFields) {
-          if (row[field] === null || row[field] === undefined || row[field] === "") {
+          const hasField = Object.hasOwn(row, field);
+          const value = row[field];
+          const invalidIdentity = nullableFields.has(field)
+            ? !hasField || value === undefined
+            : !hasField || value === null || value === undefined || value === "";
+          if (invalidIdentity) {
             diagnostics.push(createDiagnostic(
               "project_restore_invalid_snapshot",
               `Backup canonical snapshot row ${index} in domain "${domain}" is missing required identity field "${field}".`,
@@ -456,6 +466,28 @@ function validateBundleShape({ manifest, snapshot, backupDir }) {
               { nextStep: "Regenerate the backup with export_project_backup before using it for recovery." }
             ));
           }
+        }
+
+        if (
+          keyFields.includes("project_id") &&
+          Object.hasOwn(row, "project_id") &&
+          row.project_id !== null &&
+          row.project_id !== undefined &&
+          row.project_id !== "" &&
+          row.project_id !== projectId
+        ) {
+          diagnostics.push(createDiagnostic(
+            "project_restore_wrong_project",
+            `Backup canonical snapshot row ${index} in domain "${domain}" belongs to project "${row.project_id}", not "${projectId}".`,
+            {
+              backup_dir: backupDir,
+              domain,
+              index,
+              row_project_id: row.project_id,
+              expected_project_id: projectId,
+            },
+            { nextStep: "Choose the backup directory for the requested project or regenerate the backup." }
+          ));
         }
       });
     }
@@ -516,7 +548,12 @@ export function restoreProjectFromBackup(db, {
   const manifest = manifestRead.ok ? manifestRead.value : null;
   const snapshot = snapshotRead.ok ? snapshotRead.value : null;
   if (manifestRead.ok && snapshotRead.ok) {
-    const shapeDiagnostics = validateBundleShape({ manifest, snapshot, backupDir: resolvedBackupDir });
+    const shapeDiagnostics = validateBundleShape({
+      manifest,
+      snapshot,
+      backupDir: resolvedBackupDir,
+      projectId,
+    });
     diagnostics.push(...shapeDiagnostics);
     if (shapeDiagnostics.length === 0) {
       diagnostics.push(...validateBundle({ manifest, snapshot, projectId, backupDir: resolvedBackupDir }));

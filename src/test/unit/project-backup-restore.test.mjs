@@ -72,6 +72,36 @@ function seedFixture(db, syncDir) {
     INSERT INTO scene_tags (scene_id, project_id, tag)
     VALUES (?, ?, ?)
   `).run("sc-first", "test-novel", "opening");
+  db.prepare(`
+    INSERT INTO characters (character_id, project_id, universe_id, name, role, arc_summary, first_appearance, file_path)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    "char-elena",
+    "test-novel",
+    null,
+    "Elena",
+    "protagonist",
+    null,
+    null,
+    null
+  );
+  db.prepare(`
+    INSERT INTO characters (character_id, project_id, universe_id, name, role, arc_summary, first_appearance, file_path)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    "char-marcus",
+    "test-novel",
+    null,
+    "Marcus",
+    "ally",
+    null,
+    null,
+    null
+  );
+  db.prepare(`
+    INSERT INTO character_relationships (from_character, to_character, relationship_type, strength, scene_id, note)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run("char-elena", "char-marcus", "trusts", "strong", null, null);
 }
 
 function withFixture(fn) {
@@ -137,7 +167,7 @@ function restorePlan(db, syncDir, backupDir, options = {}) {
 
 describe("restoreProjectFromBackup", () => {
   test("plans a trusted current backup without mutating SQLite", () => withFixture(({ db, syncDir, backupDir }) => {
-    exportBackup(db, syncDir, backupDir);
+    const built = exportBackup(db, syncDir, backupDir);
 
     const result = restorePlan(db, syncDir, backupDir);
 
@@ -149,6 +179,10 @@ describe("restoreProjectFromBackup", () => {
     assert.equal(result.plan.totals.delete, 0);
     assert.ok(result.plan.totals.unchanged > 0);
     assert.deepEqual(result.diagnostics, []);
+    assert.deepEqual(
+      built.snapshot.character_relationships.map(row => [row.from_character, row.to_character, row.scene_id, row.note]),
+      [["char-elena", "char-marcus", null, null]]
+    );
   }));
 
   test("distinguishes create, update, delete, and unchanged candidates", () => withFixture(({ db, syncDir, backupDir }) => {
@@ -339,6 +373,28 @@ describe("restoreProjectFromBackup", () => {
     assert.deepEqual(result.diagnostics.map(diagnostic => diagnostic.type), ["project_restore_invalid_snapshot"]);
     assert.equal(result.diagnostics[0].details.domain, "scene_tags");
     assert.equal(result.diagnostics[0].details.field, "scene_id");
+    assert.equal(result.plan, null);
+  }));
+
+  test("refuses project-scoped rows whose project_id does not match the backup project", () => withFixture(({ db, syncDir, backupDir }) => {
+    const built = exportBackup(db, syncDir, backupDir);
+    writeMalformedSnapshotWithValidChecksums(backupDir, {
+      ...built.snapshot,
+      scenes: [
+        {
+          ...built.snapshot.scenes[0],
+          project_id: "other-project",
+        },
+      ],
+    });
+
+    const result = restorePlan(db, syncDir, backupDir);
+
+    assert.equal(result.ok, false);
+    assert.equal(result.action, "restore_refused");
+    assert.deepEqual(result.diagnostics.map(diagnostic => diagnostic.type), ["project_restore_wrong_project"]);
+    assert.equal(result.diagnostics[0].details.domain, "scenes");
+    assert.equal(result.diagnostics[0].details.row_project_id, "other-project");
     assert.equal(result.plan, null);
   }));
 
