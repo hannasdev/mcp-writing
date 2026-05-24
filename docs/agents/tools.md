@@ -12,6 +12,7 @@
 - [`export_project_backup`](#export_project_backup)
 - [`diagnose_project_backups`](#diagnose_project_backups)
 - [`restore_structure_from_export`](#restore_structure_from_export)
+- [`restore_project_from_backup`](#restore_project_from_backup)
 - [`import_scrivener_sync`](#import_scrivener_sync)
 - [`import_scrivener_sync_async`](#import_scrivener_sync_async)
 - [`merge_scrivener_project_beta`](#merge_scrivener_project_beta)
@@ -141,6 +142,18 @@ Explicitly restore canonical SQLite chapter, scene-placement, and epigraph struc
 | `structure_export_path` | `string` | No | Path under WRITING_SYNC_DIR to the generated structure export JSON. Defaults to structure-exports/<project>.structure.json. |
 | `structure_export_dir` | `string` | No | Directory under WRITING_SYNC_DIR containing generated structure exports. Ignored when structure_export_path is provided. Defaults to structure-exports. |
 | `dry_run` | `boolean` | No | If true (default), validate and summarize planned repairs without writing SQLite state. |
+
+---
+
+## restore_project_from_backup
+
+Dry-run an explicit project restore from a trusted generated project backup bundle. Validates manifest, schema, checksums, project identity, and file references, then returns a deterministic create/update/delete/unchanged plan without mutating SQLite or generated files.
+
+| Parameter | Type | Required | Description |
+| --- | --- | :---: | --- |
+| `project_id` | `string` | Yes | Project ID to restore (e.g. 'test-novel' or 'universe-1/book-1-the-lamb'). |
+| `backup_path` | `string` | No | Path under WRITING_SYNC_DIR to a project backup directory, manifest.json, or canonical.snapshot.json. Defaults to project-backups/<project_id>. |
+| `dry_run` | `boolean` | No | If true (default), validate and summarize the restore plan without writing SQLite state. dry_run=false is reserved for a later transactional restore milestone. |
 
 ---
 

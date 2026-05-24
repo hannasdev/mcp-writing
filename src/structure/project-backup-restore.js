@@ -1,0 +1,471 @@
+import fs from "node:fs";
+import path from "node:path";
+import {
+  buildProjectBackup,
+  computeProjectBackupBundleChecksum,
+  computeProjectBackupSnapshotChecksum,
+  PROJECT_BACKUP_SCHEMA_VERSION,
+} from "./project-backup.js";
+
+const MANIFEST_FILE = "manifest.json";
+const SNAPSHOT_FILE = "canonical.snapshot.json";
+
+const SNAPSHOT_ARRAY_DOMAINS = [
+  ["chapters", ["project_id", "chapter_id"]],
+  ["scenes", ["project_id", "scene_id"]],
+  ["epigraphs", ["project_id", "epigraph_id"]],
+  ["epigraph_characters", ["project_id", "epigraph_id", "character_id"]],
+  ["epigraph_tags", ["project_id", "epigraph_id", "tag"]],
+  ["scene_characters", ["project_id", "scene_id", "character_id"]],
+  ["scene_places", ["project_id", "scene_id", "place_id"]],
+  ["scene_tags", ["project_id", "scene_id", "tag"]],
+  ["scene_threads", ["project_id", "scene_id", "thread_id"]],
+  ["characters", ["character_id"]],
+  ["character_traits", ["character_id", "trait"]],
+  ["character_relationships", ["from_character", "to_character", "relationship_type", "scene_id", "note"]],
+  ["places", ["place_id"]],
+  ["threads", ["thread_id"]],
+  ["reference_docs", ["doc_id"]],
+  ["reference_doc_tags", ["doc_id", "tag"]],
+  ["reference_links", ["source_kind", "source_project_id", "source_id", "target_doc_id", "relation"]],
+];
+
+const FILE_REFERENCE_FIELDS = [
+  ["chapters", "source_path", "optional"],
+  ["scenes", "file_path", "required"],
+  ["epigraphs", "file_path", "required"],
+  ["characters", "file_path", "optional"],
+  ["places", "file_path", "optional"],
+  ["reference_docs", "file_path", "required"],
+];
+
+function stableStringify(value) {
+  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
+  return `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${stableStringify(value[key])}`).join(",")}}`;
+}
+
+function createDiagnostic(type, message, details = {}, {
+  severity = "warning",
+  nextStep = null,
+} = {}) {
+  return {
+    type,
+    severity,
+    message,
+    details,
+    ...(nextStep ? { next_step: nextStep } : {}),
+  };
+}
+
+function fileState(filePath) {
+  if (!fs.existsSync(filePath)) {
+    return { exists: false, readable: false, regular: false, symlink: false };
+  }
+  let stat;
+  try {
+    stat = fs.lstatSync(filePath);
+  } catch (error) {
+    return {
+      exists: true,
+      readable: false,
+      regular: false,
+      symlink: false,
+      error: "lstat_failed",
+      message: error instanceof Error ? error.message : String(error),
+    };
+  }
+  return {
+    exists: true,
+    readable: true,
+    regular: stat.isFile(),
+    directory: stat.isDirectory(),
+    symlink: stat.isSymbolicLink(),
+  };
+}
+
+function readJsonFile(filePath, label) {
+  const state = fileState(filePath);
+  if (!state.exists) {
+    return { ok: false, state, diagnostic: createDiagnostic(
+      "project_restore_backup_partial",
+      `Project backup ${label} is missing.`,
+      { file: filePath, reason: "missing" },
+      { nextStep: "Regenerate the backup with export_project_backup before using it for recovery." }
+    ) };
+  }
+  if (state.symlink || !state.regular) {
+    return { ok: false, state, diagnostic: createDiagnostic(
+      "project_restore_backup_unreadable",
+      `Project backup ${label} is not readable as trusted JSON.`,
+      { file: filePath, reason: state.error ?? (state.symlink ? "symlink" : "not_regular"), message: state.message ?? null },
+      { nextStep: "Use a regular generated backup file from export_project_backup." }
+    ) };
+  }
+  try {
+    return {
+      ok: true,
+      state,
+      value: JSON.parse(fs.readFileSync(filePath, "utf8")),
+    };
+  } catch (error) {
+    return { ok: false, state, diagnostic: createDiagnostic(
+      "project_restore_backup_unreadable",
+      `Project backup ${label} is not readable as trusted JSON.`,
+      { file: filePath, reason: "unreadable_json", message: error instanceof Error ? error.message : String(error) },
+      { nextStep: "Regenerate the backup with export_project_backup before using it for recovery." }
+    ) };
+  }
+}
+
+function resolveBackupDir(backupPath) {
+  const resolved = path.resolve(backupPath);
+  const base = path.basename(resolved);
+  if (base === MANIFEST_FILE || base === SNAPSHOT_FILE) return path.dirname(resolved);
+  return resolved;
+}
+
+function backupLocation(syncDir, backupDir) {
+  const relative = path.relative(syncDir, backupDir).split(path.sep).filter(Boolean).join("/");
+  return relative ? `${relative}/` : "./";
+}
+
+function rowKey(row, keyFields) {
+  return keyFields.map(field => String(row?.[field] ?? "")).join("\u0000");
+}
+
+function compareRows(currentRows = [], backupRows = [], keyFields) {
+  const currentByKey = new Map(currentRows.map(row => [rowKey(row, keyFields), row]));
+  const backupByKey = new Map(backupRows.map(row => [rowKey(row, keyFields), row]));
+  const keys = [...new Set([...currentByKey.keys(), ...backupByKey.keys()])].sort();
+  const changes = [];
+
+  for (const key of keys) {
+    const current = currentByKey.get(key) ?? null;
+    const backup = backupByKey.get(key) ?? null;
+    const identity = Object.fromEntries(keyFields.map((field, index) => [field, key.split("\u0000")[index] ?? ""]));
+    if (!current) {
+      changes.push({ action: "create", identity, backup });
+    } else if (!backup) {
+      changes.push({ action: "delete", identity, current, destructive: true });
+    } else if (stableStringify(current) === stableStringify(backup)) {
+      changes.push({ action: "unchanged", identity });
+    } else {
+      changes.push({ action: "update", identity, current, backup });
+    }
+  }
+
+  return changes;
+}
+
+function compareSingleton(domain, current, backup, keyFields) {
+  return compareRows(
+    current ? [current] : [],
+    backup ? [backup] : [],
+    keyFields
+  ).map(change => ({ domain, ...change }));
+}
+
+function countActions(changes) {
+  const counts = { create: 0, update: 0, delete: 0, unchanged: 0, refused: 0, conflict: 0 };
+  for (const change of changes) {
+    counts[change.action] = (counts[change.action] ?? 0) + 1;
+  }
+  return counts;
+}
+
+function buildEmptyCurrentSnapshot(db, backupSnapshot) {
+  const universeId = backupSnapshot.universe?.universe_id ?? null;
+  const universe = universeId
+    ? db.prepare(`
+      SELECT universe_id, name
+      FROM universes
+      WHERE universe_id = ?
+    `).get(universeId) ?? null
+    : null;
+
+  return {
+    project: null,
+    universe,
+    chapters: [],
+    scenes: [],
+    epigraphs: [],
+    epigraph_characters: [],
+    epigraph_tags: [],
+    scene_characters: [],
+    scene_places: [],
+    scene_tags: [],
+    scene_threads: [],
+    characters: [],
+    character_traits: [],
+    character_relationships: [],
+    places: [],
+    threads: [],
+    reference_docs: [],
+    reference_doc_tags: [],
+    reference_links: [],
+    external_references: { character_ids: [], place_ids: [], reference_doc_ids: [] },
+    operation_history: backupSnapshot.operation_history ?? null,
+  };
+}
+
+function collectCurrentSnapshot(db, {
+  projectId,
+  syncDir,
+  applicationVersion,
+  backupLocationValue,
+  backupSnapshot,
+}) {
+  const built = buildProjectBackup(db, {
+    projectId,
+    syncDir,
+    applicationVersion,
+    backupLocation: backupLocationValue,
+  });
+  if (built.ok) return { ok: true, snapshot: built.snapshot, checksum: built.manifest.checksums.canonical_snapshot_sha256 };
+  if (built.error?.code === "NOT_FOUND") {
+    const snapshot = buildEmptyCurrentSnapshot(db, backupSnapshot);
+    return { ok: true, snapshot, checksum: null };
+  }
+  return built;
+}
+
+function validateFileReferences(snapshot, { syncDir }) {
+  const diagnostics = [];
+  const syncRoot = path.resolve(syncDir);
+  for (const [domain, field, requirement] of FILE_REFERENCE_FIELDS) {
+    for (const row of snapshot[domain] ?? []) {
+      const value = row[field];
+      if (!value) {
+        if (requirement === "required") {
+          diagnostics.push(createDiagnostic(
+            "project_restore_file_reference_invalid",
+            `Backup ${domain} record is missing required ${field}.`,
+            { domain, field, identity: row },
+            { nextStep: "Regenerate the backup before using it for recovery." }
+          ));
+        }
+        continue;
+      }
+
+      const resolved = path.isAbsolute(value) ? path.resolve(value) : path.resolve(syncRoot, value);
+      const relative = path.relative(syncRoot, resolved);
+      if (relative.startsWith("..") || path.isAbsolute(relative)) {
+        diagnostics.push(createDiagnostic(
+          "project_restore_file_reference_invalid",
+          `Backup ${domain} record points outside WRITING_SYNC_DIR.`,
+          { domain, field, path: value },
+          { nextStep: "Use only trusted backups generated for this sync root." }
+        ));
+        continue;
+      }
+
+      const state = fileState(resolved);
+      if (state.symlink) {
+        diagnostics.push(createDiagnostic(
+          "project_restore_file_reference_invalid",
+          `Backup ${domain} record points to a symlink, which is not trusted restore input.`,
+          { domain, field, path: value, resolved_path: resolved, reason: "symlink" },
+          { nextStep: "Restore the referenced prose file as a regular file, then retry the dry run." }
+        ));
+      } else if (requirement === "required" && !state.exists) {
+        diagnostics.push(createDiagnostic(
+          "project_restore_file_reference_missing",
+          `Backup ${domain} record points to a missing file.`,
+          { domain, field, path: value, resolved_path: resolved },
+          { nextStep: "Restore the referenced prose file, then retry the dry run." }
+        ));
+      } else if (requirement === "required" && !state.regular) {
+        diagnostics.push(createDiagnostic(
+          "project_restore_file_reference_invalid",
+          `Backup ${domain} record does not point to a regular file.`,
+          { domain, field, path: value, resolved_path: resolved, reason: state.error ?? "not_regular" },
+          { nextStep: "Restore the referenced prose file as a regular file, then retry the dry run." }
+        ));
+      }
+    }
+  }
+  return diagnostics;
+}
+
+function validateBundle({ manifest, snapshot, projectId, backupDir }) {
+  const diagnostics = [];
+  if (manifest.artifact_kind !== "project_backup") {
+    diagnostics.push(createDiagnostic(
+      "project_restore_wrong_artifact",
+      "Backup manifest is not a project backup artifact.",
+      { backup_dir: backupDir, artifact_kind: manifest.artifact_kind ?? null },
+      { nextStep: "Choose a generated project backup bundle." }
+    ));
+  }
+  if (manifest.project_id !== projectId || snapshot.project?.project_id !== projectId) {
+    diagnostics.push(createDiagnostic(
+      "project_restore_wrong_project",
+      `Backup bundle does not belong to project "${projectId}".`,
+      {
+        backup_dir: backupDir,
+        manifest_project_id: manifest.project_id ?? null,
+        snapshot_project_id: snapshot.project?.project_id ?? null,
+      },
+      { nextStep: "Choose the backup directory for the requested project." }
+    ));
+  }
+  if (manifest.schema_version !== PROJECT_BACKUP_SCHEMA_VERSION) {
+    diagnostics.push(createDiagnostic(
+      "project_restore_incompatible_schema",
+      `Backup schema version "${manifest.schema_version ?? "unknown"}" is not compatible with this server.`,
+      {
+        backup_dir: backupDir,
+        backup_schema_version: manifest.schema_version ?? null,
+        expected_schema_version: PROJECT_BACKUP_SCHEMA_VERSION,
+      },
+      { nextStep: "Regenerate the backup with a compatible server version before restoring." }
+    ));
+  }
+
+  const exportedSnapshotChecksum = manifest.checksums?.canonical_snapshot_sha256 ?? null;
+  const computedSnapshotChecksum = computeProjectBackupSnapshotChecksum(snapshot);
+  if (!exportedSnapshotChecksum || exportedSnapshotChecksum !== computedSnapshotChecksum) {
+    diagnostics.push(createDiagnostic(
+      "project_restore_checksum_mismatch",
+      "Backup snapshot checksum does not match manifest.",
+      { backup_dir: backupDir, exported_checksum: exportedSnapshotChecksum, computed_checksum: computedSnapshotChecksum },
+      { nextStep: "Regenerate the backup before using it for recovery." }
+    ));
+  }
+
+  const exportedBundleChecksum = manifest.checksums?.bundle_sha256 ?? null;
+  const computedBundleChecksum = computeProjectBackupBundleChecksum({ manifest, snapshot });
+  if (!exportedBundleChecksum || exportedBundleChecksum !== computedBundleChecksum) {
+    diagnostics.push(createDiagnostic(
+      "project_restore_bundle_checksum_mismatch",
+      "Backup bundle checksum does not match manifest.",
+      { backup_dir: backupDir, exported_checksum: exportedBundleChecksum, computed_checksum: computedBundleChecksum },
+      { nextStep: "Regenerate the backup before using it for recovery." }
+    ));
+  }
+  return diagnostics;
+}
+
+function buildRestorePlan(currentSnapshot, backupSnapshot) {
+  const changes = [
+    ...compareSingleton("projects", currentSnapshot.project, backupSnapshot.project, ["project_id"]),
+    ...compareSingleton("universes", currentSnapshot.universe, backupSnapshot.universe, ["universe_id"]),
+  ];
+
+  for (const [domain, keyFields] of SNAPSHOT_ARRAY_DOMAINS) {
+    for (const change of compareRows(currentSnapshot[domain] ?? [], backupSnapshot[domain] ?? [], keyFields)) {
+      changes.push({ domain, ...change });
+    }
+  }
+
+  const byDomain = {};
+  for (const change of changes) {
+    byDomain[change.domain] ??= { create: 0, update: 0, delete: 0, unchanged: 0, refused: 0, conflict: 0 };
+    byDomain[change.domain][change.action] = (byDomain[change.domain][change.action] ?? 0) + 1;
+  }
+
+  return {
+    totals: countActions(changes),
+    by_domain: byDomain,
+    destructive_change_count: changes.filter(change => change.action === "delete").length,
+    changes,
+  };
+}
+
+export function restoreProjectFromBackup(db, {
+  syncDir,
+  projectId,
+  backupPath = null,
+  dryRun = true,
+  applicationVersion = "0.0.0",
+} = {}) {
+  const resolvedBackupDir = resolveBackupDir(backupPath ?? path.join(syncDir, "project-backups", projectId));
+  const manifestPath = path.join(resolvedBackupDir, MANIFEST_FILE);
+  const snapshotPath = path.join(resolvedBackupDir, SNAPSHOT_FILE);
+  const manifestRead = readJsonFile(manifestPath, "manifest");
+  const snapshotRead = readJsonFile(snapshotPath, "canonical snapshot");
+  const diagnostics = [manifestRead.diagnostic, snapshotRead.diagnostic].filter(Boolean);
+
+  if (dryRun === false) {
+    diagnostics.push(createDiagnostic(
+      "project_restore_apply_not_implemented",
+      "Project backup restore apply is not implemented in this milestone.",
+      { project_id: projectId },
+      { severity: "error", nextStep: "Run with dry_run=true to inspect the restore plan. Apply support is planned for M7." }
+    ));
+  }
+
+  const manifest = manifestRead.ok ? manifestRead.value : null;
+  const snapshot = snapshotRead.ok ? snapshotRead.value : null;
+  if (manifest && snapshot) {
+    diagnostics.push(...validateBundle({ manifest, snapshot, projectId, backupDir: resolvedBackupDir }));
+    diagnostics.push(...validateFileReferences(snapshot, { syncDir }));
+  }
+
+  diagnostics.sort((a, b) => {
+    const typeCompare = a.type.localeCompare(b.type);
+    if (typeCompare) return typeCompare;
+    return a.message.localeCompare(b.message);
+  });
+
+  if (diagnostics.length || !manifest || !snapshot) {
+    return {
+      ok: false,
+      action: "restore_refused",
+      dry_run: Boolean(dryRun),
+      project_id: projectId,
+      backup_dir: resolvedBackupDir,
+      diagnostics,
+      plan: null,
+      next_step: "Resolve restore diagnostics before using this backup as recovery input.",
+    };
+  }
+
+  const current = collectCurrentSnapshot(db, {
+    projectId,
+    syncDir,
+    applicationVersion,
+    backupLocationValue: backupLocation(syncDir, resolvedBackupDir),
+    backupSnapshot: snapshot,
+  });
+  if (!current.ok) {
+    return {
+      ok: false,
+      action: "restore_refused",
+      dry_run: Boolean(dryRun),
+      project_id: projectId,
+      backup_dir: resolvedBackupDir,
+      diagnostics: [createDiagnostic(
+        "project_restore_current_snapshot_failed",
+        current.error?.message ?? "Current SQLite canonical state could not be inspected.",
+        current.error?.details ?? { project_id: projectId },
+        { severity: "error", nextStep: "Fix the current project database state before retrying restore planning." }
+      )],
+      plan: null,
+      next_step: "Resolve restore diagnostics before using this backup as recovery input.",
+    };
+  }
+
+  const plan = buildRestorePlan(current.snapshot, snapshot);
+  return {
+    ok: true,
+    action: "planned",
+    dry_run: true,
+    project_id: projectId,
+    backup_dir: resolvedBackupDir,
+    backup: {
+      manifest: manifestPath,
+      canonical_snapshot: snapshotPath,
+      schema_version: manifest.schema_version,
+      checksums: manifest.checksums,
+    },
+    current_snapshot_checksum: current.checksum,
+    backup_snapshot_checksum: manifest.checksums.canonical_snapshot_sha256,
+    plan,
+    diagnostics: [],
+    next_step: plan.destructive_change_count > 0
+      ? "Review destructive delete candidates carefully. Apply support will require explicit confirmation in a later milestone."
+      : "Review the dry-run plan. Apply support is intentionally not available until the transactional restore milestone.",
+  };
+}

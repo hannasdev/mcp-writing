@@ -228,6 +228,42 @@ describe("sync tool", () => {
     assert.match(parsed.diagnostics[0].next_step, /export_project_backup/);
   });
 
+  test("restore_project_from_backup dry-run reports restore plan without applying it", async () => {
+    await callWriteTool("export_project_backup", {
+      project_id: "test-novel",
+      output_dir: "restore-backups/test-novel",
+    });
+
+    await callWriteTool("create_chapter", {
+      project_id: "test-novel",
+      title: "Restore Dry Run Extra Chapter",
+      sort_index: 100,
+      chapter_id: "ch-100-restore-dry-run-extra",
+    });
+
+    const text = await callWriteTool("restore_project_from_backup", {
+      project_id: "test-novel",
+      backup_path: "restore-backups/test-novel",
+    });
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.action, "planned");
+    assert.equal(parsed.dry_run, true);
+    assert.equal(parsed.plan.destructive_change_count >= 1, true);
+    assert.ok(parsed.plan.changes.some(change => (
+      change.domain === "chapters" &&
+      change.action === "delete" &&
+      change.identity.chapter_id === "ch-100-restore-dry-run-extra"
+    )));
+
+    const chaptersText = await callWriteTool("list_chapters", {
+      project_id: "test-novel",
+    });
+    const chapters = JSON.parse(chaptersText);
+    assert.ok(chapters.results.some(chapter => chapter.chapter_id === "ch-100-restore-dry-run-extra"));
+  });
+
   test("export_project_backup refuses output outside the sync directory", async () => {
     const text = await callWriteTool("export_project_backup", {
       project_id: "test-novel",
