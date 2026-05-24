@@ -81,6 +81,39 @@ function jsonType(value) {
   return typeof value;
 }
 
+function fileReferenceBoundaryFailure(error, fallbackResolvedPath) {
+  const errorDetails = isRecord(error?.details) ? error.details : {};
+  const message = error instanceof Error ? error.message : String(error);
+  const resolvedPath = typeof errorDetails.path === "string" ? errorDetails.path : fallbackResolvedPath;
+  const ancestorResolutionFailed =
+    Object.hasOwn(errorDetails, "existing_ancestor") ||
+    Object.hasOwn(errorDetails, "cause") ||
+    message === "Path ancestor could not be resolved: path may be inaccessible.";
+
+  if (ancestorResolutionFailed) {
+    return {
+      message: "file reference could not be resolved inside WRITING_SYNC_DIR.",
+      reason: "ancestor_resolution_failed",
+      resolvedPath,
+      nextStep: "Ensure the referenced path is accessible, then retry the dry run.",
+      details: {
+        existing_ancestor: errorDetails.existing_ancestor,
+        cause: errorDetails.cause,
+      },
+      errorMessage: message,
+    };
+  }
+
+  return {
+    message: "file reference points outside WRITING_SYNC_DIR.",
+    reason: "outside_sync_root",
+    resolvedPath,
+    nextStep: "Use only trusted backups generated for this sync root.",
+    details: {},
+    errorMessage: message,
+  };
+}
+
 function identityFieldError(row, field, nullableFields, emptyStringFields) {
   const hasField = Object.hasOwn(row, field);
   const value = row[field];
@@ -341,18 +374,20 @@ function validateFileReferences(snapshot, { syncDir }) {
           details: { domain, field, path: value },
         }).resolvedPath;
       } catch (error) {
+        const boundaryFailure = fileReferenceBoundaryFailure(error, resolved);
         diagnostics.push(createDiagnostic(
           "project_restore_file_reference_invalid",
-          `Backup ${domain} record points outside WRITING_SYNC_DIR.`,
+          `Backup ${domain} record ${boundaryFailure.message}`,
           {
             domain,
             field,
             path: value,
-            resolved_path: error?.details?.path ?? resolved,
-            reason: "outside_sync_root",
-            message: error instanceof Error ? error.message : String(error),
+            resolved_path: boundaryFailure.resolvedPath,
+            reason: boundaryFailure.reason,
+            message: boundaryFailure.errorMessage,
+            ...boundaryFailure.details,
           },
-          { nextStep: "Use only trusted backups generated for this sync root." }
+          { nextStep: boundaryFailure.nextStep }
         ));
         continue;
       }
