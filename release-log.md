@@ -12,7 +12,7 @@ This complements `CHANGELOG.md`:
 - Why it matters: Authors, maintainers, and AI agents can inspect recovery impact before any transactional apply workflow exists, including creates, updates, deletes, checksum trust checks, file-reference issues, and duplicate identity conflicts.
 - Who is affected: Authors, maintainers, and AI agents preparing or reviewing SQLite-canonical project recovery from generated project backup bundles.
 - Action needed: Run `restore_project_from_backup` with the default dry-run behavior and review diagnostics and destructive candidates; regenerate or repair untrusted backups before relying on them.
-- PR: TBD
+- PR: [#220](https://github.com/hannasdev/mcp-writing/pull/220)
 
 ### 2026-05-24 — Refresh project backups after canonical mutations
 
