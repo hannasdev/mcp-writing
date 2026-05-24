@@ -160,8 +160,18 @@ function backupLocation(syncDir, backupDir) {
   return relative ? `${relative}/` : "./";
 }
 
+function encodeIdentityValue(value) {
+  if (value === null) return "null:";
+  if (value === undefined) return "undefined:";
+  return `${typeof value}:${String(value)}`;
+}
+
 function rowKey(row, keyFields) {
-  return keyFields.map(field => String(row?.[field] ?? "")).join("\u0000");
+  return keyFields.map(field => encodeIdentityValue(row?.[field])).join("\u0000");
+}
+
+function rowIdentity(row, keyFields) {
+  return Object.fromEntries(keyFields.map(field => [field, row?.[field] ?? null]));
 }
 
 function compareRows(currentRows = [], backupRows = [], keyFields) {
@@ -173,7 +183,7 @@ function compareRows(currentRows = [], backupRows = [], keyFields) {
   for (const key of keys) {
     const current = currentByKey.get(key) ?? null;
     const backup = backupByKey.get(key) ?? null;
-    const identity = Object.fromEntries(keyFields.map((field, index) => [field, key.split("\u0000")[index] ?? ""]));
+    const identity = rowIdentity(backup ?? current, keyFields);
     if (!current) {
       changes.push({ action: "create", identity, backup });
     } else if (!backup) {
@@ -549,6 +559,35 @@ function validateBundleShape({ manifest, snapshot, backupDir, projectId }) {
   return diagnostics;
 }
 
+function validateCurrentSnapshotForPlanning(snapshot, { backupDir }) {
+  const diagnostics = [];
+  for (const [domain, keyFields] of SNAPSHOT_ARRAY_DOMAINS) {
+    const seenKeys = new Set();
+    for (const [index, row] of (snapshot[domain] ?? []).entries()) {
+      const key = rowKey(row, keyFields);
+      if (seenKeys.has(key)) {
+        diagnostics.push(createDiagnostic(
+          "project_restore_current_duplicate_identity",
+          `Current SQLite canonical snapshot domain "${domain}" contains duplicate identity values.`,
+          {
+            backup_dir: backupDir,
+            domain,
+            index,
+            identity: rowIdentity(row, keyFields),
+          },
+          {
+            severity: "error",
+            nextStep: "Fix duplicate current SQLite identity rows before retrying restore planning.",
+          }
+        ));
+      } else {
+        seenKeys.add(key);
+      }
+    }
+  }
+  return diagnostics;
+}
+
 function buildRestorePlan(currentSnapshot, backupSnapshot) {
   const changes = [
     ...compareSingleton("projects", currentSnapshot.project, backupSnapshot.project, ["project_id"]),
@@ -655,6 +694,27 @@ export function restoreProjectFromBackup(db, {
       )],
       plan: null,
       next_step: "Resolve restore diagnostics before using this backup as recovery input.",
+    };
+  }
+
+  const currentShapeDiagnostics = validateCurrentSnapshotForPlanning(current.snapshot, {
+    backupDir: resolvedBackupDir,
+  });
+  if (currentShapeDiagnostics.length) {
+    currentShapeDiagnostics.sort((a, b) => {
+      const typeCompare = a.type.localeCompare(b.type);
+      if (typeCompare) return typeCompare;
+      return a.message.localeCompare(b.message);
+    });
+    return {
+      ok: false,
+      action: "restore_refused",
+      dry_run: Boolean(dryRun),
+      project_id: projectId,
+      backup_dir: resolvedBackupDir,
+      diagnostics: currentShapeDiagnostics,
+      plan: null,
+      next_step: "Fix duplicate current SQLite identity rows before retrying restore planning.",
     };
   }
 

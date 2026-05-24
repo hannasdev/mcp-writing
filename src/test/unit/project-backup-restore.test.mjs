@@ -504,6 +504,57 @@ describe("restoreProjectFromBackup", () => {
     assert.equal(result.plan, null);
   }));
 
+  test("treats null and empty-string nullable identity fields as distinct", () => withFixture(({ db, syncDir, backupDir }) => {
+    const built = exportBackup(db, syncDir, backupDir);
+    writeMalformedSnapshotWithValidChecksums(backupDir, {
+      ...built.snapshot,
+      character_relationships: [
+        ...built.snapshot.character_relationships,
+        {
+          ...built.snapshot.character_relationships[0],
+          note: "",
+        },
+      ],
+    });
+
+    const result = restorePlan(db, syncDir, backupDir);
+
+    assert.equal(result.ok, true);
+    assert.ok(result.plan.changes.some(change => (
+      change.domain === "character_relationships" &&
+      change.action === "create" &&
+      change.identity.note === ""
+    )));
+    assert.ok(result.plan.changes.some(change => (
+      change.domain === "character_relationships" &&
+      change.action === "unchanged" &&
+      change.identity.note === null
+    )));
+  }));
+
+  test("refuses current SQLite duplicate identities before planning can collapse rows", () => withFixture(({ db, syncDir, backupDir }) => {
+    exportBackup(db, syncDir, backupDir);
+    db.prepare(`
+      INSERT INTO character_relationships (from_character, to_character, relationship_type, strength, scene_id, note)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run("char-elena", "char-marcus", "trusts", "strong", null, null);
+
+    const result = restorePlan(db, syncDir, backupDir);
+
+    assert.equal(result.ok, false);
+    assert.equal(result.action, "restore_refused");
+    assert.deepEqual(result.diagnostics.map(diagnostic => diagnostic.type), ["project_restore_current_duplicate_identity"]);
+    assert.equal(result.diagnostics[0].details.domain, "character_relationships");
+    assert.deepEqual(result.diagnostics[0].details.identity, {
+      from_character: "char-elena",
+      to_character: "char-marcus",
+      relationship_type: "trusts",
+      scene_id: null,
+      note: null,
+    });
+    assert.equal(result.plan, null);
+  }));
+
   test("keeps apply mode unavailable until the transactional restore milestone", () => withFixture(({ db, syncDir, backupDir }) => {
     exportBackup(db, syncDir, backupDir);
 
