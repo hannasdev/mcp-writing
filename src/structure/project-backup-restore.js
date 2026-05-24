@@ -6,6 +6,10 @@ import {
   computeProjectBackupSnapshotChecksum,
   PROJECT_BACKUP_SCHEMA_VERSION,
 } from "./project-backup.js";
+import {
+  resolveBoundaryRootReal,
+  resolveCandidateInsideBoundary,
+} from "../core/filesystem-boundary.js";
 
 const MANIFEST_FILE = "manifest.json";
 const SNAPSHOT_FILE = "canonical.snapshot.json";
@@ -294,6 +298,7 @@ function collectCurrentSnapshot(db, {
 function validateFileReferences(snapshot, { syncDir }) {
   const diagnostics = [];
   const syncRoot = path.resolve(syncDir);
+  const syncRootReal = resolveBoundaryRootReal(syncRoot);
   for (const [domain, field, requirement] of FILE_REFERENCE_FIELDS) {
     for (const row of snapshot[domain] ?? []) {
       const value = row[field];
@@ -326,12 +331,27 @@ function validateFileReferences(snapshot, { syncDir }) {
       }
 
       const resolved = path.isAbsolute(value) ? path.resolve(value) : path.resolve(syncRoot, value);
-      const relative = path.relative(syncRoot, resolved);
-      if (relative.startsWith("..") || path.isAbsolute(relative)) {
+      let boundaryResolvedPath;
+      try {
+        boundaryResolvedPath = resolveCandidateInsideBoundary(resolved, {
+          boundaryRoot: syncRoot,
+          boundaryRootReal: syncRootReal,
+          errorCode: "project_restore_file_reference_invalid",
+          errorMessage: "Backup file reference must stay inside WRITING_SYNC_DIR.",
+          details: { domain, field, path: value },
+        }).resolvedPath;
+      } catch (error) {
         diagnostics.push(createDiagnostic(
           "project_restore_file_reference_invalid",
           `Backup ${domain} record points outside WRITING_SYNC_DIR.`,
-          { domain, field, path: value },
+          {
+            domain,
+            field,
+            path: value,
+            resolved_path: error?.details?.path ?? resolved,
+            reason: "outside_sync_root",
+            message: error instanceof Error ? error.message : String(error),
+          },
           { nextStep: "Use only trusted backups generated for this sync root." }
         ));
         continue;
@@ -349,14 +369,14 @@ function validateFileReferences(snapshot, { syncDir }) {
         diagnostics.push(createDiagnostic(
           "project_restore_file_reference_missing",
           `Backup ${domain} record points to a missing file.`,
-          { domain, field, path: value, resolved_path: resolved },
+          { domain, field, path: value, resolved_path: boundaryResolvedPath },
           { nextStep: "Restore the referenced prose file, then retry the dry run." }
         ));
       } else if (requirement === "required" && !state.regular) {
         diagnostics.push(createDiagnostic(
           "project_restore_file_reference_invalid",
           `Backup ${domain} record does not point to a regular file.`,
-          { domain, field, path: value, resolved_path: resolved, reason: state.error ?? "not_regular" },
+          { domain, field, path: value, resolved_path: boundaryResolvedPath, reason: state.error ?? "not_regular" },
           { nextStep: "Restore the referenced prose file as a regular file, then retry the dry run." }
         ));
       }

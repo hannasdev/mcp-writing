@@ -276,6 +276,40 @@ describe("restoreProjectFromBackup", () => {
     assert.equal(result.plan, null);
   }));
 
+  test("refuses file references that escape through symlinked directories", () => withFixture(({ db, syncDir, backupDir }) => {
+    const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-writing-restore-file-escape-"));
+    try {
+      const outsideScenePath = path.join(outsideDir, "sc-first.md");
+      fs.writeFileSync(outsideScenePath, "# Outside Scene\n", "utf8");
+      const linkDir = path.join(syncDir, "projects/test-novel/symlink-scenes");
+      fs.symlinkSync(outsideDir, linkDir, "dir");
+
+      const built = exportBackup(db, syncDir, backupDir);
+      writeMalformedSnapshotWithValidChecksums(backupDir, {
+        ...built.snapshot,
+        scenes: [
+          {
+            ...built.snapshot.scenes[0],
+            file_path: "projects/test-novel/symlink-scenes/sc-first.md",
+          },
+        ],
+      });
+
+      const result = restorePlan(db, syncDir, backupDir);
+
+      assert.equal(result.ok, false);
+      assert.equal(result.action, "restore_refused");
+      assert.deepEqual(result.diagnostics.map(diagnostic => diagnostic.type), ["project_restore_file_reference_invalid"]);
+      assert.equal(result.diagnostics[0].details.domain, "scenes");
+      assert.equal(result.diagnostics[0].details.field, "file_path");
+      assert.equal(result.diagnostics[0].details.reason, "outside_sync_root");
+      assert.equal(result.diagnostics[0].details.resolved_path, fs.realpathSync.native(outsideScenePath));
+      assert.equal(result.plan, null);
+    } finally {
+      fs.rmSync(outsideDir, { recursive: true, force: true });
+    }
+  }));
+
   test("refuses non-object manifests with restore diagnostics", () => withFixture(({ db, syncDir, backupDir }) => {
     exportBackup(db, syncDir, backupDir);
     const snapshot = JSON.parse(fs.readFileSync(path.join(backupDir, "canonical.snapshot.json"), "utf8"));
