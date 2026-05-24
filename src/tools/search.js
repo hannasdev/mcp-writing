@@ -4,6 +4,7 @@ import matter from "gray-matter";
 import { readMeta } from "../sync/sync.js";
 import { persistSceneReferenceLink, upsertExplicitReferenceLinkRow } from "./reference-link-persistence.js";
 import { resolveValidatedChapterFilter } from "../core/chapter-resolution.js";
+import { refreshProjectBackupAfterMutation } from "../structure/project-backup-refresh.js";
 
 function accumulateSuggestionScore(scoreMap, rows, sourceLabel) {
   for (const row of rows) {
@@ -55,10 +56,18 @@ function selectApplyCandidates(enrichedCandidates, selectedDocIds, maxApply) {
   return uniqueCandidates.slice(0, maxApply ?? uniqueCandidates.length);
 }
 
+function createToolActor(id) {
+  return {
+    type: "tool",
+    id,
+  };
+}
+
 export function registerSearchTools(s, {
   db,
   SYNC_DIR,
   SYNC_DIR_WRITABLE,
+  MCP_SERVER_VERSION = "0.0.0",
   GIT_ENABLED,
   errorResponse,
   paginateRows,
@@ -1292,6 +1301,32 @@ export function registerSearchTools(s, {
           });
         }
 
+        const backupResult = appliedLinks.length
+          ? refreshProjectBackupAfterMutation(db, {
+              syncDir: SYNC_DIR,
+              projectId: resolvedProjectId,
+              applicationVersion: MCP_SERVER_VERSION,
+              operation: "suggest_scene_references",
+              actor: createToolActor("suggest_scene_references"),
+              affected: {
+                scenes: [scene_id],
+                reference_docs: appliedLinks.map(link => link.target_doc_id),
+              },
+              summary: `Applied ${appliedLinks.length} suggested reference link(s) for scene "${scene_id}".`,
+              before: null,
+              after: {
+                applied_links: appliedLinks,
+              },
+              metadata: {
+                failed_count: failedLinks.length,
+              },
+            })
+          : {
+              operation_history: null,
+              backup_refresh: null,
+              backup_warnings: [],
+            };
+
         return {
           content: [{
             type: "text",
@@ -1305,6 +1340,9 @@ export function registerSearchTools(s, {
               applied_links: appliedLinks,
               failed_count: failedLinks.length,
               failed_links: failedLinks,
+              operation_history: backupResult.operation_history,
+              backup_refresh: backupResult.backup_refresh,
+              backup_warnings: backupResult.backup_warnings,
               candidates: enriched,
             }, null, 2),
           }],

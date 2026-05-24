@@ -733,6 +733,8 @@ describe("reference link tools", () => {
     assert.equal(applyParsed.applied_count, 1);
     assert.equal(applyParsed.applied_links[0].target_doc_id, "ref-apply-mode");
     assert.equal(applyParsed.applied_links[0].origin, "explicit");
+    assert.equal(applyParsed.backup_refresh.ok, true);
+    assert.deepEqual(applyParsed.backup_warnings, []);
 
     const listedText = await callWriteTool("list_scene_references", {
       scene_id: "sc-001",
@@ -857,6 +859,8 @@ describe("upsert_thread_link tool", () => {
     assert.equal(parsed.thread.project_id, "test-novel");
     assert.equal(parsed.link.scene_id, "sc-001");
     assert.equal(parsed.link.beat, "Opening");
+    assert.equal(parsed.backup_refresh.ok, true);
+    assert.deepEqual(parsed.backup_warnings, []);
   });
 
   test("updates existing link beat idempotently", async () => {
@@ -931,6 +935,8 @@ describe("upsert_reference_link tool", () => {
     assert.equal(parsed.link.source_id, "sc-upsert-ref-001");
     assert.equal(parsed.link.target_doc_id, "ref-upsert-target");
     assert.equal(parsed.link.relation, "informs");
+    assert.equal(parsed.backup_refresh.ok, true);
+    assert.deepEqual(parsed.backup_warnings, []);
 
     const sidecarText = fs.readFileSync(scenePath.replace(/\.md$/, ".meta.yaml"), "utf8");
     assert.ok(sidecarText.includes("reference_links:"));

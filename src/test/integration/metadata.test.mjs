@@ -871,6 +871,9 @@ describe("update_character_sheet tool", () => {
       fields: { arc_summary: "Overcomes isolation to build genuine trust." },
     });
     assert.ok(text.includes("Updated character sheet"));
+    const parsed = JSON.parse(text);
+    assert.equal(parsed.backup_refresh.ok, true);
+    assert.deepEqual(parsed.backup_warnings, []);
 
     const sheet = await callWriteTool("get_character_sheet", { character_id: "elena" });
     assert.ok(sheet.includes("Overcomes isolation"), `Expected updated arc, got: ${sheet.slice(0, 300)}`);
@@ -892,6 +895,9 @@ describe("update_place_sheet tool", () => {
       fields: { name: "Harbor District (Revised)" },
     });
     assert.ok(text.includes("Updated place sheet"));
+    const parsed = JSON.parse(text);
+    assert.equal(parsed.backup_refresh.ok, true);
+    assert.deepEqual(parsed.backup_warnings, []);
 
     const listed = await callWriteTool("list_places");
     assert.ok(listed.includes("Harbor District (Revised)"), `Expected updated name in list_places, got: ${listed.slice(0, 300)}`);
@@ -928,6 +934,9 @@ describe("update_scene_metadata status field", () => {
       fields: { status: "needs-revision" },
     });
     assert.ok(text.includes("Updated metadata"));
+    const parsed = JSON.parse(text);
+    assert.equal(parsed.backup_refresh.ok, true);
+    assert.deepEqual(parsed.backup_warnings, []);
 
     // Verify the status field was written to the sidecar on disk
     const sidecarFile = path.join(writeSyncDir, "projects", "test-novel", "part-1", "chapter-1", "sc-001.meta.yaml");
@@ -951,6 +960,8 @@ describe("create_character_sheet tool", () => {
 
     assert.equal(parsed.ok, true);
     assert.equal(parsed.id, "char-mira-nystrom");
+    assert.equal(parsed.backup_refresh.ok, true);
+    assert.deepEqual(parsed.backup_warnings, []);
     assert.ok(fs.existsSync(parsed.prose_path));
     assert.ok(fs.existsSync(parsed.meta_path));
     assert.ok(fs.existsSync(path.join(path.dirname(parsed.prose_path), "arc.md")));

@@ -39,6 +39,51 @@ function createToolActor(id) {
   };
 }
 
+function emptyBackupMutationResult() {
+  return {
+    operation_history: null,
+    backup_refresh: null,
+    backup_warnings: [],
+  };
+}
+
+function refreshProjectScopedBackupAfterMutation(db, {
+  syncDir,
+  projectId,
+  applicationVersion,
+  operation,
+  actor,
+  affected,
+  before,
+  after,
+  summary,
+  metadata,
+}) {
+  if (!projectId) {
+    return emptyBackupMutationResult();
+  }
+  return refreshProjectBackupAfterMutation(db, {
+    syncDir,
+    projectId,
+    applicationVersion,
+    operation,
+    actor,
+    affected,
+    before,
+    after,
+    summary,
+    metadata,
+  });
+}
+
+function backupMutationFields(backupResult) {
+  return {
+    operation_history: backupResult.operation_history,
+    backup_refresh: backupResult.backup_refresh,
+    backup_warnings: backupResult.backup_warnings,
+  };
+}
+
 function getProvidedStructuralSceneMetadataFields(fields) {
   return STRUCTURAL_SCENE_METADATA_FIELDS.filter((field) => Object.hasOwn(fields, field));
 }
@@ -373,8 +418,34 @@ export function registerMetadataTools(s, {
           universeId: universe_id,
           meta: fields ?? {},
         });
+        const backupResult = refreshProjectScopedBackupAfterMutation(db, {
+          syncDir: SYNC_DIR,
+          projectId: project_id,
+          applicationVersion: MCP_SERVER_VERSION,
+          operation: "create_character_sheet",
+          actor: createToolActor("create_character_sheet"),
+          affected: {
+            characters: [result.id],
+          },
+          summary: `${result.created ? "Created" : "Reused"} character sheet "${result.id}".`,
+          before: null,
+          after: {
+            character: {
+              character_id: result.id,
+              project_id: result.project_id,
+              universe_id: result.universe_id,
+              name,
+            },
+          },
+        });
 
-        return jsonResponse({ ok: true, action: result.created ? "created" : "exists", kind: "character", ...result });
+        return jsonResponse({
+          ok: true,
+          action: result.created ? "created" : "exists",
+          kind: "character",
+          ...result,
+          ...backupMutationFields(backupResult),
+        });
       } catch (err) {
         if (err?.name === "CoreValidationError") {
           return errorResponse(err.code, err.message, err.details);
@@ -425,8 +496,34 @@ export function registerMetadataTools(s, {
           universeId: universe_id,
           meta: fields ?? {},
         });
+        const backupResult = refreshProjectScopedBackupAfterMutation(db, {
+          syncDir: SYNC_DIR,
+          projectId: project_id,
+          applicationVersion: MCP_SERVER_VERSION,
+          operation: "create_place_sheet",
+          actor: createToolActor("create_place_sheet"),
+          affected: {
+            places: [result.id],
+          },
+          summary: `${result.created ? "Created" : "Reused"} place sheet "${result.id}".`,
+          before: null,
+          after: {
+            place: {
+              place_id: result.id,
+              project_id: result.project_id,
+              universe_id: result.universe_id,
+              name,
+            },
+          },
+        });
 
-        return jsonResponse({ ok: true, action: result.created ? "created" : "exists", kind: "place", ...result });
+        return jsonResponse({
+          ok: true,
+          action: result.created ? "created" : "exists",
+          kind: "place",
+          ...result,
+          ...backupMutationFields(backupResult),
+        });
       } catch (err) {
         if (err?.name === "CoreValidationError") {
           return errorResponse(err.code, err.message, err.details);
@@ -484,12 +581,30 @@ export function registerMetadataTools(s, {
       const thread = db.prepare(`SELECT * FROM threads WHERE thread_id = ?`).get(thread_id);
       const link = db.prepare(`SELECT scene_id, project_id, thread_id, beat FROM scene_threads WHERE scene_id = ? AND project_id = ? AND thread_id = ?`)
         .get(scene_id, project_id, thread_id);
+      const backupResult = refreshProjectScopedBackupAfterMutation(db, {
+        syncDir: SYNC_DIR,
+        projectId: project_id,
+        applicationVersion: MCP_SERVER_VERSION,
+        operation: "upsert_thread_link",
+        actor: createToolActor("upsert_thread_link"),
+        affected: {
+          threads: [thread_id],
+          scenes: [scene_id],
+        },
+        summary: `Upserted thread "${thread_id}" link for scene "${scene_id}".`,
+        before: null,
+        after: {
+          thread,
+          link,
+        },
+      });
 
       return jsonResponse({
         ok: true,
         action: "upserted",
         thread,
         link,
+        ...backupMutationFields(backupResult),
       });
     }
   );
@@ -520,7 +635,7 @@ export function registerMetadataTools(s, {
       }
 
       const targetDoc = db.prepare(`
-        SELECT doc_id
+        SELECT doc_id, project_id
         FROM reference_docs
         WHERE doc_id = ?
       `).get(target_doc_id);
@@ -632,11 +747,29 @@ export function registerMetadataTools(s, {
         FROM reference_links
         WHERE source_kind = ? AND source_project_id = ? AND source_id = ? AND target_doc_id = ? AND relation = ?
       `).get(source_kind, resolvedSourceProjectId, source_id, target_doc_id, normalizedRelation);
+      const backupProjectId = resolvedSourceProjectId || targetDoc.project_id || null;
+      const backupResult = refreshProjectScopedBackupAfterMutation(db, {
+        syncDir: SYNC_DIR,
+        projectId: backupProjectId,
+        applicationVersion: MCP_SERVER_VERSION,
+        operation: "upsert_reference_link",
+        actor: createToolActor("upsert_reference_link"),
+        affected: {
+          reference_docs: [target_doc_id],
+          sources: [`${source_kind}:${source_id}`],
+        },
+        summary: `Upserted ${source_kind} reference link from "${source_id}" to "${target_doc_id}".`,
+        before: null,
+        after: {
+          link,
+        },
+      });
 
       return jsonResponse({
         ok: true,
         action: "upserted",
         link,
+        ...backupMutationFields(backupResult),
       });
     }
   );
@@ -1559,8 +1692,46 @@ export function registerMetadataTools(s, {
         indexSceneFile(db, SYNC_DIR, scene.file_path, updated, prose, {
           managedStructure: isManagedStructureProject(db, project_id),
         });
+        const backupResult = refreshProjectScopedBackupAfterMutation(db, {
+          syncDir: SYNC_DIR,
+          projectId: project_id,
+          applicationVersion: MCP_SERVER_VERSION,
+          operation: "update_scene_metadata",
+          actor: createToolActor("update_scene_metadata"),
+          affected: {
+            scenes: [scene_id],
+          },
+          summary: `Updated metadata for scene "${scene_id}".`,
+          before: {
+            scene: {
+              scene_id,
+              project_id,
+              fields: Object.keys(fields).sort().reduce((acc, key) => {
+                acc[key] = meta[key] ?? null;
+                return acc;
+              }, {}),
+            },
+          },
+          after: {
+            scene: {
+              scene_id,
+              project_id,
+              fields: Object.keys(fields).sort().reduce((acc, key) => {
+                acc[key] = updated[key] ?? null;
+                return acc;
+              }, {}),
+            },
+          },
+        });
 
-        return { content: [{ type: "text", text: `Updated metadata for scene '${scene_id}'.` }] };
+        return jsonResponse({
+          ok: true,
+          action: "updated",
+          message: `Updated metadata for scene '${scene_id}'.`,
+          scene_id,
+          project_id,
+          ...backupMutationFields(backupResult),
+        });
       } catch (err) {
         if (err.code === "ENOENT") {
           return errorResponse("STALE_PATH", `Prose file for scene '${scene_id}' not found at indexed path — the file may have moved. Run sync() to refresh.`, { indexed_path: scene.file_path });
@@ -1588,7 +1759,7 @@ export function registerMetadataTools(s, {
       if (!SYNC_DIR_WRITABLE) {
         return errorResponse("READ_ONLY", "Cannot update character: sync dir is read-only.");
       }
-      const char = db.prepare(`SELECT file_path FROM characters WHERE character_id = ?`).get(character_id);
+      const char = db.prepare(`SELECT character_id, project_id, universe_id, file_path, name, role, arc_summary, first_appearance FROM characters WHERE character_id = ?`).get(character_id);
       if (!char) {
         return errorResponse("NOT_FOUND", `Character '${character_id}' not found.`);
       }
@@ -1611,8 +1782,47 @@ export function registerMetadataTools(s, {
             db.prepare(`INSERT OR IGNORE INTO character_traits (character_id, trait) VALUES (?, ?)`).run(character_id, t);
           }
         }
+        const backupResult = refreshProjectScopedBackupAfterMutation(db, {
+          syncDir: SYNC_DIR,
+          projectId: char.project_id,
+          applicationVersion: MCP_SERVER_VERSION,
+          operation: "update_character_sheet",
+          actor: createToolActor("update_character_sheet"),
+          affected: {
+            characters: [character_id],
+          },
+          summary: `Updated character sheet "${character_id}".`,
+          before: {
+            character: {
+              character_id,
+              project_id: char.project_id,
+              universe_id: char.universe_id,
+              name: char.name,
+              role: char.role,
+              arc_summary: char.arc_summary,
+              first_appearance: char.first_appearance,
+            },
+          },
+          after: {
+            character: {
+              character_id,
+              project_id: char.project_id,
+              universe_id: char.universe_id,
+              name: updated.name ?? meta.name ?? null,
+              role: updated.role ?? null,
+              arc_summary: updated.arc_summary ?? null,
+              first_appearance: updated.first_appearance ?? null,
+            },
+          },
+        });
 
-        return { content: [{ type: "text", text: `Updated character sheet for '${character_id}'.` }] };
+        return jsonResponse({
+          ok: true,
+          action: "updated",
+          message: `Updated character sheet for '${character_id}'.`,
+          character_id,
+          ...backupMutationFields(backupResult),
+        });
       } catch (err) {
         if (err?.name === "CoreValidationError") {
           return errorResponse(err.code, err.message, err.details);
@@ -1641,7 +1851,7 @@ export function registerMetadataTools(s, {
       if (!SYNC_DIR_WRITABLE) {
         return errorResponse("READ_ONLY", "Cannot update place: sync dir is read-only.");
       }
-      const place = db.prepare(`SELECT file_path FROM places WHERE place_id = ?`).get(place_id);
+      const place = db.prepare(`SELECT place_id, project_id, universe_id, file_path, name FROM places WHERE place_id = ?`).get(place_id);
       if (!place) {
         return errorResponse("NOT_FOUND", `Place '${place_id}' not found.`);
       }
@@ -1652,8 +1862,41 @@ export function registerMetadataTools(s, {
 
         db.prepare(`UPDATE places SET name = ? WHERE place_id = ?`)
           .run(updated.name ?? meta.name ?? place_id, place_id);
+        const backupResult = refreshProjectScopedBackupAfterMutation(db, {
+          syncDir: SYNC_DIR,
+          projectId: place.project_id,
+          applicationVersion: MCP_SERVER_VERSION,
+          operation: "update_place_sheet",
+          actor: createToolActor("update_place_sheet"),
+          affected: {
+            places: [place_id],
+          },
+          summary: `Updated place sheet "${place_id}".`,
+          before: {
+            place: {
+              place_id,
+              project_id: place.project_id,
+              universe_id: place.universe_id,
+              name: place.name,
+            },
+          },
+          after: {
+            place: {
+              place_id,
+              project_id: place.project_id,
+              universe_id: place.universe_id,
+              name: updated.name ?? meta.name ?? place_id,
+            },
+          },
+        });
 
-        return { content: [{ type: "text", text: `Updated place sheet for '${place_id}'.` }] };
+        return jsonResponse({
+          ok: true,
+          action: "updated",
+          message: `Updated place sheet for '${place_id}'.`,
+          place_id,
+          ...backupMutationFields(backupResult),
+        });
       } catch (err) {
         if (err?.name === "CoreValidationError") {
           return errorResponse(err.code, err.message, err.details);
