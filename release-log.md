@@ -6,6 +6,14 @@ This complements `CHANGELOG.md`:
 - `CHANGELOG.md` is technical and release-oriented.
 - This log is plain-language and outcome-oriented.
 
+### 2026-05-24 — Preview project backup restores before applying them
+
+- What changed: Added `restore_project_from_backup` in dry-run mode to validate trusted project backup bundles and preview the canonical SQLite changes that a future restore would make.
+- Why it matters: Authors, maintainers, and AI agents can inspect recovery impact before any transactional apply workflow exists, including creates, updates, deletes, checksum trust checks, file-reference issues, and duplicate identity conflicts.
+- Who is affected: Authors, maintainers, and AI agents preparing or reviewing SQLite-canonical project recovery from generated project backup bundles.
+- Action needed: Run `restore_project_from_backup` with the default dry-run behavior and review diagnostics and destructive candidates; regenerate or repair untrusted backups before relying on them.
+- PR: TBD
+
 ### 2026-05-24 — Refresh project backups after canonical mutations
 
 - What changed: Sanctioned project-scoped canonical mutation tools now append advisory operation history and refresh generated project backup artifacts after successful database changes.
