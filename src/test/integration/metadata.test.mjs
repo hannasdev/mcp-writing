@@ -285,11 +285,41 @@ describe("create_chapter tool", () => {
     assert.equal(createParsed.chapter.title, "M7 New Crossing");
     assert.equal(createParsed.chapter.sort_index, 99);
     assert.equal(createParsed.diagnostics[0].code, "REPRESENTATION_DEFERRED");
+    assert.deepEqual(createParsed.backup_warnings, []);
+    assert.equal(createParsed.operation_history.appended, true);
+    assert.equal(createParsed.operation_history.relative_path, "project-backups/test-novel/operations.jsonl");
+    assert.equal(createParsed.operation_history.advisory, true);
+    assert.equal(createParsed.operation_history.restore_authority, false);
+    assert.equal(createParsed.backup_refresh.ok, true);
+    assert.equal(createParsed.backup_refresh.relative_output_dir, "project-backups/test-novel");
+    assert.equal(createParsed.backup_refresh.written.manifest, true);
+    assert.equal(createParsed.backup_refresh.written.canonical_snapshot, true);
+    assert.equal(createParsed.backup_refresh.git_commit_created, false);
     assert.ok(createParsed.next_steps.some((step) => step.includes("assign_scene_to_chapter")));
 
     const chaptersText = await callWriteTool("list_chapters", { project_id: "test-novel" });
     const chaptersParsed = JSON.parse(chaptersText);
     assert.ok(chaptersParsed.results.some((row) => row.chapter_id === "ch-99-m7-new-crossing"));
+
+    const operationLines = fs.readFileSync(
+      path.join(writeSyncDir, "project-backups", "test-novel", "operations.jsonl"),
+      "utf8"
+    ).trimEnd().split("\n");
+    const operationRecord = JSON.parse(operationLines.at(-1));
+    assert.equal(operationRecord.operation, "create_chapter");
+    assert.equal(operationRecord.project_id, "test-novel");
+    assert.deepEqual(operationRecord.affected.chapters, ["ch-99-m7-new-crossing"]);
+    assert.equal(operationRecord.actor.id, "create_chapter");
+    assert.equal(operationRecord.after.chapter.title, "M7 New Crossing");
+    assert.equal(operationRecord.advisory, true);
+    assert.equal(operationRecord.restore_authority, false);
+
+    const backupDiagnosticText = await callWriteTool("diagnose_project_backups", {
+      project_id: "test-novel",
+    });
+    const backupDiagnosticParsed = JSON.parse(backupDiagnosticText);
+    assert.equal(backupDiagnosticParsed.ok, true);
+    assert.equal(backupDiagnosticParsed.trust.status, "current");
   });
 
   test("rejects creating a chapter at an occupied sort index", async () => {
@@ -841,6 +871,9 @@ describe("update_character_sheet tool", () => {
       fields: { arc_summary: "Overcomes isolation to build genuine trust." },
     });
     assert.ok(text.includes("Updated character sheet"));
+    const parsed = JSON.parse(text);
+    assert.equal(parsed.backup_refresh.ok, true);
+    assert.deepEqual(parsed.backup_warnings, []);
 
     const sheet = await callWriteTool("get_character_sheet", { character_id: "elena" });
     assert.ok(sheet.includes("Overcomes isolation"), `Expected updated arc, got: ${sheet.slice(0, 300)}`);
@@ -862,6 +895,9 @@ describe("update_place_sheet tool", () => {
       fields: { name: "Harbor District (Revised)" },
     });
     assert.ok(text.includes("Updated place sheet"));
+    const parsed = JSON.parse(text);
+    assert.equal(parsed.backup_refresh.ok, true);
+    assert.deepEqual(parsed.backup_warnings, []);
 
     const listed = await callWriteTool("list_places");
     assert.ok(listed.includes("Harbor District (Revised)"), `Expected updated name in list_places, got: ${listed.slice(0, 300)}`);
@@ -898,6 +934,9 @@ describe("update_scene_metadata status field", () => {
       fields: { status: "needs-revision" },
     });
     assert.ok(text.includes("Updated metadata"));
+    const parsed = JSON.parse(text);
+    assert.equal(parsed.backup_refresh.ok, true);
+    assert.deepEqual(parsed.backup_warnings, []);
 
     // Verify the status field was written to the sidecar on disk
     const sidecarFile = path.join(writeSyncDir, "projects", "test-novel", "part-1", "chapter-1", "sc-001.meta.yaml");
@@ -921,6 +960,8 @@ describe("create_character_sheet tool", () => {
 
     assert.equal(parsed.ok, true);
     assert.equal(parsed.id, "char-mira-nystrom");
+    assert.equal(parsed.backup_refresh.ok, true);
+    assert.deepEqual(parsed.backup_warnings, []);
     assert.ok(fs.existsSync(parsed.prose_path));
     assert.ok(fs.existsSync(parsed.meta_path));
     assert.ok(fs.existsSync(path.join(path.dirname(parsed.prose_path), "arc.md")));

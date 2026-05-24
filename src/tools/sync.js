@@ -10,6 +10,15 @@ import {
   defaultStructureExportFileName,
   writeStructureExportFile,
 } from "../structure/structure-export.js";
+import {
+  buildProjectBackup,
+  writeProjectBackupFiles,
+} from "../structure/project-backup.js";
+import { runProjectBackupDiagnostics } from "../structure/project-backup-diagnostics.js";
+import {
+  createToolActor,
+  refreshProjectBackupAfterMutation,
+} from "../structure/project-backup-refresh.js";
 import { restoreStructureFromExport } from "../structure/structure-restore.js";
 
 export function registerSyncTools(s, {
@@ -18,6 +27,7 @@ export function registerSyncTools(s, {
   SYNC_DIR_ABS,
   SYNC_DIR_REAL,
   SYNC_DIR_WRITABLE,
+  MCP_SERVER_VERSION = "0.0.0",
   asyncJobs,
   errorResponse,
   jsonResponse,
@@ -33,6 +43,14 @@ export function registerSyncTools(s, {
   deriveLoglineFromProse,
   inferCharacterIdsFromProse,
 }) {
+  function backupMutationFields(backupResult) {
+    return {
+      operation_history: backupResult.operation_history,
+      backup_refresh: backupResult.backup_refresh,
+      backup_warnings: backupResult.backup_warnings,
+    };
+  }
+
   s.tool("sync", "Re-scan the sync folder and update derived scene/character/place indexes from disk. For already managed projects, sync reports file-derived chapter or epigraph drift without adopting it as canonical structure; use explicit import, repair, or structure tools for structural changes.", {}, async () => {
     const result = syncAll(db, SYNC_DIR, { writable: SYNC_DIR_WRITABLE });
     const parts = [`Sync complete. ${result.indexed} scenes indexed. ${result.staleMarked} scenes marked stale.`];
@@ -146,6 +164,143 @@ export function registerSyncTools(s, {
         return errorResponse(
           "EXPORT_STRUCTURE_FAILED",
           error instanceof Error ? error.message : "Failed to export structure snapshot."
+        );
+      }
+    }
+  );
+
+  s.tool(
+    "export_project_backup",
+    "Generate a deterministic project backup bundle from SQLite canonical state. Writes manifest.json, canonical.snapshot.json, and operations.jsonl under WRITING_SYNC_DIR for explicit review and future restore workflows; this is generated transparency only and does not mutate canonical state.",
+    {
+      project_id: z.string().describe("Project ID to back up (e.g. 'test-novel' or 'universe-1/book-1-the-lamb')."),
+      output_dir: z.string().optional().describe("Directory under WRITING_SYNC_DIR where manifest.json, canonical.snapshot.json, and operations.jsonl should be written. Defaults to project-backups/<project_id>."),
+    },
+    async ({ project_id, output_dir }) => {
+      if (!SYNC_DIR_WRITABLE) {
+        return errorResponse("READ_ONLY", "Cannot export project backup: sync dir is read-only.");
+      }
+
+      const projectIdCheck = validateProjectId(project_id);
+      if (!projectIdCheck.ok) {
+        return errorResponse("INVALID_PROJECT_ID", projectIdCheck.reason, { project_id });
+      }
+
+      try {
+        const requestedOutputDir = output_dir
+          ? (path.isAbsolute(output_dir) ? output_dir : path.join(SYNC_DIR_ABS, output_dir))
+          : path.join(SYNC_DIR_ABS, "project-backups", project_id);
+        const { resolvedOutputDir, relativeToSyncDir } = resolveOutputDirWithinSync(requestedOutputDir);
+        const relativeBase = relativeToSyncDir.split(path.sep).filter(Boolean).join("/");
+        const outputDirSegments = relativeToSyncDir
+          .split(path.sep)
+          .filter(Boolean)
+          .map(segment => segment.toLowerCase());
+        if (outputDirSegments.includes("scenes")) {
+          return errorResponse(
+            "INVALID_OUTPUT_DIR",
+            "output_dir cannot be inside a scenes directory. Choose a dedicated generated backup folder under WRITING_SYNC_DIR.",
+            { output_dir: resolvedOutputDir }
+          );
+        }
+
+        const built = buildProjectBackup(db, {
+          projectId: project_id,
+          syncDir: SYNC_DIR_ABS,
+          applicationVersion: MCP_SERVER_VERSION,
+          backupLocation: relativeBase ? `${relativeBase}/` : "./",
+        });
+        if (!built.ok) {
+          return errorResponse(built.error.code, built.error.message, built.error.details);
+        }
+
+        const written = writeProjectBackupFiles(built, { outputDir: resolvedOutputDir });
+        const relativePath = fileName => (relativeBase ? `${relativeBase}/${fileName}` : fileName);
+
+        return jsonResponse({
+          ok: true,
+          action: "exported",
+          project_id,
+          output_dir: resolvedOutputDir,
+          relative_output_dir: relativeBase,
+          files: {
+            manifest: written.manifestPath,
+            canonical_snapshot: written.snapshotPath,
+            operations: written.operationLogPath,
+          },
+          written: written.written,
+          relative_files: {
+            manifest: relativePath("manifest.json"),
+            canonical_snapshot: relativePath("canonical.snapshot.json"),
+            operations: relativePath("operations.jsonl"),
+          },
+          manifest: {
+            schema_version: built.manifest.schema_version,
+            canonical_source: built.manifest.canonical_source,
+            generated_transparency: built.manifest.generated_transparency,
+            mutation_surface: built.manifest.mutation_surface,
+            backup_location: built.manifest.backup_location,
+            restore_policy: built.manifest.restore_policy,
+            privacy: built.manifest.privacy,
+            coverage: built.manifest.coverage,
+            checksums: built.manifest.checksums,
+          },
+          next_step: "Review or commit the generated project backup bundle. Do not edit it as a mutation surface; future restore tools will treat it as explicit recovery input.",
+        });
+      } catch (error) {
+        if (
+          error &&
+          typeof error === "object" &&
+          error.name === "CoreValidationError" &&
+          typeof error.code === "string"
+        ) {
+          return errorResponse(error.code, error.message ?? "Request failed.", error.details);
+        }
+        return errorResponse(
+          "EXPORT_PROJECT_BACKUP_FAILED",
+          error instanceof Error ? error.message : "Failed to export project backup."
+        );
+      }
+    }
+  );
+
+  s.tool(
+    "diagnose_project_backups",
+    "Run read-only diagnostics for a generated project backup bundle. Reports missing, partial, wrong-project, incompatible-schema, tampered, unreadable, and stale backups without mutating SQLite or generated files.",
+    {
+      project_id: z.string().describe("Project ID whose backup bundle should be diagnosed (e.g. 'test-novel')."),
+      backup_dir: z.string().optional().describe("Directory under WRITING_SYNC_DIR containing manifest.json and canonical.snapshot.json. Defaults to project-backups/<project_id>."),
+    },
+    async ({ project_id, backup_dir } = {}) => {
+      const projectIdCheck = validateProjectId(project_id);
+      if (!projectIdCheck.ok) {
+        return errorResponse("INVALID_PROJECT_ID", projectIdCheck.reason, { project_id });
+      }
+
+      try {
+        const requestedBackupDir = backup_dir
+          ? (path.isAbsolute(backup_dir) ? backup_dir : path.join(SYNC_DIR_ABS, backup_dir))
+          : path.join(SYNC_DIR_ABS, "project-backups", project_id);
+        const { resolvedOutputDir } = resolveOutputDirWithinSync(requestedBackupDir);
+
+        return jsonResponse(runProjectBackupDiagnostics(db, {
+          syncDir: SYNC_DIR_ABS,
+          backupDir: resolvedOutputDir,
+          projectId: project_id,
+          applicationVersion: MCP_SERVER_VERSION,
+        }));
+      } catch (error) {
+        if (
+          error &&
+          typeof error === "object" &&
+          error.name === "CoreValidationError" &&
+          typeof error.code === "string"
+        ) {
+          return errorResponse(error.code, error.message ?? "Request failed.", error.details);
+        }
+        return errorResponse(
+          "DIAGNOSE_PROJECT_BACKUPS_FAILED",
+          error instanceof Error ? error.message : "Failed to diagnose project backup."
         );
       }
     }
@@ -573,6 +728,28 @@ export function registerSyncTools(s, {
             db.prepare(`UPDATE scenes SET metadata_stale = 0 WHERE scene_id = ? AND project_id = ?`)
               .run(sceneId, project_id);
           }
+
+          if (changedScenes.length > 0) {
+            const backupResult = refreshProjectBackupAfterMutation(db, {
+              syncDir: SYNC_DIR,
+              projectId: project_id,
+              applicationVersion: MCP_SERVER_VERSION,
+              operation: "enrich_scene_characters_batch",
+              actor: createToolActor("enrich_scene_characters_batch"),
+              affected: {
+                scenes: changedScenes,
+              },
+              summary: `Applied batch character enrichment to ${changedScenes.length} scene(s).`,
+              before: null,
+              after: {
+                scenes_changed: changedScenes.length,
+              },
+            });
+            completedJob.result = {
+              ...completedJob.result,
+              ...backupMutationFields(backupResult),
+            };
+          }
         },
       });
 
@@ -735,6 +912,28 @@ export function registerSyncTools(s, {
         });
         db.prepare(`UPDATE scenes SET metadata_stale = 0 WHERE scene_id = ? AND project_id = ?`)
           .run(scene.scene_id, scene.project_id);
+        const backupResult = refreshProjectBackupAfterMutation(db, {
+          syncDir: SYNC_DIR,
+          projectId: scene.project_id,
+          applicationVersion: MCP_SERVER_VERSION,
+          operation: "enrich_scene",
+          actor: createToolActor("enrich_scene"),
+          affected: {
+            scenes: [scene.scene_id],
+          },
+          summary: `Enriched scene "${scene.scene_id}".`,
+          before: null,
+          after: {
+            scene: {
+              scene_id: scene.scene_id,
+              project_id: scene.project_id,
+              updated_fields: {
+                logline: Boolean(inferredLogline),
+                characters: inferredCharacters.length,
+              },
+            },
+          },
+        });
 
         return jsonResponse({
           ok: true,
@@ -746,6 +945,7 @@ export function registerSyncTools(s, {
             characters: inferredCharacters.length,
           },
           metadata_stale: false,
+          ...backupMutationFields(backupResult),
         });
       } catch (err) {
         if (err?.name === "CoreValidationError") {

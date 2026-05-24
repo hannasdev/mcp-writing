@@ -11,7 +11,7 @@ It supports metadata-first reasoning, explicit prose editing workflows, and revi
 
 Active initiative: [Database Backup and Recovery](docs/initiatives/backlog/database-backup-recovery/prd.md).
 
-Current focus: M1 — Backup Domain Model and Manifest. This slice defines deterministic in-memory project backup artifacts for SQLite-canonical state before adding public tools, disk writes, mutation hooks, diagnostics, or restore behavior.
+Current focus: M6 — Restore Planning Dry Run. Project backup export, diagnostics, freshness checks, advisory operation history, and automatic backup refresh after sanctioned project-scoped canonical mutations are implemented; the next step is a dry-run restore planner that validates trusted backups and previews canonical database changes before any apply workflow exists.
 
 Most recent completed initiative: [Docker, CI, and Deployment Workflow](docs/initiatives/done/docker-ci-deployment/prd.md).
 

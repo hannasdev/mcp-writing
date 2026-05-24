@@ -123,6 +123,122 @@ describe("sync tool", () => {
     assert.equal(secondContent, firstContent);
   });
 
+  test("export_project_backup writes stable generated backup bundle", async () => {
+    const text = await callWriteTool("export_project_backup", {
+      project_id: "test-novel",
+    });
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.action, "exported");
+    assert.equal(parsed.relative_output_dir, "project-backups/test-novel");
+    assert.equal(parsed.relative_files.manifest, "project-backups/test-novel/manifest.json");
+    assert.equal(parsed.relative_files.canonical_snapshot, "project-backups/test-novel/canonical.snapshot.json");
+    assert.equal(parsed.relative_files.operations, "project-backups/test-novel/operations.jsonl");
+    assert.equal(parsed.manifest.canonical_source, "sqlite");
+    assert.equal(parsed.manifest.generated_transparency, true);
+    assert.equal(parsed.manifest.mutation_surface, false);
+    assert.equal(parsed.manifest.backup_location, "project-backups/test-novel/");
+    assert.equal(parsed.manifest.restore_policy.authority, "full_snapshot");
+    assert.equal(parsed.manifest.restore_policy.custom_delta_chains, false);
+    assert.equal(parsed.manifest.privacy.includes_authored_prose_bodies, false);
+    assert.match(parsed.manifest.checksums.canonical_snapshot_sha256, /^[a-f0-9]{64}$/);
+    assert.match(parsed.manifest.checksums.bundle_sha256, /^[a-f0-9]{64}$/);
+
+    const manifestPath = path.join(writeSyncDir, "project-backups", "test-novel", "manifest.json");
+    const snapshotPath = path.join(writeSyncDir, "project-backups", "test-novel", "canonical.snapshot.json");
+    const operationsPath = path.join(writeSyncDir, "project-backups", "test-novel", "operations.jsonl");
+    const firstManifest = fs.readFileSync(manifestPath, "utf8");
+    const firstSnapshot = fs.readFileSync(snapshotPath, "utf8");
+    const manifest = JSON.parse(firstManifest);
+    const snapshot = JSON.parse(firstSnapshot);
+
+    assert.equal(manifest.project_id, "test-novel");
+    assert.equal(manifest.backup_location, "project-backups/test-novel/");
+    assert.equal(manifest.checksums.canonical_snapshot_sha256, parsed.manifest.checksums.canonical_snapshot_sha256);
+    assert.equal(snapshot.project.project_id, "test-novel");
+    assert.equal(snapshot.operation_history.supported, true);
+    assert.equal(snapshot.operation_history.artifact, "operations.jsonl");
+    const firstOperations = fs.readFileSync(operationsPath, "utf8");
+    for (const line of firstOperations.trim().split("\n").filter(Boolean)) {
+      const operation = JSON.parse(line);
+      assert.equal(operation.artifact_kind, "project_backup_operation");
+      assert.equal(operation.project_id, "test-novel");
+    }
+    assert.ok(snapshot.scenes.some(scene => scene.scene_id === "sc-001"));
+    assert.equal(firstSnapshot.includes("This authored epigraph body must not enter"), false);
+
+    const secondText = await callWriteTool("export_project_backup", {
+      project_id: "test-novel",
+    });
+    const secondParsed = JSON.parse(secondText);
+    assert.deepEqual(secondParsed.written, {
+      manifest: false,
+      canonical_snapshot: false,
+      operations: false,
+    });
+    assert.equal(fs.readFileSync(manifestPath, "utf8"), firstManifest);
+    assert.equal(fs.readFileSync(snapshotPath, "utf8"), firstSnapshot);
+    assert.equal(fs.readFileSync(operationsPath, "utf8"), firstOperations);
+  });
+
+  test("export_project_backup records custom output_dir in manifest", async () => {
+    const text = await callWriteTool("export_project_backup", {
+      project_id: "test-novel",
+      output_dir: "manual-backups/test-novel",
+    });
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.relative_output_dir, "manual-backups/test-novel");
+    assert.equal(parsed.manifest.backup_location, "manual-backups/test-novel/");
+    assert.deepEqual(parsed.written, {
+      manifest: true,
+      canonical_snapshot: true,
+      operations: true,
+    });
+
+    const manifestPath = path.join(writeSyncDir, "manual-backups", "test-novel", "manifest.json");
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+    assert.equal(manifest.backup_location, "manual-backups/test-novel/");
+  });
+
+  test("diagnose_project_backups reports stale backup after canonical state changes", async () => {
+    await callWriteTool("export_project_backup", {
+      project_id: "test-novel",
+      output_dir: "diagnostic-backups/test-novel",
+    });
+
+    await callWriteTool("create_chapter", {
+      project_id: "test-novel",
+      title: "Diagnostic Freshness Chapter",
+      sort_index: 99,
+      chapter_id: "ch-99-diagnostic-freshness",
+    });
+
+    const text = await callWriteTool("diagnose_project_backups", {
+      project_id: "test-novel",
+      backup_dir: "diagnostic-backups/test-novel",
+    });
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.ok, false);
+    assert.equal(parsed.trust.status, "stale");
+    assert.equal(parsed.summary.by_type.project_backup_stale, 1);
+    assert.match(parsed.diagnostics[0].next_step, /export_project_backup/);
+  });
+
+  test("export_project_backup refuses output outside the sync directory", async () => {
+    const text = await callWriteTool("export_project_backup", {
+      project_id: "test-novel",
+      output_dir: os.tmpdir(),
+    });
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.ok, false);
+    assert.equal(parsed.error.code, "INVALID_OUTPUT_DIR");
+  });
+
   test("restore_structure_from_export dry-run validates current export", async () => {
     await callWriteTool("export_structure_snapshot", {
       project_id: "test-novel",
@@ -904,6 +1020,8 @@ describe("enrich_scene_characters_batch tool", () => {
       assert.equal(done.job.result.ok, true);
       assert.equal(done.job.result.scenes_changed, 1);
       assert.equal(done.job.result.links_added >= 1, true);
+      assert.equal(done.job.result.backup_refresh.ok, true);
+      assert.deepEqual(done.job.result.backup_warnings, []);
 
       // Ensure parent index is refreshed before asserting link visibility.
       await callWriteTool("sync");
@@ -975,6 +1093,27 @@ describe("enrich_scene_characters_batch tool", () => {
       const parsed = JSON.parse(result.content?.[0]?.text ?? "{}");
       assert.equal(parsed.ok, false);
       assert.equal(parsed.error.code, "READ_ONLY");
+
+      const backupResult = await roClient.callTool({
+        name: "export_project_backup",
+        arguments: {
+          project_id: "test-novel",
+        },
+      });
+      const backupParsed = JSON.parse(backupResult.content?.[0]?.text ?? "{}");
+      assert.equal(backupParsed.ok, false);
+      assert.equal(backupParsed.error.code, "READ_ONLY");
+
+      const diagnosticResult = await roClient.callTool({
+        name: "diagnose_project_backups",
+        arguments: {
+          project_id: "test-novel",
+        },
+      });
+      const diagnosticParsed = JSON.parse(diagnosticResult.content?.[0]?.text ?? "{}");
+      assert.equal(diagnosticParsed.error, undefined);
+      assert.equal(diagnosticParsed.checked.project_id, "test-novel");
+      assert.equal(typeof diagnosticParsed.trust.status, "string");
     } finally {
       try { await roClient?.close(); } catch {}
       if (roProc) roProc.kill();
@@ -1145,6 +1284,8 @@ describe("enrich_scene tool", () => {
     assert.equal(enrich.ok, true);
     assert.equal(enrich.action, "enriched");
     assert.equal(enrich.scene_id, "sc-001");
+    assert.equal(enrich.backup_refresh.ok, true);
+    assert.deepEqual(enrich.backup_warnings, []);
 
     const freshArcText = await callWriteTool("get_arc", { character_id: "elena" });
     const freshArc = JSON.parse(freshArcText);

@@ -5,7 +5,7 @@
 This milestone plan breaks the PRD into independently reviewable slices.
 Each milestone should leave the system in a releasable state and preserve the target architecture rule that SQLite remains canonical while generated backup artifacts provide transparency and explicit recovery input.
 
-Current focus: M1 — Backup Domain Model and Manifest.
+Current focus: M6 — Restore Planning and Dry Run.
 
 ## Objective
 
@@ -22,6 +22,8 @@ Docker volume backup and rollback guidance already lives in the completed Docker
 - Keep restore explicit, dry-run-first, and transactional.
 
 ## M1 — Backup Domain Model and Manifest
+
+Status: Delivered.
 
 Goal: define the backup bundle shape before wiring it into mutation workflows.
 
@@ -79,7 +81,14 @@ Out of scope:
 - Restore application.
 - Automatic refresh after mutations.
 
+Evidence:
+
+- [src/structure/project-backup.js](../../../../src/structure/project-backup.js)
+- [src/test/unit/project-backup.test.mjs](../../../../src/test/unit/project-backup.test.mjs)
+
 ## M2 — Manual Project Backup Export Tool
+
+Status: Delivered.
 
 Goal: expose project backup generation as an explicit workflow.
 
@@ -110,7 +119,15 @@ Out of scope:
 - Operation history.
 - Restore.
 
+Evidence:
+
+- [src/tools/sync.js](../../../../src/tools/sync.js)
+- [src/structure/project-backup.js](../../../../src/structure/project-backup.js)
+- [src/test/integration/sync.test.mjs](../../../../src/test/integration/sync.test.mjs)
+
 ## M3 — Backup Diagnostics and Freshness
+
+Status: Delivered.
 
 Goal: make backup trust visible before backup artifacts are needed for recovery.
 
@@ -142,7 +159,15 @@ Out of scope:
 - Restore application.
 - Git commits.
 
+Evidence:
+
+- [src/structure/project-backup-diagnostics.js](../../../../src/structure/project-backup-diagnostics.js)
+- [src/test/unit/project-backup-diagnostics.test.mjs](../../../../src/test/unit/project-backup-diagnostics.test.mjs)
+- [src/test/integration/sync.test.mjs](../../../../src/test/integration/sync.test.mjs)
+
 ## M4 — Semantic Operation History
+
+Status: Delivered.
 
 Goal: make canonical mutations reviewable as a human-readable event stream.
 
@@ -184,7 +209,22 @@ Out of scope:
 - Rewriting old operation records.
 - Automatic Git commits.
 
+Evidence:
+
+- [src/structure/project-backup-operations.js](../../../../src/structure/project-backup-operations.js)
+- [src/structure/project-backup.js](../../../../src/structure/project-backup.js)
+- [src/tools/metadata.js](../../../../src/tools/metadata.js)
+- [src/test/unit/project-backup-operations.test.mjs](../../../../src/test/unit/project-backup-operations.test.mjs)
+- [src/test/integration/metadata.test.mjs](../../../../src/test/integration/metadata.test.mjs)
+
+Notes:
+
+- Initial mutation coverage is deliberately narrow: `create_chapter` proves the event envelope, append-only artifact, and warning behavior on a representative sanctioned structural workflow.
+- M5 should generalize the post-mutation path so backup refresh and operation-history emission are applied consistently across canonical mutation tools.
+
 ## M5 — Automatic Backup Refresh After Canonical Mutations
+
+Status: Delivered.
 
 Goal: keep generated backup artifacts fresh during ordinary sanctioned workflows.
 
@@ -215,7 +255,26 @@ Out of scope:
 - Git commit creation.
 - Backup scheduling outside mutation workflows.
 
+Evidence:
+
+- [src/structure/project-backup-refresh.js](../../../../src/structure/project-backup-refresh.js)
+- [src/tools/editing.js](../../../../src/tools/editing.js)
+- [src/tools/metadata.js](../../../../src/tools/metadata.js)
+- [src/tools/sync.js](../../../../src/tools/sync.js)
+- [src/test/unit/project-backup-refresh.test.mjs](../../../../src/test/unit/project-backup-refresh.test.mjs)
+- [src/test/integration/editing.test.mjs](../../../../src/test/integration/editing.test.mjs)
+- [src/test/integration/metadata.test.mjs](../../../../src/test/integration/metadata.test.mjs)
+- [src/test/integration/search.test.mjs](../../../../src/test/integration/search.test.mjs)
+- [src/test/integration/sync.test.mjs](../../../../src/test/integration/sync.test.mjs)
+
+Notes:
+
+- Project-scoped chapter structure, scene metadata, prose edit commit, enrichment, world-entity, thread, and reference-link mutation workflows now refresh project backup artifacts and append advisory operation history after successful canonical changes.
+- Generated backup refresh remains separate from Git commits and reports warnings without rolling back the successful canonical mutation.
+
 ## M6 — Restore Planning and Dry Run
+
+Status: Current focus.
 
 Goal: make recovery inspectable before any canonical state is rewritten.
 

@@ -77,6 +77,8 @@ describe("commit_edit behavior", { concurrency: 1 }, () => {
     );
     assert.equal(typeof commitResult.next_step, "string");
     assert.ok(commitResult.next_step.includes("get_scene_prose"));
+    assert.equal(commitResult.backup_refresh.ok, true);
+    assert.deepEqual(commitResult.backup_warnings, []);
     if (typeof commitResult.snapshot_commit === "string") {
       assert.notEqual(commitResult.snapshot_commit, "");
     }

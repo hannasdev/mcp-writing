@@ -6,6 +6,38 @@ This complements `CHANGELOG.md`:
 - `CHANGELOG.md` is technical and release-oriented.
 - This log is plain-language and outcome-oriented.
 
+### 2026-05-24 — Refresh project backups after canonical mutations
+
+- What changed: Sanctioned project-scoped canonical mutation tools now append advisory operation history and refresh generated project backup artifacts after successful database changes.
+- Why it matters: Authors and AI agents get fresh `manifest.json`, `canonical.snapshot.json`, and `operations.jsonl` during normal structure, metadata, editing, enrichment, thread, and reference-link workflows without needing a separate manual export step.
+- Who is affected: Authors, maintainers, and AI agents using project-scoped chapter, epigraph, scene, edit, enrichment, world-entity, thread, and reference-link mutation tools.
+- Action needed: Review or commit generated backup artifact diffs after canonical changes; if a tool returns `backup_warnings`, run `diagnose_project_backups` or `export_project_backup`.
+- PR: [#219](https://github.com/hannasdev/mcp-writing/pull/219)
+
+### 2026-05-24 — Add advisory project operation history
+
+- What changed: Project backup bundles now include `operations.jsonl`, and `create_chapter` appends an advisory semantic operation record after the canonical database mutation succeeds.
+- Why it matters: Authors and AI agents can review how SQLite-canonical structure changed over time, while restore still depends on the manifest and deterministic snapshot rather than event replay.
+- Who is affected: Authors, maintainers, and AI agents reviewing generated project backup artifacts or auditing chapter-creation workflows.
+- Action needed: Review `operations.jsonl` alongside `manifest.json` and `canonical.snapshot.json`; treat it as provenance and analytics context, not a mutation or restore authority.
+- PR: [#219](https://github.com/hannasdev/mcp-writing/pull/219)
+
+### 2026-05-24 — Diagnose project backup trust and freshness
+
+- What changed: Added `diagnose_project_backups`, a read-only check for missing, partial, wrong-project, incompatible, tampered, unreadable, and stale project backup bundles.
+- Why it matters: Authors and AI agents can tell whether a generated backup is safe recovery input before restore tooling depends on it.
+- Who is affected: Authors, maintainers, and AI agents reviewing or preparing SQLite-canonical project recovery artifacts.
+- Action needed: Run `diagnose_project_backups` before relying on a generated project backup; regenerate stale or untrusted bundles with `export_project_backup`.
+- PR: [#219](https://github.com/hannasdev/mcp-writing/pull/219)
+
+### 2026-05-23 — Export project backup bundles
+
+- What changed: Added `export_project_backup`, which writes a deterministic `manifest.json` and `canonical.snapshot.json` backup bundle under the sync root for a project.
+- Why it matters: Authors and AI agents can review and commit broader SQLite-canonical project state before restore workflows exist, without making generated backup files a mutation surface.
+- Who is affected: Authors, maintainers, and AI agents preparing recovery artifacts for SQLite-canonical projects.
+- Action needed: Run `export_project_backup` when you want a manual backup checkpoint; review or commit the generated files, but do not edit them as canonical changes.
+- PR: [#219](https://github.com/hannasdev/mcp-writing/pull/219)
+
 ### 2026-05-23 — Complete chapter and epigraph structure alignment
 
 - What changed: Moved the chapter/epigraph initiative to completed status, documented canonical read ordering through chapter `sort_index`, aligned metadata lint with shipped scene structure fields, and split larger division support into its own backlog item.

@@ -19,6 +19,10 @@ import {
   PROSE_STYLEGUIDE_SKILL_DIRNAME,
 } from "../styleguide/prose-styleguide-skill.js";
 import { analyzeSceneStyleguideDrift } from "../styleguide/prose-styleguide-drift.js";
+import {
+  createToolActor,
+  refreshProjectBackupAfterMutation,
+} from "../structure/project-backup-refresh.js";
 
 function renderSceneContent(metadata, revisedProse) {
   const hasFrontmatter = metadata && Object.keys(metadata).length > 0;
@@ -217,6 +221,7 @@ function evaluateStyleguidePolicy({
 export function registerEditingTools(s, {
   db,
   SYNC_DIR,
+  MCP_SERVER_VERSION = "0.0.0",
   GIT_ENABLED,
   STYLEGUIDE_ENFORCEMENT_MODE,
   errorResponse,
@@ -224,6 +229,14 @@ export function registerEditingTools(s, {
   pendingProposals,
   generateProposalId,
 }) {
+  function backupMutationFields(backupResult) {
+    return {
+      operation_history: backupResult.operation_history,
+      backup_refresh: backupResult.backup_refresh,
+      backup_warnings: backupResult.backup_warnings,
+    };
+  }
+
   // ---- propose_edit --------------------------------------------------------
   s.tool(
     "propose_edit",
@@ -501,6 +514,25 @@ export function registerEditingTools(s, {
             managedStructure: isManagedStructureProject(db, proposal.project_id ?? project_id),
           });
           pendingProposals.delete(proposal_id);
+          const backupResult = refreshProjectBackupAfterMutation(db, {
+            syncDir: SYNC_DIR,
+            projectId: proposal.project_id ?? project_id,
+            applicationVersion: MCP_SERVER_VERSION,
+            operation: "commit_edit",
+            actor: createToolActor("commit_edit"),
+            affected: {
+              scenes: [scene_id],
+            },
+            summary: `Refreshed scene "${scene_id}" after no-op edit commit.`,
+            before: null,
+            after: {
+              scene: {
+                scene_id,
+                project_id: proposal.project_id ?? project_id,
+                noop: true,
+              },
+            },
+          });
 
           return jsonResponse({
             ok: true,
@@ -511,6 +543,7 @@ export function registerEditingTools(s, {
             noop: true,
             message: `Proposal for scene '${scene_id}' matches the current file. Nothing was written.`,
             next_step: "No changes were applied. If you still need edits, call propose_edit with revised prose.",
+            ...backupMutationFields(backupResult),
           });
         }
 
@@ -530,6 +563,27 @@ export function registerEditingTools(s, {
         });
 
         pendingProposals.delete(proposal_id);
+        const backupResult = refreshProjectBackupAfterMutation(db, {
+          syncDir: SYNC_DIR,
+          projectId: proposal.project_id ?? project_id,
+          applicationVersion: MCP_SERVER_VERSION,
+          operation: "commit_edit",
+          actor: createToolActor("commit_edit"),
+          affected: {
+            scenes: [scene_id],
+          },
+          summary: `Committed prose edit for scene "${scene_id}".`,
+          before: {
+            prose_digest: digestFor(proposal.original_prose),
+          },
+          after: {
+            scene: {
+              scene_id,
+              project_id: proposal.project_id ?? project_id,
+              snapshot_commit: snapshot.commit_hash,
+            },
+          },
+        });
 
         return jsonResponse({
           ok: true,
@@ -540,6 +594,7 @@ export function registerEditingTools(s, {
           noop: false,
           message: `Applied edit to scene '${scene_id}'${snapshot.commit_hash ? ` (snapshot: ${snapshot.commit_hash.substring(0, 7)})` : " (no pre-edit snapshot needed)"}`,
           next_step: "Edit applied. Run get_scene_prose to verify prose, then continue with additional targeted edits if needed.",
+          ...backupMutationFields(backupResult),
         });
       } catch (err) {
         if (err.code === "ENOENT") {

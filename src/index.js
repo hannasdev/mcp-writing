@@ -469,6 +469,7 @@ function createMcpServer() {
     SYNC_DIR_ABS,
     SYNC_DIR_REAL,
     SYNC_DIR_WRITABLE,
+    MCP_SERVER_VERSION,
     GIT_ENABLED,
     asyncJobs,
     errorResponse,
