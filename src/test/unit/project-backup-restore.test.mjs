@@ -312,42 +312,38 @@ describe("restoreProjectFromBackup", () => {
     }
   }));
 
-  test("reports inaccessible file reference ancestors separately from sync root escapes", () => withFixture(({ db, syncDir, backupDir }) => {
+  test("reports inaccessible file reference ancestors separately from sync root escapes", t => withFixture(({ db, syncDir, backupDir }) => {
     const built = exportBackup(db, syncDir, backupDir);
     const backupScenePath = built.snapshot.scenes[0].file_path;
     const scenePath = path.isAbsolute(backupScenePath)
       ? path.resolve(backupScenePath)
       : path.resolve(syncDir, backupScenePath);
     const originalRealpathNative = fs.realpathSync.native;
-    fs.realpathSync.native = targetPath => {
+    t.mock.method(fs.realpathSync, "native", targetPath => {
       if (path.resolve(targetPath) === scenePath) {
         throw new Error("EACCES: permission denied, realpath");
       }
       return originalRealpathNative(targetPath);
-    };
+    });
 
-    try {
-      const result = restorePlan(db, syncDir, backupDir);
+    const result = restorePlan(db, syncDir, backupDir);
 
-      assert.equal(result.ok, false);
-      assert.equal(result.action, "restore_refused");
-      assert.deepEqual(result.diagnostics.map(diagnostic => diagnostic.type), ["project_restore_file_reference_invalid"]);
-      assert.equal(
-        result.diagnostics[0].message,
-        "Backup scenes record file reference could not be resolved inside WRITING_SYNC_DIR."
-      );
-      assert.equal(result.diagnostics[0].details.domain, "scenes");
-      assert.equal(result.diagnostics[0].details.field, "file_path");
-      assert.equal(result.diagnostics[0].details.reason, "ancestor_resolution_failed");
-      assert.equal(result.diagnostics[0].details.resolved_path, scenePath);
-      assert.equal(result.diagnostics[0].details.existing_ancestor, scenePath);
-      assert.match(result.diagnostics[0].details.message, /Path ancestor could not be resolved/);
-      assert.match(result.diagnostics[0].details.cause, /EACCES/);
-      assert.equal(result.diagnostics[0].next_step, "Ensure the referenced path is accessible, then retry the dry run.");
-      assert.equal(result.plan, null);
-    } finally {
-      fs.realpathSync.native = originalRealpathNative;
-    }
+    assert.equal(result.ok, false);
+    assert.equal(result.action, "restore_refused");
+    assert.deepEqual(result.diagnostics.map(diagnostic => diagnostic.type), ["project_restore_file_reference_invalid"]);
+    assert.equal(
+      result.diagnostics[0].message,
+      "Backup scenes record file reference could not be resolved inside WRITING_SYNC_DIR."
+    );
+    assert.equal(result.diagnostics[0].details.domain, "scenes");
+    assert.equal(result.diagnostics[0].details.field, "file_path");
+    assert.equal(result.diagnostics[0].details.reason, "ancestor_resolution_failed");
+    assert.equal(result.diagnostics[0].details.resolved_path, scenePath);
+    assert.equal(result.diagnostics[0].details.existing_ancestor, scenePath);
+    assert.match(result.diagnostics[0].details.message, /Path ancestor could not be resolved/);
+    assert.match(result.diagnostics[0].details.cause, /EACCES/);
+    assert.equal(result.diagnostics[0].next_step, "Ensure the referenced path is accessible, then retry the dry run.");
+    assert.equal(result.plan, null);
   }));
 
   test("refuses optional file references when present but missing", () => withFixture(({ db, syncDir, backupDir }) => {
