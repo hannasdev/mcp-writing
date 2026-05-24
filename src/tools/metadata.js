@@ -28,12 +28,16 @@ import {
   upsertExplicitReferenceLinkRow,
   upsertSerializedReferenceLinks,
 } from "./reference-link-persistence.js";
-import {
-  appendProjectBackupOperationRecord,
-  buildProjectBackupOperationRecord,
-} from "../structure/project-backup-operations.js";
+import { refreshProjectBackupAfterMutation } from "../structure/project-backup-refresh.js";
 
 const STRUCTURAL_SCENE_METADATA_FIELDS = ["part", "chapter", "chapter_id", "timeline_position"];
+
+function createToolActor(id) {
+  return {
+    type: "tool",
+    id,
+  };
+}
 
 function getProvidedStructuralSceneMetadataFields(fields) {
   return STRUCTURAL_SCENE_METADATA_FIELDS.filter((field) => Object.hasOwn(fields, field));
@@ -688,52 +692,28 @@ export function registerMetadataTools(s, {
         return errorResponse("IO_ERROR", `Failed to create chapter '${plan.chapter.chapter_id}': ${err.message}`);
       }
 
-      const backupWarnings = [];
-      let operationHistory = null;
-      try {
-        const backupDir = path.join(path.resolve(SYNC_DIR), "project-backups", project_id);
-        const operationRecord = buildProjectBackupOperationRecord({
-          operation: "create_chapter",
-          projectId: project_id,
-          applicationVersion: MCP_SERVER_VERSION,
-          actor: {
-            type: "tool",
-            id: "create_chapter",
-          },
-          affected: {
-            chapters: [plan.chapter.chapter_id],
-          },
-          summary: `Created chapter "${plan.chapter.title}" at sort_index ${plan.chapter.sort_index}.`,
-          before: null,
-          after: {
-            chapter: {
-              chapter_id: plan.chapter.chapter_id,
-              project_id: plan.chapter.project_id,
-              title: plan.chapter.title,
-              sort_index: plan.chapter.sort_index,
-              logline: plan.chapter.logline,
-              metadata_stale: plan.chapter.metadata_stale,
-            },
-          },
-        });
-        const appended = appendProjectBackupOperationRecord(operationRecord, { outputDir: backupDir });
-        operationHistory = {
-          appended: appended.appended,
-          path: appended.operationLogPath,
-          relative_path: path.relative(path.resolve(SYNC_DIR), appended.operationLogPath).split(path.sep).join("/"),
-          advisory: true,
-          restore_authority: false,
-        };
-      } catch (err) {
-        backupWarnings.push({
-          code: "OPERATION_LOG_APPEND_FAILED",
-          message: `Chapter was created, but the advisory backup operation log could not be updated: ${err.message}`,
-          details: {
-            project_id,
+      const backupResult = refreshProjectBackupAfterMutation(db, {
+        syncDir: SYNC_DIR,
+        projectId: project_id,
+        applicationVersion: MCP_SERVER_VERSION,
+        operation: "create_chapter",
+        actor: createToolActor("create_chapter"),
+        affected: {
+          chapters: [plan.chapter.chapter_id],
+        },
+        summary: `Created chapter "${plan.chapter.title}" at sort_index ${plan.chapter.sort_index}.`,
+        before: null,
+        after: {
+          chapter: {
             chapter_id: plan.chapter.chapter_id,
+            project_id: plan.chapter.project_id,
+            title: plan.chapter.title,
+            sort_index: plan.chapter.sort_index,
+            logline: plan.chapter.logline,
+            metadata_stale: plan.chapter.metadata_stale,
           },
-        });
-      }
+        },
+      });
 
       return jsonResponse({
         ok: true,
@@ -747,8 +727,9 @@ export function registerMetadataTools(s, {
           metadata_stale: plan.chapter.metadata_stale,
         },
         diagnostics: plan.diagnostics,
-        operation_history: operationHistory,
-        backup_warnings: backupWarnings,
+        operation_history: backupResult.operation_history,
+        backup_refresh: backupResult.backup_refresh,
+        backup_warnings: backupResult.backup_warnings,
         next_steps: [
           "Use assign_scene_to_chapter to place unchaptered scenes in this chapter.",
           "Run diagnose_structure if existing folders or sidecars may imply conflicting structure.",
@@ -835,6 +816,39 @@ export function registerMetadataTools(s, {
         failureCode: "SCENE_SIDECAR_UPDATE_FAILED",
         syncDir: SYNC_DIR,
       });
+      const backupResult = refreshProjectBackupAfterMutation(db, {
+        syncDir: SYNC_DIR,
+        projectId: project_id,
+        applicationVersion: MCP_SERVER_VERSION,
+        operation: "rename_chapter",
+        actor: createToolActor("rename_chapter"),
+        affected: {
+          chapters: [plan.chapter.chapter_id],
+          scenes: linkedScenes.map(scene => scene.scene_id),
+        },
+        summary: `Renamed chapter "${plan.previousChapter.title}" to "${plan.chapter.title}".`,
+        before: {
+          chapter: {
+            chapter_id: plan.previousChapter.chapter_id,
+            title: plan.previousChapter.title,
+            sort_index: plan.previousChapter.sort_index,
+          },
+        },
+        after: {
+          chapter: {
+            chapter_id: plan.chapter.chapter_id,
+            project_id: plan.chapter.project_id,
+            title: plan.chapter.title,
+            sort_index: plan.chapter.sort_index,
+            logline: plan.chapter.logline,
+            metadata_stale: plan.chapter.metadata_stale,
+          },
+        },
+        metadata: {
+          updated_scene_count: linkedScenes.length,
+          updated_sidecar_count: sidecarWriteResult.updatedCount,
+        },
+      });
 
       return jsonResponse({
         ok: true,
@@ -854,6 +868,9 @@ export function registerMetadataTools(s, {
           ...plan.diagnostics,
           ...sidecarWriteResult.diagnostics,
         ],
+        operation_history: backupResult.operation_history,
+        backup_refresh: backupResult.backup_refresh,
+        backup_warnings: backupResult.backup_warnings,
         next_steps: [
           "Use list_chapters to confirm the canonical title.",
           "Run diagnose_structure if folder-derived structure may still use the previous chapter title.",
@@ -941,6 +958,39 @@ export function registerMetadataTools(s, {
         failureCode: "SCENE_SIDECAR_UPDATE_FAILED",
         syncDir: SYNC_DIR,
       });
+      const backupResult = refreshProjectBackupAfterMutation(db, {
+        syncDir: SYNC_DIR,
+        projectId: project_id,
+        applicationVersion: MCP_SERVER_VERSION,
+        operation: "reorder_chapter",
+        actor: createToolActor("reorder_chapter"),
+        affected: {
+          chapters: [plan.chapter.chapter_id],
+          scenes: linkedScenes.map(scene => scene.scene_id),
+        },
+        summary: `Reordered chapter "${plan.chapter.title}" from ${plan.previousChapter.sort_index} to ${plan.chapter.sort_index}.`,
+        before: {
+          chapter: {
+            chapter_id: plan.previousChapter.chapter_id,
+            title: plan.previousChapter.title,
+            sort_index: plan.previousChapter.sort_index,
+          },
+        },
+        after: {
+          chapter: {
+            chapter_id: plan.chapter.chapter_id,
+            project_id: plan.chapter.project_id,
+            title: plan.chapter.title,
+            sort_index: plan.chapter.sort_index,
+            logline: plan.chapter.logline,
+            metadata_stale: plan.chapter.metadata_stale,
+          },
+        },
+        metadata: {
+          updated_scene_count: linkedScenes.length,
+          updated_sidecar_count: sidecarWriteResult.updatedCount,
+        },
+      });
 
       return jsonResponse({
         ok: true,
@@ -960,6 +1010,9 @@ export function registerMetadataTools(s, {
           ...plan.diagnostics,
           ...sidecarWriteResult.diagnostics,
         ],
+        operation_history: backupResult.operation_history,
+        backup_refresh: backupResult.backup_refresh,
+        backup_warnings: backupResult.backup_warnings,
         next_steps: [
           "Use list_chapters to confirm canonical order.",
           "Run diagnose_structure if folder-derived structure may still use the previous order.",
@@ -1023,6 +1076,40 @@ export function registerMetadataTools(s, {
           failureCode: "EPIGRAPH_SIDECAR_UPDATE_FAILED",
           syncDir: SYNC_DIR,
         });
+        const backupResult = refreshProjectBackupAfterMutation(db, {
+          syncDir: SYNC_DIR,
+          projectId: project_id,
+          applicationVersion: MCP_SERVER_VERSION,
+          operation: "attach_epigraph",
+          actor: createToolActor("attach_epigraph"),
+          affected: {
+            epigraphs: [plan.epigraph.epigraph_id],
+            chapters: [plan.chapter.chapter_id],
+          },
+          summary: `Attached epigraph "${plan.epigraph.epigraph_id}" to chapter "${plan.chapter.title}".`,
+          before: {
+            epigraph: {
+              epigraph_id: plan.epigraph.epigraph_id,
+              chapter_id: plan.previousChapter?.chapter_id ?? null,
+            },
+          },
+          after: {
+            epigraph: {
+              epigraph_id: plan.epigraph.epigraph_id,
+              project_id: plan.epigraph.project_id,
+              chapter_id: plan.epigraph.chapter_id,
+              metadata_stale: plan.epigraph.metadata_stale,
+            },
+            chapter: {
+              chapter_id: plan.chapter.chapter_id,
+              title: plan.chapter.title,
+              sort_index: plan.chapter.sort_index,
+            },
+          },
+          metadata: {
+            updated_sidecar_count: sidecarWriteResult.updatedCount,
+          },
+        });
 
         return jsonResponse({
           ok: true,
@@ -1050,6 +1137,9 @@ export function registerMetadataTools(s, {
             ...plan.diagnostics,
             ...sidecarWriteResult.diagnostics,
           ],
+          operation_history: backupResult.operation_history,
+          backup_refresh: backupResult.backup_refresh,
+          backup_warnings: backupResult.backup_warnings,
           next_steps: [
             "Use find_epigraphs to confirm the canonical epigraph attachment.",
             "Run diagnose_structure if folder-derived structure may still imply the previous chapter.",
@@ -1200,6 +1290,40 @@ export function registerMetadataTools(s, {
             managedStructure: isManagedStructureProject(db, project_id),
           });
         }
+        const backupResult = refreshProjectBackupAfterMutation(db, {
+          syncDir: SYNC_DIR,
+          projectId: project_id,
+          applicationVersion: MCP_SERVER_VERSION,
+          operation: "move_scene",
+          actor: createToolActor("move_scene"),
+          affected: {
+            scenes: [scene_id],
+            chapters: [
+              plan.previousChapterId ?? null,
+              plan.assignedChapter?.chapter_id ?? null,
+            ].filter(Boolean),
+          },
+          summary: `Moved scene "${scene_id}" to ${plan.assignedChapter?.chapter_id ?? "no chapter"} at timeline_position ${plan.timelinePosition ?? "unchanged"}.`,
+          before: {
+            scene: {
+              scene_id,
+              project_id,
+              chapter_id: plan.previousChapterId ?? null,
+              timeline_position: plan.previousTimelinePosition ?? null,
+            },
+          },
+          after: {
+            scene: {
+              scene_id,
+              project_id,
+              chapter_id: plan.assignedChapter?.chapter_id ?? null,
+              timeline_position: plan.timelinePosition ?? null,
+            },
+          },
+          metadata: {
+            updated_sidecar_count: sidecarMirror.updatedCount,
+          },
+        });
 
         return jsonResponse({
           ok: true,
@@ -1223,6 +1347,9 @@ export function registerMetadataTools(s, {
             },
             ...sidecarMirror.diagnostics,
           ],
+          operation_history: backupResult.operation_history,
+          backup_refresh: backupResult.backup_refresh,
+          backup_warnings: backupResult.backup_warnings,
           next_steps: [
             "Use find_scenes to confirm the scene's canonical chapter and timeline_position.",
             "Run diagnose_structure if folder-derived structure may still imply the previous placement.",
@@ -1318,6 +1445,40 @@ export function registerMetadataTools(s, {
             managedStructure: isManagedStructureProject(db, project_id),
           });
         }
+        const backupResult = refreshProjectBackupAfterMutation(db, {
+          syncDir: SYNC_DIR,
+          projectId: project_id,
+          applicationVersion: MCP_SERVER_VERSION,
+          operation: "assign_scene_to_chapter",
+          actor: createToolActor("assign_scene_to_chapter"),
+          affected: {
+            scenes: [scene_id],
+            chapters: [
+              plan.previousChapterId ?? scene.chapter_id ?? null,
+              plan.assignedChapter?.chapter_id ?? null,
+            ].filter(Boolean),
+          },
+          summary: chapter === null
+            ? `Cleared chapter assignment for scene "${scene_id}".`
+            : `Assigned scene "${scene_id}" to chapter "${plan.assignedChapter.chapter_id}".`,
+          before: {
+            scene: {
+              scene_id,
+              project_id,
+              chapter_id: plan.previousChapterId ?? scene.chapter_id ?? null,
+            },
+          },
+          after: {
+            scene: {
+              scene_id,
+              project_id,
+              chapter_id: plan.assignedChapter?.chapter_id ?? null,
+            },
+          },
+          metadata: {
+            updated_sidecar_count: sidecarMirror.updatedCount,
+          },
+        });
 
         return jsonResponse({
           ok: true,
@@ -1328,6 +1489,9 @@ export function registerMetadataTools(s, {
           chapter: plan.assignedChapter,
           updated_sidecar_count: sidecarMirror.updatedCount,
           diagnostics: sidecarMirror.diagnostics,
+          operation_history: backupResult.operation_history,
+          backup_refresh: backupResult.backup_refresh,
+          backup_warnings: backupResult.backup_warnings,
         });
       } catch (err) {
         if (err?.name === "CoreValidationError") {

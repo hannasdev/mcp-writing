@@ -5,7 +5,7 @@
 This milestone plan breaks the PRD into independently reviewable slices.
 Each milestone should leave the system in a releasable state and preserve the target architecture rule that SQLite remains canonical while generated backup artifacts provide transparency and explicit recovery input.
 
-Current focus: M5 — Automatic Backup Refresh After Canonical Mutations.
+Current focus: M6 — Restore Planning and Dry Run.
 
 ## Objective
 
@@ -224,7 +224,7 @@ Notes:
 
 ## M5 — Automatic Backup Refresh After Canonical Mutations
 
-Status: Current focus.
+Status: Delivered.
 
 Goal: keep generated backup artifacts fresh during ordinary sanctioned workflows.
 
@@ -255,7 +255,21 @@ Out of scope:
 - Git commit creation.
 - Backup scheduling outside mutation workflows.
 
+Evidence:
+
+- [src/structure/project-backup-refresh.js](../../../../src/structure/project-backup-refresh.js)
+- [src/tools/metadata.js](../../../../src/tools/metadata.js)
+- [src/test/unit/project-backup-refresh.test.mjs](../../../../src/test/unit/project-backup-refresh.test.mjs)
+- [src/test/integration/metadata.test.mjs](../../../../src/test/integration/metadata.test.mjs)
+
+Notes:
+
+- Explicit chapter structure mutation workflows now refresh project backup artifacts and append advisory operation history after successful canonical changes.
+- Generated backup refresh remains separate from Git commits and reports warnings without rolling back the successful canonical mutation.
+
 ## M6 — Restore Planning and Dry Run
+
+Status: Current focus.
 
 Goal: make recovery inspectable before any canonical state is rewritten.
 

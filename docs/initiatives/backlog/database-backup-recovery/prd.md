@@ -2,11 +2,11 @@
 
 **Status:** Active
 
-Current focus: M5 — Automatic Backup Refresh After Canonical Mutations.
+Current focus: M6 — Restore Planning Dry Run.
 
 The product is ready to extend the SQLite-canonical architecture with a complete backup and recovery story.
 The need is clear because structural manuscript state has moved away from files-first authority.
-The internal backup artifact shape, explicit project backup export tool, project backup diagnostics, and initial advisory operation-history path are implemented; the next implementation slice should refresh generated backup artifacts after sanctioned canonical mutations without creating Git commits or making generated files authoritative.
+The internal backup artifact shape, explicit project backup export tool, project backup diagnostics, advisory operation history, and automatic backup refresh after explicit structure mutations are implemented; the next implementation slice should add dry-run restore planning that validates trusted backup bundles and previews canonical database changes before any apply workflow exists.
 
 Implementation slices are tracked in [milestones.md](milestones.md).
 

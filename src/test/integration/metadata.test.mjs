@@ -290,6 +290,11 @@ describe("create_chapter tool", () => {
     assert.equal(createParsed.operation_history.relative_path, "project-backups/test-novel/operations.jsonl");
     assert.equal(createParsed.operation_history.advisory, true);
     assert.equal(createParsed.operation_history.restore_authority, false);
+    assert.equal(createParsed.backup_refresh.ok, true);
+    assert.equal(createParsed.backup_refresh.relative_output_dir, "project-backups/test-novel");
+    assert.equal(createParsed.backup_refresh.written.manifest, true);
+    assert.equal(createParsed.backup_refresh.written.canonical_snapshot, true);
+    assert.equal(createParsed.backup_refresh.git_commit_created, false);
     assert.ok(createParsed.next_steps.some((step) => step.includes("assign_scene_to_chapter")));
 
     const chaptersText = await callWriteTool("list_chapters", { project_id: "test-novel" });
@@ -308,6 +313,13 @@ describe("create_chapter tool", () => {
     assert.equal(operationRecord.after.chapter.title, "M7 New Crossing");
     assert.equal(operationRecord.advisory, true);
     assert.equal(operationRecord.restore_authority, false);
+
+    const backupDiagnosticText = await callWriteTool("diagnose_project_backups", {
+      project_id: "test-novel",
+    });
+    const backupDiagnosticParsed = JSON.parse(backupDiagnosticText);
+    assert.equal(backupDiagnosticParsed.ok, true);
+    assert.equal(backupDiagnosticParsed.trust.status, "current");
   });
 
   test("rejects creating a chapter at an occupied sort index", async () => {

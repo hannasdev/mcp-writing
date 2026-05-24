@@ -6,6 +6,14 @@ This complements `CHANGELOG.md`:
 - `CHANGELOG.md` is technical and release-oriented.
 - This log is plain-language and outcome-oriented.
 
+### 2026-05-24 — Refresh project backups after structure mutations
+
+- What changed: Explicit structure mutation tools now append advisory operation history and refresh generated project backup artifacts after successful canonical database changes.
+- Why it matters: Authors and AI agents get fresh `manifest.json`, `canonical.snapshot.json`, and `operations.jsonl` during normal structure workflows without needing a separate manual export step.
+- Who is affected: Authors, maintainers, and AI agents using chapter, epigraph, and scene structure mutation tools.
+- Action needed: Review or commit generated backup artifact diffs after structure changes; if a tool returns `backup_warnings`, run `diagnose_project_backups` or `export_project_backup`.
+- PR: Pending
+
 ### 2026-05-24 — Add advisory project operation history
 
 - What changed: Project backup bundles now include `operations.jsonl`, and `create_chapter` appends an advisory semantic operation record after the canonical database mutation succeeds.

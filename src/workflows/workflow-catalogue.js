@@ -89,10 +89,10 @@ export const WORKFLOW_CATALOGUE = [
       { tool: "move_scene", note: "Use when a scene should move to another canonical chapter and/or unused timeline_position; this does not move the scene source file." },
       { tool: "assign_scene_to_chapter", note: "Use this named structure workflow for chapter assignment or clearing instead of editing chapter fields through generic metadata updates." },
       { tool: "diagnose_structure", note: "Run when the assignment is part of a drift repair workflow, when folder-derived structure may disagree with the requested link, or before trusting an export for recovery." },
+      { tool: "diagnose_project_backups", note: "Structure mutation tools normally refresh the project backup automatically; run this if backup_warnings were returned or you need to verify backup freshness before recovery work." },
       { tool: "restore_structure_from_export", note: "Use only as an explicit repair workflow after diagnostics show a trusted generated export can recover canonical SQLite structure." },
       { tool: "export_structure_snapshot", note: "Generate a deterministic SQLite-derived structure export for Git review after canonical structure changes; editing the export does not mutate structure." },
-      { tool: "export_project_backup", note: "Generate the broader deterministic project backup bundle for Git review and future recovery input; editing it does not mutate canonical state." },
-      { tool: "diagnose_project_backups", note: "Check whether a generated project backup is present, trusted, and fresh before relying on it as recovery input." },
+      { tool: "export_project_backup", note: "Generate or repair the broader deterministic project backup bundle for Git review and future recovery input; editing it does not mutate canonical state." },
     ],
   },
   {
