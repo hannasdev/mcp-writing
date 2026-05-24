@@ -14,6 +14,7 @@ import {
   buildProjectBackup,
   writeProjectBackupFiles,
 } from "../structure/project-backup.js";
+import { runProjectBackupDiagnostics } from "../structure/project-backup-diagnostics.js";
 import { restoreStructureFromExport } from "../structure/structure-restore.js";
 
 export function registerSyncTools(s, {
@@ -244,6 +245,48 @@ export function registerSyncTools(s, {
         return errorResponse(
           "EXPORT_PROJECT_BACKUP_FAILED",
           error instanceof Error ? error.message : "Failed to export project backup."
+        );
+      }
+    }
+  );
+
+  s.tool(
+    "diagnose_project_backups",
+    "Run read-only diagnostics for a generated project backup bundle. Reports missing, partial, wrong-project, incompatible-schema, tampered, unreadable, and stale backups without mutating SQLite or generated files.",
+    {
+      project_id: z.string().describe("Project ID whose backup bundle should be diagnosed (e.g. 'test-novel')."),
+      backup_dir: z.string().optional().describe("Directory under WRITING_SYNC_DIR containing manifest.json and canonical.snapshot.json. Defaults to project-backups/<project_id>."),
+    },
+    async ({ project_id, backup_dir } = {}) => {
+      const projectIdCheck = validateProjectId(project_id);
+      if (!projectIdCheck.ok) {
+        return errorResponse("INVALID_PROJECT_ID", projectIdCheck.reason, { project_id });
+      }
+
+      try {
+        const requestedBackupDir = backup_dir
+          ? (path.isAbsolute(backup_dir) ? backup_dir : path.join(SYNC_DIR_ABS, backup_dir))
+          : path.join(SYNC_DIR_ABS, "project-backups", project_id);
+        const { resolvedOutputDir } = resolveOutputDirWithinSync(requestedBackupDir);
+
+        return jsonResponse(runProjectBackupDiagnostics(db, {
+          syncDir: SYNC_DIR_ABS,
+          backupDir: resolvedOutputDir,
+          projectId: project_id,
+          applicationVersion: MCP_SERVER_VERSION,
+        }));
+      } catch (error) {
+        if (
+          error &&
+          typeof error === "object" &&
+          error.name === "CoreValidationError" &&
+          typeof error.code === "string"
+        ) {
+          return errorResponse(error.code, error.message ?? "Request failed.", error.details);
+        }
+        return errorResponse(
+          "DIAGNOSE_PROJECT_BACKUPS_FAILED",
+          error instanceof Error ? error.message : "Failed to diagnose project backup."
         );
       }
     }

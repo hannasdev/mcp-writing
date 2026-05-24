@@ -5,7 +5,7 @@
 This milestone plan breaks the PRD into independently reviewable slices.
 Each milestone should leave the system in a releasable state and preserve the target architecture rule that SQLite remains canonical while generated backup artifacts provide transparency and explicit recovery input.
 
-Current focus: M3 — Backup Diagnostics and Freshness.
+Current focus: M4 — Semantic Operation History.
 
 ## Objective
 
@@ -127,7 +127,7 @@ Evidence:
 
 ## M3 — Backup Diagnostics and Freshness
 
-Status: Current focus.
+Status: Delivered.
 
 Goal: make backup trust visible before backup artifacts are needed for recovery.
 
@@ -159,7 +159,15 @@ Out of scope:
 - Restore application.
 - Git commits.
 
+Evidence:
+
+- [src/structure/project-backup-diagnostics.js](../../../../src/structure/project-backup-diagnostics.js)
+- [src/test/unit/project-backup-diagnostics.test.mjs](../../../../src/test/unit/project-backup-diagnostics.test.mjs)
+- [src/test/integration/sync.test.mjs](../../../../src/test/integration/sync.test.mjs)
+
 ## M4 — Semantic Operation History
+
+Status: Current focus.
 
 Goal: make canonical mutations reviewable as a human-readable event stream.
 

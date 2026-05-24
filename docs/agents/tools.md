@@ -10,6 +10,7 @@
 - [`diagnose_structure`](#diagnose_structure)
 - [`export_structure_snapshot`](#export_structure_snapshot)
 - [`export_project_backup`](#export_project_backup)
+- [`diagnose_project_backups`](#diagnose_project_backups)
 - [`restore_structure_from_export`](#restore_structure_from_export)
 - [`import_scrivener_sync`](#import_scrivener_sync)
 - [`import_scrivener_sync_async`](#import_scrivener_sync_async)
@@ -116,6 +117,17 @@ Generate a deterministic project backup bundle from SQLite canonical state. Writ
 | --- | --- | :---: | --- |
 | `project_id` | `string` | Yes | Project ID to back up (e.g. 'test-novel' or 'universe-1/book-1-the-lamb'). |
 | `output_dir` | `string` | No | Directory under WRITING_SYNC_DIR where manifest.json and canonical.snapshot.json should be written. Defaults to project-backups/<project_id>. |
+
+---
+
+## diagnose_project_backups
+
+Run read-only diagnostics for a generated project backup bundle. Reports missing, partial, wrong-project, incompatible-schema, tampered, unreadable, and stale backups without mutating SQLite or generated files.
+
+| Parameter | Type | Required | Description |
+| --- | --- | :---: | --- |
+| `project_id` | `string` | Yes | Project ID whose backup bundle should be diagnosed (e.g. 'test-novel'). |
+| `backup_dir` | `string` | No | Directory under WRITING_SYNC_DIR containing manifest.json and canonical.snapshot.json. Defaults to project-backups/<project_id>. |
 
 ---
 

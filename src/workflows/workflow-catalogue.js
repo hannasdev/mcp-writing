@@ -92,6 +92,7 @@ export const WORKFLOW_CATALOGUE = [
       { tool: "restore_structure_from_export", note: "Use only as an explicit repair workflow after diagnostics show a trusted generated export can recover canonical SQLite structure." },
       { tool: "export_structure_snapshot", note: "Generate a deterministic SQLite-derived structure export for Git review after canonical structure changes; editing the export does not mutate structure." },
       { tool: "export_project_backup", note: "Generate the broader deterministic project backup bundle for Git review and future recovery input; editing it does not mutate canonical state." },
+      { tool: "diagnose_project_backups", note: "Check whether a generated project backup is present, trusted, and fresh before relying on it as recovery input." },
     ],
   },
   {

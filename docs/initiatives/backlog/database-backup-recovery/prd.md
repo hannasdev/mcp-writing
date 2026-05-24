@@ -2,11 +2,11 @@
 
 **Status:** Active
 
-Current focus: M3 — Backup Diagnostics and Freshness.
+Current focus: M4 — Semantic Operation History.
 
 The product is ready to extend the SQLite-canonical architecture with a complete backup and recovery story.
 The need is clear because structural manuscript state has moved away from files-first authority.
-The internal backup artifact shape and explicit project backup export tool are implemented; the next implementation slice should make backup trust, freshness, and tamper status visible before restore behavior depends on it.
+The internal backup artifact shape, explicit project backup export tool, and project backup diagnostics are implemented; the next implementation slice should add advisory operation history for provenance, progress analysis, and tool accountability without making restore depend on event replay.
 
 Implementation slices are tracked in [milestones.md](milestones.md).
 

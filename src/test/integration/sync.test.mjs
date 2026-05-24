@@ -191,6 +191,31 @@ describe("sync tool", () => {
     assert.equal(manifest.backup_location, "manual-backups/test-novel/");
   });
 
+  test("diagnose_project_backups reports stale backup after canonical state changes", async () => {
+    await callWriteTool("export_project_backup", {
+      project_id: "test-novel",
+      output_dir: "diagnostic-backups/test-novel",
+    });
+
+    await callWriteTool("create_chapter", {
+      project_id: "test-novel",
+      title: "Diagnostic Freshness Chapter",
+      sort_index: 99,
+      chapter_id: "ch-99-diagnostic-freshness",
+    });
+
+    const text = await callWriteTool("diagnose_project_backups", {
+      project_id: "test-novel",
+      backup_dir: "diagnostic-backups/test-novel",
+    });
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.ok, false);
+    assert.equal(parsed.trust.status, "stale");
+    assert.equal(parsed.summary.by_type.project_backup_stale, 1);
+    assert.match(parsed.diagnostics[0].next_step, /export_project_backup/);
+  });
+
   test("export_project_backup refuses output outside the sync directory", async () => {
     const text = await callWriteTool("export_project_backup", {
       project_id: "test-novel",
@@ -1064,6 +1089,17 @@ describe("enrich_scene_characters_batch tool", () => {
       const backupParsed = JSON.parse(backupResult.content?.[0]?.text ?? "{}");
       assert.equal(backupParsed.ok, false);
       assert.equal(backupParsed.error.code, "READ_ONLY");
+
+      const diagnosticResult = await roClient.callTool({
+        name: "diagnose_project_backups",
+        arguments: {
+          project_id: "test-novel",
+        },
+      });
+      const diagnosticParsed = JSON.parse(diagnosticResult.content?.[0]?.text ?? "{}");
+      assert.equal(diagnosticParsed.error, undefined);
+      assert.equal(diagnosticParsed.checked.project_id, "test-novel");
+      assert.equal(typeof diagnosticParsed.trust.status, "string");
     } finally {
       try { await roClient?.close(); } catch {}
       if (roProc) roProc.kill();

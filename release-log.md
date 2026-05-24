@@ -6,6 +6,14 @@ This complements `CHANGELOG.md`:
 - `CHANGELOG.md` is technical and release-oriented.
 - This log is plain-language and outcome-oriented.
 
+### 2026-05-24 — Diagnose project backup trust and freshness
+
+- What changed: Added `diagnose_project_backups`, a read-only check for missing, partial, wrong-project, incompatible, tampered, unreadable, and stale project backup bundles.
+- Why it matters: Authors and AI agents can tell whether a generated backup is safe recovery input before restore tooling depends on it.
+- Who is affected: Authors, maintainers, and AI agents reviewing or preparing SQLite-canonical project recovery artifacts.
+- Action needed: Run `diagnose_project_backups` before relying on a generated project backup; regenerate stale or untrusted bundles with `export_project_backup`.
+- PR: Pending
+
 ### 2026-05-23 — Export project backup bundles
 
 - What changed: Added `export_project_backup`, which writes a deterministic `manifest.json` and `canonical.snapshot.json` backup bundle under the sync root for a project.
