@@ -178,6 +178,7 @@ export function registerSyncTools(s, {
           ? (path.isAbsolute(output_dir) ? output_dir : path.join(SYNC_DIR_ABS, output_dir))
           : path.join(SYNC_DIR_ABS, "project-backups", project_id);
         const { resolvedOutputDir, relativeToSyncDir } = resolveOutputDirWithinSync(requestedOutputDir);
+        const relativeBase = relativeToSyncDir.split(path.sep).filter(Boolean).join("/");
         const outputDirSegments = relativeToSyncDir
           .split(path.sep)
           .filter(Boolean)
@@ -194,13 +195,13 @@ export function registerSyncTools(s, {
           projectId: project_id,
           syncDir: SYNC_DIR_ABS,
           applicationVersion: MCP_SERVER_VERSION,
+          backupLocation: relativeBase ? `${relativeBase}/` : "./",
         });
         if (!built.ok) {
           return errorResponse(built.error.code, built.error.message, built.error.details);
         }
 
         const written = writeProjectBackupFiles(built, { outputDir: resolvedOutputDir });
-        const relativeBase = relativeToSyncDir.split(path.sep).filter(Boolean).join("/");
         const relativePath = fileName => (relativeBase ? `${relativeBase}/${fileName}` : fileName);
 
         return jsonResponse({
@@ -213,6 +214,7 @@ export function registerSyncTools(s, {
             manifest: written.manifestPath,
             canonical_snapshot: written.snapshotPath,
           },
+          written: written.written,
           relative_files: {
             manifest: relativePath("manifest.json"),
             canonical_snapshot: relativePath("canonical.snapshot.json"),
@@ -222,6 +224,7 @@ export function registerSyncTools(s, {
             canonical_source: built.manifest.canonical_source,
             generated_transparency: built.manifest.generated_transparency,
             mutation_surface: built.manifest.mutation_surface,
+            backup_location: built.manifest.backup_location,
             restore_policy: built.manifest.restore_policy,
             privacy: built.manifest.privacy,
             coverage: built.manifest.coverage,

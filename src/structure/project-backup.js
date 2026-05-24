@@ -1,6 +1,8 @@
 import crypto from "node:crypto";
+import fs from "node:fs";
 import path from "node:path";
 import {
+  assertRegularFileWriteTarget,
   ensureDirectoryInsideBoundary,
   resolveGeneratedOutputPath,
   writeGeneratedOutputFile,
@@ -276,19 +278,34 @@ export function renderProjectBackupArtifact(value) {
   return `${stableStringify(value, 2)}\n`;
 }
 
+function writeGeneratedOutputFileIfChanged(filePath, rendered) {
+  assertRegularFileWriteTarget(filePath);
+  if (fs.existsSync(filePath) && fs.readFileSync(filePath, "utf8") === rendered) {
+    return false;
+  }
+  writeGeneratedOutputFile(filePath, rendered, { encoding: "utf8" });
+  return true;
+}
+
 export function writeProjectBackupFiles(bundle, { outputDir }) {
   const normalizedOutputDir = path.resolve(outputDir);
   ensureDirectoryInsideBoundary(normalizedOutputDir, { label: "backup output_dir" });
 
   const manifestPath = resolveGeneratedOutputPath(normalizedOutputDir, "manifest.json");
   const snapshotPath = resolveGeneratedOutputPath(normalizedOutputDir, "canonical.snapshot.json");
+  const renderedManifest = renderProjectBackupArtifact(bundle.manifest);
+  const renderedSnapshot = renderProjectBackupArtifact(bundle.snapshot);
 
-  writeGeneratedOutputFile(manifestPath, renderProjectBackupArtifact(bundle.manifest), { encoding: "utf8" });
-  writeGeneratedOutputFile(snapshotPath, renderProjectBackupArtifact(bundle.snapshot), { encoding: "utf8" });
+  const manifestWritten = writeGeneratedOutputFileIfChanged(manifestPath, renderedManifest);
+  const snapshotWritten = writeGeneratedOutputFileIfChanged(snapshotPath, renderedSnapshot);
 
   return {
     manifestPath,
     snapshotPath,
+    written: {
+      manifest: manifestWritten,
+      canonical_snapshot: snapshotWritten,
+    },
   };
 }
 
@@ -296,6 +313,7 @@ export function buildProjectBackup(db, {
   projectId,
   syncDir = null,
   applicationVersion = "0.0.0",
+  backupLocation = null,
 } = {}) {
   const project = db.prepare(`
     SELECT project_id, universe_id, name
@@ -322,7 +340,7 @@ export function buildProjectBackup(db, {
     generated_transparency: true,
     mutation_surface: false,
     project_id: project.project_id,
-    backup_location: `project-backups/${project.project_id}/`,
+    backup_location: backupLocation ?? `project-backups/${project.project_id}/`,
     compatibility: {
       application_version: applicationVersion,
       sqlite_schema_version: querySchemaVersion(db),

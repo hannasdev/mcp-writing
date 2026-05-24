@@ -1,11 +1,15 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { openDb } from "../../core/db.js";
 import {
   buildProjectBackup,
   computeProjectBackupBundleChecksum,
   computeProjectBackupSnapshotChecksum,
   renderProjectBackupArtifact,
+  writeProjectBackupFiles,
 } from "../../structure/project-backup.js";
 
 const SYNC_DIR = "/tmp/sync";
@@ -300,6 +304,7 @@ describe("buildProjectBackup", () => {
       assert.equal(first.manifest.checksums.bundle_sha256, computeProjectBackupBundleChecksum(first));
 
       assert.equal(first.manifest.schema_version, 1);
+      assert.equal(first.manifest.backup_location, "project-backups/test-novel/");
       assert.equal(first.manifest.compatibility.application_version, "9.9.9");
       assert.equal(typeof first.manifest.compatibility.sqlite_schema_version, "number");
       assert.equal(first.manifest.restore_policy.authority, "full_snapshot");
@@ -375,6 +380,41 @@ describe("buildProjectBackup", () => {
       assert.equal(result.error.details.project_id, "missing");
     } finally {
       db.close();
+    }
+  });
+
+  test("writes backup artifacts only when rendered content changes", () => {
+    const db = openDb(":memory:");
+    const outputDir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-writing-project-backup-"));
+    try {
+      seedProjectBackupFixture(db);
+      const result = buildProjectBackup(db, {
+        projectId: "test-novel",
+        syncDir: SYNC_DIR,
+        backupLocation: "custom-backups/test-novel/",
+      });
+
+      assert.equal(result.ok, true);
+      assert.equal(result.manifest.backup_location, "custom-backups/test-novel/");
+
+      const firstWrite = writeProjectBackupFiles(result, { outputDir });
+      assert.deepEqual(firstWrite.written, {
+        manifest: true,
+        canonical_snapshot: true,
+      });
+      const manifestBefore = fs.statSync(firstWrite.manifestPath).mtimeMs;
+      const snapshotBefore = fs.statSync(firstWrite.snapshotPath).mtimeMs;
+
+      const secondWrite = writeProjectBackupFiles(result, { outputDir });
+      assert.deepEqual(secondWrite.written, {
+        manifest: false,
+        canonical_snapshot: false,
+      });
+      assert.equal(fs.statSync(secondWrite.manifestPath).mtimeMs, manifestBefore);
+      assert.equal(fs.statSync(secondWrite.snapshotPath).mtimeMs, snapshotBefore);
+    } finally {
+      db.close();
+      fs.rmSync(outputDir, { recursive: true, force: true });
     }
   });
 });

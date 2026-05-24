@@ -137,6 +137,7 @@ describe("sync tool", () => {
     assert.equal(parsed.manifest.canonical_source, "sqlite");
     assert.equal(parsed.manifest.generated_transparency, true);
     assert.equal(parsed.manifest.mutation_surface, false);
+    assert.equal(parsed.manifest.backup_location, "project-backups/test-novel/");
     assert.equal(parsed.manifest.restore_policy.authority, "full_snapshot");
     assert.equal(parsed.manifest.restore_policy.custom_delta_chains, false);
     assert.equal(parsed.manifest.privacy.includes_authored_prose_bodies, false);
@@ -151,17 +152,43 @@ describe("sync tool", () => {
     const snapshot = JSON.parse(firstSnapshot);
 
     assert.equal(manifest.project_id, "test-novel");
+    assert.equal(manifest.backup_location, "project-backups/test-novel/");
     assert.equal(manifest.checksums.canonical_snapshot_sha256, parsed.manifest.checksums.canonical_snapshot_sha256);
     assert.equal(snapshot.project.project_id, "test-novel");
     assert.equal(snapshot.operation_history.supported, false);
     assert.ok(snapshot.scenes.some(scene => scene.scene_id === "sc-001"));
     assert.equal(firstSnapshot.includes("This authored epigraph body must not enter"), false);
 
-    await callWriteTool("export_project_backup", {
+    const secondText = await callWriteTool("export_project_backup", {
       project_id: "test-novel",
+    });
+    const secondParsed = JSON.parse(secondText);
+    assert.deepEqual(secondParsed.written, {
+      manifest: false,
+      canonical_snapshot: false,
     });
     assert.equal(fs.readFileSync(manifestPath, "utf8"), firstManifest);
     assert.equal(fs.readFileSync(snapshotPath, "utf8"), firstSnapshot);
+  });
+
+  test("export_project_backup records custom output_dir in manifest", async () => {
+    const text = await callWriteTool("export_project_backup", {
+      project_id: "test-novel",
+      output_dir: "manual-backups/test-novel",
+    });
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.relative_output_dir, "manual-backups/test-novel");
+    assert.equal(parsed.manifest.backup_location, "manual-backups/test-novel/");
+    assert.deepEqual(parsed.written, {
+      manifest: true,
+      canonical_snapshot: true,
+    });
+
+    const manifestPath = path.join(writeSyncDir, "manual-backups", "test-novel", "manifest.json");
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+    assert.equal(manifest.backup_location, "manual-backups/test-novel/");
   });
 
   test("export_project_backup refuses output outside the sync directory", async () => {
