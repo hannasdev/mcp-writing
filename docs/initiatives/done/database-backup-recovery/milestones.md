@@ -5,7 +5,7 @@
 This milestone plan breaks the PRD into independently reviewable slices.
 Each milestone should leave the system in a releasable state and preserve the target architecture rule that SQLite remains canonical while generated backup artifacts provide transparency and explicit recovery input.
 
-Current focus: M8 — Deployment, Documentation, and Release Readiness.
+Current focus: None — initiative closed.
 
 ## Objective
 
@@ -358,7 +358,7 @@ Evidence:
 
 ## M8 — Deployment, Documentation, and Release Readiness
 
-Status: Current focus.
+Status: Delivered.
 
 Goal: make the app-level backup system understandable and operationally safe across local, Docker, and homeserver workflows without duplicating deployment volume-backup guidance.
 
@@ -391,9 +391,17 @@ Out of scope:
 - Client-specific restore UI.
 - Automatic Git push or remote setup.
 
+Evidence:
+
+- [docs/guides/backup-recovery.md](../../../../docs/guides/backup-recovery.md)
+- [docs/guides/docker.md](../../../../docs/guides/docker.md)
+- [docs/agents/tools.md](../../../../docs/agents/tools.md)
+- [src/workflows/workflow-catalogue.js](../../../../src/workflows/workflow-catalogue.js)
+- Local Docker smoke on 2026-05-25 using separate `/sync` and `/data` mounts: built `mcp-writing:m8-smoke`, verified `/healthz`, ran `sync`, `export_project_backup`, `diagnose_project_backups`, `create_chapter`, dry-run `restore_project_from_backup`, transactional restore with `confirm_destructive=true`, post-restore `sync`, refreshed backup export, and confirmed backup diagnostics returned `current`.
+
 ## Related
 
 - [prd.md](prd.md)
-- [Target Architecture Migration](../../done/target-architecture-migration/prd.md)
-- [Structural Authority Hardening](../../done/structural-authority-hardening/prd.md)
-- [Docker, CI, and Deployment Workflow](../../done/docker-ci-deployment/prd.md)
+- [Target Architecture Migration](../target-architecture-migration/prd.md)
+- [Structural Authority Hardening](../structural-authority-hardening/prd.md)
+- [Docker, CI, and Deployment Workflow](../docker-ci-deployment/prd.md)

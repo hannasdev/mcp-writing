@@ -95,6 +95,18 @@ Highlights:
 
 ## Recently Delivered
 
+### 💾 [Database Backup and Recovery](docs/initiatives/done/database-backup-recovery/prd.md)
+
+Git-reviewable backup artifacts and explicit restore workflows for SQLite-canonical project state.
+
+Highlights:
+
+- `export_project_backup` writes deterministic `manifest.json`, `canonical.snapshot.json`, and advisory `operations.jsonl` artifacts under `project-backups/<project_id>/`
+- `diagnose_project_backups` reports missing, stale, wrong-project, incompatible, tampered, partial, and unreadable backup bundles
+- Sanctioned canonical mutation tools refresh backup artifacts and operation history after successful project-scoped changes
+- `restore_project_from_backup` defaults to dry-run planning, then applies trusted restore plans transactionally with explicit destructive and cross-scope confirmations
+- [Backup and Recovery](docs/guides/backup-recovery.md) explains backup layers, Git expectations, Docker/homeserver volume backups, and restore failure handling
+
 ### 🧱 [Structural Authority Hardening](docs/initiatives/done/structural-authority-hardening/prd.md)
 
 Final authority hardening after the target architecture migration.

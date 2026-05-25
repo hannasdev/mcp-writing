@@ -28,9 +28,9 @@ Instead of feeding an entire manuscript to an AI and hoping it fits in the conte
 
 **Current status:**
 - **Core platform complete:** Metadata-first analysis, sidecar-backed metadata maintenance, AI-assisted prose editing with confirmation + git history, review bundles, and Scrivener Direct extraction are all implemented.
-- **Recently completed:** Docker, CI, and Deployment Workflow made Docker a supported way to build, run, smoke-test, and deploy Writing MCP.
-- **Previous milestone:** Filesystem Boundary Hardening centralized local file mutation through application-aware helpers and lint guardrails.
-- **Active development:** Database Backup and Recovery now has project backup export, freshness diagnostics, advisory operation history, automatic backup refresh after sanctioned project-scoped canonical mutations, dry-run restore planning, and transactional restore application; the next slice focuses on deployment, documentation, and release readiness.
+- **Recently completed:** Database Backup and Recovery added project backup export, freshness diagnostics, advisory operation history, automatic backup refresh after sanctioned project-scoped canonical mutations, dry-run restore planning, transactional restore application, and backup/restore operations guidance.
+- **Previous milestone:** Docker, CI, and Deployment Workflow made Docker a supported way to build, run, smoke-test, and deploy Writing MCP.
+- **Active development:** Post-initiative stabilization and backlog selection.
 - **Deferred backlog:** OpenClaw integration, client-agnostic setup, divisions, and embeddings search.
 - **Ideas and open questions:** tracked separately so future exploration does not distort the active roadmap.
 
