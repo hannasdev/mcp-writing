@@ -277,11 +277,18 @@ describe("sync tool", () => {
       chapter_id: "ch-101-restore-apply-extra",
     });
 
+    const reviewedText = await callWriteTool("restore_project_from_backup", {
+      project_id: "test-novel",
+      backup_path: "apply-backups/test-novel",
+    });
+    const reviewed = JSON.parse(reviewedText);
+
     const text = await callWriteTool("restore_project_from_backup", {
       project_id: "test-novel",
       backup_path: "apply-backups/test-novel",
       dry_run: false,
       confirm_destructive: true,
+      expected_current_snapshot_checksum: reviewed.current_snapshot_checksum,
     });
     const parsed = JSON.parse(text);
 

@@ -837,8 +837,12 @@ describe("restoreProjectFromBackup", () => {
       INSERT INTO scene_tags (scene_id, project_id, tag)
       VALUES (?, ?, ?)
     `).run("sc-first", "test-novel", "extra-current-tag");
+    const reviewed = restorePlan(db, syncDir, backupDir);
 
-    const result = restorePlan(db, syncDir, backupDir, { dryRun: false });
+    const result = restorePlan(db, syncDir, backupDir, {
+      dryRun: false,
+      expectedCurrentSnapshotChecksum: reviewed.current_snapshot_checksum,
+    });
 
     assert.equal(result.ok, false);
     assert.equal(result.action, "restore_refused");
@@ -846,6 +850,46 @@ describe("restoreProjectFromBackup", () => {
     assert.equal(result.plan.destructive_change_count, 1);
     assert.equal(
       db.prepare(`SELECT COUNT(*) AS count FROM scene_tags WHERE project_id = ? AND tag = ?`).get("test-novel", "extra-current-tag").count,
+      1
+    );
+  }));
+
+  test("requires the reviewed current snapshot checksum before applying restore plans", () => withFixture(({ db, syncDir, backupDir }) => {
+    exportBackup(db, syncDir, backupDir);
+
+    const result = restorePlan(db, syncDir, backupDir, { dryRun: false });
+
+    assert.equal(result.ok, false);
+    assert.equal(result.action, "restore_refused");
+    assert.deepEqual(result.diagnostics.map(diagnostic => diagnostic.type), ["project_restore_current_snapshot_confirmation_required"]);
+    assert.equal(result.plan.totals.delete, 0);
+    assert.equal(
+      db.prepare(`SELECT COUNT(*) AS count FROM scenes WHERE project_id = ?`).get("test-novel").count,
+      1
+    );
+  }));
+
+  test("refuses apply when current SQLite state changed after dry-run review", () => withFixture(({ db, syncDir, backupDir }) => {
+    exportBackup(db, syncDir, backupDir);
+    const reviewed = restorePlan(db, syncDir, backupDir);
+    db.prepare(`
+      INSERT INTO scene_tags (scene_id, project_id, tag)
+      VALUES (?, ?, ?)
+    `).run("sc-first", "test-novel", "changed-after-review");
+
+    const result = restorePlan(db, syncDir, backupDir, {
+      dryRun: false,
+      confirmDestructive: true,
+      expectedCurrentSnapshotChecksum: reviewed.current_snapshot_checksum,
+    });
+
+    assert.equal(result.ok, false);
+    assert.equal(result.action, "restore_refused");
+    assert.deepEqual(result.diagnostics.map(diagnostic => diagnostic.type), ["project_restore_current_snapshot_changed"]);
+    assert.equal(result.diagnostics[0].details.expected_current_snapshot_checksum, reviewed.current_snapshot_checksum);
+    assert.notEqual(result.diagnostics[0].details.current_snapshot_checksum, reviewed.current_snapshot_checksum);
+    assert.equal(
+      db.prepare(`SELECT COUNT(*) AS count FROM scene_tags WHERE project_id = ? AND tag = ?`).get("test-novel", "changed-after-review").count,
       1
     );
   }));
@@ -869,10 +913,12 @@ describe("restoreProjectFromBackup", () => {
       INSERT INTO scenes_fts (scene_id, project_id, logline, title, keywords)
       VALUES (?, ?, ?, ?, ?)
     `).run("sc-first", "test-novel", "changed", "Changed Scene", "changed");
+    const reviewed = restorePlan(db, syncDir, backupDir);
 
     const result = restorePlan(db, syncDir, backupDir, {
       dryRun: false,
       confirmDestructive: true,
+      expectedCurrentSnapshotChecksum: reviewed.current_snapshot_checksum,
     });
 
     assert.equal(result.ok, true);
@@ -913,8 +959,12 @@ describe("restoreProjectFromBackup", () => {
         name: "Shared Universe",
       },
     });
+    const reviewed = restorePlan(db, syncDir, backupDir);
 
-    const result = restorePlan(db, syncDir, backupDir, { dryRun: false });
+    const result = restorePlan(db, syncDir, backupDir, {
+      dryRun: false,
+      expectedCurrentSnapshotChecksum: reviewed.current_snapshot_checksum,
+    });
 
     assert.equal(result.ok, false);
     assert.equal(result.action, "restore_refused");
@@ -940,8 +990,12 @@ describe("restoreProjectFromBackup", () => {
         name: null,
       },
     });
+    const reviewed = restorePlan(db, syncDir, backupDir);
 
-    const result = restorePlan(db, syncDir, backupDir, { dryRun: false });
+    const result = restorePlan(db, syncDir, backupDir, {
+      dryRun: false,
+      expectedCurrentSnapshotChecksum: reviewed.current_snapshot_checksum,
+    });
 
     assert.equal(result.ok, false);
     assert.equal(result.action, "restore_refused");

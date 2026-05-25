@@ -345,8 +345,9 @@ export function registerSyncTools(s, {
       dry_run: z.boolean().optional().describe("If true (default), validate and summarize the restore plan without writing SQLite state."),
       confirm_destructive: z.boolean().optional().describe("Required with dry_run=false when the restore plan includes delete candidates."),
       confirm_cross_scope: z.boolean().optional().describe("Required with dry_run=false when the restore plan changes universe-scoped records."),
+      expected_current_snapshot_checksum: z.string().optional().describe("Required with dry_run=false; pass the current_snapshot_checksum returned by the reviewed dry-run plan to guard against state changes before apply."),
     },
-    async ({ project_id, backup_path, dry_run = true, confirm_destructive = false, confirm_cross_scope = false } = {}) => {
+    async ({ project_id, backup_path, dry_run = true, confirm_destructive = false, confirm_cross_scope = false, expected_current_snapshot_checksum = null } = {}) => {
       if (!SYNC_DIR_WRITABLE && dry_run === false) {
         return errorResponse("READ_ONLY", "Cannot restore project from backup: server is in read-only mode for canonical structure mutations.");
       }
@@ -372,6 +373,7 @@ export function registerSyncTools(s, {
           dryRun: dry_run,
           confirmDestructive: confirm_destructive,
           confirmCrossScope: confirm_cross_scope,
+          expectedCurrentSnapshotChecksum: expected_current_snapshot_checksum,
           applicationVersion: MCP_SERVER_VERSION,
         }));
       } catch (error) {

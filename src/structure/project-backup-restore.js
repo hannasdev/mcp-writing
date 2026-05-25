@@ -1012,6 +1012,7 @@ export function restoreProjectFromBackup(db, {
   dryRun = true,
   confirmDestructive = false,
   confirmCrossScope = false,
+  expectedCurrentSnapshotChecksum = null,
   applicationVersion = "0.0.0",
 } = {}) {
   const resolvedBackupDir = resolveBackupDir(backupPath ?? path.join(syncDir, "project-backups", projectId));
@@ -1104,6 +1105,36 @@ export function restoreProjectFromBackup(db, {
 
   const plan = buildRestorePlan(current.snapshot, snapshot, { projectId });
   const applyDiagnostics = [];
+  if (dryRun === false) {
+    if (typeof expectedCurrentSnapshotChecksum !== "string" || expectedCurrentSnapshotChecksum === "") {
+      applyDiagnostics.push(createDiagnostic(
+        "project_restore_current_snapshot_confirmation_required",
+        "Project backup restore requires the current_snapshot_checksum from the reviewed dry-run plan.",
+        {
+          project_id: projectId,
+          current_snapshot_checksum: current.checksum,
+        },
+        {
+          severity: "error",
+          nextStep: "Run a dry-run restore, review the plan, then retry with expected_current_snapshot_checksum set to that dry-run current_snapshot_checksum.",
+        }
+      ));
+    } else if (expectedCurrentSnapshotChecksum !== current.checksum) {
+      applyDiagnostics.push(createDiagnostic(
+        "project_restore_current_snapshot_changed",
+        "Current SQLite canonical state changed after the reviewed dry-run plan.",
+        {
+          project_id: projectId,
+          expected_current_snapshot_checksum: expectedCurrentSnapshotChecksum,
+          current_snapshot_checksum: current.checksum,
+        },
+        {
+          severity: "error",
+          nextStep: "Run a new dry-run restore, review the updated plan, then retry with the new current_snapshot_checksum.",
+        }
+      ));
+    }
+  }
   if (dryRun === false && plan.destructive_change_count > 0 && confirmDestructive !== true) {
     applyDiagnostics.push(createDiagnostic(
       "project_restore_destructive_confirmation_required",

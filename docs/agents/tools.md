@@ -156,6 +156,7 @@ Explicitly restore a project from a trusted generated project backup bundle. Def
 | `dry_run` | `boolean` | No | If true (default), validate and summarize the restore plan without writing SQLite state. |
 | `confirm_destructive` | `boolean` | No | Required with dry_run=false when the restore plan includes delete candidates. |
 | `confirm_cross_scope` | `boolean` | No | Required with dry_run=false when the restore plan changes universe-scoped records. |
+| `expected_current_snapshot_checksum` | `string` | No | Required with dry_run=false; pass the current_snapshot_checksum returned by the reviewed dry-run plan to guard against state changes before apply. |
 
 ---
 

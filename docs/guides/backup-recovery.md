@@ -68,7 +68,7 @@ Start with:
 }
 ```
 
-The dry run validates the trusted backup bundle and returns a deterministic plan.
+The dry run validates the trusted backup bundle and returns a deterministic plan plus a `current_snapshot_checksum`.
 Review the plan before applying it, especially:
 
 - `delete` changes, which remove current SQLite records absent from the backup
@@ -81,6 +81,7 @@ To apply a trusted plan with deletes:
 {
   "project_id": "test-novel",
   "dry_run": false,
+  "expected_current_snapshot_checksum": "<current_snapshot_checksum from the reviewed dry run>",
   "confirm_destructive": true
 }
 ```
