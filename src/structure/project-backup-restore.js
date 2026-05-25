@@ -156,7 +156,7 @@ function identityFieldError(row, field, nullableFields, emptyStringFields) {
       actual_type: jsonType(value),
     };
   }
-  if (value === "" && !nullableFields.has(field) && !emptyStringFields.has(field)) {
+  if (value === "" && !emptyStringFields.has(field)) {
     return { reason: "empty_identity" };
   }
   return null;
@@ -729,7 +729,21 @@ function validateBundleShape({ manifest, snapshot, backupDir, projectId }) {
             continue;
           }
           const value = row[field];
-          if (value !== null && value !== undefined && value !== "" && value !== projectId) {
+          const emptyStringFields = EMPTY_STRING_IDENTITY_FIELDS.get(domain) ?? new Set();
+          if (value === "" && !emptyStringFields.has(field)) {
+            diagnostics.push(createDiagnostic(
+              "project_restore_invalid_snapshot",
+              `Backup canonical snapshot row ${index} in domain "${domain}" has empty project scope field "${field}".`,
+              {
+                backup_dir: backupDir,
+                domain,
+                index,
+                field,
+                reason: "empty_project_scope",
+              },
+              { nextStep: "Regenerate the backup with export_project_backup before using it for recovery." }
+            ));
+          } else if (value !== null && value !== undefined && value !== "" && value !== projectId) {
             diagnostics.push(createDiagnostic(
               "project_restore_wrong_project",
               `Backup canonical snapshot row ${index} in domain "${domain}" has ${field} "${value}", not "${projectId}".`,

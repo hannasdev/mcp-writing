@@ -699,6 +699,26 @@ describe("restoreProjectFromBackup", () => {
     assert.equal(result.plan, null);
   }));
 
+  test("refuses empty-string values for nullable project scope fields", () => withFixture(({ db, syncDir, backupDir }) => {
+    const built = exportBackup(db, syncDir, backupDir);
+    writeMalformedSnapshotWithValidChecksums(backupDir, {
+      ...built.snapshot,
+      characters: built.snapshot.characters.map((character, index) => index === 0
+        ? { ...character, project_id: "" }
+        : character),
+    });
+
+    const result = restorePlan(db, syncDir, backupDir);
+
+    assert.equal(result.ok, false);
+    assert.equal(result.action, "restore_refused");
+    assert.deepEqual(result.diagnostics.map(diagnostic => diagnostic.type), ["project_restore_invalid_snapshot"]);
+    assert.equal(result.diagnostics[0].details.domain, "characters");
+    assert.equal(result.diagnostics[0].details.field, "project_id");
+    assert.equal(result.diagnostics[0].details.reason, "empty_project_scope");
+    assert.equal(result.plan, null);
+  }));
+
   test("refuses nullable-scope reference rows that belong to another project", () => withFixture(({ db, syncDir, backupDir }) => {
     const built = exportBackup(db, syncDir, backupDir);
     writeMalformedSnapshotWithValidChecksums(backupDir, {
@@ -764,7 +784,7 @@ describe("restoreProjectFromBackup", () => {
     assert.equal(result.plan, null);
   }));
 
-  test("treats null and empty-string nullable identity fields as distinct", () => withFixture(({ db, syncDir, backupDir }) => {
+  test("refuses empty-string values for nullable identity fields", () => withFixture(({ db, syncDir, backupDir }) => {
     const built = exportBackup(db, syncDir, backupDir);
     writeMalformedSnapshotWithValidChecksums(backupDir, {
       ...built.snapshot,
@@ -779,17 +799,13 @@ describe("restoreProjectFromBackup", () => {
 
     const result = restorePlan(db, syncDir, backupDir);
 
-    assert.equal(result.ok, true);
-    assert.ok(result.plan.changes.some(change => (
-      change.domain === "character_relationships" &&
-      change.action === "create" &&
-      change.identity.note === ""
-    )));
-    assert.ok(result.plan.changes.some(change => (
-      change.domain === "character_relationships" &&
-      change.action === "unchanged" &&
-      change.identity.note === null
-    )));
+    assert.equal(result.ok, false);
+    assert.equal(result.action, "restore_refused");
+    assert.deepEqual(result.diagnostics.map(diagnostic => diagnostic.type), ["project_restore_invalid_snapshot"]);
+    assert.equal(result.diagnostics[0].details.domain, "character_relationships");
+    assert.equal(result.diagnostics[0].details.field, "note");
+    assert.equal(result.diagnostics[0].details.reason, "empty_identity");
+    assert.equal(result.plan, null);
   }));
 
   test("refuses current SQLite duplicate identities before planning can collapse rows", () => withFixture(({ db, syncDir, backupDir }) => {
