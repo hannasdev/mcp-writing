@@ -1,6 +1,6 @@
 # Database Backup and Recovery — Milestones
 
-**Status:** Active
+**Status:** Done
 
 This milestone plan breaks the PRD into independently reviewable slices.
 Each milestone should leave the system in a releasable state and preserve the target architecture rule that SQLite remains canonical while generated backup artifacts provide transparency and explicit recovery input.
