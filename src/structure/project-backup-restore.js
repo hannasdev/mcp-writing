@@ -291,8 +291,14 @@ function rowIsCrossScope(domain, row, projectId) {
   if (["characters", "places", "reference_docs"].includes(domain)) {
     return row.project_id == null || row.project_id === "";
   }
+  if (domain === "character_traits") {
+    return false;
+  }
   if (domain === "reference_links") {
     return row.source_project_id == null || row.source_project_id === "";
+  }
+  if (domain === "reference_doc_tags") {
+    return false;
   }
   if (domain === "character_relationships") {
     return row.scene_id == null || row.scene_id === "";
@@ -300,9 +306,51 @@ function rowIsCrossScope(domain, row, projectId) {
   return Object.hasOwn(row, "project_id") && row.project_id !== projectId;
 }
 
-function markChangeScope(change, projectId) {
+function mergeScopedIds(map, rows, idField, projectId) {
+  for (const row of rows ?? []) {
+    const id = row?.[idField];
+    if (!id) continue;
+    const crossScope = row.project_id == null || row.project_id === "" || row.project_id !== projectId;
+    map.set(id, (map.get(id) ?? false) || crossScope);
+  }
+}
+
+function buildRestoreScopeContext(currentSnapshot, backupSnapshot, projectId) {
+  const projectSceneIds = new Set();
+  for (const snapshot of [currentSnapshot, backupSnapshot]) {
+    for (const row of snapshot.scenes ?? []) {
+      if (row.project_id === projectId) projectSceneIds.add(row.scene_id);
+    }
+  }
+
+  const characterIds = new Map();
+  mergeScopedIds(characterIds, currentSnapshot.characters, "character_id", projectId);
+  mergeScopedIds(characterIds, backupSnapshot.characters, "character_id", projectId);
+
+  const referenceDocIds = new Map();
+  mergeScopedIds(referenceDocIds, currentSnapshot.reference_docs, "doc_id", projectId);
+  mergeScopedIds(referenceDocIds, backupSnapshot.reference_docs, "doc_id", projectId);
+
+  return { characterIds, projectSceneIds, referenceDocIds };
+}
+
+function rowIsContextCrossScope(domain, row, projectId, scopeContext) {
+  if (domain === "character_traits") {
+    return scopeContext.characterIds.get(row?.character_id) === true;
+  }
+  if (domain === "reference_doc_tags") {
+    return scopeContext.referenceDocIds.get(row?.doc_id) === true;
+  }
+  if (domain === "character_relationships") {
+    if (!row || row.scene_id == null || row.scene_id === "") return true;
+    return !scopeContext.projectSceneIds.has(row.scene_id);
+  }
+  return rowIsCrossScope(domain, row, projectId);
+}
+
+function markChangeScope(change, projectId, scopeContext) {
   const row = change.backup ?? change.current ?? null;
-  const crossScope = rowIsCrossScope(change.domain, row, projectId);
+  const crossScope = rowIsContextCrossScope(change.domain, row, projectId, scopeContext);
   return crossScope ? { ...change, cross_scope: true } : change;
 }
 
@@ -807,7 +855,8 @@ function buildRestorePlan(currentSnapshot, backupSnapshot, { projectId }) {
     }
   }
 
-  const scopedChanges = changes.map(change => markChangeScope(change, projectId));
+  const scopeContext = buildRestoreScopeContext(currentSnapshot, backupSnapshot, projectId);
+  const scopedChanges = changes.map(change => markChangeScope(change, projectId, scopeContext));
 
   const byDomain = {};
   for (const change of scopedChanges) {
@@ -967,9 +1016,6 @@ function applyProjectRestore(db, {
     `).run(row.source_kind, row.source_project_id, row.source_id, row.target_doc_id, row.relation);
   }
 
-  if (currentSnapshot.project && !backupSnapshot.project) {
-    db.prepare(`DELETE FROM projects WHERE project_id = ?`).run(projectId);
-  }
   if (currentSnapshot.universe && !backupSnapshot.universe) {
     db.prepare(`DELETE FROM universes WHERE universe_id = ?`).run(currentSnapshot.universe.universe_id);
   }

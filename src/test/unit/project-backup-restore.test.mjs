@@ -976,6 +976,144 @@ describe("restoreProjectFromBackup", () => {
     );
   }));
 
+  test("marks universe-scoped trait and reference tag changes as cross-scope", () => withFixture(({ db, syncDir, backupDir }) => {
+    const built = exportBackup(db, syncDir, backupDir);
+    const referencePath = path.join(syncDir, "projects/test-novel/world/reference/shared.md");
+    fs.mkdirSync(path.dirname(referencePath), { recursive: true });
+    fs.writeFileSync(referencePath, "# Shared Reference\n", "utf8");
+    writeMalformedSnapshotWithValidChecksums(backupDir, {
+      ...built.snapshot,
+      characters: [
+        ...built.snapshot.characters,
+        {
+          character_id: "char-shared",
+          project_id: null,
+          universe_id: "shared-universe",
+          name: "Shared Character",
+          role: null,
+          arc_summary: null,
+          first_appearance: null,
+          file_path: null,
+        },
+      ],
+      character_traits: [
+        ...built.snapshot.character_traits,
+        { character_id: "char-shared", trait: "shared-trait" },
+      ],
+      reference_docs: [
+        ...built.snapshot.reference_docs,
+        {
+          doc_id: "ref-shared",
+          project_id: null,
+          universe_id: "shared-universe",
+          type: "note",
+          title: "Shared Reference",
+          summary: null,
+          file_path: "projects/test-novel/world/reference/shared.md",
+        },
+      ],
+      reference_doc_tags: [
+        ...built.snapshot.reference_doc_tags,
+        { doc_id: "ref-shared", tag: "shared-tag" },
+      ],
+    });
+
+    const result = restorePlan(db, syncDir, backupDir);
+
+    assert.equal(result.ok, true);
+    assert.equal(
+      result.plan.changes.some(change => (
+        change.domain === "character_traits" &&
+        change.identity.character_id === "char-shared" &&
+        change.cross_scope === true
+      )),
+      true
+    );
+    assert.equal(
+      result.plan.changes.some(change => (
+        change.domain === "reference_doc_tags" &&
+        change.identity.doc_id === "ref-shared" &&
+        change.cross_scope === true
+      )),
+      true
+    );
+  }));
+
+  test("requires cross-scope confirmation before deleting universe-scoped character traits", () => withFixture(({ db, syncDir, backupDir }) => {
+    db.prepare(`
+      INSERT INTO universes (universe_id, name)
+      VALUES (?, ?)
+    `).run("shared-universe", "Shared Universe");
+    db.prepare(`
+      UPDATE projects
+      SET universe_id = ?
+      WHERE project_id = ?
+    `).run("shared-universe", "test-novel");
+    db.prepare(`
+      INSERT INTO characters (character_id, project_id, universe_id, name, role, arc_summary, first_appearance, file_path)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run("char-shared", null, "shared-universe", "Shared Character", null, null, null, null);
+    db.prepare(`
+      INSERT INTO scene_characters (scene_id, project_id, character_id)
+      VALUES (?, ?, ?)
+    `).run("sc-first", "test-novel", "char-shared");
+    db.prepare(`
+      INSERT INTO character_traits (character_id, trait)
+      VALUES (?, ?)
+    `).run("char-shared", "shared-trait");
+    const built = exportBackup(db, syncDir, backupDir);
+    writeMalformedSnapshotWithValidChecksums(backupDir, {
+      ...built.snapshot,
+      character_traits: built.snapshot.character_traits.filter(row => row.character_id !== "char-shared"),
+    });
+    const reviewed = restorePlan(db, syncDir, backupDir);
+
+    const result = restorePlan(db, syncDir, backupDir, {
+      dryRun: false,
+      confirmDestructive: true,
+      expectedCurrentSnapshotChecksum: reviewed.current_snapshot_checksum,
+    });
+
+    assert.equal(result.ok, false);
+    assert.equal(result.action, "restore_refused");
+    assert.deepEqual(result.diagnostics.map(diagnostic => diagnostic.type), ["project_restore_cross_scope_confirmation_required"]);
+    assert.equal(result.plan.cross_scope_change_count, 1);
+    assert.equal(
+      db.prepare(`SELECT COUNT(*) AS count FROM character_traits WHERE character_id = ? AND trait = ?`).get("char-shared", "shared-trait").count,
+      1
+    );
+  }));
+
+  test("marks relationships tied to non-project scenes as cross-scope", () => withFixture(({ db, syncDir, backupDir }) => {
+    const built = exportBackup(db, syncDir, backupDir);
+    writeMalformedSnapshotWithValidChecksums(backupDir, {
+      ...built.snapshot,
+      character_relationships: [
+        ...built.snapshot.character_relationships,
+        {
+          from_character: "char-elena",
+          to_character: "char-marcus",
+          relationship_type: "protects",
+          strength: "medium",
+          scene_id: "other-project-scene",
+          note: "external scene relationship",
+        },
+      ],
+    });
+
+    const result = restorePlan(db, syncDir, backupDir);
+
+    assert.equal(result.ok, true);
+    assert.equal(
+      result.plan.changes.some(change => (
+        change.domain === "character_relationships" &&
+        change.identity.relationship_type === "protects" &&
+        change.cross_scope === true
+      )),
+      true
+    );
+  }));
+
   test("rolls back all database changes when restore application fails", () => withFixture(({ db, syncDir, backupDir }) => {
     const built = exportBackup(db, syncDir, backupDir);
     db.prepare(`
