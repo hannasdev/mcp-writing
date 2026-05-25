@@ -361,6 +361,7 @@ describe("describe_workflows tool", () => {
       "place_understanding",
       "thread_understanding",
       "parity_recovery",
+      "backup_recovery",
       "review_preparation",
       "first_time_setup",
       "styleguide_setup_new",
