@@ -12,7 +12,7 @@ This complements `CHANGELOG.md`:
 - Why it matters: Authors, maintainers, and AI agents can recover SQLite-canonical project state from generated backup artifacts without leaving the database half-restored if a write fails.
 - Who is affected: Authors, maintainers, and AI agents preparing or executing project recovery from `project-backups/<project_id>/`.
 - Action needed: Dry-run restore first; pass `confirm_destructive=true` for delete candidates and `confirm_cross_scope=true` for universe-scoped changes, then run `sync`, diagnostics, and backup export after a successful restore.
-- PR: TBD
+- PR: [#221](https://github.com/hannasdev/mcp-writing/pull/221)
 
 ### 2026-05-24 — Preview project backup restores before applying them
 
