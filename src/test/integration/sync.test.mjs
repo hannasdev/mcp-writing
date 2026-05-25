@@ -300,6 +300,20 @@ describe("sync tool", () => {
     });
     const chapters = JSON.parse(chaptersText);
     assert.equal(chapters.results.some(chapter => chapter.chapter_id === "ch-101-restore-apply-extra"), false);
+
+    const clearedSearchText = await callWriteTool("search_metadata", {
+      query: "harbor",
+    });
+    assert.match(clearedSearchText, /No scenes matched/);
+
+    const syncText = await callWriteTool("sync");
+    assert.match(syncText, /scenes indexed/);
+
+    const restoredSearchText = await callWriteTool("search_metadata", {
+      query: "harbor",
+    });
+    const restoredSearch = JSON.parse(restoredSearchText);
+    assert.equal(restoredSearch.results.some(scene => scene.scene_id === "sc-001" && scene.project_id === "test-novel"), true);
   });
 
   test("export_project_backup refuses output outside the sync directory", async () => {
