@@ -5,7 +5,7 @@
 This milestone plan breaks the PRD into independently reviewable slices.
 Each milestone should leave the system in a releasable state and preserve the target architecture rule that SQLite remains canonical while generated backup artifacts provide transparency and explicit recovery input.
 
-Current focus: M7 — Transactional Restore and Rebuild Path.
+Current focus: M8 — Deployment, Documentation, and Release Readiness.
 
 ## Objective
 
@@ -316,7 +316,7 @@ Evidence:
 
 ## M7 — Transactional Restore and Rebuild Path
 
-Status: Current focus.
+Status: Delivered.
 
 Goal: fulfill the v1 recovery promise by rebuilding canonical database state from a trusted backup.
 
@@ -349,7 +349,16 @@ Out of scope:
 - Event-log replay as the primary restore path.
 - Cross-project merge restore.
 
+Evidence:
+
+- [src/structure/project-backup-restore.js](../../../../src/structure/project-backup-restore.js)
+- [src/tools/sync.js](../../../../src/tools/sync.js)
+- [src/test/unit/project-backup-restore.test.mjs](../../../../src/test/unit/project-backup-restore.test.mjs)
+- [src/test/integration/sync.test.mjs](../../../../src/test/integration/sync.test.mjs)
+
 ## M8 — Deployment, Documentation, and Release Readiness
+
+Status: Current focus.
 
 Goal: make the app-level backup system understandable and operationally safe across local, Docker, and homeserver workflows without duplicating deployment volume-backup guidance.
 

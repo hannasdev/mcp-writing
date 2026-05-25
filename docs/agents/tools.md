@@ -153,7 +153,9 @@ Dry-run an explicit project restore from a trusted generated project backup bund
 | --- | --- | :---: | --- |
 | `project_id` | `string` | Yes | Project ID to restore (e.g. 'test-novel' or 'universe-1/book-1-the-lamb'). |
 | `backup_path` | `string` | No | Path under WRITING_SYNC_DIR to a project backup directory, manifest.json, or canonical.snapshot.json. Defaults to project-backups/<project_id>. |
-| `dry_run` | `boolean` | No | If true (default), validate and summarize the restore plan without writing SQLite state. dry_run=false is reserved for a later transactional restore milestone. |
+| `dry_run` | `boolean` | No | If true (default), validate and summarize the restore plan without writing SQLite state. |
+| `confirm_destructive` | `boolean` | No | Required with dry_run=false when the restore plan includes delete candidates. |
+| `confirm_cross_scope` | `boolean` | No | Required with dry_run=false when the restore plan changes universe-scoped records. |
 
 ---
 

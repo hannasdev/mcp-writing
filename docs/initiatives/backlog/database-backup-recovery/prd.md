@@ -2,11 +2,11 @@
 
 **Status:** Active
 
-Current focus: M7 — Transactional Restore and Rebuild Path.
+Current focus: M8 — Deployment, Documentation, and Release Readiness.
 
 The product is ready to extend the SQLite-canonical architecture with a complete backup and recovery story.
 The need is clear because structural manuscript state has moved away from files-first authority.
-The internal backup artifact shape, explicit project backup export tool, project backup diagnostics, advisory operation history, automatic backup refresh after sanctioned project-scoped canonical mutations, and dry-run restore planning are implemented; the next implementation slice should apply trusted restore plans transactionally and rebuild derived state without making generated backup files a daily mutation surface.
+The internal backup artifact shape, explicit project backup export tool, project backup diagnostics, advisory operation history, automatic backup refresh after sanctioned project-scoped canonical mutations, dry-run restore planning, and transactional restore application are implemented; the next implementation slice should document and validate the completed backup and recovery workflow across local and deployment contexts.
 
 Implementation slices are tracked in [milestones.md](milestones.md).
 

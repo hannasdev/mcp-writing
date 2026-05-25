@@ -11,7 +11,7 @@ It supports metadata-first reasoning, explicit prose editing workflows, and revi
 
 Active initiative: [Database Backup and Recovery](docs/initiatives/backlog/database-backup-recovery/prd.md).
 
-Current focus: M7 — Transactional Restore and Rebuild Path. Project backup export, diagnostics, freshness checks, advisory operation history, automatic backup refresh after sanctioned project-scoped canonical mutations, and dry-run restore planning are implemented; the next step is applying trusted restore plans transactionally with explicit destructive-change confirmation.
+Current focus: M8 — Deployment, Documentation, and Release Readiness. Project backup export, diagnostics, freshness checks, advisory operation history, automatic backup refresh after sanctioned project-scoped canonical mutations, dry-run restore planning, and transactional restore application are implemented; the next step is documenting and validating the completed backup and recovery workflow.
 
 Most recent completed initiative: [Docker, CI, and Deployment Workflow](docs/initiatives/done/docker-ci-deployment/prd.md).
 

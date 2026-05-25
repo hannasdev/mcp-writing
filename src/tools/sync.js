@@ -342,9 +342,11 @@ export function registerSyncTools(s, {
     {
       project_id: z.string().describe("Project ID to restore (e.g. 'test-novel' or 'universe-1/book-1-the-lamb')."),
       backup_path: z.string().optional().describe("Path under WRITING_SYNC_DIR to a project backup directory, manifest.json, or canonical.snapshot.json. Defaults to project-backups/<project_id>."),
-      dry_run: z.boolean().optional().describe("If true (default), validate and summarize the restore plan without writing SQLite state. dry_run=false is reserved for a later transactional restore milestone."),
+      dry_run: z.boolean().optional().describe("If true (default), validate and summarize the restore plan without writing SQLite state."),
+      confirm_destructive: z.boolean().optional().describe("Required with dry_run=false when the restore plan includes delete candidates."),
+      confirm_cross_scope: z.boolean().optional().describe("Required with dry_run=false when the restore plan changes universe-scoped records."),
     },
-    async ({ project_id, backup_path, dry_run = true } = {}) => {
+    async ({ project_id, backup_path, dry_run = true, confirm_destructive = false, confirm_cross_scope = false } = {}) => {
       if (!SYNC_DIR_WRITABLE && dry_run === false) {
         return errorResponse("READ_ONLY", "Cannot restore project from backup: server is in read-only mode for canonical structure mutations.");
       }
@@ -368,6 +370,8 @@ export function registerSyncTools(s, {
           projectId: project_id,
           backupPath: requestedBackupPath,
           dryRun: dry_run,
+          confirmDestructive: confirm_destructive,
+          confirmCrossScope: confirm_cross_scope,
           applicationVersion: MCP_SERVER_VERSION,
         }));
       } catch (error) {
