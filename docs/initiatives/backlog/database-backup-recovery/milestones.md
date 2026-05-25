@@ -5,7 +5,7 @@
 This milestone plan breaks the PRD into independently reviewable slices.
 Each milestone should leave the system in a releasable state and preserve the target architecture rule that SQLite remains canonical while generated backup artifacts provide transparency and explicit recovery input.
 
-Current focus: M6 — Restore Planning and Dry Run.
+Current focus: M7 — Transactional Restore and Rebuild Path.
 
 ## Objective
 
@@ -274,7 +274,7 @@ Notes:
 
 ## M6 — Restore Planning and Dry Run
 
-Status: Current focus.
+Status: Delivered.
 
 Goal: make recovery inspectable before any canonical state is rewritten.
 
@@ -307,7 +307,16 @@ Out of scope:
 - Import-style recovery when no trusted backup exists.
 - Restoring prose bodies.
 
+Evidence:
+
+- [src/structure/project-backup-restore.js](../../../../src/structure/project-backup-restore.js)
+- [src/tools/sync.js](../../../../src/tools/sync.js)
+- [src/test/unit/project-backup-restore.test.mjs](../../../../src/test/unit/project-backup-restore.test.mjs)
+- [src/test/integration/sync.test.mjs](../../../../src/test/integration/sync.test.mjs)
+
 ## M7 — Transactional Restore and Rebuild Path
+
+Status: Current focus.
 
 Goal: fulfill the v1 recovery promise by rebuilding canonical database state from a trusted backup.
 

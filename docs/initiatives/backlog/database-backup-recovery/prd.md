@@ -2,11 +2,11 @@
 
 **Status:** Active
 
-Current focus: M6 — Restore Planning Dry Run.
+Current focus: M7 — Transactional Restore and Rebuild Path.
 
 The product is ready to extend the SQLite-canonical architecture with a complete backup and recovery story.
 The need is clear because structural manuscript state has moved away from files-first authority.
-The internal backup artifact shape, explicit project backup export tool, project backup diagnostics, advisory operation history, and automatic backup refresh after sanctioned project-scoped canonical mutations are implemented; the next implementation slice should add dry-run restore planning that validates trusted backup bundles and previews canonical database changes before any apply workflow exists.
+The internal backup artifact shape, explicit project backup export tool, project backup diagnostics, advisory operation history, automatic backup refresh after sanctioned project-scoped canonical mutations, and dry-run restore planning are implemented; the next implementation slice should apply trusted restore plans transactionally and rebuild derived state without making generated backup files a daily mutation surface.
 
 Implementation slices are tracked in [milestones.md](milestones.md).
 
