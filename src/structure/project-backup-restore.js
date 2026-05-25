@@ -66,6 +66,30 @@ const PROJECT_SCOPE_FIELDS = new Map([
   ["reference_links", ["source_project_id"]],
 ]);
 
+const SNAPSHOT_DOMAIN_COLUMNS = new Map([
+  ["project", ["project_id", "universe_id", "name"]],
+  ["universe", ["universe_id", "name"]],
+  ["external_references", ["character_ids", "place_ids", "reference_doc_ids"]],
+  ["operation_history", ["supported", "authority", "advisory", "artifact"]],
+  ["chapters", ["chapter_id", "project_id", "title", "sort_index", "logline", "source_path", "source_checksum", "metadata_stale", "updated_at"]],
+  ["scenes", ["scene_id", "project_id", "chapter_id", "scene_role", "title", "part", "chapter", "chapter_title", "pov", "logline", "scene_change", "causality", "stakes", "scene_functions", "save_the_cat_beat", "timeline_position", "story_time", "word_count", "file_path", "prose_checksum", "metadata_stale", "updated_at"]],
+  ["epigraphs", ["epigraph_id", "project_id", "chapter_id", "file_path", "prose_checksum", "metadata_stale", "updated_at"]],
+  ["epigraph_characters", ["epigraph_id", "project_id", "character_id"]],
+  ["epigraph_tags", ["epigraph_id", "project_id", "tag"]],
+  ["scene_characters", ["scene_id", "project_id", "character_id"]],
+  ["scene_places", ["scene_id", "project_id", "place_id"]],
+  ["scene_tags", ["scene_id", "project_id", "tag"]],
+  ["scene_threads", ["scene_id", "project_id", "thread_id", "beat"]],
+  ["characters", ["character_id", "project_id", "universe_id", "name", "role", "arc_summary", "first_appearance", "file_path"]],
+  ["character_traits", ["character_id", "trait"]],
+  ["character_relationships", ["from_character", "to_character", "relationship_type", "strength", "scene_id", "note"]],
+  ["places", ["place_id", "project_id", "universe_id", "name", "file_path"]],
+  ["threads", ["thread_id", "project_id", "name", "status"]],
+  ["reference_docs", ["doc_id", "project_id", "universe_id", "type", "title", "summary", "file_path"]],
+  ["reference_doc_tags", ["doc_id", "tag"]],
+  ["reference_links", ["source_kind", "source_project_id", "source_id", "target_doc_id", "relation", "origin"]],
+]);
+
 function stableStringify(value) {
   if (value === null || typeof value !== "object") return JSON.stringify(value);
   if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
@@ -553,6 +577,21 @@ function validateBundleShape({ manifest, snapshot, backupDir, projectId }) {
         },
         { nextStep: "Regenerate the backup with export_project_backup before using it for recovery." }
       ));
+    } else if (value !== null) {
+      const allowedColumns = SNAPSHOT_DOMAIN_COLUMNS.get(domain) ?? [];
+      const unexpectedColumns = Object.keys(value).filter(column => !allowedColumns.includes(column));
+      if (unexpectedColumns.length) {
+        diagnostics.push(createDiagnostic(
+          "project_restore_invalid_snapshot",
+          `Backup canonical snapshot field "${domain}" contains unsupported columns.`,
+          {
+            backup_dir: backupDir,
+            domain,
+            unsupported_columns: unexpectedColumns,
+          },
+          { nextStep: "Regenerate the backup with export_project_backup before using it for recovery." }
+        ));
+      }
     }
   }
 
@@ -594,6 +633,22 @@ function validateBundleShape({ manifest, snapshot, backupDir, projectId }) {
             { nextStep: "Regenerate the backup with export_project_backup before using it for recovery." }
           ));
           return;
+        }
+
+        const allowedColumns = SNAPSHOT_DOMAIN_COLUMNS.get(domain) ?? [];
+        const unexpectedColumns = Object.keys(row).filter(column => !allowedColumns.includes(column));
+        if (unexpectedColumns.length) {
+          diagnostics.push(createDiagnostic(
+            "project_restore_invalid_snapshot",
+            `Backup canonical snapshot row ${index} in domain "${domain}" contains unsupported columns.`,
+            {
+              backup_dir: backupDir,
+              domain,
+              index,
+              unsupported_columns: unexpectedColumns,
+            },
+            { nextStep: "Regenerate the backup with export_project_backup before using it for recovery." }
+          ));
         }
 
         let hasValidIdentity = true;

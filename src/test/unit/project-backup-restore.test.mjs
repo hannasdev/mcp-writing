@@ -476,6 +476,32 @@ describe("restoreProjectFromBackup", () => {
     assert.equal(result.plan, null);
   }));
 
+  test("refuses unsupported snapshot row columns before restore apply builds SQL", () => withFixture(({ db, syncDir, backupDir }) => {
+    const built = exportBackup(db, syncDir, backupDir);
+    writeMalformedSnapshotWithValidChecksums(backupDir, {
+      ...built.snapshot,
+      scenes: built.snapshot.scenes.map((scene, index) => index === 0
+        ? { ...scene, "title) VALUES (?) --": "unexpected" }
+        : scene),
+    });
+
+    const result = restorePlan(db, syncDir, backupDir, {
+      dryRun: false,
+      confirmDestructive: true,
+    });
+
+    assert.equal(result.ok, false);
+    assert.equal(result.action, "restore_refused");
+    assert.deepEqual(result.diagnostics.map(diagnostic => diagnostic.type), ["project_restore_invalid_snapshot"]);
+    assert.equal(result.diagnostics[0].details.domain, "scenes");
+    assert.deepEqual(result.diagnostics[0].details.unsupported_columns, ["title) VALUES (?) --"]);
+    assert.equal(
+      db.prepare(`SELECT title FROM scenes WHERE project_id = ? AND scene_id = ?`).get("test-novel", "sc-first").title,
+      "First Scene"
+    );
+    assert.equal(result.plan, null);
+  }));
+
   test("refuses rows missing identity fields before planning", () => withFixture(({ db, syncDir, backupDir }) => {
     const built = exportBackup(db, syncDir, backupDir);
     writeMalformedSnapshotWithValidChecksums(backupDir, {
