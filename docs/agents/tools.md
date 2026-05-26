@@ -147,7 +147,7 @@ Explicitly restore canonical SQLite chapter, scene-placement, and epigraph struc
 
 ## restore_project_from_backup
 
-Explicitly restore a project from a trusted generated project backup bundle. Defaults to dry-run planning; dry_run=false applies canonical SQLite changes transactionally after required destructive or cross-scope confirmations.
+Explicitly restore a project from a trusted generated project backup bundle. Defaults to dry-run planning; dry_run=false applies canonical SQLite changes transactionally after the reviewed current snapshot checksum and required destructive or cross-scope confirmations are provided.
 
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |
