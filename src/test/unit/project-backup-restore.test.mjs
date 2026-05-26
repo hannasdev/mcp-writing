@@ -226,8 +226,39 @@ describe("restoreProjectFromBackup", () => {
     const result = restorePlan(db, syncDir, backupDir);
 
     assert.equal(result.ok, true);
+    assert.equal(typeof result.current_snapshot_checksum, "string");
+    assert.notEqual(result.current_snapshot_checksum, "");
     assert.ok(result.plan.changes.some(change => change.domain === "projects" && change.action === "create"));
     assert.ok(result.plan.changes.some(change => change.domain === "scenes" && change.action === "create"));
+  }));
+
+  test("applies project creation from a reviewed missing-project dry-run", () => withFixture(({ db, syncDir, backupDir }) => {
+    exportBackup(db, syncDir, backupDir);
+    db.prepare(`DELETE FROM scene_tags WHERE project_id = ?`).run("test-novel");
+    db.prepare(`DELETE FROM scenes WHERE project_id = ?`).run("test-novel");
+    db.prepare(`DELETE FROM chapters WHERE project_id = ?`).run("test-novel");
+    db.prepare(`DELETE FROM character_relationships`).run();
+    db.prepare(`DELETE FROM characters WHERE project_id = ?`).run("test-novel");
+    db.prepare(`DELETE FROM projects WHERE project_id = ?`).run("test-novel");
+    const reviewed = restorePlan(db, syncDir, backupDir);
+
+    const result = restorePlan(db, syncDir, backupDir, {
+      dryRun: false,
+      confirmCrossScope: true,
+      expectedCurrentSnapshotChecksum: reviewed.current_snapshot_checksum,
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.action, "restored");
+    assert.equal(result.current_snapshot_checksum, reviewed.current_snapshot_checksum);
+    assert.equal(
+      db.prepare(`SELECT title FROM scenes WHERE project_id = ? AND scene_id = ?`).get("test-novel", "sc-first").title,
+      "First Scene"
+    );
+    assert.equal(
+      db.prepare(`SELECT name FROM projects WHERE project_id = ?`).get("test-novel").name,
+      "Test Novel"
+    );
   }));
 
   test("refuses tampered backup snapshots", () => withFixture(({ db, syncDir, backupDir }) => {

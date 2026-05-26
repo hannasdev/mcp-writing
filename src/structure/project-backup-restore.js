@@ -421,7 +421,7 @@ function collectCurrentSnapshot(db, {
   if (built.ok) return { ok: true, snapshot: built.snapshot, checksum: built.manifest.checksums.canonical_snapshot_sha256 };
   if (built.error?.code === "NOT_FOUND") {
     const snapshot = buildEmptyCurrentSnapshot(db, backupSnapshot);
-    return { ok: true, snapshot, checksum: null };
+    return { ok: true, snapshot, checksum: computeProjectBackupSnapshotChecksum(snapshot) };
   }
   return built;
 }
