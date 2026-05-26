@@ -338,13 +338,16 @@ export function registerSyncTools(s, {
 
   s.tool(
     "restore_project_from_backup",
-    "Dry-run an explicit project restore from a trusted generated project backup bundle. Validates manifest, schema, checksums, project identity, and file references, then returns a deterministic create/update/delete/unchanged plan without mutating SQLite or generated files.",
+    "Explicitly restore a project from a trusted generated project backup bundle. Defaults to dry-run planning; dry_run=false applies canonical SQLite changes transactionally after the reviewed current snapshot checksum and required destructive or cross-scope confirmations are provided.",
     {
       project_id: z.string().describe("Project ID to restore (e.g. 'test-novel' or 'universe-1/book-1-the-lamb')."),
       backup_path: z.string().optional().describe("Path under WRITING_SYNC_DIR to a project backup directory, manifest.json, or canonical.snapshot.json. Defaults to project-backups/<project_id>."),
-      dry_run: z.boolean().optional().describe("If true (default), validate and summarize the restore plan without writing SQLite state. dry_run=false is reserved for a later transactional restore milestone."),
+      dry_run: z.boolean().optional().describe("If true (default), validate and summarize the restore plan without writing SQLite state."),
+      confirm_destructive: z.boolean().optional().describe("Required with dry_run=false when the restore plan includes delete candidates."),
+      confirm_cross_scope: z.boolean().optional().describe("Required with dry_run=false when the restore plan changes universe-scoped records."),
+      expected_current_snapshot_checksum: z.string().optional().describe("Required with dry_run=false; pass the current_snapshot_checksum returned by the reviewed dry-run plan to guard against state changes before apply."),
     },
-    async ({ project_id, backup_path, dry_run = true } = {}) => {
+    async ({ project_id, backup_path, dry_run = true, confirm_destructive = false, confirm_cross_scope = false, expected_current_snapshot_checksum = null } = {}) => {
       if (!SYNC_DIR_WRITABLE && dry_run === false) {
         return errorResponse("READ_ONLY", "Cannot restore project from backup: server is in read-only mode for canonical structure mutations.");
       }
@@ -368,6 +371,9 @@ export function registerSyncTools(s, {
           projectId: project_id,
           backupPath: requestedBackupPath,
           dryRun: dry_run,
+          confirmDestructive: confirm_destructive,
+          confirmCrossScope: confirm_cross_scope,
+          expectedCurrentSnapshotChecksum: expected_current_snapshot_checksum,
           applicationVersion: MCP_SERVER_VERSION,
         }));
       } catch (error) {

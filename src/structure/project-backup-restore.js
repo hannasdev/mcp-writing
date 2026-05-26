@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import matter from "gray-matter";
 import {
   buildProjectBackup,
   computeProjectBackupBundleChecksum,
@@ -65,6 +66,30 @@ const PROJECT_SCOPE_FIELDS = new Map([
   ["reference_links", ["source_project_id"]],
 ]);
 
+const SNAPSHOT_DOMAIN_COLUMNS = new Map([
+  ["project", ["project_id", "universe_id", "name"]],
+  ["universe", ["universe_id", "name"]],
+  ["external_references", ["character_ids", "place_ids", "reference_doc_ids"]],
+  ["operation_history", ["supported", "authority", "advisory", "artifact"]],
+  ["chapters", ["chapter_id", "project_id", "title", "sort_index", "logline", "source_path", "source_checksum", "metadata_stale", "updated_at"]],
+  ["scenes", ["scene_id", "project_id", "chapter_id", "scene_role", "title", "part", "chapter", "chapter_title", "pov", "logline", "scene_change", "causality", "stakes", "scene_functions", "save_the_cat_beat", "timeline_position", "story_time", "word_count", "file_path", "prose_checksum", "metadata_stale", "updated_at"]],
+  ["epigraphs", ["epigraph_id", "project_id", "chapter_id", "file_path", "prose_checksum", "metadata_stale", "updated_at"]],
+  ["epigraph_characters", ["epigraph_id", "project_id", "character_id"]],
+  ["epigraph_tags", ["epigraph_id", "project_id", "tag"]],
+  ["scene_characters", ["scene_id", "project_id", "character_id"]],
+  ["scene_places", ["scene_id", "project_id", "place_id"]],
+  ["scene_tags", ["scene_id", "project_id", "tag"]],
+  ["scene_threads", ["scene_id", "project_id", "thread_id", "beat"]],
+  ["characters", ["character_id", "project_id", "universe_id", "name", "role", "arc_summary", "first_appearance", "file_path"]],
+  ["character_traits", ["character_id", "trait"]],
+  ["character_relationships", ["from_character", "to_character", "relationship_type", "strength", "scene_id", "note"]],
+  ["places", ["place_id", "project_id", "universe_id", "name", "file_path"]],
+  ["threads", ["thread_id", "project_id", "name", "status"]],
+  ["reference_docs", ["doc_id", "project_id", "universe_id", "type", "title", "summary", "file_path"]],
+  ["reference_doc_tags", ["doc_id", "tag"]],
+  ["reference_links", ["source_kind", "source_project_id", "source_id", "target_doc_id", "relation", "origin"]],
+]);
+
 function stableStringify(value) {
   if (value === null || typeof value !== "object") return JSON.stringify(value);
   if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
@@ -79,6 +104,10 @@ function jsonType(value) {
   if (value === null) return "null";
   if (Array.isArray(value)) return "array";
   return typeof value;
+}
+
+function sortedUnique(values) {
+  return [...new Set(values.filter(value => value !== null && value !== undefined && value !== ""))].sort();
 }
 
 function fileReferenceBoundaryFailure(error, fallbackResolvedPath) {
@@ -127,7 +156,7 @@ function identityFieldError(row, field, nullableFields, emptyStringFields) {
       actual_type: jsonType(value),
     };
   }
-  if (value === "" && !nullableFields.has(field) && !emptyStringFields.has(field)) {
+  if (value === "" && !emptyStringFields.has(field)) {
     return { reason: "empty_identity" };
   }
   return null;
@@ -256,6 +285,75 @@ function compareRows(currentRows = [], backupRows = [], keyFields) {
   return changes;
 }
 
+function rowIsCrossScope(domain, row, projectId) {
+  if (!row) return false;
+  if (domain === "universes") return true;
+  if (["characters", "places", "reference_docs"].includes(domain)) {
+    return row.project_id == null || row.project_id === "";
+  }
+  if (domain === "character_traits") {
+    return false;
+  }
+  if (domain === "reference_links") {
+    return row.source_project_id == null || row.source_project_id === "";
+  }
+  if (domain === "reference_doc_tags") {
+    return false;
+  }
+  if (domain === "character_relationships") {
+    return row.scene_id == null || row.scene_id === "";
+  }
+  return Object.hasOwn(row, "project_id") && row.project_id !== projectId;
+}
+
+function mergeScopedIds(map, rows, idField, projectId) {
+  for (const row of rows ?? []) {
+    const id = row?.[idField];
+    if (!id) continue;
+    const crossScope = row.project_id == null || row.project_id === "" || row.project_id !== projectId;
+    map.set(id, (map.get(id) ?? false) || crossScope);
+  }
+}
+
+function buildRestoreScopeContext(currentSnapshot, backupSnapshot, projectId) {
+  const projectSceneIds = new Set();
+  for (const snapshot of [currentSnapshot, backupSnapshot]) {
+    for (const row of snapshot.scenes ?? []) {
+      if (row.project_id === projectId) projectSceneIds.add(row.scene_id);
+    }
+  }
+
+  const characterIds = new Map();
+  mergeScopedIds(characterIds, currentSnapshot.characters, "character_id", projectId);
+  mergeScopedIds(characterIds, backupSnapshot.characters, "character_id", projectId);
+
+  const referenceDocIds = new Map();
+  mergeScopedIds(referenceDocIds, currentSnapshot.reference_docs, "doc_id", projectId);
+  mergeScopedIds(referenceDocIds, backupSnapshot.reference_docs, "doc_id", projectId);
+
+  return { characterIds, projectSceneIds, referenceDocIds };
+}
+
+function rowIsContextCrossScope(domain, row, projectId, scopeContext) {
+  if (domain === "character_traits") {
+    return scopeContext.characterIds.get(row?.character_id) === true;
+  }
+  if (domain === "reference_doc_tags") {
+    return scopeContext.referenceDocIds.get(row?.doc_id) === true;
+  }
+  if (domain === "character_relationships") {
+    if (!row || row.scene_id == null || row.scene_id === "") return true;
+    return !scopeContext.projectSceneIds.has(row.scene_id);
+  }
+  return rowIsCrossScope(domain, row, projectId);
+}
+
+function markChangeScope(change, projectId, scopeContext) {
+  const row = change.backup ?? change.current ?? null;
+  const crossScope = rowIsContextCrossScope(change.domain, row, projectId, scopeContext);
+  return crossScope ? { ...change, cross_scope: true } : change;
+}
+
 function compareSingleton(domain, current, backup, keyFields) {
   return compareRows(
     current ? [current] : [],
@@ -323,7 +421,7 @@ function collectCurrentSnapshot(db, {
   if (built.ok) return { ok: true, snapshot: built.snapshot, checksum: built.manifest.checksums.canonical_snapshot_sha256 };
   if (built.error?.code === "NOT_FOUND") {
     const snapshot = buildEmptyCurrentSnapshot(db, backupSnapshot);
-    return { ok: true, snapshot, checksum: null };
+    return { ok: true, snapshot, checksum: computeProjectBackupSnapshotChecksum(snapshot) };
   }
   return built;
 }
@@ -527,6 +625,21 @@ function validateBundleShape({ manifest, snapshot, backupDir, projectId }) {
         },
         { nextStep: "Regenerate the backup with export_project_backup before using it for recovery." }
       ));
+    } else if (value !== null) {
+      const allowedColumns = SNAPSHOT_DOMAIN_COLUMNS.get(domain) ?? [];
+      const unexpectedColumns = Object.keys(value).filter(column => !allowedColumns.includes(column));
+      if (unexpectedColumns.length) {
+        diagnostics.push(createDiagnostic(
+          "project_restore_invalid_snapshot",
+          `Backup canonical snapshot field "${domain}" contains unsupported columns.`,
+          {
+            backup_dir: backupDir,
+            domain,
+            unsupported_columns: unexpectedColumns,
+          },
+          { nextStep: "Regenerate the backup with export_project_backup before using it for recovery." }
+        ));
+      }
     }
   }
 
@@ -568,6 +681,22 @@ function validateBundleShape({ manifest, snapshot, backupDir, projectId }) {
             { nextStep: "Regenerate the backup with export_project_backup before using it for recovery." }
           ));
           return;
+        }
+
+        const allowedColumns = SNAPSHOT_DOMAIN_COLUMNS.get(domain) ?? [];
+        const unexpectedColumns = Object.keys(row).filter(column => !allowedColumns.includes(column));
+        if (unexpectedColumns.length) {
+          diagnostics.push(createDiagnostic(
+            "project_restore_invalid_snapshot",
+            `Backup canonical snapshot row ${index} in domain "${domain}" contains unsupported columns.`,
+            {
+              backup_dir: backupDir,
+              domain,
+              index,
+              unsupported_columns: unexpectedColumns,
+            },
+            { nextStep: "Regenerate the backup with export_project_backup before using it for recovery." }
+          ));
         }
 
         let hasValidIdentity = true;
@@ -648,7 +777,21 @@ function validateBundleShape({ manifest, snapshot, backupDir, projectId }) {
             continue;
           }
           const value = row[field];
-          if (value !== null && value !== undefined && value !== "" && value !== projectId) {
+          const emptyStringFields = EMPTY_STRING_IDENTITY_FIELDS.get(domain) ?? new Set();
+          if (value === "" && !emptyStringFields.has(field)) {
+            diagnostics.push(createDiagnostic(
+              "project_restore_invalid_snapshot",
+              `Backup canonical snapshot row ${index} in domain "${domain}" has empty project scope field "${field}".`,
+              {
+                backup_dir: backupDir,
+                domain,
+                index,
+                field,
+                reason: "empty_project_scope",
+              },
+              { nextStep: "Regenerate the backup with export_project_backup before using it for recovery." }
+            ));
+          } else if (value !== null && value !== undefined && value !== "" && value !== projectId) {
             diagnostics.push(createDiagnostic(
               "project_restore_wrong_project",
               `Backup canonical snapshot row ${index} in domain "${domain}" has ${field} "${value}", not "${projectId}".`,
@@ -700,7 +843,7 @@ function validateCurrentSnapshotForPlanning(snapshot, { backupDir }) {
   return diagnostics;
 }
 
-function buildRestorePlan(currentSnapshot, backupSnapshot) {
+function buildRestorePlan(currentSnapshot, backupSnapshot, { projectId }) {
   const changes = [
     ...compareSingleton("projects", currentSnapshot.project, backupSnapshot.project, ["project_id"]),
     ...compareSingleton("universes", currentSnapshot.universe, backupSnapshot.universe, ["universe_id"]),
@@ -712,18 +855,200 @@ function buildRestorePlan(currentSnapshot, backupSnapshot) {
     }
   }
 
+  const scopeContext = buildRestoreScopeContext(currentSnapshot, backupSnapshot, projectId);
+  const scopedChanges = changes.map(change => markChangeScope(change, projectId, scopeContext));
+
   const byDomain = {};
-  for (const change of changes) {
+  for (const change of scopedChanges) {
     byDomain[change.domain] ??= { create: 0, update: 0, delete: 0, unchanged: 0, refused: 0, conflict: 0 };
     byDomain[change.domain][change.action] = (byDomain[change.domain][change.action] ?? 0) + 1;
   }
 
   return {
-    totals: countActions(changes),
+    totals: countActions(scopedChanges),
     by_domain: byDomain,
-    destructive_change_count: changes.filter(change => change.action === "delete").length,
-    changes,
+    destructive_change_count: scopedChanges.filter(change => change.action === "delete").length,
+    cross_scope_change_count: scopedChanges.filter(change => change.cross_scope && change.action !== "unchanged").length,
+    changes: scopedChanges,
   };
+}
+
+function placeholders(values) {
+  return values.map(() => "?").join(",") || "NULL";
+}
+
+function allSnapshotIds(snapshot, domain, field) {
+  return sortedUnique((snapshot[domain] ?? []).map(row => row[field]));
+}
+
+function deleteCharacterRelationship(db, row) {
+  db.prepare(`
+    DELETE FROM character_relationships
+    WHERE from_character = ?
+      AND to_character = ?
+      AND relationship_type = ?
+      AND (strength IS ? OR strength = ?)
+      AND (scene_id IS ? OR scene_id = ?)
+      AND (note IS ? OR note = ?)
+  `).run(
+    row.from_character,
+    row.to_character,
+    row.relationship_type,
+    row.strength ?? null,
+    row.strength ?? null,
+    row.scene_id ?? null,
+    row.scene_id ?? null,
+    row.note ?? null,
+    row.note ?? null
+  );
+}
+
+function upsertRow(db, table, row, conflictColumns) {
+  const columns = Object.keys(row);
+  if (!conflictColumns.length) {
+    db.prepare(`
+      INSERT INTO ${table} (${columns.join(", ")})
+      VALUES (${columns.map(() => "?").join(", ")})
+    `).run(...columns.map(column => row[column]));
+    return;
+  }
+  const updateColumns = columns.filter(column => !conflictColumns.includes(column));
+  const conflictSql = conflictColumns.join(", ");
+  const updateSql = updateColumns.length
+    ? `DO UPDATE SET ${updateColumns.map(column => `${column} = excluded.${column}`).join(", ")}`
+    : "DO NOTHING";
+  db.prepare(`
+    INSERT INTO ${table} (${columns.join(", ")})
+    VALUES (${columns.map(() => "?").join(", ")})
+    ON CONFLICT (${conflictSql}) ${updateSql}
+  `).run(...columns.map(column => row[column]));
+}
+
+function insertRows(db, table, rows, conflictColumns) {
+  for (const row of rows) {
+    upsertRow(db, table, row, conflictColumns);
+  }
+}
+
+function restoreEpigraphRows(db, snapshot, { syncDir }) {
+  for (const row of snapshot.epigraphs) {
+    const filePath = path.isAbsolute(row.file_path)
+      ? path.resolve(row.file_path)
+      : path.resolve(syncDir, row.file_path);
+    const body = matter(fs.readFileSync(filePath, "utf8")).content;
+    upsertRow(db, "epigraphs", {
+      ...row,
+      body,
+      file_path: row.file_path,
+    }, ["epigraph_id", "project_id"]);
+  }
+}
+
+function clearDerivedRestoreRows(db, { projectId, currentSnapshot, backupSnapshot }) {
+  db.prepare(`DELETE FROM scenes_fts WHERE project_id = ?`).run(projectId);
+
+  const referenceDocIds = sortedUnique([
+    ...allSnapshotIds(currentSnapshot, "reference_docs", "doc_id"),
+    ...allSnapshotIds(backupSnapshot, "reference_docs", "doc_id"),
+  ]);
+  if (referenceDocIds.length) {
+    db.prepare(`
+      DELETE FROM reference_docs_fts
+      WHERE doc_id IN (${placeholders(referenceDocIds)})
+    `).run(...referenceDocIds);
+  }
+}
+
+function applyProjectRestore(db, {
+  projectId,
+  syncDir,
+  currentSnapshot,
+  backupSnapshot,
+}) {
+  const currentCharacterIds = allSnapshotIds(currentSnapshot, "characters", "character_id");
+  const currentPlaceIds = allSnapshotIds(currentSnapshot, "places", "place_id");
+  const currentReferenceDocIds = allSnapshotIds(currentSnapshot, "reference_docs", "doc_id");
+
+  clearDerivedRestoreRows(db, { projectId, currentSnapshot, backupSnapshot });
+
+  for (const domain of [
+    "epigraph_characters",
+    "epigraph_tags",
+    "scene_characters",
+    "scene_places",
+    "scene_tags",
+    "scene_threads",
+  ]) {
+    db.prepare(`DELETE FROM ${domain} WHERE project_id = ?`).run(projectId);
+  }
+
+  db.prepare(`DELETE FROM chapters WHERE project_id = ?`).run(projectId);
+  db.prepare(`DELETE FROM epigraphs WHERE project_id = ?`).run(projectId);
+  db.prepare(`DELETE FROM scenes WHERE project_id = ?`).run(projectId);
+  db.prepare(`DELETE FROM threads WHERE project_id = ?`).run(projectId);
+
+  if (currentCharacterIds.length) {
+    db.prepare(`DELETE FROM character_traits WHERE character_id IN (${placeholders(currentCharacterIds)})`).run(...currentCharacterIds);
+  }
+  for (const row of currentSnapshot.character_relationships ?? []) {
+    deleteCharacterRelationship(db, row);
+  }
+  if (currentCharacterIds.length) {
+    db.prepare(`DELETE FROM characters WHERE character_id IN (${placeholders(currentCharacterIds)})`).run(...currentCharacterIds);
+  }
+
+  if (currentPlaceIds.length) {
+    db.prepare(`DELETE FROM places WHERE place_id IN (${placeholders(currentPlaceIds)})`).run(...currentPlaceIds);
+  }
+
+  if (currentReferenceDocIds.length) {
+    db.prepare(`DELETE FROM reference_doc_tags WHERE doc_id IN (${placeholders(currentReferenceDocIds)})`).run(...currentReferenceDocIds);
+    db.prepare(`DELETE FROM reference_docs WHERE doc_id IN (${placeholders(currentReferenceDocIds)})`).run(...currentReferenceDocIds);
+  }
+  for (const row of currentSnapshot.reference_links ?? []) {
+    db.prepare(`
+      DELETE FROM reference_links
+      WHERE source_kind = ?
+        AND source_project_id = ?
+        AND source_id = ?
+        AND target_doc_id = ?
+        AND relation = ?
+    `).run(row.source_kind, row.source_project_id, row.source_id, row.target_doc_id, row.relation);
+  }
+
+  if (currentSnapshot.universe && !backupSnapshot.universe) {
+    db.prepare(`DELETE FROM universes WHERE universe_id = ?`).run(currentSnapshot.universe.universe_id);
+  }
+
+  if (backupSnapshot.universe) {
+    upsertRow(db, "universes", backupSnapshot.universe, ["universe_id"]);
+  }
+  if (backupSnapshot.project) {
+    upsertRow(db, "projects", backupSnapshot.project, ["project_id"]);
+  }
+
+  insertRows(db, "chapters", backupSnapshot.chapters, ["chapter_id", "project_id"]);
+  insertRows(db, "scenes", backupSnapshot.scenes, ["scene_id", "project_id"]);
+  restoreEpigraphRows(db, backupSnapshot, { syncDir });
+  insertRows(db, "characters", backupSnapshot.characters, ["character_id"]);
+  insertRows(db, "character_traits", backupSnapshot.character_traits, ["character_id", "trait"]);
+  insertRows(db, "character_relationships", backupSnapshot.character_relationships, []);
+  insertRows(db, "places", backupSnapshot.places, ["place_id"]);
+  insertRows(db, "threads", backupSnapshot.threads, ["thread_id"]);
+  insertRows(db, "reference_docs", backupSnapshot.reference_docs, ["doc_id"]);
+  insertRows(db, "reference_doc_tags", backupSnapshot.reference_doc_tags, ["doc_id", "tag"]);
+  insertRows(db, "reference_links", backupSnapshot.reference_links, ["source_kind", "source_project_id", "source_id", "target_doc_id", "relation"]);
+
+  for (const domain of [
+    ["epigraph_characters", ["epigraph_id", "project_id", "character_id"]],
+    ["epigraph_tags", ["epigraph_id", "project_id", "tag"]],
+    ["scene_characters", ["scene_id", "project_id", "character_id"]],
+    ["scene_places", ["scene_id", "project_id", "place_id"]],
+    ["scene_tags", ["scene_id", "project_id", "tag"]],
+    ["scene_threads", ["scene_id", "project_id", "thread_id"]],
+  ]) {
+    insertRows(db, domain[0], backupSnapshot[domain[0]], domain[1]);
+  }
 }
 
 export function restoreProjectFromBackup(db, {
@@ -731,6 +1056,9 @@ export function restoreProjectFromBackup(db, {
   projectId,
   backupPath = null,
   dryRun = true,
+  confirmDestructive = false,
+  confirmCrossScope = false,
+  expectedCurrentSnapshotChecksum = null,
   applicationVersion = "0.0.0",
 } = {}) {
   const resolvedBackupDir = resolveBackupDir(backupPath ?? path.join(syncDir, "project-backups", projectId));
@@ -739,15 +1067,6 @@ export function restoreProjectFromBackup(db, {
   const manifestRead = readJsonFile(manifestPath, "manifest");
   const snapshotRead = readJsonFile(snapshotPath, "canonical snapshot");
   const diagnostics = [manifestRead.diagnostic, snapshotRead.diagnostic].filter(Boolean);
-
-  if (dryRun === false) {
-    diagnostics.push(createDiagnostic(
-      "project_restore_apply_not_implemented",
-      "Project backup restore apply is not implemented in this milestone.",
-      { project_id: projectId },
-      { severity: "error", nextStep: "Run with dry_run=true to inspect the restore plan. Apply support is planned for M7." }
-    ));
-  }
 
   const manifest = manifestRead.ok ? manifestRead.value : null;
   const snapshot = snapshotRead.ok ? snapshotRead.value : null;
@@ -830,10 +1149,125 @@ export function restoreProjectFromBackup(db, {
     };
   }
 
-  const plan = buildRestorePlan(current.snapshot, snapshot);
+  const plan = buildRestorePlan(current.snapshot, snapshot, { projectId });
+  const applyDiagnostics = [];
+  if (dryRun === false) {
+    if (typeof expectedCurrentSnapshotChecksum !== "string" || expectedCurrentSnapshotChecksum === "") {
+      applyDiagnostics.push(createDiagnostic(
+        "project_restore_current_snapshot_confirmation_required",
+        "Project backup restore requires the current_snapshot_checksum from the reviewed dry-run plan.",
+        {
+          project_id: projectId,
+          current_snapshot_checksum: current.checksum,
+        },
+        {
+          severity: "error",
+          nextStep: "Run a dry-run restore, review the plan, then retry with expected_current_snapshot_checksum set to that dry-run current_snapshot_checksum.",
+        }
+      ));
+    } else if (expectedCurrentSnapshotChecksum !== current.checksum) {
+      applyDiagnostics.push(createDiagnostic(
+        "project_restore_current_snapshot_changed",
+        "Current SQLite canonical state changed after the reviewed dry-run plan.",
+        {
+          project_id: projectId,
+          expected_current_snapshot_checksum: expectedCurrentSnapshotChecksum,
+          current_snapshot_checksum: current.checksum,
+        },
+        {
+          severity: "error",
+          nextStep: "Run a new dry-run restore, review the updated plan, then retry with the new current_snapshot_checksum.",
+        }
+      ));
+    }
+  }
+  if (dryRun === false && plan.destructive_change_count > 0 && confirmDestructive !== true) {
+    applyDiagnostics.push(createDiagnostic(
+      "project_restore_destructive_confirmation_required",
+      "Project backup restore would delete canonical SQLite records and requires explicit confirmation.",
+      {
+        project_id: projectId,
+        destructive_change_count: plan.destructive_change_count,
+      },
+      {
+        severity: "error",
+        nextStep: "Review the dry-run delete candidates, then retry with confirm_destructive=true if those deletes are intended.",
+      }
+    ));
+  }
+  if (dryRun === false && plan.cross_scope_change_count > 0 && confirmCrossScope !== true) {
+    applyDiagnostics.push(createDiagnostic(
+      "project_restore_cross_scope_confirmation_required",
+      "Project backup restore would create, update, or delete universe-scoped records and requires explicit confirmation.",
+      {
+        project_id: projectId,
+        cross_scope_change_count: plan.cross_scope_change_count,
+      },
+      {
+        severity: "error",
+        nextStep: "Review the dry-run cross_scope changes, then retry with confirm_cross_scope=true if those changes are intended.",
+      }
+    ));
+  }
+
+  if (applyDiagnostics.length) {
+    applyDiagnostics.sort((a, b) => {
+      const typeCompare = a.type.localeCompare(b.type);
+      if (typeCompare) return typeCompare;
+      return a.message.localeCompare(b.message);
+    });
+    return {
+      ok: false,
+      action: "restore_refused",
+      dry_run: Boolean(dryRun),
+      project_id: projectId,
+      backup_dir: resolvedBackupDir,
+      diagnostics: applyDiagnostics,
+      plan,
+      next_step: "Resolve confirmation requirements before applying this trusted backup.",
+    };
+  }
+
+  if (dryRun === false) {
+    try {
+      db.exec("BEGIN");
+      applyProjectRestore(db, {
+        projectId,
+        syncDir,
+        currentSnapshot: current.snapshot,
+        backupSnapshot: snapshot,
+      });
+      db.exec("COMMIT");
+    } catch (error) {
+      try {
+        db.exec("ROLLBACK");
+      } catch (rollbackError) {
+        void rollbackError;
+      }
+      return {
+        ok: false,
+        action: "restore_refused",
+        dry_run: false,
+        project_id: projectId,
+        backup_dir: resolvedBackupDir,
+        diagnostics: [createDiagnostic(
+          "project_restore_write_failed",
+          "Failed to apply project backup restore transaction.",
+          {
+            project_id: projectId,
+            error: error instanceof Error ? error.message : String(error),
+          },
+          { severity: "error", nextStep: "Review the database error and retry after resolving conflicts." }
+        )],
+        plan,
+        next_step: "Resolve restore write diagnostics before retrying.",
+      };
+    }
+  }
+
   return {
     ok: true,
-    action: "planned",
+    action: dryRun ? "planned" : "restored",
     dry_run: Boolean(dryRun),
     project_id: projectId,
     backup_dir: resolvedBackupDir,
@@ -846,9 +1280,20 @@ export function restoreProjectFromBackup(db, {
     current_snapshot_checksum: current.checksum,
     backup_snapshot_checksum: manifest.checksums.canonical_snapshot_sha256,
     plan,
+    applied: dryRun ? null : {
+      restored: true,
+      destructive_confirmed: Boolean(confirmDestructive),
+      cross_scope_confirmed: Boolean(confirmCrossScope),
+      derived_indexes: {
+        scenes_fts: "cleared_for_restored_project",
+        reference_docs_fts: "cleared_for_restored_reference_docs",
+      },
+    },
     diagnostics: [],
-    next_step: plan.destructive_change_count > 0
-      ? "Review destructive delete candidates carefully. Apply support will require explicit confirmation in a later milestone."
-      : "Review the dry-run plan. Apply support is intentionally not available until the transactional restore milestone.",
+    next_step: dryRun
+      ? (plan.destructive_change_count > 0 || plan.cross_scope_change_count > 0
+          ? "Review destructive delete and cross_scope candidates carefully before applying with explicit confirmation."
+          : "Review the dry-run plan, then rerun with dry_run=false to apply the restore transactionally.")
+      : "Run sync, diagnose_project_backups, and export_project_backup to rebuild derived indexes and refresh generated backup transparency.",
   };
 }

@@ -9,12 +9,13 @@ It supports metadata-first reasoning, explicit prose editing workflows, and revi
 
 ## Product Status
 
-Active initiative: [Database Backup and Recovery](docs/initiatives/backlog/database-backup-recovery/prd.md).
+Active initiative: None. See [BACKLOG.md](BACKLOG.md) for deferred product work.
 
-Current focus: M6 — Restore Planning Dry Run. Project backup export, diagnostics, freshness checks, advisory operation history, and automatic backup refresh after sanctioned project-scoped canonical mutations are implemented; the next step is a dry-run restore planner that validates trusted backups and previews canonical database changes before any apply workflow exists.
+Current focus: Post-initiative stabilization and backlog selection after Database Backup and Recovery.
 
-Most recent completed initiative: [Docker, CI, and Deployment Workflow](docs/initiatives/done/docker-ci-deployment/prd.md).
+Most recent completed initiative: [Database Backup and Recovery](docs/initiatives/done/database-backup-recovery/prd.md).
 
+Database Backup and Recovery added deterministic project backup bundles, trust/freshness diagnostics, advisory operation history, automatic backup refresh after sanctioned canonical mutations, dry-run restore planning, transactional restore application, and operational backup/restore documentation.
 Docker, CI, and Deployment Workflow made Docker a supported way to build, run, smoke-test, and deploy Writing MCP, with a documented container contract, Compose workflow, CI smoke coverage, and deployment-readiness guidance.
 Target Architecture Migration completed the structural manuscript state consolidation scope.
 SQLite is the durable canonical model for structural manuscript state, while prose remains file-based and generated structure exports provide Git-reviewable transparency and future recovery input.
@@ -48,7 +49,7 @@ For structural manuscript state, use [Managed Structure Contract](docs/foundatio
 
 - [Features](FEATURES.md) — shipped product capabilities and links to completed initiative docs
 - [Backlog](BACKLOG.md) — deferred product work that is not currently active
-- [Database Backup and Recovery](docs/initiatives/backlog/database-backup-recovery/prd.md) — active initiative for Git-reviewable recovery artifacts for SQLite-canonical state
+- [Database Backup and Recovery](docs/initiatives/done/database-backup-recovery/prd.md) — completed initiative for Git-reviewable recovery artifacts and explicit restore workflows for SQLite-canonical state
 - [Conceptual Target Architecture](docs/foundations/target-architecture.md) — idealized architectural model for evaluating future structure, tooling, and workflow decisions
 - [Managed Structure Contract](docs/foundations/managed-structure-contract.md) — design boundaries for structural mutation, generated transparency, import, and maintenance workflows
 - [Docker, CI, and Deployment Workflow](docs/initiatives/done/docker-ci-deployment/prd.md) — completed milestone for supported container build, run, smoke-test, and deployment operations

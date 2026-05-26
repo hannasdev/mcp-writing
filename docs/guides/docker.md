@@ -180,6 +180,10 @@ Back up both durable mounts:
 
 At minimum, keep a recent filesystem backup before image upgrades. For homeserver deployments, prefer scheduled snapshots or volume backups that include both host paths used by `WRITING_SYNC_DIR_HOST` and `WRITING_DATA_DIR_HOST`.
 
+Writing MCP also writes app-level project backup artifacts under `/sync/project-backups/<project_id>/`.
+Those files are Git-reviewable recovery input for SQLite-canonical project state, but they do not replace `/sync` and `/data` volume backups.
+For the restore workflow, see [Backup and Recovery](backup-recovery.md).
+
 ### Rollback
 
 Rollback means restoring both the container image and durable state to a compatible point.

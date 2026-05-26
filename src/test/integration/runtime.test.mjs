@@ -361,6 +361,7 @@ describe("describe_workflows tool", () => {
       "place_understanding",
       "thread_understanding",
       "parity_recovery",
+      "backup_recovery",
       "review_preparation",
       "first_time_setup",
       "styleguide_setup_new",
@@ -370,6 +371,19 @@ describe("describe_workflows tool", () => {
     for (const id of expected) {
       assert.ok(ids.includes(id), `Missing workflow: ${id}`);
     }
+  });
+
+  test("backup recovery workflow apply guidance includes reviewed checksum", async () => {
+    const text = await callWriteTool("describe_workflows");
+    const parsed = JSON.parse(text);
+    const workflow = parsed.workflows.find(w => w.id === "backup_recovery");
+    const applyStep = workflow?.steps.find(step => (
+      step.tool === "restore_project_from_backup" &&
+      step.note.includes("dry_run=false")
+    ));
+
+    assert.ok(applyStep, "backup_recovery workflow missing restore apply step");
+    assert.match(applyStep.note, /expected_current_snapshot_checksum/);
   });
 
   test("front-loads discovery and scene workflows ahead of setup/styleguide workflows", async () => {

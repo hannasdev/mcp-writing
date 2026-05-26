@@ -96,6 +96,19 @@ export const WORKFLOW_CATALOGUE = [
     ],
   },
   {
+    id: "backup_recovery",
+    label: "Verify or restore project backups",
+    use_when: "Use when the user asks about backup freshness, generated project-backups files, database loss, recovery readiness, or restoring SQLite-canonical project state.",
+    steps: [
+      { tool: "diagnose_project_backups", note: "Start here to verify whether the bundle is missing, stale, tampered, incompatible, partial, or current. This never mutates SQLite or generated files." },
+      { tool: "export_project_backup", note: "Generate or refresh the deterministic project backup bundle when diagnostics report missing or stale backup artifacts." },
+      { tool: "restore_project_from_backup", note: "Use dry_run=true first to validate the trusted bundle and inspect create/update/delete/unchanged and cross_scope changes before applying anything." },
+      { tool: "restore_project_from_backup", note: "Apply only after the dry-run plan is reviewed. Pass dry_run=false with expected_current_snapshot_checksum from that dry run, confirm_destructive=true for deletes, and confirm_cross_scope=true for universe-scoped changes." },
+      { tool: "sync", note: "Run after a successful restore to regenerate derived indexes and confirm ordinary read workflows see the restored state." },
+      { tool: "diagnose_project_backups", note: "Re-check backup health after restore, then run export_project_backup if generated transparency needs refreshing." },
+    ],
+  },
+  {
     id: "review_preparation",
     label: "Prepare material for human review",
     use_when: "Use when the task has shifted from reasoning or revising into packaging material for editors, collaborators, or beta readers.",

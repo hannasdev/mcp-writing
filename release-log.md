@@ -6,6 +6,14 @@ This complements `CHANGELOG.md`:
 - `CHANGELOG.md` is technical and release-oriented.
 - This log is plain-language and outcome-oriented.
 
+### 2026-05-25 — Apply trusted project backups transactionally
+
+- What changed: `restore_project_from_backup` can now apply a trusted project backup with `dry_run=false`, after the dry-run plan has been reviewed and required destructive or cross-scope confirmations are provided.
+- Why it matters: Authors, maintainers, and AI agents can recover SQLite-canonical project state from generated backup artifacts without leaving the database half-restored if a write fails.
+- Who is affected: Authors, maintainers, and AI agents preparing or executing project recovery from `project-backups/<project_id>/`.
+- Action needed: Dry-run restore first; pass the reviewed `current_snapshot_checksum` as `expected_current_snapshot_checksum`, pass `confirm_destructive=true` for delete candidates and `confirm_cross_scope=true` for universe-scoped changes, then run `sync`, diagnostics, and backup export after a successful restore.
+- PR: [#221](https://github.com/hannasdev/mcp-writing/pull/221)
+
 ### 2026-05-24 — Preview project backup restores before applying them
 
 - What changed: Added `restore_project_from_backup` in dry-run mode to validate trusted project backup bundles and preview the canonical SQLite changes that a future restore would make.

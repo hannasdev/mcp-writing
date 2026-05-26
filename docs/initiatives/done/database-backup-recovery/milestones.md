@@ -1,11 +1,11 @@
 # Database Backup and Recovery — Milestones
 
-**Status:** Active
+**Status:** Done
 
 This milestone plan breaks the PRD into independently reviewable slices.
 Each milestone should leave the system in a releasable state and preserve the target architecture rule that SQLite remains canonical while generated backup artifacts provide transparency and explicit recovery input.
 
-Current focus: M6 — Restore Planning and Dry Run.
+Current focus: None — initiative closed.
 
 ## Objective
 
@@ -274,7 +274,7 @@ Notes:
 
 ## M6 — Restore Planning and Dry Run
 
-Status: Current focus.
+Status: Delivered.
 
 Goal: make recovery inspectable before any canonical state is rewritten.
 
@@ -307,7 +307,16 @@ Out of scope:
 - Import-style recovery when no trusted backup exists.
 - Restoring prose bodies.
 
+Evidence:
+
+- [src/structure/project-backup-restore.js](../../../../src/structure/project-backup-restore.js)
+- [src/tools/sync.js](../../../../src/tools/sync.js)
+- [src/test/unit/project-backup-restore.test.mjs](../../../../src/test/unit/project-backup-restore.test.mjs)
+- [src/test/integration/sync.test.mjs](../../../../src/test/integration/sync.test.mjs)
+
 ## M7 — Transactional Restore and Rebuild Path
+
+Status: Delivered.
 
 Goal: fulfill the v1 recovery promise by rebuilding canonical database state from a trusted backup.
 
@@ -340,7 +349,16 @@ Out of scope:
 - Event-log replay as the primary restore path.
 - Cross-project merge restore.
 
+Evidence:
+
+- [src/structure/project-backup-restore.js](../../../../src/structure/project-backup-restore.js)
+- [src/tools/sync.js](../../../../src/tools/sync.js)
+- [src/test/unit/project-backup-restore.test.mjs](../../../../src/test/unit/project-backup-restore.test.mjs)
+- [src/test/integration/sync.test.mjs](../../../../src/test/integration/sync.test.mjs)
+
 ## M8 — Deployment, Documentation, and Release Readiness
+
+Status: Delivered.
 
 Goal: make the app-level backup system understandable and operationally safe across local, Docker, and homeserver workflows without duplicating deployment volume-backup guidance.
 
@@ -373,9 +391,17 @@ Out of scope:
 - Client-specific restore UI.
 - Automatic Git push or remote setup.
 
+Evidence:
+
+- [docs/guides/backup-recovery.md](../../../../docs/guides/backup-recovery.md)
+- [docs/guides/docker.md](../../../../docs/guides/docker.md)
+- [docs/agents/tools.md](../../../../docs/agents/tools.md)
+- [src/workflows/workflow-catalogue.js](../../../../src/workflows/workflow-catalogue.js)
+- Local Docker smoke on 2026-05-25 using separate `/sync` and `/data` mounts: built `mcp-writing:m8-smoke`, verified `/healthz`, ran `sync`, `export_project_backup`, `diagnose_project_backups`, `create_chapter`, dry-run `restore_project_from_backup`, transactional restore with `confirm_destructive=true`, post-restore `sync`, refreshed backup export, and confirmed backup diagnostics returned `current`.
+
 ## Related
 
 - [prd.md](prd.md)
-- [Target Architecture Migration](../../done/target-architecture-migration/prd.md)
-- [Structural Authority Hardening](../../done/structural-authority-hardening/prd.md)
-- [Docker, CI, and Deployment Workflow](../../done/docker-ci-deployment/prd.md)
+- [Target Architecture Migration](../target-architecture-migration/prd.md)
+- [Structural Authority Hardening](../structural-authority-hardening/prd.md)
+- [Docker, CI, and Deployment Workflow](../docker-ci-deployment/prd.md)

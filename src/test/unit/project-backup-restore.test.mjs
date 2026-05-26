@@ -226,8 +226,39 @@ describe("restoreProjectFromBackup", () => {
     const result = restorePlan(db, syncDir, backupDir);
 
     assert.equal(result.ok, true);
+    assert.equal(typeof result.current_snapshot_checksum, "string");
+    assert.notEqual(result.current_snapshot_checksum, "");
     assert.ok(result.plan.changes.some(change => change.domain === "projects" && change.action === "create"));
     assert.ok(result.plan.changes.some(change => change.domain === "scenes" && change.action === "create"));
+  }));
+
+  test("applies project creation from a reviewed missing-project dry-run", () => withFixture(({ db, syncDir, backupDir }) => {
+    exportBackup(db, syncDir, backupDir);
+    db.prepare(`DELETE FROM scene_tags WHERE project_id = ?`).run("test-novel");
+    db.prepare(`DELETE FROM scenes WHERE project_id = ?`).run("test-novel");
+    db.prepare(`DELETE FROM chapters WHERE project_id = ?`).run("test-novel");
+    db.prepare(`DELETE FROM character_relationships`).run();
+    db.prepare(`DELETE FROM characters WHERE project_id = ?`).run("test-novel");
+    db.prepare(`DELETE FROM projects WHERE project_id = ?`).run("test-novel");
+    const reviewed = restorePlan(db, syncDir, backupDir);
+
+    const result = restorePlan(db, syncDir, backupDir, {
+      dryRun: false,
+      confirmCrossScope: true,
+      expectedCurrentSnapshotChecksum: reviewed.current_snapshot_checksum,
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.action, "restored");
+    assert.equal(result.current_snapshot_checksum, reviewed.current_snapshot_checksum);
+    assert.equal(
+      db.prepare(`SELECT title FROM scenes WHERE project_id = ? AND scene_id = ?`).get("test-novel", "sc-first").title,
+      "First Scene"
+    );
+    assert.equal(
+      db.prepare(`SELECT name FROM projects WHERE project_id = ?`).get("test-novel").name,
+      "Test Novel"
+    );
   }));
 
   test("refuses tampered backup snapshots", () => withFixture(({ db, syncDir, backupDir }) => {
@@ -476,6 +507,32 @@ describe("restoreProjectFromBackup", () => {
     assert.equal(result.plan, null);
   }));
 
+  test("refuses unsupported snapshot row columns before restore apply builds SQL", () => withFixture(({ db, syncDir, backupDir }) => {
+    const built = exportBackup(db, syncDir, backupDir);
+    writeMalformedSnapshotWithValidChecksums(backupDir, {
+      ...built.snapshot,
+      scenes: built.snapshot.scenes.map((scene, index) => index === 0
+        ? { ...scene, "title) VALUES (?) --": "unexpected" }
+        : scene),
+    });
+
+    const result = restorePlan(db, syncDir, backupDir, {
+      dryRun: false,
+      confirmDestructive: true,
+    });
+
+    assert.equal(result.ok, false);
+    assert.equal(result.action, "restore_refused");
+    assert.deepEqual(result.diagnostics.map(diagnostic => diagnostic.type), ["project_restore_invalid_snapshot"]);
+    assert.equal(result.diagnostics[0].details.domain, "scenes");
+    assert.deepEqual(result.diagnostics[0].details.unsupported_columns, ["title) VALUES (?) --"]);
+    assert.equal(
+      db.prepare(`SELECT title FROM scenes WHERE project_id = ? AND scene_id = ?`).get("test-novel", "sc-first").title,
+      "First Scene"
+    );
+    assert.equal(result.plan, null);
+  }));
+
   test("refuses rows missing identity fields before planning", () => withFixture(({ db, syncDir, backupDir }) => {
     const built = exportBackup(db, syncDir, backupDir);
     writeMalformedSnapshotWithValidChecksums(backupDir, {
@@ -673,6 +730,26 @@ describe("restoreProjectFromBackup", () => {
     assert.equal(result.plan, null);
   }));
 
+  test("refuses empty-string values for nullable project scope fields", () => withFixture(({ db, syncDir, backupDir }) => {
+    const built = exportBackup(db, syncDir, backupDir);
+    writeMalformedSnapshotWithValidChecksums(backupDir, {
+      ...built.snapshot,
+      characters: built.snapshot.characters.map((character, index) => index === 0
+        ? { ...character, project_id: "" }
+        : character),
+    });
+
+    const result = restorePlan(db, syncDir, backupDir);
+
+    assert.equal(result.ok, false);
+    assert.equal(result.action, "restore_refused");
+    assert.deepEqual(result.diagnostics.map(diagnostic => diagnostic.type), ["project_restore_invalid_snapshot"]);
+    assert.equal(result.diagnostics[0].details.domain, "characters");
+    assert.equal(result.diagnostics[0].details.field, "project_id");
+    assert.equal(result.diagnostics[0].details.reason, "empty_project_scope");
+    assert.equal(result.plan, null);
+  }));
+
   test("refuses nullable-scope reference rows that belong to another project", () => withFixture(({ db, syncDir, backupDir }) => {
     const built = exportBackup(db, syncDir, backupDir);
     writeMalformedSnapshotWithValidChecksums(backupDir, {
@@ -738,7 +815,7 @@ describe("restoreProjectFromBackup", () => {
     assert.equal(result.plan, null);
   }));
 
-  test("treats null and empty-string nullable identity fields as distinct", () => withFixture(({ db, syncDir, backupDir }) => {
+  test("refuses empty-string values for nullable identity fields", () => withFixture(({ db, syncDir, backupDir }) => {
     const built = exportBackup(db, syncDir, backupDir);
     writeMalformedSnapshotWithValidChecksums(backupDir, {
       ...built.snapshot,
@@ -753,17 +830,13 @@ describe("restoreProjectFromBackup", () => {
 
     const result = restorePlan(db, syncDir, backupDir);
 
-    assert.equal(result.ok, true);
-    assert.ok(result.plan.changes.some(change => (
-      change.domain === "character_relationships" &&
-      change.action === "create" &&
-      change.identity.note === ""
-    )));
-    assert.ok(result.plan.changes.some(change => (
-      change.domain === "character_relationships" &&
-      change.action === "unchanged" &&
-      change.identity.note === null
-    )));
+    assert.equal(result.ok, false);
+    assert.equal(result.action, "restore_refused");
+    assert.deepEqual(result.diagnostics.map(diagnostic => diagnostic.type), ["project_restore_invalid_snapshot"]);
+    assert.equal(result.diagnostics[0].details.domain, "character_relationships");
+    assert.equal(result.diagnostics[0].details.field, "note");
+    assert.equal(result.diagnostics[0].details.reason, "empty_identity");
+    assert.equal(result.plan, null);
   }));
 
   test("refuses current SQLite duplicate identities before planning can collapse rows", () => withFixture(({ db, syncDir, backupDir }) => {
@@ -789,13 +862,320 @@ describe("restoreProjectFromBackup", () => {
     assert.equal(result.plan, null);
   }));
 
-  test("keeps apply mode unavailable until the transactional restore milestone", () => withFixture(({ db, syncDir, backupDir }) => {
+  test("requires explicit confirmation before applying destructive restore plans", () => withFixture(({ db, syncDir, backupDir }) => {
+    exportBackup(db, syncDir, backupDir);
+    db.prepare(`
+      INSERT INTO scene_tags (scene_id, project_id, tag)
+      VALUES (?, ?, ?)
+    `).run("sc-first", "test-novel", "extra-current-tag");
+    const reviewed = restorePlan(db, syncDir, backupDir);
+
+    const result = restorePlan(db, syncDir, backupDir, {
+      dryRun: false,
+      expectedCurrentSnapshotChecksum: reviewed.current_snapshot_checksum,
+    });
+
+    assert.equal(result.ok, false);
+    assert.equal(result.action, "restore_refused");
+    assert.deepEqual(result.diagnostics.map(diagnostic => diagnostic.type), ["project_restore_destructive_confirmation_required"]);
+    assert.equal(result.plan.destructive_change_count, 1);
+    assert.equal(
+      db.prepare(`SELECT COUNT(*) AS count FROM scene_tags WHERE project_id = ? AND tag = ?`).get("test-novel", "extra-current-tag").count,
+      1
+    );
+  }));
+
+  test("requires the reviewed current snapshot checksum before applying restore plans", () => withFixture(({ db, syncDir, backupDir }) => {
     exportBackup(db, syncDir, backupDir);
 
     const result = restorePlan(db, syncDir, backupDir, { dryRun: false });
 
     assert.equal(result.ok, false);
     assert.equal(result.action, "restore_refused");
-    assert.deepEqual(result.diagnostics.map(diagnostic => diagnostic.type), ["project_restore_apply_not_implemented"]);
+    assert.deepEqual(result.diagnostics.map(diagnostic => diagnostic.type), ["project_restore_current_snapshot_confirmation_required"]);
+    assert.equal(result.plan.totals.delete, 0);
+    assert.equal(
+      db.prepare(`SELECT COUNT(*) AS count FROM scenes WHERE project_id = ?`).get("test-novel").count,
+      1
+    );
+  }));
+
+  test("refuses apply when current SQLite state changed after dry-run review", () => withFixture(({ db, syncDir, backupDir }) => {
+    exportBackup(db, syncDir, backupDir);
+    const reviewed = restorePlan(db, syncDir, backupDir);
+    db.prepare(`
+      INSERT INTO scene_tags (scene_id, project_id, tag)
+      VALUES (?, ?, ?)
+    `).run("sc-first", "test-novel", "changed-after-review");
+
+    const result = restorePlan(db, syncDir, backupDir, {
+      dryRun: false,
+      confirmDestructive: true,
+      expectedCurrentSnapshotChecksum: reviewed.current_snapshot_checksum,
+    });
+
+    assert.equal(result.ok, false);
+    assert.equal(result.action, "restore_refused");
+    assert.deepEqual(result.diagnostics.map(diagnostic => diagnostic.type), ["project_restore_current_snapshot_changed"]);
+    assert.equal(result.diagnostics[0].details.expected_current_snapshot_checksum, reviewed.current_snapshot_checksum);
+    assert.notEqual(result.diagnostics[0].details.current_snapshot_checksum, reviewed.current_snapshot_checksum);
+    assert.equal(
+      db.prepare(`SELECT COUNT(*) AS count FROM scene_tags WHERE project_id = ? AND tag = ?`).get("test-novel", "changed-after-review").count,
+      1
+    );
+  }));
+
+  test("applies a confirmed restore transaction and rebuilds covered canonical state", () => withFixture(({ db, syncDir, backupDir }) => {
+    exportBackup(db, syncDir, backupDir);
+    db.prepare(`
+      UPDATE scenes
+      SET title = ?
+      WHERE project_id = ? AND scene_id = ?
+    `).run("Changed Scene", "test-novel", "sc-first");
+    db.prepare(`
+      INSERT INTO scene_tags (scene_id, project_id, tag)
+      VALUES (?, ?, ?)
+    `).run("sc-first", "test-novel", "extra-current-tag");
+    db.prepare(`
+      DELETE FROM chapters
+      WHERE project_id = ? AND chapter_id = ?
+    `).run("test-novel", "ch-01-first");
+    db.prepare(`
+      INSERT INTO scenes_fts (scene_id, project_id, logline, title, keywords)
+      VALUES (?, ?, ?, ?, ?)
+    `).run("sc-first", "test-novel", "changed", "Changed Scene", "changed");
+    const reviewed = restorePlan(db, syncDir, backupDir);
+
+    const result = restorePlan(db, syncDir, backupDir, {
+      dryRun: false,
+      confirmDestructive: true,
+      expectedCurrentSnapshotChecksum: reviewed.current_snapshot_checksum,
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.action, "restored");
+    assert.equal(result.dry_run, false);
+    assert.equal(result.applied.restored, true);
+    assert.equal(result.plan.totals.create, 1);
+    assert.equal(result.plan.totals.update, 1);
+    assert.equal(result.plan.totals.delete, 1);
+    assert.equal(
+      db.prepare(`SELECT title FROM scenes WHERE project_id = ? AND scene_id = ?`).get("test-novel", "sc-first").title,
+      "First Scene"
+    );
+    assert.equal(
+      db.prepare(`SELECT COUNT(*) AS count FROM scene_tags WHERE project_id = ? AND tag = ?`).get("test-novel", "extra-current-tag").count,
+      0
+    );
+    assert.equal(
+      db.prepare(`SELECT COUNT(*) AS count FROM chapters WHERE project_id = ? AND chapter_id = ?`).get("test-novel", "ch-01-first").count,
+      1
+    );
+    assert.equal(
+      db.prepare(`SELECT COUNT(*) AS count FROM scenes_fts WHERE project_id = ?`).get("test-novel").count,
+      0
+    );
+  }));
+
+  test("requires explicit confirmation before applying cross-scope restore plans", () => withFixture(({ db, syncDir, backupDir }) => {
+    const built = exportBackup(db, syncDir, backupDir);
+    writeMalformedSnapshotWithValidChecksums(backupDir, {
+      ...built.snapshot,
+      project: {
+        ...built.snapshot.project,
+        universe_id: "shared-universe",
+      },
+      universe: {
+        universe_id: "shared-universe",
+        name: "Shared Universe",
+      },
+    });
+    const reviewed = restorePlan(db, syncDir, backupDir);
+
+    const result = restorePlan(db, syncDir, backupDir, {
+      dryRun: false,
+      expectedCurrentSnapshotChecksum: reviewed.current_snapshot_checksum,
+    });
+
+    assert.equal(result.ok, false);
+    assert.equal(result.action, "restore_refused");
+    assert.deepEqual(result.diagnostics.map(diagnostic => diagnostic.type), ["project_restore_cross_scope_confirmation_required"]);
+    assert.equal(result.plan.cross_scope_change_count, 1);
+    assert.equal(
+      db.prepare(`SELECT COUNT(*) AS count FROM universes WHERE universe_id = ?`).get("shared-universe").count,
+      0
+    );
+  }));
+
+  test("marks universe-scoped trait and reference tag changes as cross-scope", () => withFixture(({ db, syncDir, backupDir }) => {
+    const built = exportBackup(db, syncDir, backupDir);
+    const referencePath = path.join(syncDir, "projects/test-novel/world/reference/shared.md");
+    fs.mkdirSync(path.dirname(referencePath), { recursive: true });
+    fs.writeFileSync(referencePath, "# Shared Reference\n", "utf8");
+    writeMalformedSnapshotWithValidChecksums(backupDir, {
+      ...built.snapshot,
+      characters: [
+        ...built.snapshot.characters,
+        {
+          character_id: "char-shared",
+          project_id: null,
+          universe_id: "shared-universe",
+          name: "Shared Character",
+          role: null,
+          arc_summary: null,
+          first_appearance: null,
+          file_path: null,
+        },
+      ],
+      character_traits: [
+        ...built.snapshot.character_traits,
+        { character_id: "char-shared", trait: "shared-trait" },
+      ],
+      reference_docs: [
+        ...built.snapshot.reference_docs,
+        {
+          doc_id: "ref-shared",
+          project_id: null,
+          universe_id: "shared-universe",
+          type: "note",
+          title: "Shared Reference",
+          summary: null,
+          file_path: "projects/test-novel/world/reference/shared.md",
+        },
+      ],
+      reference_doc_tags: [
+        ...built.snapshot.reference_doc_tags,
+        { doc_id: "ref-shared", tag: "shared-tag" },
+      ],
+    });
+
+    const result = restorePlan(db, syncDir, backupDir);
+
+    assert.equal(result.ok, true);
+    assert.equal(
+      result.plan.changes.some(change => (
+        change.domain === "character_traits" &&
+        change.identity.character_id === "char-shared" &&
+        change.cross_scope === true
+      )),
+      true
+    );
+    assert.equal(
+      result.plan.changes.some(change => (
+        change.domain === "reference_doc_tags" &&
+        change.identity.doc_id === "ref-shared" &&
+        change.cross_scope === true
+      )),
+      true
+    );
+  }));
+
+  test("requires cross-scope confirmation before deleting universe-scoped character traits", () => withFixture(({ db, syncDir, backupDir }) => {
+    db.prepare(`
+      INSERT INTO universes (universe_id, name)
+      VALUES (?, ?)
+    `).run("shared-universe", "Shared Universe");
+    db.prepare(`
+      UPDATE projects
+      SET universe_id = ?
+      WHERE project_id = ?
+    `).run("shared-universe", "test-novel");
+    db.prepare(`
+      INSERT INTO characters (character_id, project_id, universe_id, name, role, arc_summary, first_appearance, file_path)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run("char-shared", null, "shared-universe", "Shared Character", null, null, null, null);
+    db.prepare(`
+      INSERT INTO scene_characters (scene_id, project_id, character_id)
+      VALUES (?, ?, ?)
+    `).run("sc-first", "test-novel", "char-shared");
+    db.prepare(`
+      INSERT INTO character_traits (character_id, trait)
+      VALUES (?, ?)
+    `).run("char-shared", "shared-trait");
+    const built = exportBackup(db, syncDir, backupDir);
+    writeMalformedSnapshotWithValidChecksums(backupDir, {
+      ...built.snapshot,
+      character_traits: built.snapshot.character_traits.filter(row => row.character_id !== "char-shared"),
+    });
+    const reviewed = restorePlan(db, syncDir, backupDir);
+
+    const result = restorePlan(db, syncDir, backupDir, {
+      dryRun: false,
+      confirmDestructive: true,
+      expectedCurrentSnapshotChecksum: reviewed.current_snapshot_checksum,
+    });
+
+    assert.equal(result.ok, false);
+    assert.equal(result.action, "restore_refused");
+    assert.deepEqual(result.diagnostics.map(diagnostic => diagnostic.type), ["project_restore_cross_scope_confirmation_required"]);
+    assert.equal(result.plan.cross_scope_change_count, 1);
+    assert.equal(
+      db.prepare(`SELECT COUNT(*) AS count FROM character_traits WHERE character_id = ? AND trait = ?`).get("char-shared", "shared-trait").count,
+      1
+    );
+  }));
+
+  test("marks relationships tied to non-project scenes as cross-scope", () => withFixture(({ db, syncDir, backupDir }) => {
+    const built = exportBackup(db, syncDir, backupDir);
+    writeMalformedSnapshotWithValidChecksums(backupDir, {
+      ...built.snapshot,
+      character_relationships: [
+        ...built.snapshot.character_relationships,
+        {
+          from_character: "char-elena",
+          to_character: "char-marcus",
+          relationship_type: "protects",
+          strength: "medium",
+          scene_id: "other-project-scene",
+          note: "external scene relationship",
+        },
+      ],
+    });
+
+    const result = restorePlan(db, syncDir, backupDir);
+
+    assert.equal(result.ok, true);
+    assert.equal(
+      result.plan.changes.some(change => (
+        change.domain === "character_relationships" &&
+        change.identity.relationship_type === "protects" &&
+        change.cross_scope === true
+      )),
+      true
+    );
+  }));
+
+  test("rolls back all database changes when restore application fails", () => withFixture(({ db, syncDir, backupDir }) => {
+    const built = exportBackup(db, syncDir, backupDir);
+    db.prepare(`
+      UPDATE scenes
+      SET title = ?
+      WHERE project_id = ? AND scene_id = ?
+    `).run("Changed Scene", "test-novel", "sc-first");
+    writeMalformedSnapshotWithValidChecksums(backupDir, {
+      ...built.snapshot,
+      project: {
+        ...built.snapshot.project,
+        name: null,
+      },
+    });
+    const reviewed = restorePlan(db, syncDir, backupDir);
+
+    const result = restorePlan(db, syncDir, backupDir, {
+      dryRun: false,
+      expectedCurrentSnapshotChecksum: reviewed.current_snapshot_checksum,
+    });
+
+    assert.equal(result.ok, false);
+    assert.equal(result.action, "restore_refused");
+    assert.deepEqual(result.diagnostics.map(diagnostic => diagnostic.type), ["project_restore_write_failed"]);
+    assert.equal(
+      db.prepare(`SELECT title FROM scenes WHERE project_id = ? AND scene_id = ?`).get("test-novel", "sc-first").title,
+      "Changed Scene"
+    );
+    assert.equal(
+      db.prepare(`SELECT COUNT(*) AS count FROM chapters WHERE project_id = ?`).get("test-novel").count,
+      1
+    );
   }));
 });

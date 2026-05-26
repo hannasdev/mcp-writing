@@ -147,13 +147,16 @@ Explicitly restore canonical SQLite chapter, scene-placement, and epigraph struc
 
 ## restore_project_from_backup
 
-Dry-run an explicit project restore from a trusted generated project backup bundle. Validates manifest, schema, checksums, project identity, and file references, then returns a deterministic create/update/delete/unchanged plan without mutating SQLite or generated files.
+Explicitly restore a project from a trusted generated project backup bundle. Defaults to dry-run planning; dry_run=false applies canonical SQLite changes transactionally after the reviewed current snapshot checksum and required destructive or cross-scope confirmations are provided.
 
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |
 | `project_id` | `string` | Yes | Project ID to restore (e.g. 'test-novel' or 'universe-1/book-1-the-lamb'). |
 | `backup_path` | `string` | No | Path under WRITING_SYNC_DIR to a project backup directory, manifest.json, or canonical.snapshot.json. Defaults to project-backups/<project_id>. |
-| `dry_run` | `boolean` | No | If true (default), validate and summarize the restore plan without writing SQLite state. dry_run=false is reserved for a later transactional restore milestone. |
+| `dry_run` | `boolean` | No | If true (default), validate and summarize the restore plan without writing SQLite state. |
+| `confirm_destructive` | `boolean` | No | Required with dry_run=false when the restore plan includes delete candidates. |
+| `confirm_cross_scope` | `boolean` | No | Required with dry_run=false when the restore plan changes universe-scoped records. |
+| `expected_current_snapshot_checksum` | `string` | No | Required with dry_run=false; pass the current_snapshot_checksum returned by the reviewed dry-run plan to guard against state changes before apply. |
 
 ---
 

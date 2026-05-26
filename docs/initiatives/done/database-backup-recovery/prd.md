@@ -1,16 +1,16 @@
 # PRD: Database Backup and Recovery
 
-**Status:** Active
+**Status:** Done
 
-Current focus: M6 — Restore Planning Dry Run.
+Completed: 2026-05-25.
 
 The product is ready to extend the SQLite-canonical architecture with a complete backup and recovery story.
 The need is clear because structural manuscript state has moved away from files-first authority.
-The internal backup artifact shape, explicit project backup export tool, project backup diagnostics, advisory operation history, and automatic backup refresh after sanctioned project-scoped canonical mutations are implemented; the next implementation slice should add dry-run restore planning that validates trusted backup bundles and previews canonical database changes before any apply workflow exists.
+The internal backup artifact shape, explicit project backup export tool, project backup diagnostics, advisory operation history, automatic backup refresh after sanctioned project-scoped canonical mutations, dry-run restore planning, transactional restore application, and backup/recovery operations documentation are implemented and validated.
 
 Implementation slices are tracked in [milestones.md](milestones.md).
 
-Docker and homeserver volume backup expectations for `/sync` and `/data` are covered by the completed [Docker, CI, and Deployment Workflow](../../done/docker-ci-deployment/prd.md).
+Docker and homeserver volume backup expectations for `/sync` and `/data` are covered by the completed [Docker, CI, and Deployment Workflow](../docker-ci-deployment/prd.md).
 This initiative is about the separate application-level recovery surface: Git-reviewable backup artifacts generated from SQLite-canonical state, diagnostics, and explicit restore workflows.
 
 ## Problem Statement
