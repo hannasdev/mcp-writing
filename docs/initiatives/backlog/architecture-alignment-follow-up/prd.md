@@ -7,6 +7,8 @@ periodic reviews. It is a holding place for missing parts, correction
 candidates, and follow-up work that should not be lost, but it is not active
 implementation scope until explicitly prioritized.
 
+Implementation sequencing lives in [milestones.md](milestones.md).
+
 ## Goal
 
 Keep Writing MCP converging toward the [Conceptual Target Architecture](../../../foundations/target-architecture.md)
@@ -173,135 +175,6 @@ workflows. The public tool surface should preserve author intent, validation,
 diagnostics, and next-step guidance instead of exposing direct create/read/update
 or delete operations for individual tables.
 
-## Milestone Breakdown
-
-These milestones are intended to become independently reviewable implementation
-initiatives or PRs. Milestones 0 and 1 are decision and design work; later
-milestones change behavior only after ownership and snapshot semantics are
-settled.
-
-### Milestone 0: Metadata Ownership Inventory
-
-Outcome:
-- Produce an implementation-backed inventory of current metadata fields,
-  relationship tables, sidecar fields, generated views, and import/export paths.
-
-Key questions:
-- Which fields are already SQLite-canonical?
-- Which fields remain sidecar-only or sidecar-first?
-- Which fields are legacy import compatibility rather than current product
-  state?
-- Which outcome workflows already exist, and where are callers still forced
-  into storage-shaped operations?
-
-Deliverables:
-- Update this PRD with a metadata ownership matrix.
-- Mark each metadata family as canonical, generated, import-only, review
-  snapshot, recovery snapshot, or deprecated.
-- Identify migration risks before changing behavior.
-
-Exit criteria:
-- No implementation begins until the canonical owner and compatibility role are
-  named for scenes, chapters, epigraphs, threads, characters, places, reference
-  links, tags, status fields, and source identifiers.
-
-### Milestone 1: Snapshot Model Decision
-
-Outcome:
-- Replace the writable-sidecar mental model with explicit review snapshots and
-  recovery snapshots.
-
-Deliverables:
-- Define review snapshots as temporary, human/AI-readable before/after material
-  for dry runs, reviews, and proposed operations.
-- Define recovery snapshots as durable rollback or rebuild material tied to
-  backup/restore workflows.
-- Document that neither snapshot type is a daily-work source of truth.
-- Decide whether any existing generated sidecar-shaped output should become a
-  named snapshot artifact or be deprecated.
-
-Exit criteria:
-- The architecture docs describe sidecars, review snapshots, and recovery
-  snapshots with distinct ownership and mutation rules.
-- Planned tool behavior routes proposed changes through review snapshots and
-  committed changes through SQLite-backed workflows.
-
-### Milestone 2: Managed Sync Preservation
-
-Outcome:
-- Ordinary managed-project sync stops deleting canonical structure merely
-  because prose or representation files are missing.
-
-Deliverables:
-- Change sync planning so missing files produce diagnostics or repair/delete
-  candidates instead of silent canonical deletion.
-- Preserve first-time import and legacy migration behavior as explicit modes.
-- Add focused tests for missing scene prose, epigraph files, chapters, and
-  relationship rows.
-
-Exit criteria:
-- Managed daily sync observes filesystem absence without treating it as
-  canonical delete authority.
-- Any destructive structural outcome requires an explicit workflow, restore
-  operation, or confirmed repair path.
-
-### Milestone 3: Sidecar Write Boundary
-
-Outcome:
-- Generic metadata updates no longer rewrite structural sidecar compatibility
-  fields, and sidecar-shaped files stop acting as active mutation surfaces.
-
-Deliverables:
-- Separate raw sidecar reads from sync-normalized metadata reads.
-- Preserve existing structural compatibility fields during non-structural
-  updates.
-- Route any regeneration of structure-shaped compatibility output through named
-  generated-view, review-snapshot, or recovery-snapshot workflows.
-
-Exit criteria:
-- Non-structural metadata tools cannot accidentally rewrite structural
-  representations.
-- Tests cover path-conflicting managed scenes and structural-field
-  preservation.
-
-### Milestone 4: Outcome-Oriented Relationship Workflows
-
-Outcome:
-- Relationship metadata changes are exposed through story/review outcomes, not
-  storage CRUD.
-
-Deliverables:
-- Convert or add workflows for thread tracking, character/place association,
-  reference linking, metadata audit, and metadata repair where gaps exist.
-- Ensure active writes are SQLite-first, validated, and diagnostically clear.
-- Keep compatibility files read-only, generated, import-only, or deprecated
-  according to the Milestone 0 ownership matrix.
-
-Exit criteria:
-- Public tools express user goals such as tracking an arc, linking evidence,
-  reviewing stale relationships, repairing metadata, or preparing a recovery
-  snapshot.
-- Tool docs and `describe_workflows` guide AI agents toward outcomes rather
-  than tables or files.
-
-### Milestone 5: Deprecation, Migration, and Documentation
-
-Outcome:
-- Legacy sidecar behavior is either migrated, explicitly retained as import
-  compatibility, or removed from normal workflows.
-
-Deliverables:
-- Add migration guidance for projects with existing sidecars.
-- Update README, workflow docs, generated tool docs, and architecture docs where
-  user-facing behavior changes.
-- Add release-log coverage if tools or compatibility expectations change.
-
-Exit criteria:
-- The product docs consistently present SQLite as canonical structural and
-  relationship metadata storage.
-- Any remaining sidecar support has a named compatibility role and cannot be
-  mistaken for daily-work authority.
-
 ## Acceptance Criteria
 
 1. Architecture review findings are captured in this initiative or split into
@@ -319,7 +192,7 @@ Exit criteria:
 7. Sidecar replacement work introduces outcome-oriented workflows, not raw CRUD
    wrappers around SQLite tables.
 8. The PRD contains a milestone plan that can be converted into independently
-   reviewable implementation initiatives.
+   reviewable implementation initiatives in [milestones.md](milestones.md).
 
 ## Test Strategy
 
@@ -337,6 +210,7 @@ Exit criteria:
 
 - [Conceptual Target Architecture](../../../foundations/target-architecture.md)
 - [Managed Structure Contract](../../../foundations/managed-structure-contract.md)
+- [Milestones](milestones.md)
 - [Structural Authority Hardening](../../done/structural-authority-hardening/prd.md)
 - [Target Architecture Migration](../../done/target-architecture-migration/prd.md)
 - [Database Backup and Recovery](../../done/database-backup-recovery/prd.md)
