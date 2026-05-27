@@ -46,6 +46,10 @@ They may be useful, inspectable, portable, and Git-friendly, but they should not
    Human-readable folder names, numeric chapter labels, and Scrivener ordering can be useful views or migration hints.
    They should not be long-term identity, ordering, or relationship authority once the domain model has first-class concepts.
 
+9. **Tools express outcomes, not storage internals**
+   MCP tools should be shaped around author, reviewer, maintainer, and AI-agent outcomes.
+   They should not expose raw CRUD wrappers for tables or files when a workflow-level operation can preserve intent, validation, diagnostics, and next-step guidance.
+
 ## Numeric Chapter Compatibility
 
 Numeric `chapter` and `chapters` inputs are retained as compatibility aliases for read-scoped workflows such as scene discovery, chapter prose retrieval, styleguide analysis, batch enrichment, and review bundle planning.
@@ -121,7 +125,8 @@ When adding or changing a workflow, ask:
 2. Is this setup/import, daily work, or maintenance?
 3. Is the operation reading, generating, or mutating?
 4. If it mutates structure, what sanctioned MCP command owns it?
-5. If no command exists, is that a product gap rather than something an AI agent should patch directly?
+5. Does the public tool express the user's intended outcome rather than storage CRUD?
+6. If no command exists, is that a product gap rather than something an AI agent should patch directly?
 
 ## Relationship to Current Design
 
