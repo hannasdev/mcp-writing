@@ -46,8 +46,14 @@ Deliverables:
   - recovery snapshot;
   - deprecated.
 - Identify which fields remain sidecar-only or sidecar-first.
+- Identify fields without current SQLite homes, including scene
+  `external_source`, `external_id`, `status`, sidecar `threads`, character
+  `group` and `tags`, place `associated_characters` and `tags`, `versions`, and
+  legacy reference aliases.
 - Identify which outcome workflows already exist and where callers are still
   forced into storage-shaped operations.
+- Include prose-derived metadata enrichment and apply/dry-run workflows in the
+  write-order inventory.
 - Update [prd.md](prd.md) or add a companion inventory document with the
   ownership matrix.
 
@@ -58,6 +64,8 @@ Acceptance gates:
 - Relationship metadata families have explicit write-order expectations.
 - Each sidecar-shaped field is classified as current authority, generated view,
   import compatibility, review snapshot, recovery snapshot, or deprecated.
+- Fields without a current SQLite home are marked as migrate-to-schema,
+  generated/import-only, deprecated, or intentionally prose/file-owned.
 - Maintainers can see which compatibility paths are safe to preserve and which
   require migration or deprecation.
 - No behavior-changing milestone starts until this inventory is reviewed.
@@ -148,6 +156,9 @@ Acceptance gates:
   coherent after the change.
 - Tool responses guide users or agents to the next explicit outcome instead of
   silently mutating canonical state.
+- Every canonical mutation introduced or reordered by this milestone refreshes
+  project backup artifacts and operation history after successful commit, or
+  documents why the affected state is non-canonical or derived.
 
 Test strategy:
 
@@ -192,6 +203,9 @@ Acceptance gates:
   canonical input during daily work.
 - Tests prove path-conflicting managed scenes preserve structural fields.
 - Tool guidance points structural changes to explicit structure workflows.
+- Existing non-structural metadata use cases remain available, or are
+  explicitly marked pending M4 replacement with diagnostics and next-step
+  guidance.
 
 Test strategy:
 
@@ -218,7 +232,8 @@ instead of storage CRUD.
 Deliverables:
 
 - Convert or add workflows for thread tracking, character/place association,
-  reference linking, metadata audit, and metadata repair where gaps exist.
+  reference linking, prose-derived metadata enrichment, metadata audit, and
+  metadata repair where gaps exist.
 - Ensure active relationship writes are SQLite-first, validated, and
   diagnostically clear.
 - Keep compatibility files read-only, generated, import-only, or deprecated
@@ -237,6 +252,11 @@ Acceptance gates:
   as `threads`, `scene_threads`, `scene_tags`, or `reference_links`.
 - Active writes are SQLite-first and have clear validation and rollback
   behavior.
+- Every canonical mutation introduced or reordered by this milestone refreshes
+  project backup artifacts and operation history after successful commit, or
+  documents why the affected state is non-canonical or derived.
+- Reference-link apply workflows commit SQLite first or transactionally couple
+  compatibility output with canonical writes.
 - Compatibility files cannot be mistaken for current relationship authority.
 - Workflow discovery steers both humans and AI agents toward outcome-level
   operations.
