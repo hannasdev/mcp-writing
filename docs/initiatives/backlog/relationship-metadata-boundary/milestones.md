@@ -31,6 +31,8 @@ Deliverables:
   `characters` and `places`.
 - A documented contract decision choosing strict rejection or
   compatibility-only behavior for those fields.
+- If compatibility-only behavior remains an option, a decision on how it avoids
+  delayed canonical mutation through ordinary sync.
 - Identification of any known clients or docs that still recommend generic
   metadata updates for relationship changes.
 - Explicit confirmation that `tags`, `status`, `flags`, and `versions` remain
@@ -41,6 +43,8 @@ Acceptance criteria:
 - Reviewers can see the before/after contract from tests and docs.
 - The chosen contract is consistent with the Managed Structure Contract.
 - The migration path preserves legacy sync/import compatibility.
+- Compatibility-only behavior, if chosen, cannot write ordinary fields that
+  ordinary sync later adopts as canonical relationship state.
 - No public behavior changes are included beyond characterization or docs.
 
 Required validation:
@@ -76,6 +80,8 @@ Acceptance criteria:
   with a clear relationship-boundary error or stores only non-authoritative
   compatibility/review metadata without changing canonical relationship rows,
   depending on the M0 decision.
+- If compatibility/review metadata is retained, subsequent ordinary sync does
+  not convert that retained metadata into canonical relationship rows.
 - The tool response names the correct relationship workflow for daily work.
 - Existing allowed metadata fields continue to work.
 - Sidecar structural compatibility fields remain preserved.

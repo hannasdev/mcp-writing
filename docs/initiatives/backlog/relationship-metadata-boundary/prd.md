@@ -127,7 +127,12 @@ There are two acceptable implementation shapes:
 
 The strict contract is the default planning assumption because it is easiest for
 agents and users to understand. The compatibility-only contract remains a
-fallback if existing integrations need a softer migration.
+fallback if existing integrations need a softer migration, but it has an
+important constraint: it must not write ordinary `characters` or `places`
+sidecar fields that ordinary sync will later adopt into canonical relationship
+rows. If compatibility-only behavior is chosen, it needs a review-only storage
+shape that sync ignores, or an accompanying sync contract change that prevents
+delayed canonical mutation.
 
 ## Workflows
 
@@ -165,11 +170,13 @@ be the current path for scene-backed character/place authority.
    indexable through sync/import compatibility paths.
 4. Generic scene metadata updates no longer silently convert sidecar-first
    character/place edits into canonical relationship authority.
-5. Tool responses and workflow guidance point agents to the correct
+5. If a compatibility-only transition is chosen, later ordinary sync cannot
+   convert those compatibility writes into canonical relationship rows.
+6. Tool responses and workflow guidance point agents to the correct
    relationship workflow.
-6. Backups and operation history stay current after canonical relationship
+7. Backups and operation history stay current after canonical relationship
    mutations.
-7. Tests cover old compatibility behavior, new daily-work guardrails, stale
+8. Tests cover old compatibility behavior, new daily-work guardrails, stale
    sidecar diagnostics, and generated documentation.
 
 ## Risks And Tradeoffs
@@ -177,6 +184,7 @@ be the current path for scene-backed character/place authority.
 | Risk | Impact | Mitigation / Decision Path |
 | --- | --- | --- |
 | Existing clients may call `update_scene_metadata` with `characters` or `places`. | Behavior change could surprise integrations. | Characterize current behavior first, then choose strict rejection or compatibility-only migration with clear error guidance. |
+| Compatibility-only writes are later adopted by sync. | A delayed canonical mutation would preserve the authority leak under a different timing. | If compatibility-only is selected, use review-only metadata ignored by sync or change sync so those writes remain non-authoritative. |
 | Removing the sidecar-first path may leave no bulk relationship update path. | Authors may need repetitive calls for broad relationship repair. | Keep `enrich_scene_characters_batch` for dry-run-first repair and consider a future bulk outcome workflow only if needed. |
 | Sync still indexes legacy sidecar fields. | The compatibility path could be mistaken for daily authority. | Keep sync wording and audit diagnostics explicit: import/sync compatibility is not a mutation contract. |
 | Tags, versions, flags, and status have adjacent ownership questions. | Scope could balloon into a broad metadata redesign. | Limit this initiative to scene character/place relationship authority; record other families as future schema/deprecation decisions. |

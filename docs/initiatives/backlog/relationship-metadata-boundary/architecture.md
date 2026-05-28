@@ -91,7 +91,7 @@ through sidecar-first writes.
 
 | Decision | Preferred Direction | Rationale | Alternative |
 | --- | --- | --- | --- |
-| `characters` and `places` in `update_scene_metadata` | Reject and route to relationship workflows. | Clearest agent/user contract and matches structural-field rejection. | Allow compatibility-only writes that do not affect canonical relationship indexes. |
+| `characters` and `places` in `update_scene_metadata` | Reject and route to relationship workflows. | Clearest agent/user contract and matches structural-field rejection. | Allow compatibility-only writes only if ordinary sync cannot later adopt those writes into canonical relationship indexes. |
 | Legacy sync handling | Preserve indexing from existing sidecar/frontmatter fields. | Import is a special mode and existing projects need continuity. | Require an explicit migration before indexing legacy relationship fields. |
 | Backup refresh | Refresh backups after canonical relationship workflows, not after compatibility-only writes. | Recovery snapshots should represent canonical state. | Refresh backup after all sidecar metadata writes, even if non-canonical. |
 | Diagnostic owner | Use `audit_relationship_metadata` for authority/drift guidance. | Keeps repair reasoning in an outcome-oriented workflow. | Add a new diagnostic tool just for character/place sidecars. |
@@ -168,6 +168,11 @@ If compatibility-only behavior is chosen, callers should receive:
 - a statement that canonical relationship rows were not changed;
 - next-step guidance to use `connect_character_place_evidence` for authority.
 
+Compatibility-only behavior must not write ordinary `characters` or `places`
+sidecar fields that existing sync treats as relationship input unless sync is
+changed in the same milestone to keep those fields non-authoritative for that
+path. Otherwise the canonical mutation is merely delayed until the next sync.
+
 ## Failure Modes
 
 - **Stale indexed scene path:** canonical relationship tools should commit only
@@ -177,6 +182,9 @@ If compatibility-only behavior is chosen, callers should receive:
   remain current; response includes compatibility diagnostics.
 - **Legacy sidecar disagreement:** sync/audit reports drift and points to
   outcome-level repair; ordinary sync does not silently decide author intent.
+- **Compatibility-only delayed mutation:** if retained review metadata is stored
+  in a shape that sync still consumes, the plan has failed; M0 must choose a
+  storage shape or sync rule that prevents this.
 - **Ambiguous character or place identity:** relationship workflows reject or
   require explicit IDs instead of guessing from names.
 - **Existing clients use old metadata path:** M0 decides whether to use strict
