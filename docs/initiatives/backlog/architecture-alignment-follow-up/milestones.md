@@ -90,7 +90,7 @@ Out of scope:
 
 ## M1 — Snapshot Model Decision
 
-Status: Drafted for review.
+Status: Accepted.
 
 Goal: replace the writable-sidecar mental model with explicit review snapshots
 and recovery snapshots.
