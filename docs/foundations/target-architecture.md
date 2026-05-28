@@ -180,6 +180,12 @@ allowed to define current manuscript state. Review snapshots explain proposed
 state. Recovery snapshots support explicit recovery. Canonical SQLite state and
 authored prose remain the daily-work authority.
 
+For existing projects, the migration posture is documented in
+[Sidecar Compatibility and Migration](../guides/sidecar-compatibility.md):
+sidecars may remain import inputs, generated compatibility output, retained
+review notes, or deprecated artifacts, but direct sidecar editing is not the
+normal managed-project mutation path.
+
 ## Workflow Zones
 
 ### Setup and Import

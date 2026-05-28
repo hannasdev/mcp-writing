@@ -7,6 +7,7 @@
 - [Quick start with Scrivener (stable default)](#quick-start-with-scrivener-stable-default)
 - [Direct Scrivener project merge](#direct-scrivener-project-merge)
 - [Compatibility notes and fallback](#compatibility-notes-and-fallback)
+- [Sidecar compatibility after setup](#sidecar-compatibility-after-setup)
 - [Advanced: Native sync format](#advanced-native-sync-format)
 - [Managed structure contract](../foundations/managed-structure-contract.md)
 
@@ -65,8 +66,8 @@ If you use VS Code, client-native setup flows are available via:
 Once this is working, you can come back to:
 
 - **Advanced: Native sync format** below for custom project layouts
-- **[docs/agents/tools.md](agents/tools.md)** for the full tool catalog
-- **[README.md](../README.md#usage-scenarios)** for workflow ideas
+- **[docs/agents/tools.md](../agents/tools.md)** for the full tool catalog
+- **[README.md](../../README.md#usage-scenarios)** for workflow ideas
 
 If you later want richer metadata from a full `.scriv` bundle, add the **Direct Scrivener project merge** step after the stable import has already created your scene sidecars.
 
@@ -247,9 +248,34 @@ If the merge returns warnings:
 
 ---
 
+## Sidecar compatibility after setup
+
+Sidecars remain supported for import compatibility, generated compatibility
+output, and retained review notes. After a project is indexed and managed,
+daily structural and relationship work should use MCP tools instead of direct
+sidecar edits.
+
+Use this rule of thumb:
+
+- Setup/import may read sidecars, frontmatter, Scrivener output, and legacy
+  folders to seed canonical state.
+- Daily structure changes use tools such as `assign_scene_to_chapter`,
+  `move_scene`, `rename_chapter`, `reorder_chapter`, and `attach_epigraph`.
+- Daily relationship changes use tools such as `track_thread_arc`,
+  `connect_character_place_evidence`, `record_character_relationship_beat`,
+  and `link_reference_evidence`.
+- Sidecar-only flags, status, tags, and place associated-character notes are
+  compatibility/review metadata unless a future release promotes or removes
+  them.
+
+See [Sidecar Compatibility and Migration](sidecar-compatibility.md) for the
+current compatibility matrix and migration posture.
+
+---
+
 ## Advanced: Native sync format
 
-For projects not starting from a Scrivener export, place plain `.md` files in the sync folder directly. Metadata lives in a YAML frontmatter block.
+For projects not starting from a Scrivener export, place plain `.md` files in the sync folder directly. Metadata can seed the project from a YAML frontmatter block during setup/import.
 
 ### Scene file example
 
@@ -272,7 +298,7 @@ tags: [first-meeting, tension]
 Prose starts here...
 ```
 
-Alternatively, metadata can live in a sidecar file named `<scene-file>.meta.yaml` alongside the prose file — useful for keeping the prose file clean.
+Alternatively, metadata can live in a sidecar file named `<scene-file>.meta.yaml` alongside the prose file. In managed projects, treat that file as compatibility input/output rather than the preferred daily mutation surface for structure or relationships.
 
 ### Project structure
 

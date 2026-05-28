@@ -27,10 +27,10 @@ For VS Code-native setup flows (including prose styleguide setup), use:
 Instead of feeding an entire manuscript to an AI and hoping it fits in the context window, `mcp-writing` builds a structured index from your scene files. The AI queries that index first — finding relevant characters, beats, and loglines — then loads only the specific prose it needs.
 
 **Current status:**
-- **Core platform complete:** Metadata-first analysis, sidecar-backed metadata maintenance, AI-assisted prose editing with confirmation + git history, review bundles, and Scrivener Direct extraction are all implemented.
+- **Core platform complete:** Metadata-first analysis, SQLite-canonical structural and relationship metadata, compatibility sidecar maintenance, AI-assisted prose editing with confirmation + git history, review bundles, and Scrivener Direct extraction are all implemented.
 - **Recently completed:** Database Backup and Recovery added project backup export, freshness diagnostics, advisory operation history, automatic backup refresh after sanctioned project-scoped canonical mutations, dry-run restore planning, transactional restore application, and backup/restore operations guidance.
 - **Previous milestone:** Docker, CI, and Deployment Workflow made Docker a supported way to build, run, smoke-test, and deploy Writing MCP.
-- **Active development:** Post-initiative stabilization and backlog selection.
+- **Active development:** Architecture Alignment Follow-up M5, documenting sidecar compatibility, migration, and deprecation expectations.
 - **Deferred backlog:** OpenClaw integration, client-agnostic setup, divisions, and embeddings search.
 - **Ideas and open questions:** tracked separately so future exploration does not distort the active roadmap.
 
@@ -48,6 +48,7 @@ Instead of feeding an entire manuscript to an AI and hoping it fits in the conte
 | [mcp-writing-vscode](https://github.com/hannasdev/mcp-writing-vscode) | VS Code extension for client-native setup flows |
 | [docs/guides/docker.md](docs/guides/docker.md) | Docker Compose, deployment operations, MCP gateway notes |
 | [docs/guides/backup-recovery.md](docs/guides/backup-recovery.md) | Project backup artifacts, diagnostics, and explicit restore workflow |
+| [docs/guides/sidecar-compatibility.md](docs/guides/sidecar-compatibility.md) | Sidecar compatibility roles, migration posture, and daily-work authority boundaries |
 | [docs/foundations/managed-structure-contract.md](docs/foundations/managed-structure-contract.md) | Design boundaries for structural mutation, generated views, import, and maintenance workflows |
 | [docs/agents/tools.md](docs/agents/tools.md) | Full tool reference — auto-generated from source |
 | [docs/agents/README.md](docs/agents/README.md) | Index of agent-focused guidance, examples, and boot files |
@@ -142,7 +143,7 @@ Goal: make sure subplot threads progress intentionally and resolve on time.
 
 1. Run `list_threads` for the project.
 2. Use `get_thread_arc` to inspect scene order and beat labels for each thread.
-3. When a beat is missing, call `upsert_thread_link` to add or update it on the right scene.
+3. When a beat is missing, call `track_thread_arc` to add or update it on the right scene.
 4. Re-run `get_thread_arc` to confirm pacing and coverage.
 
 Outcome: subplot structure stays visible and auditable, which reduces dropped threads in late drafts.
@@ -185,7 +186,7 @@ Outcome: character-link maintenance becomes a preview-first batch operation inst
 Goal: recover index confidence quickly when legacy upgrade warnings indicate ambiguous rows were skipped.
 
 1. Start by checking `get_runtime_config` (or `describe_workflows`) and confirm whether `db_migration_warnings` contains `LEGACY_JOIN_ROWS_SKIPPED`.
-2. If present, run `sync` immediately to rebuild scene relationships from current sidecars and prose metadata.
+2. If present, run `sync` immediately to rebuild scene relationships from compatibility sidecars and prose metadata.
 3. Continue normal discovery (`find_scenes`, `get_arc`, `get_thread_arc`) and watch for stale-metadata warnings.
 4. When you touch stale scenes, run `enrich_scene(scene_id, project_id)` to recover metadata parity incrementally.
 5. If many scenes remain stale, switch to `enrich_scene_characters_batch` (dry-run first) for broader catch-up.

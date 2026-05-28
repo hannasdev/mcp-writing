@@ -9,9 +9,9 @@ It supports metadata-first reasoning, explicit prose editing workflows, and revi
 
 ## Product Status
 
-Active initiative: [Architecture Alignment Follow-up](docs/initiatives/active/architecture-alignment-follow-up/prd.md), implementing milestone M4 Outcome-Oriented Relationship Workflows.
+Active initiative: [Architecture Alignment Follow-up](docs/initiatives/active/architecture-alignment-follow-up/prd.md), implementing milestone M5 Deprecation, Migration, and Documentation.
 
-Current focus: Implement M4 outcome-oriented relationship workflows after a partial conformance review identified remaining character/place, enrichment, audit/repair, compatibility-authority, release-log, and generated-doc gaps.
+Current focus: Document remaining sidecar compatibility roles, migration posture, workflow guidance, release-log expectations, and generated tool guidance after PR #225 delivered outcome-oriented relationship workflows.
 
 Most recent completed initiative: [Database Backup and Recovery](docs/initiatives/done/database-backup-recovery/prd.md).
 

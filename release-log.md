@@ -6,6 +6,14 @@ This complements `CHANGELOG.md`:
 - `CHANGELOG.md` is technical and release-oriented.
 - This log is plain-language and outcome-oriented.
 
+### 2026-05-28 — Document sidecar compatibility and migration posture
+
+- What changed: Added sidecar compatibility and migration guidance, updated setup, product, architecture, and agent docs, and added workflow discovery guidance for projects or prompts that still treat `.meta.yaml` files as mutation surfaces.
+- Why it matters: Authors, maintainers, and AI agents can keep existing sidecar-based projects working while understanding that SQLite and outcome workflows are current authority for structure and relationships.
+- Who is affected: Authors, maintainers, and AI agents upgrading existing projects, using Scrivener import/merge paths, or reviewing retained sidecar-only fields such as flags, status, tags, and place associated characters.
+- Action needed: Run `sync` after upgrading, then use `describe_workflows`, `diagnose_structure`, and `audit_relationship_metadata` before repair work. Prefer explicit structure and relationship tools over direct sidecar edits for managed projects.
+- PR: Pending
+
 ### 2026-05-28 — Add outcome-oriented relationship workflows
 
 - What changed: Added relationship tools for scene-backed character/place evidence, character relationship beats, and relationship metadata audits. Character and place profile updates now present sidecar files as generated compatibility or review output, while reference-link and thread workflows steer callers toward outcome-level operations.
