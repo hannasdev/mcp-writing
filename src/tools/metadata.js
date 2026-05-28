@@ -2,7 +2,7 @@ import { z } from "zod";
 import fs from "node:fs";
 import path from "node:path";
 import matter from "gray-matter";
-import { readMeta, writeMeta, indexSceneFile, isManagedStructureProject } from "../sync/sync.js";
+import { readMeta, readSourceMeta, writeMeta, indexSceneFile, isManagedStructureProject, normalizeSceneMetaForPath } from "../sync/sync.js";
 import { validateProjectId, validateUniverseId } from "../sync/importer.js";
 import { resolveValidatedChapterFilter } from "../core/chapter-resolution.js";
 import {
@@ -33,7 +33,7 @@ import {
   refreshProjectBackupAfterMutation,
 } from "../structure/project-backup-refresh.js";
 
-const STRUCTURAL_SCENE_METADATA_FIELDS = ["part", "chapter", "chapter_id", "timeline_position"];
+const STRUCTURAL_SCENE_METADATA_FIELDS = ["part", "chapter", "chapter_id", "chapter_title", "timeline_position"];
 
 function emptyBackupMutationResult() {
   return {
@@ -1641,7 +1641,7 @@ export function registerMetadataTools(s, {
   // ---- update_scene_metadata -----------------------------------------------
   s.tool(
     "update_scene_metadata",
-    "Update one or more non-structural metadata fields for a scene. Writes to the .meta.yaml sidecar — never modifies prose. Structural fields (part, chapter, chapter_id, timeline_position) are rejected here; use assign_scene_to_chapter or move_scene for chapter placement and ordering. Changes are immediately reflected in the index. Only available when the sync dir is writable.",
+    "Update one or more non-structural metadata fields for a scene. Writes only supplied non-structural fields to the .meta.yaml sidecar and preserves existing structural compatibility fields; it never modifies prose or mirrors path-derived structure. Structural fields (part, chapter, chapter_id, chapter_title, timeline_position) are rejected here; use list_chapters plus assign_scene_to_chapter, move_scene, rename_chapter, or reorder_chapter for structure changes. Changes are immediately reflected in the index. Only available when the sync dir is writable.",
     {
       scene_id:   z.string().describe("The scene_id to update (e.g. 'sc-011-sebastian')."),
       project_id: z.string().describe("Project the scene belongs to (e.g. 'the-lamb')."),
@@ -1654,6 +1654,7 @@ export function registerMetadataTools(s, {
         part:              z.number().int().optional().describe("Rejected by update_scene_metadata. Structural placement must use explicit structure workflows."),
         chapter:           z.number().int().optional().describe("Rejected by update_scene_metadata. Use assign_scene_to_chapter or move_scene with canonical chapter_id."),
         chapter_id:        z.string().nullable().optional().describe("Rejected by update_scene_metadata. Use list_chapters, then assign_scene_to_chapter or move_scene."),
+        chapter_title:     z.string().nullable().optional().describe("Rejected by update_scene_metadata. Use rename_chapter for canonical chapter title changes."),
         timeline_position: z.number().int().optional().describe("Rejected by update_scene_metadata. Use move_scene for ordering changes."),
         story_time:        z.string().optional(),
         tags:              z.array(z.string()).optional(),
@@ -1674,22 +1675,23 @@ export function registerMetadataTools(s, {
       if (structuralFields.length > 0) {
         return errorResponse(
           "VALIDATION_ERROR",
-          "update_scene_metadata cannot change structural fields. Use assign_scene_to_chapter for chapter assignment or move_scene for chapter and timeline placement.",
+          "update_scene_metadata cannot change structural fields. Use list_chapters plus assign_scene_to_chapter, move_scene, rename_chapter, or reorder_chapter for structural changes.",
           {
             project_id,
             scene_id,
             blocked_fields: structuralFields,
-            allowed_structure_tools: ["assign_scene_to_chapter", "move_scene"],
+            allowed_structure_tools: ["list_chapters", "assign_scene_to_chapter", "move_scene", "rename_chapter", "reorder_chapter"],
           }
         );
       }
       try {
-        const { meta } = readMeta(scene.file_path, SYNC_DIR, { writable: true });
-        const updated = { ...meta, ...fields };
+        const { sourceMeta } = readSourceMeta(scene.file_path, SYNC_DIR, { writable: true });
+        const updated = { ...sourceMeta, ...fields };
         writeMeta(scene.file_path, updated, { syncDir: SYNC_DIR });
+        const normalizedUpdated = normalizeSceneMetaForPath(SYNC_DIR, scene.file_path, updated).meta;
 
         const { content: prose } = matter(fs.readFileSync(scene.file_path, "utf8"));
-        indexSceneFile(db, SYNC_DIR, scene.file_path, updated, prose, {
+        indexSceneFile(db, SYNC_DIR, scene.file_path, normalizedUpdated, prose, {
           managedStructure: isManagedStructureProject(db, project_id),
         });
         const backupResult = refreshProjectScopedBackupAfterMutation(db, {
@@ -1707,7 +1709,7 @@ export function registerMetadataTools(s, {
               scene_id,
               project_id,
               fields: Object.keys(fields).sort().reduce((acc, key) => {
-                acc[key] = meta[key] ?? null;
+                acc[key] = sourceMeta[key] ?? null;
                 return acc;
               }, {}),
             },
@@ -1717,7 +1719,7 @@ export function registerMetadataTools(s, {
               scene_id,
               project_id,
               fields: Object.keys(fields).sort().reduce((acc, key) => {
-                acc[key] = updated[key] ?? null;
+                acc[key] = normalizedUpdated[key] ?? null;
                 return acc;
               }, {}),
             },
@@ -1928,10 +1930,10 @@ export function registerMetadataTools(s, {
         return errorResponse("NOT_FOUND", `Scene '${scene_id}' not found in project '${project_id}'.`);
       }
       try {
-        const { meta } = readMeta(scene.file_path, SYNC_DIR, { writable: true });
-        const flags = meta.flags ?? [];
+        const { sourceMeta } = readSourceMeta(scene.file_path, SYNC_DIR, { writable: true });
+        const flags = sourceMeta.flags ?? [];
         flags.push({ note, flagged_at: new Date().toISOString() });
-        writeMeta(scene.file_path, { ...meta, flags }, { syncDir: SYNC_DIR });
+        writeMeta(scene.file_path, { ...sourceMeta, flags }, { syncDir: SYNC_DIR });
         return { content: [{ type: "text", text: `Flagged scene '${scene_id}': ${note}` }] };
       } catch (err) {
         if (err?.name === "CoreValidationError") {

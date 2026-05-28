@@ -1,4 +1,4 @@
-import { readMeta, writeMeta, normalizeReferenceLinkList } from "../sync/sync.js";
+import { readSourceMeta, writeMeta, normalizeReferenceLinkList } from "../sync/sync.js";
 
 let savepointCounter = 0;
 
@@ -13,7 +13,7 @@ export function upsertSerializedReferenceLinks(existing, targetDocId, relation, 
 }
 
 export function persistSceneReferenceLink({ scenePath, syncDir, targetDocId, relation }) {
-  const { meta } = readMeta(scenePath, syncDir, { writable: true });
+  const { sourceMeta: meta } = readSourceMeta(scenePath, syncDir, { writable: true });
   const existingExplicit = [
     ...(Array.isArray(meta.reference_links) ? meta.reference_links : meta.reference_links ? [meta.reference_links] : []),
     ...(Array.isArray(meta.explicit_reference_links) ? meta.explicit_reference_links : meta.explicit_reference_links ? [meta.explicit_reference_links] : []),

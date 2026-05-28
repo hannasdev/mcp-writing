@@ -618,7 +618,7 @@ Assign a scene to a canonical chapter through the explicit structure workflow. W
 
 ## update_scene_metadata
 
-Update one or more non-structural metadata fields for a scene. Writes to the .meta.yaml sidecar — never modifies prose. Structural fields (part, chapter, chapter_id, timeline_position) are rejected here; use assign_scene_to_chapter or move_scene for chapter placement and ordering. Changes are immediately reflected in the index. Only available when the sync dir is writable.
+Update one or more non-structural metadata fields for a scene. Writes only supplied non-structural fields to the .meta.yaml sidecar and preserves existing structural compatibility fields; it never modifies prose or mirrors path-derived structure. Structural fields (part, chapter, chapter_id, chapter_title, timeline_position) are rejected here; use list_chapters plus assign_scene_to_chapter, move_scene, rename_chapter, or reorder_chapter for structure changes. Changes are immediately reflected in the index. Only available when the sync dir is writable.
 
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |

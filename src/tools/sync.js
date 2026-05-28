@@ -2,7 +2,7 @@ import { z } from "zod";
 import fs from "node:fs";
 import path from "node:path";
 import matter from "gray-matter";
-import { syncAll, writeMeta, readMeta, indexSceneFile, normalizeSceneMetaForPath, isManagedStructureProject } from "../sync/sync.js";
+import { syncAll, writeMeta, readSourceMeta, indexSceneFile, normalizeSceneMetaForPath, isManagedStructureProject } from "../sync/sync.js";
 import { importScrivenerSync, validateProjectId } from "../sync/importer.js";
 import { runStructureDiagnostics } from "../structure/structure-diagnostics.js";
 import {
@@ -951,20 +951,21 @@ export function registerSyncTools(s, {
       try {
         const raw = fs.readFileSync(scene.file_path, "utf8");
         const { content: prose } = matter(raw);
-        const { meta } = readMeta(scene.file_path, SYNC_DIR, { writable: true });
+        const { sourceMeta: meta } = readSourceMeta(scene.file_path, SYNC_DIR, { writable: true });
 
         const inferredLogline = deriveLoglineFromProse(prose);
         const inferredCharacters = inferCharacterIdsFromProse(db, prose, scene.project_id);
 
-        const updatedMeta = normalizeSceneMetaForPath(SYNC_DIR, scene.file_path, {
+        const sourceUpdatedMeta = {
           ...meta,
           ...(inferredLogline ? { logline: inferredLogline } : {}),
           ...((inferredCharacters.length > 0 || (meta.characters?.length ?? 0) > 0)
             ? { characters: inferredCharacters.length > 0 ? inferredCharacters : meta.characters }
             : {}),
-        }).meta;
+        };
+        const updatedMeta = normalizeSceneMetaForPath(SYNC_DIR, scene.file_path, sourceUpdatedMeta).meta;
 
-        writeMeta(scene.file_path, updatedMeta, { syncDir: SYNC_DIR });
+        writeMeta(scene.file_path, sourceUpdatedMeta, { syncDir: SYNC_DIR });
         indexSceneFile(db, SYNC_DIR, scene.file_path, updatedMeta, prose, {
           managedStructure: isManagedStructureProject(db, scene.project_id),
         });

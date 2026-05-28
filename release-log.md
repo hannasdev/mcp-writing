@@ -6,6 +6,14 @@ This complements `CHANGELOG.md`:
 - `CHANGELOG.md` is technical and release-oriented.
 - This log is plain-language and outcome-oriented.
 
+### 2026-05-28 — Preserve structure fields during metadata updates
+
+- What changed: Generic scene metadata, enrichment, flagging, reference-link, and character-normalization writes now preserve existing structural sidecar compatibility fields instead of backfilling path-derived chapter or part values.
+- Why it matters: Authors, maintainers, and AI agents can safely update editorial metadata without accidentally changing compatibility mirrors for SQLite-canonical scene structure.
+- Who is affected: Authors, maintainers, and AI agents using scene metadata, enrichment, flagging, reference-link, or character-normalization workflows on managed projects.
+- Action needed: Use `list_chapters`, `assign_scene_to_chapter`, `move_scene`, `rename_chapter`, or `reorder_chapter` for intentional structure changes; keep generic metadata tools for non-structural updates.
+- PR: TBD
+
 ### 2026-05-28 — Preserve managed structure when representation files are missing
 
 - What changed: Ordinary `sync` now preserves canonical scene, chapter, and epigraph rows for managed projects when prose or representation files are missing, and reports classified sync warnings instead of silently pruning the SQLite state.

@@ -10,7 +10,7 @@ import {
   deriveReferenceSummary, deriveReferenceTitle, normalizeReferenceTags,
   normalizeReferenceIdList,
   isCanonicalWorldEntityFile, getSyncOwnershipDiagnostics, getFileWriteDiagnostics,
-  isWorldFile, readMeta, writeMeta, isSyncDirWritable, sidecarPath, syncAll,
+  isWorldFile, readMeta, readSourceMeta, writeMeta, isSyncDirWritable, sidecarPath, syncAll,
   walkFiles, walkSidecars, worldEntityFolderKey, worldEntityKindForPath,
   buildCanonicalIndexPlan, buildWarningSummary, observeOrphanedSidecars,
   observeStructureForFile, readSceneFileForSync, readSceneMetadataForSync,
@@ -183,6 +183,47 @@ describe("readMeta", () => {
     fs.writeFileSync(path.join(dir, "sc-001.meta.yaml"), "scene_id: new-id\n");
     const { meta } = readMeta(path.join(dir, "sc-001.md"), dir);
     assert.equal(meta.scene_id, "new-id");
+    fs.rmSync(dir, { recursive: true });
+  });
+});
+
+describe("readSourceMeta", () => {
+  test("reads raw sidecar metadata without path-derived structural fields", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "meta-source-"));
+    const scenePath = path.join(dir, "projects", "test-novel", "part-7", "chapter-8", "sc-001.md");
+    fs.mkdirSync(path.dirname(scenePath), { recursive: true });
+    fs.writeFileSync(scenePath, "some prose");
+    fs.writeFileSync(sidecarPath(scenePath), "scene_id: sc-001\ntitle: Raw Scene\nchapter: 2\n");
+
+    const raw = readSourceMeta(scenePath, dir);
+    const normalized = readMeta(scenePath, dir);
+
+    assert.equal(raw.meta.scene_id, "sc-001");
+    assert.equal(raw.meta.chapter, 2);
+    assert.equal(raw.meta.part, undefined);
+    assert.equal(raw.meta.chapter_id, undefined);
+    assert.equal(raw.meta.chapter_title, undefined);
+    assert.equal(normalized.meta.part, 7);
+    assert.equal(normalized.meta.chapter, 8);
+    assert.equal(normalized.meta.chapter_id, "ch-08-chapter-8");
+    assert.equal(normalized.meta.chapter_title, "Chapter 8");
+
+    fs.rmSync(dir, { recursive: true });
+  });
+
+  test("does not auto-generate a sidecar from frontmatter in writable mode", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "meta-source-"));
+    const scenePath = path.join(dir, "projects", "test-novel", "part-1", "chapter-2", "sc-001.md");
+    fs.mkdirSync(path.dirname(scenePath), { recursive: true });
+    fs.writeFileSync(scenePath, "---\nscene_id: sc-001\ntitle: Frontmatter Scene\n---\nsome prose");
+
+    const raw = readSourceMeta(scenePath, dir, { writable: true });
+
+    assert.equal(raw.source, "frontmatter");
+    assert.equal(raw.meta.scene_id, "sc-001");
+    assert.equal(raw.meta.part, undefined);
+    assert.equal(fs.existsSync(sidecarPath(scenePath)), false);
+
     fs.rmSync(dir, { recursive: true });
   });
 });

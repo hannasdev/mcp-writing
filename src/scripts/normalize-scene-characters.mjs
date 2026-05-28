@@ -2,7 +2,7 @@
 import path from "node:path";
 import { openDb } from "../core/db.js";
 import { buildCharacterNormalizationContext, normalizeSceneCharacters } from "../sync/scene-character-normalization.js";
-import { normalizeSceneMetaForPath, readMeta, syncAll, writeMeta } from "../sync/sync.js";
+import { readMeta, readSourceMeta, syncAll, writeMeta } from "../sync/sync.js";
 
 function readRequiredValue(argv, index, option) {
   const value = argv[index + 1];
@@ -138,11 +138,11 @@ function runNormalization({ syncDir, projectId, write, limit }) {
       if (!normalized.changed) continue;
 
       if (write) {
-        const updatedMeta = normalizeSceneMetaForPath(syncDir, scene.file_path, {
-          ...meta,
+        const { sourceMeta } = readSourceMeta(scene.file_path, syncDir, { writable: true });
+        writeMeta(scene.file_path, {
+          ...sourceMeta,
           characters: normalized.after,
-        }).meta;
-        writeMeta(scene.file_path, updatedMeta, { syncDir });
+        }, { syncDir });
       }
 
       changed.push({

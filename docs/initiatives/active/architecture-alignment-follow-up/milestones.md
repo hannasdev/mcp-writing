@@ -1,11 +1,12 @@
 # Architecture Alignment Follow-up — Milestones
 
-**Status:** Backlog initiative in progress by milestone
+**Status:** Active — M3 Sidecar Write Boundary
 
 This milestone plan breaks the Architecture Alignment Follow-up PRD into
 independently reviewable slices. Use [prd.md](prd.md) for product framing and
 this document for sequencing, gates, and implementation readiness.
-M0–M2 are accepted; M3–M5 remain deferred for future prioritization.
+M0–M2 are accepted; M3 is active for implementation; M4–M5 remain
+deferred for future prioritization.
 
 ## Objective
 
@@ -207,7 +208,7 @@ Out of scope:
 
 ## M3 — Sidecar Write Boundary
 
-Status: Planned.
+Status: Active for implementation.
 
 Goal: prevent generic metadata updates from rewriting structural sidecar
 compatibility fields and stop sidecar-shaped files from acting as active

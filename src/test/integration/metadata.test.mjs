@@ -67,6 +67,7 @@ describe("update_scene_metadata tool", () => {
         part: 1,
         chapter: firstChapter.sort_index,
         chapter_id: firstChapter.chapter_id,
+        chapter_title: firstChapter.title,
         timeline_position: 3,
       },
     });
@@ -79,15 +80,69 @@ describe("update_scene_metadata tool", () => {
       "part",
       "chapter",
       "chapter_id",
+      "chapter_title",
       "timeline_position",
     ]);
     assert.deepEqual(parsed.error.details.allowed_structure_tools, [
+      "list_chapters",
       "assign_scene_to_chapter",
       "move_scene",
+      "rename_chapter",
+      "reorder_chapter",
     ]);
 
     const sidecarAfter = fs.existsSync(sidecarFile) ? fs.readFileSync(sidecarFile, "utf8") : null;
     assert.equal(sidecarAfter, sidecarBefore);
+  });
+
+  test("preserves path-conflicting structural sidecar fields on managed non-structural updates", async () => {
+    await callWriteTool("sync");
+
+    const sceneDir = path.join(writeSyncDir, "projects", "test-novel", "part-7", "chapter-8");
+    fs.mkdirSync(sceneDir, { recursive: true });
+    const scenePath = path.join(sceneDir, "sc-m3-sidecar-boundary.md");
+    const sidecarFile = path.join(sceneDir, "sc-m3-sidecar-boundary.meta.yaml");
+    fs.writeFileSync(scenePath, "M3 sidecar boundary prose.", "utf8");
+    fs.writeFileSync(
+      sidecarFile,
+      yaml.dump({
+        scene_id: "sc-m3-sidecar-boundary",
+        title: "M3 Sidecar Boundary",
+        part: 3,
+        chapter: 4,
+        chapter_id: "ch-04-preserved-sidecar",
+        chapter_title: "Preserved Sidecar Chapter",
+        timeline_position: 27,
+        tags: ["m3-before"],
+      }),
+      "utf8"
+    );
+
+    await callWriteTool("sync");
+
+    const updateText = await callWriteTool("update_scene_metadata", {
+      scene_id: "sc-m3-sidecar-boundary",
+      project_id: "test-novel",
+      fields: {
+        logline: "Non-structural M3 update.",
+        status: "needs-review",
+        tags: ["m3-after"],
+      },
+    });
+    const updateParsed = JSON.parse(updateText);
+    assert.equal(updateParsed.ok, true, updateText);
+
+    const sidecar = yaml.load(fs.readFileSync(sidecarFile, "utf8"));
+    assert.equal(sidecar.part, 3);
+    assert.equal(sidecar.chapter, 4);
+    assert.equal(sidecar.chapter_id, "ch-04-preserved-sidecar");
+    assert.equal(sidecar.chapter_title, "Preserved Sidecar Chapter");
+    assert.equal(sidecar.timeline_position, 27);
+    assert.equal(sidecar.logline, "Non-structural M3 update.");
+    assert.equal(sidecar.status, "needs-review");
+    assert.deepEqual(sidecar.tags, ["m3-after"]);
+    assert.notEqual(sidecar.chapter_id, "ch-08-chapter-8");
+    assert.notEqual(sidecar.chapter_title, "Chapter 8");
   });
 });
 
@@ -1175,6 +1230,48 @@ describe("flag_scene tool", () => {
     // Re-sync and check that flagged scene is still indexed (flag is metadata, doesn't break sync)
     const syncText = await callWriteTool("sync");
     assert.ok(syncText.includes("scenes indexed"));
+  });
+
+  test("preserves path-conflicting structural sidecar fields when flagging", async () => {
+    const sceneDir = path.join(writeSyncDir, "projects", "test-novel", "part-7", "chapter-8");
+    fs.mkdirSync(sceneDir, { recursive: true });
+    const scenePath = path.join(sceneDir, "sc-flag-structural-preserve.md");
+    const sidecarFile = path.join(sceneDir, "sc-flag-structural-preserve.meta.yaml");
+    fs.writeFileSync(scenePath, "Flag preservation prose.", "utf8");
+    fs.writeFileSync(
+      sidecarFile,
+      yaml.dump({
+        scene_id: "sc-flag-structural-preserve",
+        title: "Flag Structural Preserve",
+        part: 3,
+        chapter: 4,
+        chapter_id: "ch-flag-preserved",
+        chapter_title: "Flag Preserved Chapter",
+        timeline_position: 31,
+      }),
+      "utf8"
+    );
+
+    try {
+      await callWriteTool("sync");
+      await callWriteTool("flag_scene", {
+        scene_id: "sc-flag-structural-preserve",
+        project_id: "test-novel",
+        note: "Preserve structure while flagging.",
+      });
+
+      const sidecar = yaml.load(fs.readFileSync(sidecarFile, "utf8"));
+      assert.equal(sidecar.part, 3);
+      assert.equal(sidecar.chapter, 4);
+      assert.equal(sidecar.chapter_id, "ch-flag-preserved");
+      assert.equal(sidecar.chapter_title, "Flag Preserved Chapter");
+      assert.equal(sidecar.timeline_position, 31);
+      assert.equal(sidecar.flags.length, 1);
+    } finally {
+      fs.rmSync(scenePath, { force: true });
+      fs.rmSync(sidecarFile, { force: true });
+      await callWriteTool("sync");
+    }
   });
 
   test("returns error for unknown scene", async () => {
