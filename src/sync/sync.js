@@ -957,15 +957,24 @@ function canPruneScenes(syncDir) {
   return hasBroadRootChild;
 }
 
-function pruneMissingScenes(db, seenSceneKeys, syncDir) {
+function pruneMissingScenes(db, seenSceneKeys, syncDir, { managedProjectIds = new Set() } = {}) {
   const projectScope = inferSceneProjectScopeFromSyncDir(syncDir);
   const rows = projectScope
-    ? db.prepare(`SELECT scene_id, project_id FROM scenes WHERE project_id = ?`).all(projectScope)
-    : db.prepare(`SELECT scene_id, project_id FROM scenes`).all();
+    ? db.prepare(`SELECT scene_id, project_id, file_path FROM scenes WHERE project_id = ?`).all(projectScope)
+    : db.prepare(`SELECT scene_id, project_id, file_path FROM scenes`).all();
 
+  const result = { deleted: 0, preservedManagedScenes: [] };
   for (const row of rows) {
     const key = `${row.scene_id}::${row.project_id}`;
     if (seenSceneKeys.has(key)) continue;
+    if (managedProjectIds.has(row.project_id)) {
+      result.preservedManagedScenes.push({
+        scene_id: row.scene_id,
+        project_id: row.project_id,
+        file_path: row.file_path,
+      });
+      continue;
+    }
 
     db.prepare(`DELETE FROM scenes_fts WHERE scene_id = ? AND project_id = ?`).run(row.scene_id, row.project_id);
     db.prepare(`
@@ -977,7 +986,9 @@ function pruneMissingScenes(db, seenSceneKeys, syncDir) {
     db.prepare(`DELETE FROM scene_places WHERE scene_id = ? AND project_id = ?`).run(row.scene_id, row.project_id);
     db.prepare(`DELETE FROM scene_tags WHERE scene_id = ? AND project_id = ?`).run(row.scene_id, row.project_id);
     db.prepare(`DELETE FROM scene_threads WHERE scene_id = ? AND project_id = ?`).run(row.scene_id, row.project_id);
+    result.deleted++;
   }
+  return result;
 }
 
 function pruneMissingChapters(db, seenChapterKeys, syncDir) {
@@ -1013,19 +1024,99 @@ function pruneMissingEpigraphs(db, seenEpigraphKeys, syncDir) {
   }
 }
 
+function formatSyncRelativePath(syncDir, filePath) {
+  if (!filePath) return null;
+  if (!path.isAbsolute(filePath)) return filePath.split(/[\\/]+/).join("/");
+  const resolvedSyncDir = path.resolve(syncDir);
+  const resolvedFilePath = path.resolve(filePath);
+  const relativePath = path.relative(resolvedSyncDir, resolvedFilePath);
+  if (relativePath && !relativePath.startsWith("..") && !path.isAbsolute(relativePath)) {
+    return relativePath.split(path.sep).join("/");
+  }
+  return resolvedFilePath;
+}
+
+function storedSyncPathCandidates(syncDir, filePath) {
+  if (!filePath) return [];
+  if (path.isAbsolute(filePath)) return [path.resolve(filePath)];
+
+  const candidates = new Set([path.resolve(syncDir, filePath)]);
+  const normalizedParts = filePath.split(/[\\/]+/).filter(Boolean);
+  const anchor = normalizedParts[0];
+  if (["projects", "universes", "scenes"].includes(anchor)) {
+    const syncParts = path.resolve(syncDir).split(path.sep);
+    for (let index = syncParts.length - 1; index >= 0; index--) {
+      if (syncParts[index] !== anchor) continue;
+      const rootParts = syncParts.slice(0, index);
+      const root = rootParts.length ? rootParts.join(path.sep) : path.sep;
+      candidates.add(path.resolve(root, filePath));
+    }
+  }
+
+  return [...candidates];
+}
+
+function collectMissingManagedRepresentationWarnings(db, syncDir, {
+  observedChapterKeys,
+  observedEpigraphKeys,
+}) {
+  const projectScope = inferSceneProjectScopeFromSyncDir(syncDir);
+  const chapterRows = projectScope
+    ? db.prepare(`SELECT chapter_id, project_id, source_path FROM chapters WHERE project_id = ?`).all(projectScope)
+    : db.prepare(`SELECT chapter_id, project_id, source_path FROM chapters`).all();
+  const epigraphRows = projectScope
+    ? db.prepare(`SELECT epigraph_id, project_id, file_path FROM epigraphs WHERE project_id = ?`).all(projectScope)
+    : db.prepare(`SELECT epigraph_id, project_id, file_path FROM epigraphs`).all();
+  const warnings = [];
+
+  for (const row of chapterRows) {
+    const key = `${row.chapter_id}::${row.project_id}`;
+    if (observedChapterKeys.has(key)) continue;
+    const sourcePaths = storedSyncPathCandidates(syncDir, row.source_path);
+    if (!sourcePaths.length || sourcePaths.some(candidate => fs.existsSync(candidate))) continue;
+    warnings.push(`Managed sync preserved canonical chapter missing from filesystem: ${row.project_id}/${row.chapter_id} (${formatSyncRelativePath(syncDir, row.source_path)})`);
+  }
+
+  for (const row of epigraphRows) {
+    const key = `${row.epigraph_id}::${row.project_id}`;
+    if (observedEpigraphKeys.has(key)) continue;
+    const filePaths = storedSyncPathCandidates(syncDir, row.file_path);
+    if (!filePaths.length || filePaths.some(candidate => fs.existsSync(candidate))) continue;
+    warnings.push(`Managed sync preserved canonical epigraph missing from filesystem: ${row.project_id}/${row.epigraph_id} (${formatSyncRelativePath(syncDir, row.file_path)})`);
+  }
+
+  return warnings;
+}
+
+function formatStoredPathSuffix(syncDir, filePath) {
+  const displayPath = formatSyncRelativePath(syncDir, filePath);
+  return displayPath ? ` (${displayPath})` : "";
+}
+
+function formatPreservedManagedSceneWarning(syncDir, scene) {
+  const pathSuffix = formatStoredPathSuffix(syncDir, scene.file_path);
+  const sceneLabel = `${scene.project_id}/${scene.scene_id}`;
+  const filePaths = storedSyncPathCandidates(syncDir, scene.file_path);
+  if (filePaths.some(candidate => fs.existsSync(candidate))) {
+    return `Managed sync preserved canonical scene not observed during sync scan: ${sceneLabel}${pathSuffix}`;
+  }
+  return `Managed sync preserved canonical scene missing from filesystem: ${sceneLabel}${pathSuffix}`;
+}
+
 export function pruneSyncDerivedIndexes(db, syncDir, {
   seenSceneKeys,
   seenEpigraphKeys,
   seenChapterKeys,
   sceneIndexFailures,
+  managedProjectIds = new Set(),
 }) {
   if (!canPruneScenes(syncDir)) return { pruned: false, reason: "scope_not_prunable" };
   if (sceneIndexFailures !== 0) return { pruned: false, reason: "scene_index_failures" };
 
-  pruneMissingScenes(db, seenSceneKeys, syncDir);
+  const scenePrune = pruneMissingScenes(db, seenSceneKeys, syncDir, { managedProjectIds });
   pruneMissingEpigraphs(db, seenEpigraphKeys, syncDir);
   pruneMissingChapters(db, seenChapterKeys, syncDir);
-  return { pruned: true, reason: null };
+  return { pruned: true, reason: null, scenePrune };
 }
 
 export function regenerateReferenceAndWorldIndexes(db, syncDir, files, {
@@ -1449,6 +1540,10 @@ const WARNING_TYPE_LABELS = {
   chapter_structure: "Chapter structure",
   orphaned_sidecar: "Orphaned sidecar",
   moved_scene: "Moved scene",
+  missing_canonical_scene: "Missing canonical scene",
+  unobserved_canonical_scene: "Unobserved canonical scene",
+  missing_canonical_chapter: "Missing canonical chapter",
+  missing_canonical_epigraph: "Missing canonical epigraph",
   nested_mirror: "Ignored nested mirror path",
 };
 
@@ -1459,6 +1554,10 @@ const WARNING_PATTERNS = [
   { type: "chapter_structure",      re: /^(Chapter structure warning|Epigraph requires explicit chapter linkage|Epigraph references unknown chapter_id|Scene references unknown chapter_id|Ambiguous chapter linkage|Epigraph identity conflict|Managed structure sync ignored|Managed structure sync preserved canonical epigraph)/ },
   { type: "moved_scene",            re: /^Moved scene detected:/      },
   { type: "orphaned_sidecar",       re: /^Orphaned sidecar/          },
+  { type: "missing_canonical_scene", re: /^Managed sync preserved canonical scene missing from filesystem:/ },
+  { type: "unobserved_canonical_scene", re: /^Managed sync preserved canonical scene not observed during sync scan:/ },
+  { type: "missing_canonical_chapter", re: /^Managed sync preserved canonical chapter missing from filesystem:/ },
+  { type: "missing_canonical_epigraph", re: /^Managed sync preserved canonical epigraph missing from filesystem:/ },
   { type: "nested_mirror",          re: /^Ignored nested mirror path:/ },
 ];
 
@@ -1511,6 +1610,8 @@ export function syncAll(db, syncDir, { quiet = false, writable = false } = {}) {
   const indexedSceneIds = new Set(); // scene_id only — for orphaned sidecar move detection
   const seenChapterKeys = new Set(managedChapterKeys);
   const seenEpigraphKeys = new Set(managedEpigraphKeys);
+  const observedChapterKeys = new Set();
+  const observedEpigraphKeys = new Set();
   let sceneIndexFailures = 0;
   const warnings = [];
   const chapterFoldersByProject = new Map();
@@ -1588,7 +1689,9 @@ export function syncAll(db, syncDir, { quiet = false, writable = false } = {}) {
         warnings.push(result.warning);
       }
       if (result.chapterId) {
-        seenChapterKeys.add(`${result.chapterId}::${project_id}`);
+        const chapterKey = `${result.chapterId}::${project_id}`;
+        seenChapterKeys.add(chapterKey);
+        observedChapterKeys.add(chapterKey);
       }
       if (chapterStructure.chapter && result.chapterId) {
         const chapterMapKey = `${project_id}::${chapterStructure.chapter.sort_index}`;
@@ -1607,7 +1710,9 @@ export function syncAll(db, syncDir, { quiet = false, writable = false } = {}) {
       if (result.skippedAsEpigraph) {
         if (result.epigraphIndexed && result.epigraphId) {
           const epigraphId = result.epigraphId;
-          seenEpigraphKeys.add(`${epigraphId}::${project_id}`);
+          const epigraphKey = `${epigraphId}::${project_id}`;
+          seenEpigraphKeys.add(epigraphKey);
+          observedEpigraphKeys.add(epigraphKey);
         }
         if (result.epigraphIndexed) {
           epigraphsIndexed++;
@@ -1626,12 +1731,22 @@ export function syncAll(db, syncDir, { quiet = false, writable = false } = {}) {
     }
   }
 
-  pruneSyncDerivedIndexes(db, syncDir, {
+  const pruneResult = pruneSyncDerivedIndexes(db, syncDir, {
     seenSceneKeys,
     seenEpigraphKeys,
     seenChapterKeys,
     sceneIndexFailures,
+    managedProjectIds,
   });
+  for (const scene of pruneResult.scenePrune?.preservedManagedScenes ?? []) {
+    warnings.push(formatPreservedManagedSceneWarning(syncDir, scene));
+  }
+  for (const warning of collectMissingManagedRepresentationWarnings(db, syncDir, {
+    observedChapterKeys,
+    observedEpigraphKeys,
+  })) {
+    warnings.push(warning);
+  }
 
   // --- Orphaned sidecar detection ---
   for (const diagnostic of observeOrphanedSidecars(syncDir, { indexedSceneIds })) {

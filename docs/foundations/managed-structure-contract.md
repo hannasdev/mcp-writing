@@ -46,6 +46,10 @@ They may be useful, inspectable, portable, and Git-friendly, but they should not
    Human-readable folder names, numeric chapter labels, and Scrivener ordering can be useful views or migration hints.
    They should not be long-term identity, ordering, or relationship authority once the domain model has first-class concepts.
 
+9. **Tools express outcomes, not storage internals**
+   MCP tools should be shaped around author, reviewer, maintainer, and AI-agent outcomes.
+   They should not expose raw CRUD wrappers for tables or files when a workflow-level operation can preserve intent, validation, diagnostics, and next-step guidance.
+
 ## Numeric Chapter Compatibility
 
 Numeric `chapter` and `chapters` inputs are retained as compatibility aliases for read-scoped workflows such as scene discovery, chapter prose retrieval, styleguide analysis, batch enrichment, and review bundle planning.
@@ -63,6 +67,32 @@ Daily chapter creation, chapter rename/reorder, scene placement, and epigraph at
 | Canonical structure | IDs, order, chapter links, division links | MCP-only mutation |
 | Derived views | Outline, chapter index, reports, bundles, search index | Regenerated from canonical state |
 | Migration inputs | Legacy folders, Scrivener markers, numeric chapters | Interpreted during setup/import only |
+
+## Snapshot and Sidecar Roles
+
+Writable sidecars are not a target daily-work authority for structured
+metadata. Where sidecar-shaped data remains useful, it should have one of these
+explicit roles:
+
+- **Import compatibility input:** legacy sidecars, Scrivener-derived metadata,
+  and frontmatter may seed or reconcile canonical state during setup, import, or
+  named migration workflows.
+- **Generated compatibility output:** a sidecar-shaped file may be regenerated
+  from canonical state for external tools or transitional compatibility, but
+  editing it must not become a structural mutation path.
+- **Review snapshot:** proposed before/after material for dry runs, Git review,
+  and AI/human inspection. Review snapshots are advisory and expire when the
+  proposed operation is discarded or committed through an MCP workflow.
+- **Recovery snapshot:** durable rollback or rebuild input tied to backup and
+  restore workflows. Recovery snapshots can be explicit restore inputs, but only
+  through dry-run-first, validated restore workflows.
+- **Deprecated compatibility artifact:** sidecar-shaped state with no retained
+  product role should be migrated, ignored, or removed through a named follow-up
+  decision.
+
+Review snapshots and recovery snapshots must not be treated as competing daily
+sources of truth. Daily work reads and mutates canonical SQLite state through
+outcome-oriented MCP workflows, while prose remains authored file content.
 
 ## Workflow Zones
 
@@ -121,7 +151,8 @@ When adding or changing a workflow, ask:
 2. Is this setup/import, daily work, or maintenance?
 3. Is the operation reading, generating, or mutating?
 4. If it mutates structure, what sanctioned MCP command owns it?
-5. If no command exists, is that a product gap rather than something an AI agent should patch directly?
+5. Does the public tool express the user's intended outcome rather than storage CRUD?
+6. If no command exists, is that a product gap rather than something an AI agent should patch directly?
 
 ## Relationship to Current Design
 

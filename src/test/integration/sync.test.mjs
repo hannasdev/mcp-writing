@@ -1354,6 +1354,32 @@ describe("sync warning_summary", () => {
       assert.equal("warnings" in parsed.sync, false, "raw warnings list should not appear in sync response");
     }
   });
+
+  test("sync tool reports missing managed canonical representations in warning summary", async () => {
+    const projectId = "missing-managed-summary";
+    const chapterDir = path.join(writeSyncDir, "projects", projectId, "Draft", "01-Arrival");
+    fs.mkdirSync(chapterDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(chapterDir, "sc-001.md"),
+      "---\nscene_id: sc-001\ntitle: Arrival\n---\nScene prose.",
+      "utf8"
+    );
+    fs.writeFileSync(
+      path.join(chapterDir, "epigraph.md"),
+      "---\nepigraph_id: epi-arrival\n---\nOpening epigraph.",
+      "utf8"
+    );
+
+    await callWriteTool("sync");
+    fs.rmSync(chapterDir, { recursive: true });
+
+    const text = await callWriteTool("sync");
+
+    assert.match(text, /Warning summary:/);
+    assert.match(text, /missing_canonical_scene: 1/);
+    assert.match(text, /missing_canonical_chapter: 1/);
+    assert.match(text, /missing_canonical_epigraph: 1/);
+  });
 });
 
 describe("enrich_scene tool", () => {

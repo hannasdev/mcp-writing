@@ -22,6 +22,12 @@ Add optional project-scoped Parts, Acts, or other larger structural sections abo
 
 **Status:** Deferred backlog (not active). Chapter and epigraph structure is complete; this follow-up captures the optional division layer without reopening shipped chapter behavior.
 
+### 🧭 [Architecture Alignment Follow-up](docs/initiatives/backlog/architecture-alignment-follow-up/prd.md) 📋
+
+Track target-architecture alignment gaps found during reviews, including managed-sync canonical deletion risks and structural sidecar mirror drift from generic metadata updates.
+
+**Status:** Backlog initiative in progress by milestone. M0–M2 are accepted, including managed sync preservation behavior; M3–M5 remain deferred for future prioritization.
+
 ### 📊 [Embedding-Based Search](docs/initiatives/backlog/embeddings-search/prd.md) 📋
 
 Semantic search for queries that require understanding meaning, not just keywords.

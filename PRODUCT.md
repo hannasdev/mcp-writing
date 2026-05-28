@@ -40,6 +40,7 @@ See [BACKLOG.md](BACKLOG.md) for deferred product work that is not currently act
 6. **Separated artifact ownership:** prose, canonical structure, derived views, and migration inputs have distinct read/write rules.
 7. **Generated transparency:** reports, outlines, bundles, and indexes explain state but do not become authority.
 8. **Import is a special mode:** setup/import may infer cautiously, but daily work should use explicit operations.
+9. **Outcome-oriented tools:** MCP tools should express writing, revision, review, recovery, and reasoning outcomes rather than exposing raw storage CRUD or table-shaped APIs.
 
 For structural manuscript state, use [Managed Structure Contract](docs/foundations/managed-structure-contract.md) as the detailed arbiter for trusted mutation paths, generated views, import boundaries, and AI/human workflow guardrails.
 

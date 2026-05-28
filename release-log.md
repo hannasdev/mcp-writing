@@ -6,6 +6,14 @@ This complements `CHANGELOG.md`:
 - `CHANGELOG.md` is technical and release-oriented.
 - This log is plain-language and outcome-oriented.
 
+### 2026-05-28 — Preserve managed structure when representation files are missing
+
+- What changed: Ordinary `sync` now preserves canonical scene, chapter, and epigraph rows for managed projects when prose or representation files are missing, and reports classified sync warnings instead of silently pruning the SQLite state.
+- Why it matters: Missing files, stale generated representations, or accidental filesystem edits no longer erase canonical structure or relationship metadata for projects already under MCP management.
+- Who is affected: Authors, maintainers, and AI agents running sync on managed projects after files have moved, disappeared, or been temporarily withheld.
+- Action needed: Review the sync warning, then use an explicit repair, restore, or future delete/detach workflow if the missing canonical item should truly be removed.
+- PR: [#222](https://github.com/hannasdev/mcp-writing/pull/222)
+
 ### 2026-05-25 — Apply trusted project backups transactionally
 
 - What changed: `restore_project_from_backup` can now apply a trusted project backup with `dry_run=false`, after the dry-run plan has been reviewed and required destructive or cross-scope confirmations are provided.
