@@ -1023,6 +1023,47 @@ function pruneMissingEpigraphs(db, seenEpigraphKeys, syncDir) {
   }
 }
 
+function formatSyncRelativePath(syncDir, filePath) {
+  if (!filePath) return null;
+  const resolvedSyncDir = path.resolve(syncDir);
+  const resolvedFilePath = path.resolve(filePath);
+  const relativePath = path.relative(resolvedSyncDir, resolvedFilePath);
+  if (relativePath && !relativePath.startsWith("..") && !path.isAbsolute(relativePath)) {
+    return relativePath.split(path.sep).join("/");
+  }
+  return resolvedFilePath;
+}
+
+function collectMissingManagedRepresentationWarnings(db, syncDir, {
+  observedChapterKeys,
+  observedEpigraphKeys,
+}) {
+  const projectScope = inferSceneProjectScopeFromSyncDir(syncDir);
+  const chapterRows = projectScope
+    ? db.prepare(`SELECT chapter_id, project_id, source_path FROM chapters WHERE project_id = ?`).all(projectScope)
+    : db.prepare(`SELECT chapter_id, project_id, source_path FROM chapters`).all();
+  const epigraphRows = projectScope
+    ? db.prepare(`SELECT epigraph_id, project_id, file_path FROM epigraphs WHERE project_id = ?`).all(projectScope)
+    : db.prepare(`SELECT epigraph_id, project_id, file_path FROM epigraphs`).all();
+  const warnings = [];
+
+  for (const row of chapterRows) {
+    const key = `${row.chapter_id}::${row.project_id}`;
+    if (observedChapterKeys.has(key)) continue;
+    if (!row.source_path || fs.existsSync(row.source_path)) continue;
+    warnings.push(`Managed sync preserved canonical chapter missing from filesystem: ${row.project_id}/${row.chapter_id} (${formatSyncRelativePath(syncDir, row.source_path)})`);
+  }
+
+  for (const row of epigraphRows) {
+    const key = `${row.epigraph_id}::${row.project_id}`;
+    if (observedEpigraphKeys.has(key)) continue;
+    if (!row.file_path || fs.existsSync(row.file_path)) continue;
+    warnings.push(`Managed sync preserved canonical epigraph missing from filesystem: ${row.project_id}/${row.epigraph_id} (${formatSyncRelativePath(syncDir, row.file_path)})`);
+  }
+
+  return warnings;
+}
+
 export function pruneSyncDerivedIndexes(db, syncDir, {
   seenSceneKeys,
   seenEpigraphKeys,
@@ -1461,6 +1502,8 @@ const WARNING_TYPE_LABELS = {
   orphaned_sidecar: "Orphaned sidecar",
   moved_scene: "Moved scene",
   missing_canonical_scene: "Missing canonical scene",
+  missing_canonical_chapter: "Missing canonical chapter",
+  missing_canonical_epigraph: "Missing canonical epigraph",
   nested_mirror: "Ignored nested mirror path",
 };
 
@@ -1472,6 +1515,8 @@ const WARNING_PATTERNS = [
   { type: "moved_scene",            re: /^Moved scene detected:/      },
   { type: "orphaned_sidecar",       re: /^Orphaned sidecar/          },
   { type: "missing_canonical_scene", re: /^Managed sync preserved canonical scene missing from filesystem:/ },
+  { type: "missing_canonical_chapter", re: /^Managed sync preserved canonical chapter missing from filesystem:/ },
+  { type: "missing_canonical_epigraph", re: /^Managed sync preserved canonical epigraph missing from filesystem:/ },
   { type: "nested_mirror",          re: /^Ignored nested mirror path:/ },
 ];
 
@@ -1524,6 +1569,8 @@ export function syncAll(db, syncDir, { quiet = false, writable = false } = {}) {
   const indexedSceneIds = new Set(); // scene_id only — for orphaned sidecar move detection
   const seenChapterKeys = new Set(managedChapterKeys);
   const seenEpigraphKeys = new Set(managedEpigraphKeys);
+  const observedChapterKeys = new Set();
+  const observedEpigraphKeys = new Set();
   let sceneIndexFailures = 0;
   const warnings = [];
   const chapterFoldersByProject = new Map();
@@ -1601,7 +1648,9 @@ export function syncAll(db, syncDir, { quiet = false, writable = false } = {}) {
         warnings.push(result.warning);
       }
       if (result.chapterId) {
-        seenChapterKeys.add(`${result.chapterId}::${project_id}`);
+        const chapterKey = `${result.chapterId}::${project_id}`;
+        seenChapterKeys.add(chapterKey);
+        observedChapterKeys.add(chapterKey);
       }
       if (chapterStructure.chapter && result.chapterId) {
         const chapterMapKey = `${project_id}::${chapterStructure.chapter.sort_index}`;
@@ -1620,7 +1669,9 @@ export function syncAll(db, syncDir, { quiet = false, writable = false } = {}) {
       if (result.skippedAsEpigraph) {
         if (result.epigraphIndexed && result.epigraphId) {
           const epigraphId = result.epigraphId;
-          seenEpigraphKeys.add(`${epigraphId}::${project_id}`);
+          const epigraphKey = `${epigraphId}::${project_id}`;
+          seenEpigraphKeys.add(epigraphKey);
+          observedEpigraphKeys.add(epigraphKey);
         }
         if (result.epigraphIndexed) {
           epigraphsIndexed++;
@@ -1648,6 +1699,12 @@ export function syncAll(db, syncDir, { quiet = false, writable = false } = {}) {
   });
   for (const scene of pruneResult.scenePrune?.preservedManagedScenes ?? []) {
     warnings.push(`Managed sync preserved canonical scene missing from filesystem: ${scene.project_id}/${scene.scene_id}`);
+  }
+  for (const warning of collectMissingManagedRepresentationWarnings(db, syncDir, {
+    observedChapterKeys,
+    observedEpigraphKeys,
+  })) {
+    warnings.push(warning);
   }
 
   // --- Orphaned sidecar detection ---

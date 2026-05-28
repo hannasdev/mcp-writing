@@ -6,12 +6,12 @@ This complements `CHANGELOG.md`:
 - `CHANGELOG.md` is technical and release-oriented.
 - This log is plain-language and outcome-oriented.
 
-### 2026-05-28 — Preserve managed scenes when prose files are missing
+### 2026-05-28 — Preserve managed structure when representation files are missing
 
-- What changed: Ordinary `sync` now preserves canonical scene rows and their relationship metadata for managed projects when the scene prose/sidecar representation is missing, and reports a sync warning instead of silently pruning the SQLite state.
-- Why it matters: Missing files, stale generated representations, or accidental filesystem edits no longer erase canonical scene structure for projects already under MCP management.
+- What changed: Ordinary `sync` now preserves canonical scene, chapter, and epigraph rows for managed projects when prose or representation files are missing, and reports classified sync warnings instead of silently pruning the SQLite state.
+- Why it matters: Missing files, stale generated representations, or accidental filesystem edits no longer erase canonical structure or relationship metadata for projects already under MCP management.
 - Who is affected: Authors, maintainers, and AI agents running sync on managed projects after files have moved, disappeared, or been temporarily withheld.
-- Action needed: Review the sync warning, then use an explicit repair, restore, or future delete/detach workflow if the missing scene should truly be removed from canonical state.
+- Action needed: Review the sync warning, then use an explicit repair, restore, or future delete/detach workflow if the missing canonical item should truly be removed.
 - PR: TBD
 
 ### 2026-05-25 — Apply trusted project backups transactionally

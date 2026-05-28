@@ -1974,6 +1974,83 @@ describe("syncAll", () => {
     fs.rmSync(dir, { recursive: true });
   });
 
+  test("managed sync warns and preserves canonical epigraphs when epigraph files are missing", () => {
+    const dir = makeTempSync();
+    const db = openDb(":memory:");
+    const chapterDir = path.join(dir, "projects", "test-novel", "Draft", "01-Arrival");
+    const epigraphPath = path.join(chapterDir, "epigraph.md");
+    fs.mkdirSync(chapterDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(chapterDir, "sc-001.md"),
+      "---\nscene_id: sc-001\ntitle: Arrival\n---\nScene prose."
+    );
+    fs.writeFileSync(
+      epigraphPath,
+      "---\nepigraph_id: epi-arrival\ncharacters:\n  - elena\ntags:\n  - threshold\n---\nOpening epigraph."
+    );
+
+    syncAll(db, dir, { quiet: true });
+    fs.rmSync(epigraphPath);
+    const result = syncAll(db, dir, { quiet: true });
+
+    assert.equal(
+      db.prepare(`SELECT COUNT(*) AS count FROM epigraphs WHERE epigraph_id = 'epi-arrival' AND project_id = 'test-novel'`).get().count,
+      1
+    );
+    assert.equal(
+      db.prepare(`SELECT COUNT(*) AS count FROM epigraph_characters WHERE epigraph_id = 'epi-arrival' AND project_id = 'test-novel'`).get().count,
+      1
+    );
+    assert.equal(
+      db.prepare(`SELECT COUNT(*) AS count FROM epigraph_tags WHERE epigraph_id = 'epi-arrival' AND project_id = 'test-novel'`).get().count,
+      1
+    );
+    assert.ok(result.warnings.some((warning) => warning.includes("Managed sync preserved canonical epigraph missing from filesystem")));
+    assert.equal(result.warningSummary.missing_canonical_epigraph.count, 1);
+
+    db.close();
+    fs.rmSync(dir, { recursive: true });
+  });
+
+  test("managed sync warns and preserves canonical chapters when chapter folders are missing", () => {
+    const dir = makeTempSync();
+    const db = openDb(":memory:");
+    const chapterDir = path.join(dir, "projects", "test-novel", "Draft", "01-Arrival");
+    fs.mkdirSync(chapterDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(chapterDir, "sc-001.md"),
+      "---\nscene_id: sc-001\ntitle: Arrival\n---\nScene prose."
+    );
+    fs.writeFileSync(
+      path.join(chapterDir, "epigraph.md"),
+      "---\nepigraph_id: epi-arrival\n---\nOpening epigraph."
+    );
+
+    syncAll(db, dir, { quiet: true });
+    fs.rmSync(chapterDir, { recursive: true });
+    const result = syncAll(db, dir, { quiet: true });
+
+    assert.equal(
+      db.prepare(`SELECT COUNT(*) AS count FROM chapters WHERE chapter_id = 'ch-01-arrival' AND project_id = 'test-novel'`).get().count,
+      1
+    );
+    assert.equal(
+      db.prepare(`SELECT COUNT(*) AS count FROM scenes WHERE scene_id = 'sc-001' AND project_id = 'test-novel'`).get().count,
+      1
+    );
+    assert.equal(
+      db.prepare(`SELECT COUNT(*) AS count FROM epigraphs WHERE epigraph_id = 'epi-arrival' AND project_id = 'test-novel'`).get().count,
+      1
+    );
+    assert.ok(result.warnings.some((warning) => warning.includes("Managed sync preserved canonical chapter missing from filesystem")));
+    assert.ok(result.warnings.some((warning) => warning.includes("Managed sync preserved canonical scene missing from filesystem")));
+    assert.ok(result.warnings.some((warning) => warning.includes("Managed sync preserved canonical epigraph missing from filesystem")));
+    assert.equal(result.warningSummary.missing_canonical_chapter.count, 1);
+
+    db.close();
+    fs.rmSync(dir, { recursive: true });
+  });
+
   test("pruning one project does not clear scene metadata for same scene_id in another project", () => {
     const dir = makeTempSync();
     const db = openDb(":memory:");
