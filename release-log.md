@@ -12,7 +12,7 @@ This complements `CHANGELOG.md`:
 - Why it matters: Missing files, stale generated representations, or accidental filesystem edits no longer erase canonical structure or relationship metadata for projects already under MCP management.
 - Who is affected: Authors, maintainers, and AI agents running sync on managed projects after files have moved, disappeared, or been temporarily withheld.
 - Action needed: Review the sync warning, then use an explicit repair, restore, or future delete/detach workflow if the missing canonical item should truly be removed.
-- PR: TBD
+- PR: [#222](https://github.com/hannasdev/mcp-writing/pull/222)
 
 ### 2026-05-25 — Apply trusted project backups transactionally
 
