@@ -2051,6 +2051,35 @@ describe("syncAll", () => {
     fs.rmSync(dir, { recursive: true });
   });
 
+  test("managed sync does not warn when a relative canonical chapter folder still exists", () => {
+    const dir = makeTempSync();
+    const db = openDb(":memory:");
+    const relativeChapterPath = "projects/test-novel/Draft/01-Arrival";
+    fs.mkdirSync(path.join(dir, relativeChapterPath), { recursive: true });
+    db.prepare(`
+      INSERT INTO projects (project_id, name)
+      VALUES ('test-novel', 'Test Novel')
+    `).run();
+    db.prepare(`
+      INSERT INTO chapters (
+        chapter_id, project_id, title, sort_index, source_path, source_checksum, metadata_stale, updated_at
+      ) VALUES (
+        'ch-01-arrival', 'test-novel', 'Arrival', 1, ?, 'checksum', 0, '2026-05-28T00:00:00.000Z'
+      )
+    `).run(relativeChapterPath);
+
+    const result = syncAll(db, dir, { quiet: true });
+
+    assert.equal(
+      result.warnings.some((warning) => warning.includes("Managed sync preserved canonical chapter missing from filesystem")),
+      false
+    );
+    assert.equal(result.warningSummary.missing_canonical_chapter, undefined);
+
+    db.close();
+    fs.rmSync(dir, { recursive: true });
+  });
+
   test("pruning one project does not clear scene metadata for same scene_id in another project", () => {
     const dir = makeTempSync();
     const db = openDb(":memory:");

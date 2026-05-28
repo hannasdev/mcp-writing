@@ -1026,12 +1026,19 @@ function pruneMissingEpigraphs(db, seenEpigraphKeys, syncDir) {
 function formatSyncRelativePath(syncDir, filePath) {
   if (!filePath) return null;
   const resolvedSyncDir = path.resolve(syncDir);
-  const resolvedFilePath = path.resolve(filePath);
+  const resolvedFilePath = resolveStoredSyncPath(syncDir, filePath);
   const relativePath = path.relative(resolvedSyncDir, resolvedFilePath);
   if (relativePath && !relativePath.startsWith("..") && !path.isAbsolute(relativePath)) {
     return relativePath.split(path.sep).join("/");
   }
   return resolvedFilePath;
+}
+
+function resolveStoredSyncPath(syncDir, filePath) {
+  if (!filePath) return null;
+  return path.isAbsolute(filePath)
+    ? path.resolve(filePath)
+    : path.resolve(syncDir, filePath);
 }
 
 function collectMissingManagedRepresentationWarnings(db, syncDir, {
@@ -1050,14 +1057,16 @@ function collectMissingManagedRepresentationWarnings(db, syncDir, {
   for (const row of chapterRows) {
     const key = `${row.chapter_id}::${row.project_id}`;
     if (observedChapterKeys.has(key)) continue;
-    if (!row.source_path || fs.existsSync(row.source_path)) continue;
+    const sourcePath = resolveStoredSyncPath(syncDir, row.source_path);
+    if (!sourcePath || fs.existsSync(sourcePath)) continue;
     warnings.push(`Managed sync preserved canonical chapter missing from filesystem: ${row.project_id}/${row.chapter_id} (${formatSyncRelativePath(syncDir, row.source_path)})`);
   }
 
   for (const row of epigraphRows) {
     const key = `${row.epigraph_id}::${row.project_id}`;
     if (observedEpigraphKeys.has(key)) continue;
-    if (!row.file_path || fs.existsSync(row.file_path)) continue;
+    const filePath = resolveStoredSyncPath(syncDir, row.file_path);
+    if (!filePath || fs.existsSync(filePath)) continue;
     warnings.push(`Managed sync preserved canonical epigraph missing from filesystem: ${row.project_id}/${row.epigraph_id} (${formatSyncRelativePath(syncDir, row.file_path)})`);
   }
 
