@@ -1135,6 +1135,52 @@ describe("enrich_scene_characters_batch tool", () => {
     }
   });
 
+  test("dry_run=false preserves path-conflicting structural sidecar fields", async () => {
+    const sceneDir = path.join(writeSyncDir, "projects", "test-novel", "part-7", "chapter-8");
+    fs.mkdirSync(sceneDir, { recursive: true });
+    const scenePath = path.join(sceneDir, "sc-batch-structural-preserve.md");
+    const sidecarPath = path.join(sceneDir, "sc-batch-structural-preserve.meta.yaml");
+    fs.writeFileSync(scenePath, "Elena Voss finds a hidden ledger.", "utf8");
+    fs.writeFileSync(
+      sidecarPath,
+      yaml.dump({
+        scene_id: "sc-batch-structural-preserve",
+        title: "Batch Structural Preserve",
+        part: 3,
+        chapter: 4,
+        chapter_id: "ch-batch-preserved",
+        chapter_title: "Batch Preserved Chapter",
+        timeline_position: 43,
+        characters: [],
+      }),
+      "utf8"
+    );
+
+    await callWriteTool("sync");
+
+    const startText = await callWriteTool("enrich_scene_characters_batch", {
+      project_id: "test-novel",
+      scene_ids: ["sc-batch-structural-preserve"],
+      dry_run: false,
+      replace_mode: "merge",
+    });
+    const started = JSON.parse(startText);
+    const done = await waitForAsyncJob(started.job.job_id);
+
+    assert.equal(done.ok, true);
+    assert.equal(done.job.status, "completed");
+    assert.equal(done.job.result.ok, true);
+    assert.equal(done.job.result.scenes_changed, 1);
+
+    const sidecar = yaml.load(fs.readFileSync(sidecarPath, "utf8"));
+    assert.equal(sidecar.part, 3);
+    assert.equal(sidecar.chapter, 4);
+    assert.equal(sidecar.chapter_id, "ch-batch-preserved");
+    assert.equal(sidecar.chapter_title, "Batch Preserved Chapter");
+    assert.equal(sidecar.timeline_position, 43);
+    assert.deepEqual(sidecar.characters, ["elena"]);
+  });
+
   test("only_stale=true scopes processing to stale scenes", async () => {
     await callWriteTool("sync");
 
@@ -1411,5 +1457,51 @@ describe("enrich_scene tool", () => {
     const freshArcText = await callWriteTool("get_arc", { character_id: "elena" });
     const freshArc = JSON.parse(freshArcText);
     assert.equal(freshArc.warning, undefined);
+  });
+
+  test("preserves path-conflicting structural sidecar fields when enriching", async () => {
+    const sceneDir = path.join(writeSyncDir, "projects", "test-novel", "part-7", "chapter-8");
+    fs.mkdirSync(sceneDir, { recursive: true });
+    const scenePath = path.join(sceneDir, "sc-enrich-structural-preserve.md");
+    const sidecarPath = path.join(sceneDir, "sc-enrich-structural-preserve.meta.yaml");
+    fs.writeFileSync(scenePath, "Elena Voss studies the hidden ledger for a clue.", "utf8");
+    fs.writeFileSync(
+      sidecarPath,
+      yaml.dump({
+        scene_id: "sc-enrich-structural-preserve",
+        title: "Enrich Structural Preserve",
+        part: 3,
+        chapter: 4,
+        chapter_id: "ch-enrich-preserved",
+        chapter_title: "Enrich Preserved Chapter",
+        timeline_position: 47,
+        characters: [],
+      }),
+      "utf8"
+    );
+
+    try {
+      await callWriteTool("sync");
+
+      const enrichText = await callWriteTool("enrich_scene", {
+        scene_id: "sc-enrich-structural-preserve",
+        project_id: "test-novel",
+      });
+      const enrich = JSON.parse(enrichText);
+      assert.equal(enrich.ok, true);
+
+      const sidecar = yaml.load(fs.readFileSync(sidecarPath, "utf8"));
+      assert.equal(sidecar.part, 3);
+      assert.equal(sidecar.chapter, 4);
+      assert.equal(sidecar.chapter_id, "ch-enrich-preserved");
+      assert.equal(sidecar.chapter_title, "Enrich Preserved Chapter");
+      assert.equal(sidecar.timeline_position, 47);
+      assert.deepEqual(sidecar.characters, ["elena"]);
+      assert.equal(typeof sidecar.logline, "string");
+    } finally {
+      fs.rmSync(scenePath, { force: true });
+      fs.rmSync(sidecarPath, { force: true });
+      await callWriteTool("sync");
+    }
   });
 });

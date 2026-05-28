@@ -9,6 +9,7 @@ import { runSceneCharacterBatch } from "../../sync/scene-character-batch.js";
 import { buildCharacterNormalizationContext, isDistinctiveToken, normalizeSceneCharacters } from "../../sync/scene-character-normalization.js";
 import { openDb } from "../../core/db.js";
 import { insertTestScene } from "../helpers/db.js";
+import { createTestSyncFixture } from "../helpers/fixtures.js";
 
 describe("runSceneCharacterBatch", () => {
   function makeBatchFixture() {
@@ -289,6 +290,58 @@ describe("runSceneCharacterBatch", () => {
 
     fs.rmSync(dir, { recursive: true, force: true });
   });
+
+  test("write mode preserves path-conflicting structural sidecar fields", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "batch-scenes-"));
+    const sceneDir = path.join(dir, "projects", "test-novel", "part-7", "chapter-8");
+    fs.mkdirSync(sceneDir, { recursive: true });
+    const filePath = path.join(sceneDir, "sc-structural-preserve.md");
+    const sidecarPath = path.join(sceneDir, "sc-structural-preserve.meta.yaml");
+    fs.writeFileSync(filePath, "Elena Vasquez waits by the harbor.", "utf8");
+    fs.writeFileSync(
+      sidecarPath,
+      yaml.dump({
+        scene_id: "sc-structural-preserve",
+        title: "Structural Preserve",
+        part: 3,
+        chapter: 4,
+        chapter_id: "ch-preserved",
+        chapter_title: "Preserved Chapter",
+        timeline_position: 17,
+        characters: ["marcus"],
+      }),
+      "utf8"
+    );
+
+    try {
+      const result = await runSceneCharacterBatch({
+        syncDir: dir,
+        args: {
+          project_id: "test-novel",
+          dry_run: false,
+          replace_mode: "merge",
+          target_scenes: [{ scene_id: "sc-structural-preserve", project_id: "test-novel", file_path: filePath }],
+          character_rows: [
+            { character_id: "elena", name: "Elena Vasquez" },
+            { character_id: "marcus", name: "Marcus Hale" },
+          ],
+        },
+      });
+
+      assert.equal(result.ok, true);
+      assert.equal(result.scenes_changed, 1);
+
+      const sidecar = yaml.load(fs.readFileSync(sidecarPath, "utf8"));
+      assert.equal(sidecar.part, 3);
+      assert.equal(sidecar.chapter, 4);
+      assert.equal(sidecar.chapter_id, "ch-preserved");
+      assert.equal(sidecar.chapter_title, "Preserved Chapter");
+      assert.equal(sidecar.timeline_position, 17);
+      assert.deepEqual(sidecar.characters.sort(), ["elena", "marcus"]);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("scene character normalization", () => {
@@ -384,6 +437,66 @@ describe("scene character normalization", () => {
 
     assert.equal(result.status, 1);
     assert.match(result.stderr, /--limit requires a value\./);
+  });
+
+  test("normalize-scene-characters CLI write mode preserves structural sidecar fields", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "normalize-scene-characters-"));
+    createTestSyncFixture(dir);
+
+    const sceneDir = path.join(dir, "projects", "test-novel", "part-7", "chapter-8");
+    fs.mkdirSync(sceneDir, { recursive: true });
+    const scenePath = path.join(sceneDir, "sc-cli-structural-preserve.md");
+    const sidecarPath = path.join(sceneDir, "sc-cli-structural-preserve.meta.yaml");
+    fs.writeFileSync(scenePath, "CLI normalization prose.", "utf8");
+    fs.writeFileSync(
+      sidecarPath,
+      yaml.dump({
+        scene_id: "sc-cli-structural-preserve",
+        title: "CLI Structural Preserve",
+        part: 3,
+        chapter: 4,
+        chapter_id: "ch-cli-preserved",
+        chapter_title: "CLI Preserved Chapter",
+        timeline_position: 23,
+        characters: ["Elena Voss"],
+      }),
+      "utf8"
+    );
+
+    try {
+      const result = spawnSync(
+        process.execPath,
+        [
+          "--experimental-sqlite",
+          "src/scripts/normalize-scene-characters.mjs",
+          "--sync-dir",
+          dir,
+          "--project-id",
+          "test-novel",
+          "--write",
+          "--json",
+        ],
+        {
+          cwd: path.resolve("."),
+          encoding: "utf8",
+        }
+      );
+
+      assert.equal(result.status, 0, result.stderr);
+      const parsed = JSON.parse(result.stdout);
+      assert.equal(parsed.ok, true);
+      assert.equal(parsed.scenes_changed >= 1, true);
+
+      const sidecar = yaml.load(fs.readFileSync(sidecarPath, "utf8"));
+      assert.equal(sidecar.part, 3);
+      assert.equal(sidecar.chapter, 4);
+      assert.equal(sidecar.chapter_id, "ch-cli-preserved");
+      assert.equal(sidecar.chapter_title, "CLI Preserved Chapter");
+      assert.equal(sidecar.timeline_position, 23);
+      assert.deepEqual(sidecar.characters, ["elena"]);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
 

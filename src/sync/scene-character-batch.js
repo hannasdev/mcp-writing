@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import matter from "gray-matter";
 import { buildCharacterNormalizationContext, escapeRegex, resolveCharacterReference } from "./scene-character-normalization.js";
-import { normalizeSceneMetaForPath, readMeta, writeMeta } from "./sync.js";
+import { readSourceMeta, writeMeta } from "./sync.js";
 
 function normalizeCharacterRows(rows) {
   return buildCharacterNormalizationContext(rows);
@@ -138,7 +138,7 @@ export async function runSceneCharacterBatch({ syncDir, args, onProgress, should
     try {
       const raw = fs.readFileSync(scene.file_path, "utf8");
       const { content: prose } = matter(raw);
-      const { meta } = readMeta(scene.file_path, syncDir, { writable: !dry_run });
+      const { sourceMeta: meta } = readSourceMeta(scene.file_path, syncDir, { writable: !dry_run });
 
       const before_characters = [...new Set((meta.characters ?? []).map(String).filter(Boolean))];
       const normalized_before_characters = [...new Set(
@@ -169,10 +169,10 @@ export async function runSceneCharacterBatch({ syncDir, args, onProgress, should
       const changed = added.length > 0 || removed.length > 0;
 
       if (!dry_run && changed) {
-        const updatedMeta = normalizeSceneMetaForPath(syncDir, scene.file_path, {
+        const updatedMeta = {
           ...meta,
           characters: after_characters,
-        }).meta;
+        };
 
         writeMeta(scene.file_path, updatedMeta, { syncDir });
       }

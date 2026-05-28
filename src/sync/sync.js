@@ -494,11 +494,12 @@ export function parseFile(filePath) {
 }
 
 /**
- * Read metadata for a scene file. Priority: sidecar > frontmatter.
- * If sidecar doesn't exist but frontmatter does, auto-generates the sidecar.
- * Returns { meta, sidecarGenerated }.
+ * Read source metadata for a scene file. Priority: sidecar > frontmatter.
+ * Does not apply path-derived structural normalization or auto-generate sidecars.
+ * Generic metadata writers use this so non-structural updates do not mirror
+ * path-derived structure fields into sidecars.
  */
-export function readMeta(filePath, syncDir, { writable = false } = {}) {
+export function readSourceMeta(filePath, syncDir, { writable = false } = {}) {
   const sidecar = sidecarPath(filePath);
   const syncDirAbs = path.resolve(syncDir);
 
@@ -517,26 +518,45 @@ export function readMeta(filePath, syncDir, { writable = false } = {}) {
     }
     const raw = fs.readFileSync(sidecar, "utf8");
     const parsed = parseYaml(raw) ?? {};
-    return { ...normalizeSceneMetaForPath(syncDir, filePath, parsed), sourceMeta: parsed, sidecarGenerated: false };
+    return { meta: parsed, sourceMeta: parsed, source: "sidecar", sidecarGenerated: false };
   }
 
   // Fall back to frontmatter
   const { data: frontmatter } = parseFile(filePath);
   if (!Object.keys(frontmatter).length) {
-    return { ...normalizeSceneMetaForPath(syncDir, filePath, {}), sourceMeta: {}, sidecarGenerated: false };
+    return { meta: {}, sourceMeta: {}, source: "empty", sidecarGenerated: false };
   }
 
-  const normalized = normalizeSceneMetaForPath(syncDir, filePath, frontmatter);
+  return { meta: frontmatter, sourceMeta: frontmatter, source: "frontmatter", sidecarGenerated: false };
+}
+
+/**
+ * Read metadata for a scene file. Priority: sidecar > frontmatter.
+ * If sidecar doesn't exist but frontmatter does, auto-generates the sidecar.
+ * Returns { meta, sidecarGenerated }.
+ */
+export function readMeta(filePath, syncDir, { writable = false } = {}) {
+  const sourceRead = readSourceMeta(filePath, syncDir, { writable });
+
+  if (sourceRead.source === "sidecar" || sourceRead.source === "empty") {
+    return {
+      ...normalizeSceneMetaForPath(syncDir, filePath, sourceRead.sourceMeta),
+      sourceMeta: sourceRead.sourceMeta,
+      sidecarGenerated: false,
+    };
+  }
+
+  const normalized = normalizeSceneMetaForPath(syncDir, filePath, sourceRead.sourceMeta);
 
   // Auto-migrate: write sidecar from frontmatter (only if writable)
   if (writable) {
     try {
       writeMeta(filePath, normalized.meta, { syncDir });
-      return { ...normalized, sourceMeta: frontmatter, sidecarGenerated: true };
+      return { ...normalized, sourceMeta: sourceRead.sourceMeta, sidecarGenerated: true };
     } catch { /* empty */ }
   }
 
-  return { ...normalized, sourceMeta: frontmatter, sidecarGenerated: false };
+  return { ...normalized, sourceMeta: sourceRead.sourceMeta, sidecarGenerated: false };
 }
 
 /**

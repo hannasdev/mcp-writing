@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import yaml from "js-yaml";
 import { createTestContext } from "../helpers/server.js";
 
 const ctx = createTestContext(3075, 3074);
@@ -954,6 +955,61 @@ describe("upsert_reference_link tool", () => {
     assert.ok(sidecarText.includes("reference_links:"));
     assert.ok(sidecarText.includes("target_doc_id: ref-upsert-target"));
     assert.ok(sidecarText.includes("relation: informs"));
+  });
+
+  test("preserves path-conflicting structural sidecar fields when linking scene references", async () => {
+    const scenePath = path.join(writeSyncDir, "projects", "test-novel", "part-7", "chapter-8", "sc-upsert-ref-structural.md");
+    const sidecarPath = scenePath.replace(/\.md$/, ".meta.yaml");
+    const targetRefPath = path.join(writeSyncDir, "projects", "test-novel", "world", "reference", "upsert-structural-target.md");
+
+    fs.mkdirSync(path.dirname(scenePath), { recursive: true });
+    fs.mkdirSync(path.dirname(targetRefPath), { recursive: true });
+    fs.writeFileSync(scenePath, "Scene reference structural preservation prose.", "utf8");
+    fs.writeFileSync(
+      sidecarPath,
+      yaml.dump({
+        scene_id: "sc-upsert-ref-structural",
+        title: "Upsert Reference Structural",
+        part: 3,
+        chapter: 4,
+        chapter_id: "ch-upsert-preserved",
+        chapter_title: "Upsert Preserved Chapter",
+        timeline_position: 41,
+      }),
+      "utf8"
+    );
+    fs.writeFileSync(
+      targetRefPath,
+      "---\ndoc_id: ref-upsert-structural-target\ntitle: Upsert Structural Target\n---\nReference body.",
+      "utf8"
+    );
+
+    try {
+      await callWriteTool("sync");
+
+      const text = await callWriteTool("upsert_reference_link", {
+        source_kind: "scene",
+        source_id: "sc-upsert-ref-structural",
+        source_project_id: "test-novel",
+        target_doc_id: "ref-upsert-structural-target",
+        relation: "informs",
+      });
+      const parsed = JSON.parse(text);
+      assert.equal(parsed.ok, true);
+
+      const sidecar = yaml.load(fs.readFileSync(sidecarPath, "utf8"));
+      assert.equal(sidecar.part, 3);
+      assert.equal(sidecar.chapter, 4);
+      assert.equal(sidecar.chapter_id, "ch-upsert-preserved");
+      assert.equal(sidecar.chapter_title, "Upsert Preserved Chapter");
+      assert.equal(sidecar.timeline_position, 41);
+      assert.deepEqual(sidecar.reference_ids, ["ref-upsert-structural-target"]);
+    } finally {
+      fs.rmSync(scenePath, { force: true });
+      fs.rmSync(sidecarPath, { force: true });
+      fs.rmSync(targetRefPath, { force: true });
+      await callWriteTool("sync");
+    }
   });
 
   test("updates existing relation for same source and target", async () => {
