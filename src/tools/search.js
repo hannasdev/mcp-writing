@@ -2,7 +2,10 @@ import { z } from "zod";
 import fs from "node:fs";
 import matter from "gray-matter";
 import { readMeta } from "../sync/sync.js";
-import { persistSceneReferenceLink, upsertExplicitReferenceLinkRow } from "./reference-link-persistence.js";
+import {
+  persistSceneReferenceLink,
+  upsertExplicitReferenceLinkRow,
+} from "./reference-link-persistence.js";
 import { resolveValidatedChapterFilter } from "../core/chapter-resolution.js";
 import {
   createToolActor,
@@ -606,7 +609,7 @@ export function registerSearchTools(s, {
   // ---- get_place_sheet -----------------------------------------------------
   s.tool(
     "get_place_sheet",
-    "Get full place details: associated_characters, tags, the canonical sheet content, and any adjacent support notes when the place uses a folder-based layout. Use this when the current scene or question makes the place itself materially relevant. Response shape note: returns a structured envelope (`results`, `total_count`) with one result row.",
+    "Get full place details, including canonical sheet content plus retained sidecar associated_characters and tags as compatibility/review notes. Use connect_character_place_evidence for current scene-backed character/place authority. Response shape note: returns a structured envelope (`results`, `total_count`) with one result row.",
     {
       place_id: z.string().describe("The place_id to look up (e.g. 'place-harbor-district'). Use list_places to find valid IDs."),
     },
@@ -1073,7 +1076,7 @@ export function registerSearchTools(s, {
   // ---- suggest_scene_references --------------------------------------------
   s.tool(
     "suggest_scene_references",
-    "Suggest reference documents for a scene by aggregating links from the scene's characters and places. Returns weighted candidates ranked by how many entities in the scene link to each reference. Excludes any explicit scene → reference links already present. In apply mode, can persist selected suggestions as explicit scene links in one call.",
+    "Suggest reference documents for a scene by aggregating links from the scene's characters and places. Returns weighted candidates ranked by how many entities in the scene link to each reference. Excludes any explicit scene reference links already present. In apply mode, selected links commit to SQLite first, project backups refresh, and scene sidecar/frontmatter output is refreshed only as generated compatibility.",
     {
       scene_id: z.string().describe("Scene ID (e.g. 'sc-011-sebastian')."),
       project_id: z.string().optional().describe("Optional project scope to disambiguate an ambiguous scene_id across projects."),
@@ -1235,40 +1238,13 @@ export function registerSearchTools(s, {
 
 
       if (mode === "apply") {
-        if (!resolvedScene.file_path) {
-          return errorResponse("STALE_PATH", `Scene '${scene_id}' has no indexed file path. Run sync() to refresh.`, {
-            scene_id,
-            project_id: resolvedProjectId,
-          });
-        }
-
-          const toApply = selectApplyCandidates(enriched, selected_doc_ids, max_apply);
-
+        const toApply = selectApplyCandidates(enriched, selected_doc_ids, max_apply);
         const appliedLinks = [];
         const failedLinks = [];
 
-        for (const candidate of toApply) {
-          try {
-            persistSceneReferenceLink({
-              scenePath: resolvedScene.file_path,
-              syncDir: SYNC_DIR,
-              targetDocId: candidate.doc_id,
-              relation: candidate.relation,
-            });
-          } catch (err) {
-            failedLinks.push({
-              target_doc_id: candidate.doc_id,
-              relation: candidate.relation,
-              stage: "metadata",
-              code: err?.code ?? "IO_ERROR",
-              message: err?.code === "ENOENT"
-                ? `Scene file for '${scene_id}' not found at indexed path — run sync() to refresh.`
-                : `Failed to persist scene reference link metadata: ${err.message}`,
-            });
-            continue;
-          }
-
-          try {
+        try {
+          db.exec("BEGIN");
+          for (const candidate of toApply) {
             upsertExplicitReferenceLinkRow(db, {
               sourceKind: "scene",
               sourceProjectId: resolvedProjectId,
@@ -1276,7 +1252,15 @@ export function registerSearchTools(s, {
               targetDocId: candidate.doc_id,
               relation: candidate.relation,
             });
-          } catch (err) {
+          }
+          db.exec("COMMIT");
+        } catch (err) {
+          try {
+            db.exec("ROLLBACK");
+          } catch (rollbackErr) {
+            void rollbackErr;
+          }
+          for (const candidate of toApply) {
             failedLinks.push({
               target_doc_id: candidate.doc_id,
               relation: candidate.relation,
@@ -1284,17 +1268,20 @@ export function registerSearchTools(s, {
               code: err?.code ?? "IO_ERROR",
               message: `Failed to persist scene reference link index row: ${err.message}`,
             });
-            continue;
           }
+        }
 
-          appliedLinks.push({
-            source_kind: "scene",
-            source_project_id: resolvedProjectId,
-            source_id: scene_id,
-            target_doc_id: candidate.doc_id,
-            relation: candidate.relation,
-            origin: "explicit",
-          });
+        if (failedLinks.length === 0) {
+          for (const candidate of toApply) {
+            appliedLinks.push({
+              source_kind: "scene",
+              source_project_id: resolvedProjectId,
+              source_id: scene_id,
+              target_doc_id: candidate.doc_id,
+              relation: candidate.relation,
+              origin: "explicit",
+            });
+          }
         }
 
         const backupResult = appliedLinks.length
@@ -1323,6 +1310,47 @@ export function registerSearchTools(s, {
               backup_warnings: [],
             };
 
+        const compatibilityDiagnostics = [];
+        if (appliedLinks.length) {
+          if (!resolvedScene.file_path) {
+            compatibilityDiagnostics.push({
+              code: "STALE_PATH",
+              severity: "warning",
+              message: `Canonical scene reference link was committed, but scene '${scene_id}' has no indexed file path for generated compatibility output.`,
+              next_step: "Treat SQLite and project backup artifacts as current. Run sync, inspect the indexed scene path, then retry suggest_scene_references in apply mode if compatibility output is still needed.",
+              details: {
+                scene_id,
+                project_id: resolvedProjectId,
+                indexed_path: null,
+              },
+            });
+          } else {
+            for (const link of appliedLinks) {
+              try {
+                persistSceneReferenceLink({
+                  scenePath: resolvedScene.file_path,
+                  syncDir: SYNC_DIR,
+                  targetDocId: link.target_doc_id,
+                  relation: link.relation,
+                });
+              } catch (err) {
+                compatibilityDiagnostics.push({
+                  code: err?.code ?? "COMPATIBILITY_OUTPUT_FAILED",
+                  severity: "warning",
+                  message: `Canonical scene reference link was committed, but generated compatibility metadata for scene '${scene_id}' could not be refreshed: ${err.message}`,
+                  next_step: "Treat SQLite and project backup artifacts as current. Run sync, inspect the indexed scene path, then retry suggest_scene_references in apply mode if compatibility output is still needed.",
+                  details: {
+                    scene_id,
+                    project_id: resolvedProjectId,
+                    target_doc_id: link.target_doc_id,
+                    indexed_path: resolvedScene.file_path,
+                  },
+                });
+              }
+            }
+          }
+        }
+
         return {
           content: [{
             type: "text",
@@ -1336,6 +1364,18 @@ export function registerSearchTools(s, {
               applied_links: appliedLinks,
               failed_count: failedLinks.length,
               failed_links: failedLinks,
+              mutation_order: [
+                "validated_request",
+                "sqlite_commit",
+                "project_backup_refresh",
+                "compatibility_output_refresh",
+              ],
+              compatibility_output: {
+                generated_transparency: true,
+                mutation_surface: false,
+                refreshed: compatibilityDiagnostics.length === 0,
+              },
+              compatibility_diagnostics: compatibilityDiagnostics,
               operation_history: backupResult.operation_history,
               backup_refresh: backupResult.backup_refresh,
               backup_warnings: backupResult.backup_warnings,

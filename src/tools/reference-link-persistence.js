@@ -59,6 +59,11 @@ export function upsertExplicitReferenceLinkRow(
     insertStmt.run(sourceKind, sourceProjectId, sourceId, targetDocId, relation);
   };
 
+  if (db.inTransaction) {
+    runUpsertBody();
+    return;
+  }
+
   if (typeof db.transaction === "function") {
     db.transaction(runUpsertBody)();
     return;

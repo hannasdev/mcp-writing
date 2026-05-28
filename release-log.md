@@ -6,6 +6,14 @@ This complements `CHANGELOG.md`:
 - `CHANGELOG.md` is technical and release-oriented.
 - This log is plain-language and outcome-oriented.
 
+### 2026-05-28 — Add outcome-oriented relationship workflows
+
+- What changed: Added relationship tools for scene-backed character/place evidence, character relationship beats, and relationship metadata audits. Character and place profile updates now present sidecar files as generated compatibility or review output, while reference-link and thread workflows steer callers toward outcome-level operations.
+- Why it matters: Authors, maintainers, and AI agents can track arcs, link evidence, review stale relationship metadata, and prepare recovery snapshots without treating sidecars or raw table names as relationship authority.
+- Who is affected: Authors, maintainers, and AI agents using character/place, thread, reference-link, enrichment, metadata audit, or recovery workflows.
+- Action needed: Prefer `track_thread_arc`, `connect_character_place_evidence`, `record_character_relationship_beat`, `link_reference_evidence`, and `audit_relationship_metadata` for relationship work. Treat sidecar tags, flags, and place associated_characters as compatibility/review notes unless a future migration promotes them.
+- PR: [#225](https://github.com/hannasdev/mcp-writing/pull/225)
+
 ### 2026-05-28 — Preserve structure fields during metadata updates
 
 - What changed: Generic scene metadata, enrichment, flagging, reference-link, and character-normalization writes now preserve existing structural sidecar compatibility fields instead of backfilling path-derived chapter or part values.

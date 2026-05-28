@@ -1,12 +1,13 @@
 # Architecture Alignment Follow-up
 
-**Status:** Active — M3 Sidecar Write Boundary
+**Status:** Active — M4 Outcome-Oriented Relationship Workflows in implementation
 
 This initiative records target-architecture alignment gaps discovered during
 periodic reviews. It is a holding place for missing parts, correction
 candidates, and follow-up work that should not be lost. M0–M2 have been
-accepted and implemented through the managed sync preservation slice. M3 is
-active for implementation; M4–M5 remain deferred until explicitly prioritized.
+accepted and implemented through the managed sync preservation slice; M3 is
+accepted and implemented through the sidecar write-boundary slice. M4 is in
+implementation; M5 remains deferred until explicitly prioritized.
 
 Implementation sequencing lives in [milestones.md](milestones.md). The M0
 metadata ownership inventory lives in [inventory.md](inventory.md).

@@ -1,11 +1,11 @@
 # Architecture Alignment Follow-up — Milestones
 
-**Status:** Active — M3 Sidecar Write Boundary
+**Status:** Active — M4 Outcome-Oriented Relationship Workflows in implementation
 
 This milestone plan breaks the Architecture Alignment Follow-up PRD into
 independently reviewable slices. Use [prd.md](prd.md) for product framing and
 this document for sequencing, gates, and implementation readiness.
-M0–M2 are accepted; M3 is active for implementation; M4–M5 remain
+M0–M3 are accepted; M4 is in implementation; M5 remains
 deferred for future prioritization.
 
 ## Objective
@@ -208,7 +208,7 @@ Out of scope:
 
 ## M3 — Sidecar Write Boundary
 
-Status: Active for implementation.
+Status: Accepted.
 
 Goal: prevent generic metadata updates from rewriting structural sidecar
 compatibility fields and stop sidecar-shaped files from acting as active
@@ -225,6 +225,37 @@ Deliverables:
   named repair/regeneration flows.
 - Add diagnostics or guidance when callers attempt to use generic metadata
   tools for structural outcomes.
+
+Evidence:
+
+- [src/sync/sync.js](../../../../src/sync/sync.js)
+- [src/tools/metadata.js](../../../../src/tools/metadata.js)
+- [src/tools/sync.js](../../../../src/tools/sync.js)
+- [src/tools/reference-link-persistence.js](../../../../src/tools/reference-link-persistence.js)
+- [src/sync/scene-character-batch.js](../../../../src/sync/scene-character-batch.js)
+- [src/scripts/normalize-scene-characters.mjs](../../../../src/scripts/normalize-scene-characters.mjs)
+- [src/test/unit/sync.test.mjs](../../../../src/test/unit/sync.test.mjs)
+- [src/test/unit/scene-character.test.mjs](../../../../src/test/unit/scene-character.test.mjs)
+- [src/test/integration/metadata.test.mjs](../../../../src/test/integration/metadata.test.mjs)
+- [src/test/integration/search.test.mjs](../../../../src/test/integration/search.test.mjs)
+- [src/test/integration/sync.test.mjs](../../../../src/test/integration/sync.test.mjs)
+- [release-log.md](../../../../release-log.md)
+
+Acceptance notes:
+
+- Generic scene metadata writes now use raw/source sidecar metadata for writes,
+  while normalized metadata remains available for sync and indexing.
+- `update_scene_metadata` rejects `chapter_title` along with `part`,
+  `chapter`, `chapter_id`, and `timeline_position`, and points callers to
+  explicit structure workflows.
+- Enrichment, flagging, reference-link, batch character enrichment, and
+  character-normalization writes preserve existing structural sidecar
+  compatibility fields during non-structural updates.
+- Path-conflicting managed scene regressions cover structural field
+  preservation for generic metadata, enrichment, reference-link, flagging,
+  batch character enrichment, and CLI normalization workflows.
+- Relationship metadata authority and broader sidecar-first write-order cleanup
+  remain deferred to M4.
 
 Acceptance gates:
 
@@ -257,7 +288,7 @@ Out of scope:
 
 ## M4 — Outcome-Oriented Relationship Workflows
 
-Status: Planned.
+Status: In implementation after partial conformance follow-up.
 
 Goal: expose relationship metadata changes through story and review outcomes
 instead of storage CRUD.
@@ -275,6 +306,25 @@ Deliverables:
   outcome workflows.
 - Preserve useful review/dry-run visibility through review snapshots rather
   than writable sidecars.
+
+Implementation notes:
+
+- `track_thread_arc`, `connect_character_place_evidence`,
+  `record_character_relationship_beat`, `link_reference_evidence`, and
+  `audit_relationship_metadata` provide outcome-level surfaces for the
+  previously under-specified relationship families.
+- `update_character_sheet` and canonical `update_place_sheet` name changes now
+  commit SQLite first, refresh project backups, then refresh sidecar
+  compatibility output. Place `associated_characters`, place tags, character
+  tags, and scene flags are explicitly non-authoritative compatibility/review
+  notes until a future migration promotes or removes them.
+- `enrich_scene_characters_batch` remains a retained prose-derived repair path
+  that writes scene character compatibility output before sync-index repair;
+  its responses and inventory now document that retained ordering rather than
+  presenting sidecars as general relationship authority.
+- Broad schema migration/deprecation for sidecar-only tags, flags,
+  workflow-status fields, and place associated-character fields remains M5 or a
+  future focused initiative.
 
 Acceptance gates:
 
