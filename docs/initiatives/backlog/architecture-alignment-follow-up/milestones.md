@@ -137,7 +137,7 @@ Out of scope:
 
 ## M2 — Managed Sync Preservation
 
-Status: In progress.
+Status: Accepted.
 
 Goal: stop ordinary managed-project sync from deleting canonical structure
 because prose or representation files are missing.
@@ -158,6 +158,22 @@ Evidence:
 
 - [src/sync/sync.js](../../../../src/sync/sync.js)
 - [src/test/unit/sync.test.mjs](../../../../src/test/unit/sync.test.mjs)
+- [release-log.md](../../../../release-log.md)
+
+Acceptance notes:
+
+- Managed sync now preserves canonical scenes, chapters, epigraphs, and scene
+  relationship rows when their filesystem representations are missing.
+- Missing canonical scene, chapter, and epigraph representations now produce
+  classified sync warnings instead of silent canonical deletion.
+- First-time import, legacy migration, and unmanaged pruning paths remain
+  covered by existing regression tests.
+- No new canonical mutation was introduced by this milestone; preservation
+  avoids deletion, so backup refresh and operation-history requirements do not
+  apply to the new missing-file diagnostics.
+- Explicit delete, detach, archive, or repair workflows remain deferred until a
+  product need requires canonical removal beyond existing restore and structure
+  workflows.
 
 Acceptance gates:
 
