@@ -137,7 +137,7 @@ Out of scope:
 
 ## M2 — Managed Sync Preservation
 
-Status: Planned.
+Status: In progress.
 
 Goal: stop ordinary managed-project sync from deleting canonical structure
 because prose or representation files are missing.
@@ -153,6 +153,11 @@ Deliverables:
   missing generated artifacts.
 - Cover scenes, epigraphs, chapters, and relationship rows affected by sync
   pruning.
+
+Evidence:
+
+- [src/sync/sync.js](../../../../src/sync/sync.js)
+- [src/test/unit/sync.test.mjs](../../../../src/test/unit/sync.test.mjs)
 
 Acceptance gates:
 

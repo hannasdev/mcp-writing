@@ -957,15 +957,23 @@ function canPruneScenes(syncDir) {
   return hasBroadRootChild;
 }
 
-function pruneMissingScenes(db, seenSceneKeys, syncDir) {
+function pruneMissingScenes(db, seenSceneKeys, syncDir, { managedProjectIds = new Set() } = {}) {
   const projectScope = inferSceneProjectScopeFromSyncDir(syncDir);
   const rows = projectScope
     ? db.prepare(`SELECT scene_id, project_id FROM scenes WHERE project_id = ?`).all(projectScope)
     : db.prepare(`SELECT scene_id, project_id FROM scenes`).all();
 
+  const result = { deleted: 0, preservedManagedScenes: [] };
   for (const row of rows) {
     const key = `${row.scene_id}::${row.project_id}`;
     if (seenSceneKeys.has(key)) continue;
+    if (managedProjectIds.has(row.project_id)) {
+      result.preservedManagedScenes.push({
+        scene_id: row.scene_id,
+        project_id: row.project_id,
+      });
+      continue;
+    }
 
     db.prepare(`DELETE FROM scenes_fts WHERE scene_id = ? AND project_id = ?`).run(row.scene_id, row.project_id);
     db.prepare(`
@@ -977,7 +985,9 @@ function pruneMissingScenes(db, seenSceneKeys, syncDir) {
     db.prepare(`DELETE FROM scene_places WHERE scene_id = ? AND project_id = ?`).run(row.scene_id, row.project_id);
     db.prepare(`DELETE FROM scene_tags WHERE scene_id = ? AND project_id = ?`).run(row.scene_id, row.project_id);
     db.prepare(`DELETE FROM scene_threads WHERE scene_id = ? AND project_id = ?`).run(row.scene_id, row.project_id);
+    result.deleted++;
   }
+  return result;
 }
 
 function pruneMissingChapters(db, seenChapterKeys, syncDir) {
@@ -1018,14 +1028,15 @@ export function pruneSyncDerivedIndexes(db, syncDir, {
   seenEpigraphKeys,
   seenChapterKeys,
   sceneIndexFailures,
+  managedProjectIds = new Set(),
 }) {
   if (!canPruneScenes(syncDir)) return { pruned: false, reason: "scope_not_prunable" };
   if (sceneIndexFailures !== 0) return { pruned: false, reason: "scene_index_failures" };
 
-  pruneMissingScenes(db, seenSceneKeys, syncDir);
+  const scenePrune = pruneMissingScenes(db, seenSceneKeys, syncDir, { managedProjectIds });
   pruneMissingEpigraphs(db, seenEpigraphKeys, syncDir);
   pruneMissingChapters(db, seenChapterKeys, syncDir);
-  return { pruned: true, reason: null };
+  return { pruned: true, reason: null, scenePrune };
 }
 
 export function regenerateReferenceAndWorldIndexes(db, syncDir, files, {
@@ -1449,6 +1460,7 @@ const WARNING_TYPE_LABELS = {
   chapter_structure: "Chapter structure",
   orphaned_sidecar: "Orphaned sidecar",
   moved_scene: "Moved scene",
+  missing_canonical_scene: "Missing canonical scene",
   nested_mirror: "Ignored nested mirror path",
 };
 
@@ -1459,6 +1471,7 @@ const WARNING_PATTERNS = [
   { type: "chapter_structure",      re: /^(Chapter structure warning|Epigraph requires explicit chapter linkage|Epigraph references unknown chapter_id|Scene references unknown chapter_id|Ambiguous chapter linkage|Epigraph identity conflict|Managed structure sync ignored|Managed structure sync preserved canonical epigraph)/ },
   { type: "moved_scene",            re: /^Moved scene detected:/      },
   { type: "orphaned_sidecar",       re: /^Orphaned sidecar/          },
+  { type: "missing_canonical_scene", re: /^Managed sync preserved canonical scene missing from filesystem:/ },
   { type: "nested_mirror",          re: /^Ignored nested mirror path:/ },
 ];
 
@@ -1626,12 +1639,16 @@ export function syncAll(db, syncDir, { quiet = false, writable = false } = {}) {
     }
   }
 
-  pruneSyncDerivedIndexes(db, syncDir, {
+  const pruneResult = pruneSyncDerivedIndexes(db, syncDir, {
     seenSceneKeys,
     seenEpigraphKeys,
     seenChapterKeys,
     sceneIndexFailures,
+    managedProjectIds,
   });
+  for (const scene of pruneResult.scenePrune?.preservedManagedScenes ?? []) {
+    warnings.push(`Managed sync preserved canonical scene missing from filesystem: ${scene.project_id}/${scene.scene_id}`);
+  }
 
   // --- Orphaned sidecar detection ---
   for (const diagnostic of observeOrphanedSidecars(syncDir, { indexedSceneIds })) {

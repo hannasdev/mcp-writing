@@ -1896,7 +1896,10 @@ describe("syncAll", () => {
       "---\ndoc_id: ref-vampirism\ntitle: Vampirism in this universe\n---\nReference body."
     );
 
-    writeScene(dir, "sc-001", { reference_ids: ["ref-vampirism"] });
+    fs.writeFileSync(
+      path.join(dir, "projects", "test-novel", "scenes", "sc-001.md"),
+      "---\nscene_id: sc-001\ntitle: Unmanaged Scene\nreference_ids:\n  - ref-vampirism\n---\nScene prose."
+    );
     syncAll(db, dir, { quiet: true });
     assert.equal(db.prepare(`SELECT COUNT(*) AS count FROM scenes WHERE scene_id = 'sc-001'`).get().count, 1);
     assert.equal(
@@ -1912,6 +1915,60 @@ describe("syncAll", () => {
       db.prepare(`SELECT COUNT(*) AS count FROM reference_links WHERE source_kind = 'scene' AND source_id = 'sc-001'`).get().count,
       0
     );
+
+    db.close();
+    fs.rmSync(dir, { recursive: true });
+  });
+
+  test("managed sync preserves canonical scenes and relationship rows when prose files are missing", () => {
+    const dir = makeTempSync();
+    const db = openDb(":memory:");
+
+    fs.mkdirSync(path.join(dir, "projects", "test-novel", "world", "reference"), { recursive: true });
+    fs.writeFileSync(
+      path.join(dir, "projects", "test-novel", "world", "reference", "vampirism.md"),
+      "---\ndoc_id: ref-vampirism\ntitle: Vampirism in this universe\n---\nReference body."
+    );
+
+    const chapterDir = path.join(dir, "projects", "test-novel", "Draft", "01-Arrival");
+    fs.mkdirSync(chapterDir, { recursive: true });
+    const scenePath = path.join(chapterDir, "sc-managed.md");
+    fs.writeFileSync(
+      scenePath,
+      "---\nscene_id: sc-managed\ntitle: Managed Scene\ncharacters:\n  - elena\nplaces:\n  - harbor\ntags:\n  - setup\nreference_ids:\n  - ref-vampirism\n---\nManaged prose."
+    );
+
+    syncAll(db, dir, { quiet: true });
+    assert.equal(
+      db.prepare(`SELECT COUNT(*) AS count FROM scenes WHERE scene_id = 'sc-managed' AND project_id = 'test-novel'`).get().count,
+      1
+    );
+
+    fs.rmSync(scenePath);
+    fs.rmSync(sidecarPath(scenePath), { force: true });
+    const result = syncAll(db, dir, { quiet: true });
+
+    assert.equal(
+      db.prepare(`SELECT COUNT(*) AS count FROM scenes WHERE scene_id = 'sc-managed' AND project_id = 'test-novel'`).get().count,
+      1
+    );
+    assert.equal(
+      db.prepare(`SELECT COUNT(*) AS count FROM scene_characters WHERE scene_id = 'sc-managed' AND project_id = 'test-novel'`).get().count,
+      1
+    );
+    assert.equal(
+      db.prepare(`SELECT COUNT(*) AS count FROM scene_places WHERE scene_id = 'sc-managed' AND project_id = 'test-novel'`).get().count,
+      1
+    );
+    assert.equal(
+      db.prepare(`SELECT COUNT(*) AS count FROM scene_tags WHERE scene_id = 'sc-managed' AND project_id = 'test-novel'`).get().count,
+      1
+    );
+    assert.equal(
+      db.prepare(`SELECT COUNT(*) AS count FROM reference_links WHERE source_kind = 'scene' AND source_project_id = 'test-novel' AND source_id = 'sc-managed'`).get().count,
+      1
+    );
+    assert.ok(result.warnings.some((warning) => warning.includes("Managed sync preserved canonical scene missing from filesystem")));
 
     db.close();
     fs.rmSync(dir, { recursive: true });
@@ -1960,8 +2017,12 @@ describe("syncAll", () => {
   test("does not prune existing scenes when scene indexing fails", () => {
     const dir = makeTempSync();
     const db = openDb(":memory:");
+    const scenePath = path.join(dir, "projects", "test-novel", "scenes", "sc-001.md");
 
-    writeScene(dir, "sc-001");
+    fs.writeFileSync(
+      scenePath,
+      "---\nscene_id: sc-001\ntitle: Unmanaged Scene\n---\nScene prose."
+    );
     syncAll(db, dir, { quiet: true });
     assert.equal(db.prepare(`SELECT COUNT(*) AS count FROM scenes WHERE scene_id = 'sc-001'`).get().count, 1);
 
@@ -2030,7 +2091,10 @@ describe("syncAll", () => {
     const scenePath = path.join(dir, "projects", "test-novel", "scenes", "sc-001.md");
     const notePath = path.join(dir, "projects", "test-novel", "scenes", "notes.md");
 
-    writeScene(dir, "sc-001");
+    fs.writeFileSync(
+      scenePath,
+      "---\nscene_id: sc-001\ntitle: Unmanaged Scene\n---\nScene prose."
+    );
     syncAll(db, dir, { quiet: true });
     assert.equal(db.prepare(`SELECT COUNT(*) AS count FROM scenes WHERE scene_id = 'sc-001'`).get().count, 1);
 
@@ -2689,7 +2753,7 @@ describe("syncAll", () => {
     fs.rmSync(dir, { recursive: true });
   });
 
-  test("managed sync does not create an epigraph when a scene file is converted to epigraph representation", () => {
+  test("managed sync does not create an epigraph or delete the scene when a scene file is converted to epigraph representation", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sync-"));
     const db = openDb(":memory:");
     const chapterDir = path.join(dir, "projects", "test-novel", "Draft", "01-The perfect chapter");
@@ -2726,7 +2790,7 @@ describe("syncAll", () => {
       WHERE project_id = 'test-novel'
     `).all();
 
-    assert.deepEqual(scenes.map((row) => row.scene_id), ["sc-001"]);
+    assert.deepEqual(scenes.map((row) => row.scene_id), ["sc-001", "sc-epi"]);
     assert.deepEqual(epigraphs.map((row) => [row.chapter_id, row.body]), []);
     assert.ok(result.warnings.some((warning) => warning.includes("Managed structure sync ignored file-derived epigraph linkage")));
 
