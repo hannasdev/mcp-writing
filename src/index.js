@@ -336,7 +336,7 @@ function createMcpServer() {
   // ---- describe_workflows --------------------------------------------------
   s.tool(
     "describe_workflows",
-    "Return the default workflow map and current project context for this server. Call this first in most sessions and again whenever you are unsure what to do next. Never write scripts to invoke tools — call them directly.",
+    "Return the default workflow map and current project context for this server. Call this first in most sessions and again whenever you are unsure what to do next. Treat sidecars, frontmatter, Scrivener-derived fields, generated exports, and backups by their named compatibility, review, or recovery roles; use outcome workflows for current SQLite-canonical structure and relationship changes. Never write scripts to invoke tools — call them directly.",
     {},
     async () => {
       const projectRow = db.prepare(
@@ -453,6 +453,7 @@ function createMcpServer() {
           "When calling bootstrap_prose_styleguide_config or check_prose_styleguide_drift, set max_scenes to context.scene_count to avoid the default limit.",
           "Use context.setup_contract.styleguide_setup_status to decide whether styleguide setup is missing/invalid and advisory/blocking.",
           "Styleguide tools resolve config in priority order: project_root > universe_root > sync_root. If any styleguide_exists field is true, a config exists and styleguide tools will work. For invalid setup states, use setup_contract plan preview actions (which may set overwrite=true for repair).",
+          "Treat sidecars, frontmatter, Scrivener-derived fields, generated exports, and project backups by their named compatibility, review, or recovery roles. Use outcome workflows for current SQLite-canonical structure and relationship changes.",
           ...(DB_STARTUP_WARNINGS.length > 0
             ? ["Database migration warnings are present in context.db_migration_warnings. Run sync() now, then run enrich_scene(scene_id, project_id) for stale scenes you touch."]
             : []),

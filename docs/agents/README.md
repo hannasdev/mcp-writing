@@ -16,4 +16,5 @@ This section collects documentation primarily intended for AI agents and agent m
 ## Related References
 
 - [docs/guides/setup.md](../guides/setup.md) - Shipped setup guide covering prerequisites, setup flows, import paths, and runtime ownership expectations.
+- [docs/guides/sidecar-compatibility.md](../guides/sidecar-compatibility.md) - Compatibility and migration guidance for existing `.meta.yaml` sidecars.
 - [tools.md](tools.md) - Auto-generated tool catalog and parameter contracts.

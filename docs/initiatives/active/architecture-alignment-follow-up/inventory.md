@@ -28,13 +28,13 @@ schemas, sync indexers, and MCP write tools.
 | Scene identity and core metadata | `scenes.scene_id`, `project_id`, `title`, `pov`, `logline`, `scene_change`, `causality`, `stakes`, `scene_functions`, `save_the_cat_beat`, `story_time`, `word_count`, `metadata_stale` | SQLite-canonical after sync/tool writes | Sidecar/frontmatter remains compatibility input | Keep SQLite-canonical; M3 preserves structural compatibility fields during generic metadata writes. |
 | Scene structural placement | `scenes.chapter_id`, `scene_role`, `part`, `chapter`, `chapter_title`, `timeline_position`; `chapters` | SQLite-canonical | Folder names and numeric chapter fields are compatibility hints/read aliases | Keep SQLite-canonical; M2/M3 preserve structure unless explicit workflows mutate it. |
 | Scene prose | Markdown/text scene files | Prose-authored | Sync computes checksum and stale state | Keep prose-authored and file-based. |
-| Scene workflow status | Accepted by scene sidecar schema and `update_scene_metadata`; no SQLite column | Sidecar-only today | Daily metadata field, not import-only | Needs decision: migrate-to-schema or intentionally deprecated/replaced by review workflow status. |
+| Scene workflow status | Accepted by scene sidecar schema and `update_scene_metadata`; no SQLite column | Sidecar-only today | Retained compatibility/review metadata | M5 documents status as compatibility/review metadata until a future schema migration or deprecation decision promotes or removes it. |
 | Scene source identifiers | `external_source`, `external_id` accepted by scene sidecar schema; Scrivener import/merge uses them | Import-only compatibility input today | Scrivener/import reconciliation | Mark import-only unless a future provenance model adds SQLite columns. |
-| Scene flags/review notes | `flag_scene` appends `flags` to sidecar; not in lint schema or SQLite | Sidecar-only today | Review note scratchpad | M4 classifies flags as compatibility review notes, not canonical relationship authority; future migration/deprecation remains M5/follow-up scope. |
+| Scene flags/review notes | `flag_scene` appends `flags` to sidecar; not in lint schema or SQLite | Sidecar-only today | Review note scratchpad | M5 documents flags as retained compatibility/review notes, not canonical relationship authority; future schema migration or deprecation remains follow-up scope. |
 | Scene characters | `scene_characters`; populated by sync from sidecar, by `connect_character_place_evidence`, and by enrichment apply/sync | SQLite-canonical index; active scene-backed association writes are SQLite-first except retained prose-derived batch repair | Sidecar `characters` is compatibility input/output and retained batch repair output | M4 adds `connect_character_place_evidence`; batch enrichment now documents sidecar output as compatibility before sync-index repair. |
-| Scene places | `scene_places`; populated by sync from sidecar and by `connect_character_place_evidence` | SQLite-canonical index; active scene-backed association writes are SQLite-first | Sidecar `places` is compatibility input/output | M4 adds outcome-level character/place association through scene evidence; broad sidecar deprecation remains M5. |
+| Scene places | `scene_places`; populated by sync from sidecar and by `connect_character_place_evidence` | SQLite-canonical index; active scene-backed association writes are SQLite-first | Sidecar `places` is compatibility input/output | M5 documents sidecar `places` as compatibility input/output; active scene-backed association work should use `connect_character_place_evidence`. |
 | Scene tags | `scene_tags`; populated by sync from sidecar `tags` and `versions` | SQLite-canonical search index; generic tag writes remain retained metadata compatibility | Sidecar `tags` is compatibility input/output for search keywords | M4 does not promote tags to relationship authority; schema/semantics decision remains future scope. |
-| Scene versions | Sidecar `versions`; indexed into `scene_tags`; legacy script splits version markers out of characters | Generated/import compatibility today | Search keyword continuity and legacy cleanup | Decide whether versions become first-class schema, ordinary tags, or deprecated import cleanup. |
+| Scene versions | Sidecar `versions`; indexed into `scene_tags`; legacy script splits version markers out of characters | Generated/import compatibility today | Search keyword continuity and legacy cleanup | M5 documents versions as compatibility metadata; future work can decide whether to promote them, fold them into ordinary tags, or deprecate import cleanup. |
 | Threads and scene-thread beats | `threads`, `scene_threads`; `upsert_thread_link` writes SQLite-first | SQLite-canonical | Sidecar `threads` is lint-accepted but not active authority | Keep SQLite-canonical; treat sidecar `threads` as deprecated/import-only unless M4 defines migration. |
 | Chapters | `chapters` | SQLite-canonical | Folder-derived structure can seed or diagnose | Keep SQLite-canonical. |
 | Epigraphs | `epigraphs`, `epigraph_characters`, `epigraph_tags` | SQLite-canonical for indexed metadata; prose body file-based | Epigraph metadata/frontmatter and folder placement are compatibility input | Keep SQLite-canonical for placement/relationships; prose remains file-based. |
@@ -44,7 +44,7 @@ schemas, sync indexers, and MCP write tools.
 | Character prose notes | `sheet.md` and adjacent support notes | Prose-authored | Search/detail tools read notes on demand | Keep prose-authored and file-based. |
 | Character relationships | `character_relationships`; `record_character_relationship_beat` writes relationship beats with scene evidence | SQLite-canonical | Public workflow hides table shape from callers | M4 adds outcome-level mutation surface and backup refresh. |
 | Places | `places`; sheet files plus sidecars | SQLite-canonical for indexed name; sidecars are compatibility input/output and retained review notes | Place sidecars seed import/sync and are refreshed as compatibility output | M4 reorders canonical place-name updates SQLite-first; relationship fields remain review notes unless backed by scene evidence. |
-| Place associated characters | Accepted/read from place sidecar; scene-backed authority is `scene_characters` + `scene_places` through `connect_character_place_evidence` | Sidecar-only review note unless connected through scene evidence | Place detail output and audit diagnostic | M4 classifies retained sidecar values as compatibility/review notes and adds scene-backed outcome workflow; schema migration remains future scope. |
+| Place associated characters | Accepted/read from place sidecar; scene-backed authority is `scene_characters` + `scene_places` through `connect_character_place_evidence` | Sidecar-only review note unless connected through scene evidence | Place detail output and audit diagnostic | M5 documents retained sidecar values as compatibility/review notes; scene-backed authority uses `connect_character_place_evidence`, and schema migration remains future scope. |
 | Place tags | Accepted/read from place sidecar; no SQLite table | Sidecar-only today | Compatibility/review note surfaced by `audit_relationship_metadata` | M4 classifies as non-authoritative compatibility/review notes; migrate/deprecate decision remains future scope. |
 | Reference docs | `reference_docs`, `reference_doc_tags`, `reference_docs_fts` | SQLite-canonical index over file-authored docs | Reference file frontmatter seeds index | Keep SQLite-canonical index; source doc prose remains file-based. |
 | Reference links | `reference_links` with `origin`; sidecar/frontmatter aliases `reference_ids`, `references`, `related_reference_ids`, `related_references`, `related_docs`, `related`, `reference_links`, `explicit_reference_links`, `related_reference_links` | SQLite-canonical target state; `link_reference_evidence` and apply workflows commit SQLite first | Legacy aliases and generated compatibility output | M4 makes explicit/apply workflows SQLite-first and treats sidecar/frontmatter refresh as compatibility output. |
@@ -86,19 +86,21 @@ schemas, sync indexers, and MCP write tools.
 - Existing dry-run/apply workflows need reviewable output even if writable
   sidecars are removed; M1 should assign those outputs to review snapshots.
 
-## Schema Gap Decisions Needed Before Behavior Changes
+## Schema Gap Decisions And Migration Posture
 
 - **Migrate-to-schema candidates:** scene workflow status, scene flags/review
   notes if retained, character tags, place tags, place associated characters,
-  and possibly character group. M4 classifies flags/tags/place
-  associated_characters as non-authoritative compatibility/review notes unless
-  a scene-backed relationship workflow writes SQLite evidence.
+  and possibly character group. M5 documents these as retained
+  compatibility/review metadata unless a scene-backed relationship workflow
+  writes SQLite evidence.
 - **Generated/import-only candidates:** `external_source`, `external_id`,
   sidecar `threads`, legacy reference aliases, numeric chapter fields, and
   folder-derived structure.
 - **Deprecated candidates:** sidecar `threads` as daily input, version strings
   as a separate scene field if ordinary tags are sufficient, and sidecar-only
-  flags if replaced by review snapshots.
+  flags if replaced by review snapshots. M5 does not remove these paths; it
+  names their compatibility role so removal or schema promotion can be planned
+  separately.
 - **Intentionally prose/file-owned candidates:** authored scene prose,
   character/place notes, and reference document bodies.
 

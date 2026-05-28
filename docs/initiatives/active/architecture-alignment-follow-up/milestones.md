@@ -1,12 +1,12 @@
 # Architecture Alignment Follow-up — Milestones
 
-**Status:** Active — M4 Outcome-Oriented Relationship Workflows in implementation
+**Status:** Active — M5 Deprecation, Migration, and Documentation in implementation
 
 This milestone plan breaks the Architecture Alignment Follow-up PRD into
 independently reviewable slices. Use [prd.md](prd.md) for product framing and
 this document for sequencing, gates, and implementation readiness.
-M0–M3 are accepted; M4 is in implementation; M5 remains
-deferred for future prioritization.
+M0–M3 are accepted; M4 was implemented in PR #225; M5 is in
+implementation.
 
 ## Objective
 
@@ -288,7 +288,7 @@ Out of scope:
 
 ## M4 — Outcome-Oriented Relationship Workflows
 
-Status: In implementation after partial conformance follow-up.
+Status: Implemented; pending conformance acceptance.
 
 Goal: expose relationship metadata changes through story and review outcomes
 instead of storage CRUD.
@@ -326,6 +326,13 @@ Implementation notes:
   workflow-status fields, and place associated-character fields remains M5 or a
   future focused initiative.
 
+Evidence:
+
+- [release-log.md](../../../../release-log.md)
+- [docs/agents/tools.md](../../../agents/tools.md)
+- [src/workflows/workflow-catalogue.js](../../../../src/workflows/workflow-catalogue.js)
+- [src/tools/metadata.js](../../../../src/tools/metadata.js)
+
 Acceptance gates:
 
 - Public tools express goals such as tracking an arc, linking evidence,
@@ -361,7 +368,7 @@ Out of scope:
 
 ## M5 — Deprecation, Migration, and Documentation
 
-Status: Planned.
+Status: In implementation.
 
 Goal: make remaining sidecar behavior explicit, migrated, or removed from normal
 workflows.
@@ -375,6 +382,16 @@ Deliverables:
 - Document which sidecar paths remain import compatibility and which are
   generated/review/recovery artifacts.
 - Remove or de-emphasize docs that imply sidecars are daily-work authority.
+
+Evidence:
+
+- [Sidecar Compatibility and Migration](../../../guides/sidecar-compatibility.md)
+- [Setup Guide](../../../guides/setup.md#sidecar-compatibility-after-setup)
+- [Agent Docs](../../../agents/README.md)
+- [Managed Structure Contract](../../../foundations/managed-structure-contract.md#snapshot-and-sidecar-roles)
+- [Conceptual Target Architecture](../../../foundations/target-architecture.md#snapshot-and-sidecar-roles)
+- [Generated Tool Reference](../../../agents/tools.md)
+- [release-log.md](../../../../release-log.md)
 
 Acceptance gates:
 

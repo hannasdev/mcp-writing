@@ -79,7 +79,7 @@
 
 ## describe_workflows
 
-Return the default workflow map and current project context for this server. Call this first in most sessions and again whenever you are unsure what to do next. Never write scripts to invoke tools — call them directly.
+Return the default workflow map and current project context for this server. Call this first in most sessions and again whenever you are unsure what to do next. Treat sidecars, frontmatter, Scrivener-derived fields, generated exports, and backups by their named compatibility, review, or recovery roles; use outcome workflows for current SQLite-canonical structure and relationship changes. Never write scripts to invoke tools — call them directly.
 
 _No parameters._
 

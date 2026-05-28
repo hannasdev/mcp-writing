@@ -362,6 +362,7 @@ describe("describe_workflows tool", () => {
       "thread_understanding",
       "relationship_alignment",
       "parity_recovery",
+      "sidecar_compatibility_migration",
       "backup_recovery",
       "review_preparation",
       "first_time_setup",
@@ -394,6 +395,26 @@ describe("describe_workflows tool", () => {
     assert.match(evidenceStep.note, /generated transparency/);
   });
 
+  test("sidecar compatibility migration workflow steers away from direct sidecar authority", async () => {
+    const text = await callWriteTool("describe_workflows");
+    const parsed = JSON.parse(text);
+    const workflow = parsed.workflows.find(w => w.id === "sidecar_compatibility_migration");
+
+    assert.ok(workflow, "sidecar_compatibility_migration workflow missing");
+    assert.match(workflow.use_when, /\.meta\.yaml sidecars/);
+    const tools = workflow.steps.map(step => step.tool);
+    assert.deepEqual(tools.slice(0, 3), [
+      "sync",
+      "diagnose_structure",
+      "audit_relationship_metadata",
+    ]);
+    assert.ok(tools.includes("track_thread_arc"));
+    assert.ok(tools.includes("connect_character_place_evidence"));
+    assert.ok(tools.includes("link_reference_evidence"));
+    const relationshipStep = workflow.steps.find(step => step.tool === "connect_character_place_evidence");
+    assert.match(relationshipStep.note, /instead of editing sidecar/);
+  });
+
   test("backup recovery workflow apply guidance includes reviewed checksum", async () => {
     const text = await callWriteTool("describe_workflows");
     const parsed = JSON.parse(text);
@@ -419,6 +440,7 @@ describe("describe_workflows tool", () => {
       "character_understanding",
     ]);
 
+    assert.ok(ids.indexOf("sidecar_compatibility_migration") > ids.indexOf("parity_recovery"));
     assert.ok(ids.indexOf("first_time_setup") > ids.indexOf("review_preparation"));
     assert.ok(ids.indexOf("styleguide_setup_new") > ids.indexOf("first_time_setup"));
   });

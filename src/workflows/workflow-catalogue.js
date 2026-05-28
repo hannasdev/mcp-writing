@@ -95,6 +95,20 @@ export const WORKFLOW_CATALOGUE = [
     ],
   },
   {
+    id: "sidecar_compatibility_migration",
+    label: "Migrate legacy sidecar expectations",
+    use_when: "Use when an existing project, prompt, or external workflow still treats .meta.yaml sidecars, frontmatter, or Scrivener-derived fields as the place to make structural or relationship changes.",
+    steps: [
+      { tool: "sync", note: "Refresh SQLite indexes from current compatibility inputs, then review warnings instead of patching sidecars as the first repair step." },
+      { tool: "diagnose_structure", note: "Use when sidecar, frontmatter, folder, chapter, epigraph, or generated-export structure appears to disagree with SQLite canonical state." },
+      { tool: "audit_relationship_metadata", note: "Use when sidecar threads, tags, flags, associated_characters, characters, places, or reference aliases need authority classification before repair." },
+      { tool: "track_thread_arc", note: "Use for current thread authority instead of editing sidecar threads." },
+      { tool: "connect_character_place_evidence", note: "Use for current scene-backed character/place authority instead of editing sidecar relationship lists." },
+      { tool: "link_reference_evidence", note: "Use for current reference-link authority instead of editing sidecar/frontmatter aliases." },
+      { tool: "export_project_backup", note: "Generate a recovery snapshot from SQLite canonical state after meaningful canonical migration or repair work; editing backup artifacts does not mutate current state." },
+    ],
+  },
+  {
     id: "structure_assignment",
     label: "Manage chapter structure",
     use_when: "Use when the user wants to create, rename, or reorder a canonical chapter, attach an epigraph to a chapter, move a scene into a canonical chapter or position, repair an explicit scene chapter link, or clear a scene's explicit chapter assignment.",

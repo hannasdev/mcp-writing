@@ -14,7 +14,8 @@ How metadata is stored, managed, and kept in sync with prose.
 Highlights:
 
 - Tier 1 (structural) and Tier 2 (editorial) metadata split
-- Sidecar-based storage with `.meta.yaml`
+- SQLite-canonical structural and relationship metadata with `.meta.yaml`
+  compatibility input/output
 - Auto-migration from legacy frontmatter
 - Staleness detection and `enrich_scene`
 

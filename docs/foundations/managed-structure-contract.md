@@ -94,6 +94,11 @@ Review snapshots and recovery snapshots must not be treated as competing daily
 sources of truth. Daily work reads and mutates canonical SQLite state through
 outcome-oriented MCP workflows, while prose remains authored file content.
 
+Migration guidance for existing projects lives in
+[Sidecar Compatibility and Migration](../guides/sidecar-compatibility.md).
+That guide names the retained compatibility roles for existing sidecars without
+making direct sidecar edits the daily-work contract.
+
 ## Workflow Zones
 
 ### Setup and Import
@@ -167,6 +172,7 @@ This contract refines existing ownership principles:
 
 - [Product Overview](../../PRODUCT.md)
 - [Conceptual Target Architecture](./target-architecture.md)
+- [Sidecar Compatibility and Migration](../guides/sidecar-compatibility.md)
 - [Data Ownership](../history/data-ownership.md)
 - [Chapter and Epigraph Structure](../initiatives/done/chapter-structure/prd.md)
 - [Divisions](../initiatives/backlog/divisions/prd.md)
