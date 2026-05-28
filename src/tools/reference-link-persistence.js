@@ -40,10 +40,6 @@ export function persistSceneReferenceLink({ scenePath, syncDir, targetDocId, rel
   writeMeta(scenePath, nextMeta, { syncDir });
 }
 
-export function validateSceneReferenceLinkCompatibilityTarget({ scenePath, syncDir }) {
-  readSourceMeta(scenePath, syncDir, { writable: true });
-}
-
 export function upsertExplicitReferenceLinkRow(
   db,
   { sourceKind, sourceProjectId, sourceId, targetDocId, relation }

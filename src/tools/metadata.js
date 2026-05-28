@@ -948,25 +948,38 @@ export function registerMetadataTools(s, {
 
   async function auditRelationshipMetadata({ project_id }) {
     const projectFilter = project_id ? `WHERE project_id = ?` : "";
-    const params = project_id ? [project_id] : [];
+    const projectParams = project_id ? [project_id] : [];
+    const projectScope = project_id
+      ? db.prepare(`SELECT universe_id FROM projects WHERE project_id = ?`).get(project_id)
+      : null;
+    const entityFilter = project_id
+      ? projectScope
+        ? `WHERE project_id = ?
+          OR (universe_id IS NOT NULL AND universe_id = ?)
+          OR (project_id IS NULL AND universe_id IS NULL)`
+        : "WHERE 0"
+      : "";
+    const entityParams = project_id && projectScope
+      ? [project_id, projectScope.universe_id]
+      : [];
     const scenes = db.prepare(`
       SELECT scene_id, project_id, file_path, metadata_stale
       FROM scenes
       ${projectFilter}
       ORDER BY project_id, scene_id
-    `).all(...params);
+    `).all(...projectParams);
     const characters = db.prepare(`
       SELECT character_id, project_id, universe_id, file_path
       FROM characters
-      ${projectFilter}
+      ${entityFilter}
       ORDER BY character_id
-    `).all(...params);
+    `).all(...entityParams);
     const places = db.prepare(`
       SELECT place_id, project_id, universe_id, file_path
       FROM places
-      ${projectFilter}
+      ${entityFilter}
       ORDER BY place_id
-    `).all(...params);
+    `).all(...entityParams);
 
     const diagnostics = [];
     for (const scene of scenes) {

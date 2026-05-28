@@ -57,11 +57,17 @@ function makeToolHarness(db, { writable = true } = {}) {
   };
 }
 
-function seedProject(db, projectId) {
+function seedProject(db, projectId, { universeId = null } = {}) {
+  if (universeId) {
+    db.prepare(`
+      INSERT OR IGNORE INTO universes (universe_id, name)
+      VALUES (?, ?)
+    `).run(universeId, universeId);
+  }
   db.prepare(`
     INSERT INTO projects (project_id, universe_id, name)
     VALUES (?, ?, ?)
-  `).run(projectId, null, projectId);
+  `).run(projectId, universeId, projectId);
 }
 
 function seedScene(db, { sceneId, projectId }) {
@@ -94,8 +100,8 @@ function seedReferenceDoc(db, { docId, projectId, title }) {
   `).run(docId, projectId, null, "world", title, null, referencePath);
 }
 
-function seedCharacter(db, { characterId, projectId, name = characterId, filePath = null }) {
-  const characterPath = filePath ?? path.join(SEED_TMP_DIR, `${projectId ?? "global"}-${characterId}-${++seedCounter}.md`);
+function seedCharacter(db, { characterId, projectId, universeId = null, name = characterId, filePath = null }) {
+  const characterPath = filePath ?? path.join(SEED_TMP_DIR, `${projectId ?? universeId ?? "global"}-${characterId}-${++seedCounter}.md`);
   if (!filePath) {
     fs.writeFileSync(
       characterPath,
@@ -107,11 +113,11 @@ function seedCharacter(db, { characterId, projectId, name = characterId, filePat
     INSERT INTO characters (
       character_id, project_id, universe_id, name, role, arc_summary, first_appearance, file_path
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(characterId, projectId, null, name, null, null, null, characterPath);
+  `).run(characterId, projectId, universeId, name, null, null, null, characterPath);
 }
 
-function seedPlace(db, { placeId, projectId, name = placeId, filePath = null }) {
-  const placePath = filePath ?? path.join(SEED_TMP_DIR, `${projectId ?? "global"}-${placeId}-${++seedCounter}.md`);
+function seedPlace(db, { placeId, projectId, universeId = null, name = placeId, filePath = null }) {
+  const placePath = filePath ?? path.join(SEED_TMP_DIR, `${projectId ?? universeId ?? "global"}-${placeId}-${++seedCounter}.md`);
   if (!filePath) {
     fs.writeFileSync(
       placePath,
@@ -122,7 +128,7 @@ function seedPlace(db, { placeId, projectId, name = placeId, filePath = null }) 
   db.prepare(`
     INSERT INTO places (place_id, project_id, universe_id, name, file_path)
     VALUES (?, ?, ?, ?, ?)
-  `).run(placeId, projectId, null, name, placePath);
+  `).run(placeId, projectId, universeId, name, placePath);
 }
 
 describe("metadata upsert_reference_link tool", () => {
@@ -571,6 +577,57 @@ describe("metadata relationship outcome tools", () => {
       assert.ok(parsed.diagnostics.some(diagnostic => diagnostic.type === "character_tags_review_note"));
       assert.ok(parsed.diagnostics.some(diagnostic => diagnostic.type === "place_associated_characters_review_note"));
       assert.ok(parsed.next_steps.includes("Use connect_character_place_evidence for scene-backed character/place relationships."));
+    } finally {
+      db.close();
+    }
+  });
+
+  test("audit_relationship_metadata includes universe-scoped compatibility notes for a project", async () => {
+    const db = openDb(":memory:");
+    try {
+      seedProject(db, "book-one", { universeId: "shared-universe" });
+      seedScene(db, { sceneId: "sc-audit-universe", projectId: "book-one" });
+      const characterPath = path.join(SEED_TMP_DIR, `audit-universe-char-${++seedCounter}.md`);
+      fs.writeFileSync(
+        characterPath,
+        "---\ncharacter_id: char-shared\nname: Shared Character\ntags:\n  - universe-tag\n---\nCharacter notes.",
+        "utf8"
+      );
+      seedCharacter(db, {
+        characterId: "char-shared",
+        projectId: null,
+        universeId: "shared-universe",
+        name: "Shared Character",
+        filePath: characterPath,
+      });
+      const placePath = path.join(SEED_TMP_DIR, `audit-universe-place-${++seedCounter}.md`);
+      fs.writeFileSync(
+        placePath,
+        "---\nplace_id: place-shared\nname: Shared Place\nassociated_characters:\n  - char-shared\n---\nPlace notes.",
+        "utf8"
+      );
+      seedPlace(db, {
+        placeId: "place-shared",
+        projectId: null,
+        universeId: "shared-universe",
+        name: "Shared Place",
+        filePath: placePath,
+      });
+
+      const tools = makeToolHarness(db);
+      const parsed = await tools.call("audit_relationship_metadata", {
+        project_id: "book-one",
+      });
+
+      assert.equal(parsed.ok, true);
+      assert.ok(parsed.diagnostics.some(diagnostic =>
+        diagnostic.type === "character_tags_review_note" &&
+        diagnostic.character_id === "char-shared"
+      ));
+      assert.ok(parsed.diagnostics.some(diagnostic =>
+        diagnostic.type === "place_associated_characters_review_note" &&
+        diagnostic.place_id === "place-shared"
+      ));
     } finally {
       db.close();
     }
