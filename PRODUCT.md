@@ -50,7 +50,7 @@ For structural manuscript state, use [Managed Structure Contract](docs/foundatio
 
 - [Features](FEATURES.md) — shipped product capabilities and links to completed initiative docs
 - [Backlog](BACKLOG.md) — deferred product work that is not currently active
-- [Architecture Alignment Follow-up](docs/initiatives/active/architecture-alignment-follow-up/prd.md) — active initiative with M4 relationship workflow alignment remaining
+- [Architecture Alignment Follow-up](docs/initiatives/active/architecture-alignment-follow-up/prd.md) — active initiative documenting sidecar compatibility, migration, and deprecation expectations
 - [Database Backup and Recovery](docs/initiatives/done/database-backup-recovery/prd.md) — completed initiative for Git-reviewable recovery artifacts and explicit restore workflows for SQLite-canonical state
 - [Conceptual Target Architecture](docs/foundations/target-architecture.md) — idealized architectural model for evaluating future structure, tooling, and workflow decisions
 - [Managed Structure Contract](docs/foundations/managed-structure-contract.md) — design boundaries for structural mutation, generated transparency, import, and maintenance workflows
