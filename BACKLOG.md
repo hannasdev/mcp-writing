@@ -22,6 +22,12 @@ Add optional project-scoped Parts, Acts, or other larger structural sections abo
 
 **Status:** Deferred backlog (not active). Chapter and epigraph structure is complete; this follow-up captures the optional division layer without reopening shipped chapter behavior.
 
+### 🔗 [Relationship Metadata Boundary](docs/initiatives/backlog/relationship-metadata-boundary/prd.md) 📋
+
+Close the remaining sidecar-first relationship mutation path so generic scene metadata updates no longer act as canonical character/place relationship writes.
+
+**Status:** Deferred backlog (not active). Planning captures the next target-architecture cleanup candidate from the architecture review.
+
 ### 📊 [Embedding-Based Search](docs/initiatives/backlog/embeddings-search/prd.md) 📋
 
 Semantic search for queries that require understanding meaning, not just keywords.
