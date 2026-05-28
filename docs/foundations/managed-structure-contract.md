@@ -68,6 +68,32 @@ Daily chapter creation, chapter rename/reorder, scene placement, and epigraph at
 | Derived views | Outline, chapter index, reports, bundles, search index | Regenerated from canonical state |
 | Migration inputs | Legacy folders, Scrivener markers, numeric chapters | Interpreted during setup/import only |
 
+## Snapshot and Sidecar Roles
+
+Writable sidecars are not a target daily-work authority for structured
+metadata. Where sidecar-shaped data remains useful, it should have one of these
+explicit roles:
+
+- **Import compatibility input:** legacy sidecars, Scrivener-derived metadata,
+  and frontmatter may seed or reconcile canonical state during setup, import, or
+  named migration workflows.
+- **Generated compatibility output:** a sidecar-shaped file may be regenerated
+  from canonical state for external tools or transitional compatibility, but
+  editing it must not become a structural mutation path.
+- **Review snapshot:** proposed before/after material for dry runs, Git review,
+  and AI/human inspection. Review snapshots are advisory and expire when the
+  proposed operation is discarded or committed through an MCP workflow.
+- **Recovery snapshot:** durable rollback or rebuild input tied to backup and
+  restore workflows. Recovery snapshots can be explicit restore inputs, but only
+  through dry-run-first, validated restore workflows.
+- **Deprecated compatibility artifact:** sidecar-shaped state with no retained
+  product role should be migrated, ignored, or removed through a named follow-up
+  decision.
+
+Review snapshots and recovery snapshots must not be treated as competing daily
+sources of truth. Daily work reads and mutates canonical SQLite state through
+outcome-oriented MCP workflows, while prose remains authored file content.
+
 ## Workflow Zones
 
 ### Setup and Import

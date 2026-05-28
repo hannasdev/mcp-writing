@@ -157,6 +157,29 @@ Exports should read canonical state and prose, but they should not redefine eith
 | Derived views | Reports, indexes, bundles, generated docs | Regenerated from canonical state |
 | Migration inputs | Scrivener output, legacy folders, old numbering | Interpreted during import only |
 
+## Snapshot and Sidecar Roles
+
+The target architecture does not depend on writable metadata sidecars as a
+parallel source of truth. Sidecar-shaped data can still exist, but only with an
+explicit role:
+
+- **Import compatibility input:** legacy sidecars, frontmatter, and
+  Scrivener-derived metadata can help translate existing material into
+  canonical state.
+- **Generated compatibility output:** sidecar-shaped files can be regenerated
+  from canonical state when an external workflow still needs them.
+- **Review snapshot:** temporary before/after material can make dry runs,
+  proposed changes, and Git review inspectable without becoming authority.
+- **Recovery snapshot:** durable backup/restore material can rebuild or roll
+  back canonical state through explicit restore workflows.
+- **Deprecated compatibility artifact:** sidecar-shaped files with no retained
+  role should be migrated or removed through a named product decision.
+
+The important boundary is not the file extension. It is whether an artifact is
+allowed to define current manuscript state. Review snapshots explain proposed
+state. Recovery snapshots support explicit recovery. Canonical SQLite state and
+authored prose remain the daily-work authority.
+
 ## Workflow Zones
 
 ### Setup and Import

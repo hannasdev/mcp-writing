@@ -7,7 +7,8 @@ periodic reviews. It is a holding place for missing parts, correction
 candidates, and follow-up work that should not be lost, but it is not active
 implementation scope until explicitly prioritized.
 
-Implementation sequencing lives in [milestones.md](milestones.md).
+Implementation sequencing lives in [milestones.md](milestones.md). The M0
+metadata ownership inventory lives in [inventory.md](inventory.md).
 
 ## Goal
 
@@ -211,6 +212,7 @@ or delete operations for individual tables.
 - [Conceptual Target Architecture](../../../foundations/target-architecture.md)
 - [Managed Structure Contract](../../../foundations/managed-structure-contract.md)
 - [Milestones](milestones.md)
+- [Metadata Ownership Inventory](inventory.md)
 - [Structural Authority Hardening](../../done/structural-authority-hardening/prd.md)
 - [Target Architecture Migration](../../done/target-architecture-migration/prd.md)
 - [Database Backup and Recovery](../../done/database-backup-recovery/prd.md)

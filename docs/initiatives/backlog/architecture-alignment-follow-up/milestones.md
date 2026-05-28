@@ -29,7 +29,7 @@ and public tools express writing outcomes rather than storage internals.
 
 ## M0 — Metadata Ownership Inventory
 
-Status: Planned.
+Status: Accepted for M1 sequencing.
 
 Goal: build an implementation-backed inventory before changing behavior.
 
@@ -57,10 +57,15 @@ Deliverables:
 - Update [prd.md](prd.md) or add a companion inventory document with the
   ownership matrix.
 
+Evidence:
+
+- [inventory.md](inventory.md)
+
 Acceptance gates:
 
 - Scenes, chapters, epigraphs, threads, characters, places, reference links,
-  tags, status fields, and source identifiers all have named canonical owners.
+  tags, status fields, and source identifiers all have named current owners and
+  target ownership decisions.
 - Relationship metadata families have explicit write-order expectations.
 - Each sidecar-shaped field is classified as current authority, generated view,
   import compatibility, review snapshot, recovery snapshot, or deprecated.
@@ -84,7 +89,7 @@ Out of scope:
 
 ## M1 — Snapshot Model Decision
 
-Status: Planned.
+Status: Drafted for review.
 
 Goal: replace the writable-sidecar mental model with explicit review snapshots
 and recovery snapshots.
@@ -100,6 +105,11 @@ Deliverables:
   snapshot artifact or be deprecated.
 - Update architecture docs so sidecars, review snapshots, and recovery
   snapshots have distinct ownership and mutation rules.
+
+Evidence:
+
+- [Managed Structure Contract](../../../foundations/managed-structure-contract.md#snapshot-and-sidecar-roles)
+- [Conceptual Target Architecture](../../../foundations/target-architecture.md#snapshot-and-sidecar-roles)
 
 Acceptance gates:
 
