@@ -12,7 +12,7 @@ This complements `CHANGELOG.md`:
 - Why it matters: Authors, maintainers, and AI agents can track arcs, link evidence, review stale relationship metadata, and prepare recovery snapshots without treating sidecars or raw table names as relationship authority.
 - Who is affected: Authors, maintainers, and AI agents using character/place, thread, reference-link, enrichment, metadata audit, or recovery workflows.
 - Action needed: Prefer `track_thread_arc`, `connect_character_place_evidence`, `record_character_relationship_beat`, `link_reference_evidence`, and `audit_relationship_metadata` for relationship work. Treat sidecar tags, flags, and place associated_characters as compatibility/review notes unless a future migration promotes them.
-- PR: Pending
+- PR: [#225](https://github.com/hannasdev/mcp-writing/pull/225)
 
 ### 2026-05-28 — Preserve structure fields during metadata updates
 
