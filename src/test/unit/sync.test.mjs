@@ -2051,10 +2051,11 @@ describe("syncAll", () => {
     fs.rmSync(dir, { recursive: true });
   });
 
-  test("managed sync does not warn when a relative canonical chapter folder still exists", () => {
+  test("managed sync does not warn when a relative canonical chapter folder still exists from a scoped root", () => {
     const dir = makeTempSync();
     const db = openDb(":memory:");
     const relativeChapterPath = "projects/test-novel/Draft/01-Arrival";
+    const projectRoot = path.join(dir, "projects", "test-novel");
     fs.mkdirSync(path.join(dir, relativeChapterPath), { recursive: true });
     db.prepare(`
       INSERT INTO projects (project_id, name)
@@ -2068,7 +2069,7 @@ describe("syncAll", () => {
       )
     `).run(relativeChapterPath);
 
-    const result = syncAll(db, dir, { quiet: true });
+    const result = syncAll(db, projectRoot, { quiet: true });
 
     assert.equal(
       result.warnings.some((warning) => warning.includes("Managed sync preserved canonical chapter missing from filesystem")),

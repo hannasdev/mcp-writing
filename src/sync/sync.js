@@ -1025,8 +1025,9 @@ function pruneMissingEpigraphs(db, seenEpigraphKeys, syncDir) {
 
 function formatSyncRelativePath(syncDir, filePath) {
   if (!filePath) return null;
+  if (!path.isAbsolute(filePath)) return filePath.split(/[\\/]+/).join("/");
   const resolvedSyncDir = path.resolve(syncDir);
-  const resolvedFilePath = resolveStoredSyncPath(syncDir, filePath);
+  const resolvedFilePath = path.resolve(filePath);
   const relativePath = path.relative(resolvedSyncDir, resolvedFilePath);
   if (relativePath && !relativePath.startsWith("..") && !path.isAbsolute(relativePath)) {
     return relativePath.split(path.sep).join("/");
@@ -1034,11 +1035,24 @@ function formatSyncRelativePath(syncDir, filePath) {
   return resolvedFilePath;
 }
 
-function resolveStoredSyncPath(syncDir, filePath) {
-  if (!filePath) return null;
-  return path.isAbsolute(filePath)
-    ? path.resolve(filePath)
-    : path.resolve(syncDir, filePath);
+function storedSyncPathCandidates(syncDir, filePath) {
+  if (!filePath) return [];
+  if (path.isAbsolute(filePath)) return [path.resolve(filePath)];
+
+  const candidates = new Set([path.resolve(syncDir, filePath)]);
+  const normalizedParts = filePath.split(/[\\/]+/).filter(Boolean);
+  const anchor = normalizedParts[0];
+  if (["projects", "universes", "scenes"].includes(anchor)) {
+    const syncParts = path.resolve(syncDir).split(path.sep);
+    for (let index = syncParts.length - 1; index >= 0; index--) {
+      if (syncParts[index] !== anchor) continue;
+      const rootParts = syncParts.slice(0, index);
+      const root = rootParts.length ? rootParts.join(path.sep) : path.sep;
+      candidates.add(path.resolve(root, filePath));
+    }
+  }
+
+  return [...candidates];
 }
 
 function collectMissingManagedRepresentationWarnings(db, syncDir, {
@@ -1057,16 +1071,16 @@ function collectMissingManagedRepresentationWarnings(db, syncDir, {
   for (const row of chapterRows) {
     const key = `${row.chapter_id}::${row.project_id}`;
     if (observedChapterKeys.has(key)) continue;
-    const sourcePath = resolveStoredSyncPath(syncDir, row.source_path);
-    if (!sourcePath || fs.existsSync(sourcePath)) continue;
+    const sourcePaths = storedSyncPathCandidates(syncDir, row.source_path);
+    if (!sourcePaths.length || sourcePaths.some(candidate => fs.existsSync(candidate))) continue;
     warnings.push(`Managed sync preserved canonical chapter missing from filesystem: ${row.project_id}/${row.chapter_id} (${formatSyncRelativePath(syncDir, row.source_path)})`);
   }
 
   for (const row of epigraphRows) {
     const key = `${row.epigraph_id}::${row.project_id}`;
     if (observedEpigraphKeys.has(key)) continue;
-    const filePath = resolveStoredSyncPath(syncDir, row.file_path);
-    if (!filePath || fs.existsSync(filePath)) continue;
+    const filePaths = storedSyncPathCandidates(syncDir, row.file_path);
+    if (!filePaths.length || filePaths.some(candidate => fs.existsSync(candidate))) continue;
     warnings.push(`Managed sync preserved canonical epigraph missing from filesystem: ${row.project_id}/${row.epigraph_id} (${formatSyncRelativePath(syncDir, row.file_path)})`);
   }
 
