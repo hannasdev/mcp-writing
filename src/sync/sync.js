@@ -960,8 +960,8 @@ function canPruneScenes(syncDir) {
 function pruneMissingScenes(db, seenSceneKeys, syncDir, { managedProjectIds = new Set() } = {}) {
   const projectScope = inferSceneProjectScopeFromSyncDir(syncDir);
   const rows = projectScope
-    ? db.prepare(`SELECT scene_id, project_id FROM scenes WHERE project_id = ?`).all(projectScope)
-    : db.prepare(`SELECT scene_id, project_id FROM scenes`).all();
+    ? db.prepare(`SELECT scene_id, project_id, file_path FROM scenes WHERE project_id = ?`).all(projectScope)
+    : db.prepare(`SELECT scene_id, project_id, file_path FROM scenes`).all();
 
   const result = { deleted: 0, preservedManagedScenes: [] };
   for (const row of rows) {
@@ -971,6 +971,7 @@ function pruneMissingScenes(db, seenSceneKeys, syncDir, { managedProjectIds = ne
       result.preservedManagedScenes.push({
         scene_id: row.scene_id,
         project_id: row.project_id,
+        file_path: row.file_path,
       });
       continue;
     }
@@ -1085,6 +1086,21 @@ function collectMissingManagedRepresentationWarnings(db, syncDir, {
   }
 
   return warnings;
+}
+
+function formatStoredPathSuffix(syncDir, filePath) {
+  const displayPath = formatSyncRelativePath(syncDir, filePath);
+  return displayPath ? ` (${displayPath})` : "";
+}
+
+function formatPreservedManagedSceneWarning(syncDir, scene) {
+  const pathSuffix = formatStoredPathSuffix(syncDir, scene.file_path);
+  const sceneLabel = `${scene.project_id}/${scene.scene_id}`;
+  const filePaths = storedSyncPathCandidates(syncDir, scene.file_path);
+  if (filePaths.some(candidate => fs.existsSync(candidate))) {
+    return `Managed sync preserved canonical scene not observed during sync scan: ${sceneLabel}${pathSuffix}`;
+  }
+  return `Managed sync preserved canonical scene missing from filesystem: ${sceneLabel}${pathSuffix}`;
 }
 
 export function pruneSyncDerivedIndexes(db, syncDir, {
@@ -1525,6 +1541,7 @@ const WARNING_TYPE_LABELS = {
   orphaned_sidecar: "Orphaned sidecar",
   moved_scene: "Moved scene",
   missing_canonical_scene: "Missing canonical scene",
+  unobserved_canonical_scene: "Unobserved canonical scene",
   missing_canonical_chapter: "Missing canonical chapter",
   missing_canonical_epigraph: "Missing canonical epigraph",
   nested_mirror: "Ignored nested mirror path",
@@ -1538,6 +1555,7 @@ const WARNING_PATTERNS = [
   { type: "moved_scene",            re: /^Moved scene detected:/      },
   { type: "orphaned_sidecar",       re: /^Orphaned sidecar/          },
   { type: "missing_canonical_scene", re: /^Managed sync preserved canonical scene missing from filesystem:/ },
+  { type: "unobserved_canonical_scene", re: /^Managed sync preserved canonical scene not observed during sync scan:/ },
   { type: "missing_canonical_chapter", re: /^Managed sync preserved canonical chapter missing from filesystem:/ },
   { type: "missing_canonical_epigraph", re: /^Managed sync preserved canonical epigraph missing from filesystem:/ },
   { type: "nested_mirror",          re: /^Ignored nested mirror path:/ },
@@ -1721,7 +1739,7 @@ export function syncAll(db, syncDir, { quiet = false, writable = false } = {}) {
     managedProjectIds,
   });
   for (const scene of pruneResult.scenePrune?.preservedManagedScenes ?? []) {
-    warnings.push(`Managed sync preserved canonical scene missing from filesystem: ${scene.project_id}/${scene.scene_id}`);
+    warnings.push(formatPreservedManagedSceneWarning(syncDir, scene));
   }
   for (const warning of collectMissingManagedRepresentationWarnings(db, syncDir, {
     observedChapterKeys,

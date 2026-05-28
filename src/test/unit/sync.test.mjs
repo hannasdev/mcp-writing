@@ -1974,6 +1974,40 @@ describe("syncAll", () => {
     fs.rmSync(dir, { recursive: true });
   });
 
+  test("managed sync reports an existing unobserved canonical scene separately from missing files", () => {
+    const dir = makeTempSync();
+    const db = openDb(":memory:");
+
+    const chapterDir = path.join(dir, "projects", "test-novel", "Draft", "01-Arrival");
+    fs.mkdirSync(chapterDir, { recursive: true });
+    const scenePath = path.join(chapterDir, "sc-managed.md");
+    fs.writeFileSync(
+      scenePath,
+      "---\nscene_id: sc-managed\ntitle: Managed Scene\n---\nManaged prose."
+    );
+
+    syncAll(db, dir, { quiet: true });
+    fs.writeFileSync(
+      scenePath,
+      "---\ntitle: Missing ID\n---\nManaged prose still exists."
+    );
+
+    const result = syncAll(db, dir, { quiet: true });
+
+    assert.equal(
+      db.prepare(`SELECT COUNT(*) AS count FROM scenes WHERE scene_id = 'sc-managed' AND project_id = 'test-novel'`).get().count,
+      1
+    );
+    assert.ok(result.warnings.some((warning) => warning.includes(
+      "Managed sync preserved canonical scene not observed during sync scan: test-novel/sc-managed (projects/test-novel/Draft/01-Arrival/sc-managed.md)"
+    )));
+    assert.equal(result.warningSummary.unobserved_canonical_scene.count, 1);
+    assert.equal(result.warningSummary.missing_canonical_scene, undefined);
+
+    db.close();
+    fs.rmSync(dir, { recursive: true });
+  });
+
   test("managed sync warns and preserves canonical epigraphs when epigraph files are missing", () => {
     const dir = makeTempSync();
     const db = openDb(":memory:");
