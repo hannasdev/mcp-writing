@@ -12,6 +12,7 @@ This complements `CHANGELOG.md`:
 - Why it matters: Authors, maintainers, and AI agents can keep existing sidecar-based projects working while understanding that SQLite and outcome workflows are current authority for structure and relationships.
 - Who is affected: Authors, maintainers, and AI agents upgrading existing projects, using Scrivener import/merge paths, or reviewing retained sidecar-only fields such as flags, status, tags, and place associated characters.
 - Action needed: Run `sync` after upgrading, then use `describe_workflows`, `diagnose_structure`, and `audit_relationship_metadata` before repair work. Prefer explicit structure and relationship tools over direct sidecar edits for managed projects.
+- PR: [#226](https://github.com/hannasdev/mcp-writing/pull/226)
 
 ### 2026-05-28 — Add outcome-oriented relationship workflows
 
