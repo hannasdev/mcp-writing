@@ -96,6 +96,18 @@ Highlights:
 
 ## Recently Delivered
 
+### 🧭 [Architecture Alignment Follow-up](docs/initiatives/done/architecture-alignment-follow-up/prd.md)
+
+Target-architecture follow-up work for managed sync, sidecar compatibility, and outcome-oriented relationship workflows.
+
+Highlights:
+
+- Ordinary managed-project sync preserves canonical structure and relationship rows when filesystem representations are missing
+- Generic metadata updates preserve structural sidecar compatibility fields unless an explicit structure or repair workflow owns the change
+- Relationship work is routed through outcome-level tools for arcs, character/place evidence, relationship beats, reference evidence, and metadata audits
+- Sidecar compatibility and migration docs explain retained import, generated, review, and recovery roles without making sidecars daily-work authority
+- Release-log entries for PRs #222, #224, #225, and #226 document the delivered migration posture and user-facing guidance
+
 ### 💾 [Database Backup and Recovery](docs/initiatives/done/database-backup-recovery/prd.md)
 
 Git-reviewable backup artifacts and explicit restore workflows for SQLite-canonical project state.

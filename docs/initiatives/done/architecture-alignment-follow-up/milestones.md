@@ -1,12 +1,13 @@
 # Architecture Alignment Follow-up — Milestones
 
-**Status:** Active — M5 Deprecation, Migration, and Documentation in implementation
+**Status:** Done
 
 This milestone plan breaks the Architecture Alignment Follow-up PRD into
 independently reviewable slices. Use [prd.md](prd.md) for product framing and
 this document for sequencing, gates, and implementation readiness.
-M0–M3 are accepted; M4 was implemented in PR #225; M5 is in
-implementation.
+M0–M5 are accepted.
+
+Current focus: None — initiative closed.
 
 ## Objective
 
@@ -288,7 +289,7 @@ Out of scope:
 
 ## M4 — Outcome-Oriented Relationship Workflows
 
-Status: Implemented; pending conformance acceptance.
+Status: Accepted.
 
 Goal: expose relationship metadata changes through story and review outcomes
 instead of storage CRUD.
@@ -351,6 +352,14 @@ Acceptance gates:
 - Workflow discovery steers both humans and AI agents toward outcome-level
   operations.
 
+Acceptance notes:
+
+- Accepted in PR [#225](https://github.com/hannasdev/mcp-writing/pull/225).
+- Outcome-level relationship tools and workflow guidance now steer callers away
+  from raw table-shaped relationship operations.
+- Retained compatibility output is documented as generated, review-oriented, or
+  migration-compatible rather than daily-work authority.
+
 Test strategy:
 
 - Unit tests for relationship validation and write ordering.
@@ -368,7 +377,7 @@ Out of scope:
 
 ## M5 — Deprecation, Migration, and Documentation
 
-Status: In implementation.
+Status: Accepted.
 
 Goal: make remaining sidecar behavior explicit, migrated, or removed from normal
 workflows.
@@ -402,6 +411,16 @@ Acceptance gates:
   continue daily work without editing sidecars as source of truth.
 - Release notes describe behavior changes and migration expectations.
 - Completed milestone evidence is linked from this file.
+
+Acceptance notes:
+
+- Accepted in PR [#226](https://github.com/hannasdev/mcp-writing/pull/226).
+- Sidecar compatibility and migration guidance now explains retained import,
+  generated, review, and recovery roles without presenting sidecars as
+  daily-work authority.
+- Setup, agent, architecture, generated tool, and release-log documentation now
+  route users and AI agents toward SQLite-canonical workflows and explicit
+  relationship/structure tools.
 
 Test strategy:
 
