@@ -40,6 +40,10 @@ export function persistSceneReferenceLink({ scenePath, syncDir, targetDocId, rel
   writeMeta(scenePath, nextMeta, { syncDir });
 }
 
+export function validateSceneReferenceLinkCompatibilityTarget({ scenePath, syncDir }) {
+  readSourceMeta(scenePath, syncDir, { writable: true });
+}
+
 export function upsertExplicitReferenceLinkRow(
   db,
   { sourceKind, sourceProjectId, sourceId, targetDocId, relation }
@@ -58,6 +62,11 @@ export function upsertExplicitReferenceLinkRow(
     deleteStmt.run(sourceKind, sourceProjectId, sourceId, targetDocId);
     insertStmt.run(sourceKind, sourceProjectId, sourceId, targetDocId, relation);
   };
+
+  if (db.inTransaction) {
+    runUpsertBody();
+    return;
+  }
 
   if (typeof db.transaction === "function") {
     db.transaction(runUpsertBody)();

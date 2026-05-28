@@ -734,6 +734,16 @@ describe("reference link tools", () => {
     assert.equal(applyParsed.applied_count, 1);
     assert.equal(applyParsed.applied_links[0].target_doc_id, "ref-apply-mode");
     assert.equal(applyParsed.applied_links[0].origin, "explicit");
+    assert.deepEqual(applyParsed.mutation_order, [
+      "validated_request",
+      "sqlite_commit",
+      "project_backup_refresh",
+      "compatibility_output_refresh",
+    ]);
+    assert.equal(applyParsed.compatibility_output.generated_transparency, true);
+    assert.equal(applyParsed.compatibility_output.mutation_surface, false);
+    assert.equal(applyParsed.compatibility_output.refreshed, true);
+    assert.deepEqual(applyParsed.compatibility_diagnostics, []);
     assert.equal(applyParsed.backup_refresh.ok, true);
     assert.deepEqual(applyParsed.backup_warnings, []);
 
@@ -845,6 +855,30 @@ describe("thread arc tool", () => {
 });
 
 describe("upsert_thread_link tool", () => {
+  test("track_thread_arc creates thread and scene link through outcome workflow", async () => {
+    const text = await callWriteTool("track_thread_arc", {
+      project_id: "test-novel",
+      thread_id: "thread-outcome-001",
+      thread_name: "Outcome Thread",
+      scene_id: "sc-001",
+      beat: "setup",
+    });
+    const parsed = JSON.parse(text);
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.action, "tracked");
+    assert.equal(parsed.thread.thread_id, "thread-outcome-001");
+    assert.equal(parsed.thread.project_id, "test-novel");
+    assert.equal(parsed.link.scene_id, "sc-001");
+    assert.equal(parsed.link.beat, "setup");
+    assert.deepEqual(parsed.mutation_order, [
+      "validated_request",
+      "sqlite_commit",
+      "project_backup_refresh",
+    ]);
+    assert.equal(parsed.backup_refresh.ok, true);
+    assert.deepEqual(parsed.backup_warnings, []);
+  });
+
   test("creates thread and scene link", async () => {
     const text = await callWriteTool("upsert_thread_link", {
       project_id: "test-novel",
@@ -860,6 +894,11 @@ describe("upsert_thread_link tool", () => {
     assert.equal(parsed.thread.project_id, "test-novel");
     assert.equal(parsed.link.scene_id, "sc-001");
     assert.equal(parsed.link.beat, "Opening");
+    assert.deepEqual(parsed.mutation_order, [
+      "validated_request",
+      "sqlite_commit",
+      "project_backup_refresh",
+    ]);
     assert.equal(parsed.backup_refresh.ok, true);
     assert.deepEqual(parsed.backup_warnings, []);
   });
@@ -948,6 +987,16 @@ describe("upsert_reference_link tool", () => {
     assert.equal(parsed.link.source_id, "sc-upsert-ref-001");
     assert.equal(parsed.link.target_doc_id, "ref-upsert-target");
     assert.equal(parsed.link.relation, "informs");
+    assert.deepEqual(parsed.mutation_order, [
+      "validated_request",
+      "sqlite_commit",
+      "project_backup_refresh",
+      "compatibility_output_refresh",
+    ]);
+    assert.equal(parsed.compatibility_output.generated_transparency, true);
+    assert.equal(parsed.compatibility_output.mutation_surface, false);
+    assert.equal(parsed.compatibility_output.refreshed, true);
+    assert.deepEqual(parsed.compatibility_diagnostics, []);
     assert.equal(parsed.backup_refresh.ok, true);
     assert.deepEqual(parsed.backup_warnings, []);
 
@@ -1122,7 +1171,7 @@ describe("upsert_reference_link tool", () => {
     assert.ok(sourceRefFrontmatter.includes("relation: history_of"));
   });
 
-  test("rejects reference metadata writes through a symlink escape", async () => {
+  test("commits reference link but rejects compatibility output through a symlink escape", async () => {
     const sourceRefPath = path.join(writeSyncDir, "projects", "test-novel", "world", "reference", "ref-upsert-symlink-source.md");
     const targetRefPath = path.join(writeSyncDir, "projects", "test-novel", "world", "reference", "ref-upsert-symlink-target.md");
     const outsideTargetPath = path.join(path.dirname(writeSyncDir), "mcp-writing-reference-outside-target.md");
@@ -1146,9 +1195,19 @@ describe("upsert_reference_link tool", () => {
       });
       const parsed = JSON.parse(text);
 
-      assert.equal(parsed.ok, false);
-      assert.equal(parsed.error.code, "INVALID_METADATA_PATH");
+      assert.equal(parsed.ok, true);
+      assert.equal(parsed.compatibility_output.refreshed, false);
+      assert.equal(parsed.compatibility_diagnostics[0].code, "INVALID_METADATA_PATH");
       assert.equal(fs.readFileSync(outsideTargetPath, "utf8"), outsideBefore);
+
+      const referenceDocText = await callWriteTool("get_reference_doc", {
+        doc_id: "ref-upsert-symlink-source",
+        include_related: true,
+      });
+      const referenceDoc = JSON.parse(referenceDocText);
+      assert.equal(referenceDoc.related.length, 1);
+      assert.equal(referenceDoc.related[0].doc_id, "ref-upsert-symlink-target");
+      assert.equal(referenceDoc.related[0].relation, "related");
     } finally {
       if (fs.lstatSync(sourceRefPath, { throwIfNoEntry: false })?.isSymbolicLink()) {
         fs.unlinkSync(sourceRefPath);

@@ -360,6 +360,7 @@ describe("describe_workflows tool", () => {
       "character_understanding",
       "place_understanding",
       "thread_understanding",
+      "relationship_alignment",
       "parity_recovery",
       "backup_recovery",
       "review_preparation",
@@ -371,6 +372,26 @@ describe("describe_workflows tool", () => {
     for (const id of expected) {
       assert.ok(ids.includes(id), `Missing workflow: ${id}`);
     }
+  });
+
+  test("relationship workflow steers callers to outcome-level tools", async () => {
+    const text = await callWriteTool("describe_workflows");
+    const parsed = JSON.parse(text);
+    const workflow = parsed.workflows.find(w => w.id === "relationship_alignment");
+
+    assert.ok(workflow, "relationship_alignment workflow missing");
+    const tools = workflow.steps.map(step => step.tool);
+    assert.ok(tools.includes("track_thread_arc"));
+    assert.ok(tools.includes("connect_character_place_evidence"));
+    assert.ok(tools.includes("record_character_relationship_beat"));
+    assert.ok(tools.includes("link_reference_evidence"));
+    assert.ok(tools.includes("audit_relationship_metadata"));
+    assert.ok(tools.includes("suggest_scene_references"));
+    assert.equal(tools.includes("upsert_thread_link"), false);
+    assert.equal(tools.includes("upsert_reference_link"), false);
+    const evidenceStep = workflow.steps.find(step => step.tool === "link_reference_evidence");
+    assert.match(evidenceStep.note, /SQLite commits first/);
+    assert.match(evidenceStep.note, /generated transparency/);
   });
 
   test("backup recovery workflow apply guidance includes reviewed checksum", async () => {

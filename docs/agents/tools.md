@@ -41,8 +41,13 @@
 - [`suggest_scene_references`](#suggest_scene_references)
 - [`create_character_sheet`](#create_character_sheet)
 - [`create_place_sheet`](#create_place_sheet)
+- [`track_thread_arc`](#track_thread_arc)
 - [`upsert_thread_link`](#upsert_thread_link)
+- [`link_reference_evidence`](#link_reference_evidence)
 - [`upsert_reference_link`](#upsert_reference_link)
+- [`connect_character_place_evidence`](#connect_character_place_evidence)
+- [`record_character_relationship_beat`](#record_character_relationship_beat)
+- [`audit_relationship_metadata`](#audit_relationship_metadata)
 - [`create_chapter`](#create_chapter)
 - [`rename_chapter`](#rename_chapter)
 - [`reorder_chapter`](#reorder_chapter)
@@ -207,7 +212,7 @@ Merge metadata directly from a Scrivener .scriv project into existing scene side
 
 ## enrich_scene_characters_batch
 
-Start an asynchronous batch job that infers scene character mentions and updates scene metadata links. Version 1 uses canonical character names only (no aliases). Defaults to dry_run=true.
+Start an asynchronous prose-derived relationship repair job that infers scene character mentions and updates scene character links. Defaults to dry_run=true; apply mode retains scene sidecar characters as compatibility output, then syncs SQLite scene_characters and refreshes project backups for changed scenes.
 
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |
@@ -217,7 +222,7 @@ Start an asynchronous batch job that infers scene character mentions and updates
 | `chapter` | `integer` | No | Optional read-scope compatibility alias resolved through canonical chapter identity. Not a structural mutation target. |
 | `chapter_id` | `string` | No | Optional canonical chapter identifier. |
 | `only_stale` | `boolean` | No | If true, only process scenes currently marked metadata_stale. |
-| `dry_run` | `boolean` | No | If true (default), returns preview results without writing sidecars. |
+| `dry_run` | `boolean` | No | If true (default), returns preview results without writing compatibility metadata. |
 | `replace_mode` | `enum("merge","replace")` | No | merge (default): add inferred IDs; replace: overwrite characters with inferred IDs. |
 | `max_scenes` | `integer` | No | Hard guardrail for resolved scene count (default: 200). |
 | `include_match_details` | `boolean` | No | If true, include extra match diagnostics per scene. |
@@ -379,7 +384,7 @@ List indexed places with their place_id and name. Use this mainly as a lookup an
 
 ## get_place_sheet
 
-Get full place details: associated_characters, tags, the canonical sheet content, and any adjacent support notes when the place uses a folder-based layout. Use this when the current scene or question makes the place itself materially relevant. Response shape note: returns a structured envelope (`results`, `total_count`) with one result row.
+Get full place details, including canonical sheet content plus retained sidecar associated_characters and tags as compatibility/review notes. Use connect_character_place_evidence for current scene-backed character/place authority. Response shape note: returns a structured envelope (`results`, `total_count`) with one result row.
 
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |
@@ -471,7 +476,7 @@ Show how the relationship between two characters evolves across scenes, in order
 
 ## suggest_scene_references
 
-Suggest reference documents for a scene by aggregating links from the scene's characters and places. Returns weighted candidates ranked by how many entities in the scene link to each reference. Excludes any explicit scene → reference links already present. In apply mode, can persist selected suggestions as explicit scene links in one call.
+Suggest reference documents for a scene by aggregating links from the scene's characters and places. Returns weighted candidates ranked by how many entities in the scene link to each reference. Excludes any explicit scene reference links already present. In apply mode, selected links commit to SQLite first, project backups refresh, and scene sidecar/frontmatter output is refreshed only as generated compatibility.
 
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |
@@ -512,32 +517,101 @@ Create or reuse a canonical place sheet folder with sheet.md and sheet.meta.yaml
 
 ---
 
-## upsert_thread_link
+## track_thread_arc
 
-Create or update a thread and link it to a scene. Idempotent: if the link already exists, updates its beat. Only available when the sync dir is writable.
+Track a storyline, subplot, or recurring arc through a scene by recording the scene's thread beat. This is the outcome-level workflow for thread relationship changes: callers provide story intent, while SQLite thread tables, backup refresh, and rollback stay implementation details.
 
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |
 | `project_id` | `string` | Yes | Project the thread belongs to (e.g. 'the-lamb'). |
-| `thread_id` | `string` | Yes | Thread ID (e.g. 'thread-reconciliation'). |
-| `thread_name` | `string` | Yes | Thread display name. |
-| `scene_id` | `string` | Yes | Scene to link to the thread (e.g. 'sc-011-sebastian'). |
-| `beat` | `string` | No | Optional thread-specific beat label for this scene. |
+| `thread_id` | `string` | Yes | Stable thread ID for the arc being tracked (e.g. 'thread-reconciliation'). |
+| `thread_name` | `string` | Yes | Human-readable thread or arc name. |
+| `scene_id` | `string` | Yes | Scene that carries this thread beat (e.g. 'sc-011-sebastian'). |
+| `beat` | `string` | No | Optional story beat for this scene in the thread, such as setup, escalation, reveal, reversal, or payoff. |
 | `status` | `string` | No | Thread status (e.g. 'active', 'resolved'). Defaults to 'active'. |
+
+---
+
+## upsert_thread_link
+
+Compatibility name for track_thread_arc. Prefer track_thread_arc when recording story intent; this retained alias still validates, writes SQLite first, refreshes project backups, and rolls back failed canonical writes.
+
+| Parameter | Type | Required | Description |
+| --- | --- | :---: | --- |
+| `project_id` | `string` | Yes | Project the thread belongs to (e.g. 'the-lamb'). |
+| `thread_id` | `string` | Yes | Stable thread ID for the arc being tracked (e.g. 'thread-reconciliation'). |
+| `thread_name` | `string` | Yes | Human-readable thread or arc name. |
+| `scene_id` | `string` | Yes | Scene that carries this thread beat (e.g. 'sc-011-sebastian'). |
+| `beat` | `string` | No | Optional story beat for this scene in the thread, such as setup, escalation, reveal, reversal, or payoff. |
+| `status` | `string` | No | Thread status (e.g. 'active', 'resolved'). Defaults to 'active'. |
+
+---
+
+## link_reference_evidence
+
+Link scene, character, place, or reference evidence to a reference document. This is the outcome-level workflow for evidence relationships: SQLite commits first, project backup artifacts refresh after commit, and sidecar/frontmatter compatibility output is refreshed only as generated transparency.
+
+| Parameter | Type | Required | Description |
+| --- | --- | :---: | --- |
+| `source_kind` | `enum("scene","character","place","reference")` | Yes | Evidence source kind. |
+| `source_id` | `string` | Yes | Source scene_id, character_id, place_id, or reference doc_id. |
+| `source_project_id` | `string` | No | Optional project scope for the source. For scene/character/place sources, use this to disambiguate an ambiguous source_id across projects. For reference sources, when provided, it is treated as an ownership check and must match the source reference doc's project. |
+| `target_doc_id` | `string` | Yes | Target reference doc_id. |
+| `relation` | `string` | Yes | Evidence relationship label (for example: 'informs', 'related', 'history_of'). The value is trimmed and lowercased before validation. |
 
 ---
 
 ## upsert_reference_link
 
-Create or update an explicit reference link from a scene, character, place, or reference doc to a target reference doc. If a link already exists between the same source and target, this updates the relation. Only available when the sync dir is writable.
+Compatibility name for link_reference_evidence. Prefer link_reference_evidence when recording story evidence; this retained alias still validates, commits SQLite first, refreshes project backups, and treats sidecar/frontmatter output as generated compatibility.
 
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |
-| `source_kind` | `enum("scene","character","place","reference")` | Yes | Link source kind. |
+| `source_kind` | `enum("scene","character","place","reference")` | Yes | Evidence source kind. |
 | `source_id` | `string` | Yes | Source scene_id, character_id, place_id, or reference doc_id. |
 | `source_project_id` | `string` | No | Optional project scope for the source. For scene/character/place sources, use this to disambiguate an ambiguous source_id across projects. For reference sources, when provided, it is treated as an ownership check and must match the source reference doc's project. |
 | `target_doc_id` | `string` | Yes | Target reference doc_id. |
-| `relation` | `string` | Yes | Relationship label (for example: 'informs', 'related', 'history_of'). The value is trimmed and lowercased before validation. |
+| `relation` | `string` | Yes | Evidence relationship label (for example: 'informs', 'related', 'history_of'). The value is trimmed and lowercased before validation. |
+
+---
+
+## connect_character_place_evidence
+
+Connect a character and place as scene-backed story evidence. This is the outcome-level workflow for character/place association: SQLite scene relationship indexes commit first, project backups refresh after commit, and scene sidecar characters/places are refreshed only as generated compatibility output.
+
+| Parameter | Type | Required | Description |
+| --- | --- | :---: | --- |
+| `project_id` | `string` | Yes | Project the scene belongs to (e.g. 'the-lamb'). |
+| `scene_id` | `string` | Yes | Scene that provides the evidence for this character/place association. |
+| `character_id` | `string` | Yes | Character present in the scene. Use list_characters to find valid IDs. |
+| `place_id` | `string` | Yes | Place present in the scene. Use list_places to find valid IDs. |
+| `note` | `string` | No | Optional review note explaining the evidence. Stored in operation history, not in compatibility sidecars. |
+
+---
+
+## record_character_relationship_beat
+
+Record how two characters relate in a specific scene. This outcome-level workflow writes character relationship beats directly to SQLite, validates scene evidence, refreshes project backups after commit, and does not require callers to know the character_relationships table.
+
+| Parameter | Type | Required | Description |
+| --- | --- | :---: | --- |
+| `project_id` | `string` | Yes | Project the scene evidence belongs to (e.g. 'the-lamb'). |
+| `from_character` | `string` | Yes | First character_id in the relationship beat. |
+| `to_character` | `string` | Yes | Second character_id in the relationship beat. |
+| `relationship_type` | `string` | Yes | Relationship label such as trusts, protects, fears, betrays, or reconciles. Trimmed and lowercased before validation. |
+| `strength` | `string` | No | Optional qualitative strength or direction for this scene beat. |
+| `scene_id` | `string` | Yes | Scene that provides the evidence for this relationship beat. |
+| `note` | `string` | No | Optional short evidence note for this beat. |
+
+---
+
+## audit_relationship_metadata
+
+Review relationship metadata authority, stale indexes, and retained compatibility notes without mutating SQLite or files. Use this before repair work when character/place associations, sidecar tags, scene threads, or recovery readiness look stale or ambiguous.
+
+| Parameter | Type | Required | Description |
+| --- | --- | :---: | --- |
+| `project_id` | `string` | No | Optional project scope for the audit. |
 
 ---
 
@@ -630,7 +704,7 @@ Update one or more non-structural metadata fields for a scene. Writes only suppl
 
 ## update_character_sheet
 
-Update structured metadata fields for a character (role, arc_summary, traits, etc). Writes to the .meta.yaml sidecar — never modifies the prose notes file. Changes are immediately reflected in the index. Only available when the sync dir is writable.
+Update canonical character profile fields such as name, role, arc_summary, first_appearance, and traits. SQLite commits first, project backups refresh after commit, and the .meta.yaml file is refreshed only as generated compatibility output; prose notes are never modified.
 
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |
@@ -641,7 +715,7 @@ Update structured metadata fields for a character (role, arc_summary, traits, et
 
 ## update_place_sheet
 
-Update structured metadata fields for a place (name, associated_characters, tags). Writes to the .meta.yaml sidecar — never modifies the prose notes file. Changes are immediately reflected in the index. Only available when the sync dir is writable.
+Update canonical place profile fields and retained compatibility notes. The place name commits to SQLite first and refreshes project backups; associated_characters and tags are compatibility/review metadata only. For current character/place relationship authority, use connect_character_place_evidence.
 
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |
@@ -652,7 +726,7 @@ Update structured metadata fields for a place (name, associated_characters, tags
 
 ## flag_scene
 
-Attach a continuity or review note to a scene. Flags are appended to the sidecar file and accumulate over time — they are never overwritten. Use this to record continuity problems, revision notes, or questions you want to revisit.
+Attach a continuity or review note to a scene as compatibility review metadata. Flags are not canonical relationship authority and do not mutate SQLite; use audit_relationship_metadata, connect_character_place_evidence, record_character_relationship_beat, or link_reference_evidence when the note identifies relationship repair work.
 
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |

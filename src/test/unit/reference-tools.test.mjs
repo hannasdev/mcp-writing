@@ -823,6 +823,16 @@ describe("reference link search tools", () => {
       assert.equal(result.applied_count, 1);
       assert.equal(result.applied_links.length, 1);
       assert.equal(result.applied_links[0].target_doc_id, "ref-vampirism");
+      assert.deepEqual(result.mutation_order, [
+        "validated_request",
+        "sqlite_commit",
+        "project_backup_refresh",
+        "compatibility_output_refresh",
+      ]);
+      assert.equal(result.compatibility_output.generated_transparency, true);
+      assert.equal(result.compatibility_output.mutation_surface, false);
+      assert.equal(result.compatibility_output.refreshed, true);
+      assert.deepEqual(result.compatibility_diagnostics, []);
 
       const row = db.prepare(`
         SELECT relation, origin
@@ -841,16 +851,18 @@ describe("reference link search tools", () => {
     }
   });
 
-  test("suggest_scene_references apply mode reports failures when scene path is stale", async () => {
+  test("suggest_scene_references apply mode commits SQLite when compatibility output path is stale", async () => {
     const db = openDb(":memory:");
+    const syncDir = fs.mkdtempSync(path.join(os.tmpdir(), "ref-stale-apply-"));
     try {
       seedProject(db, "test-novel");
+      const scenePath = path.join(syncDir, "missing-scene.md");
 
       db.prepare(`
         INSERT INTO scenes (
           scene_id, project_id, title, file_path, prose_checksum, metadata_stale, updated_at
         ) VALUES (?, ?, ?, ?, ?, 0, ?)
-      `).run("sc-001", "test-novel", "Scene 1", "/tmp/missing-scene.md", "deadbeef", new Date().toISOString());
+      `).run("sc-001", "test-novel", "Scene 1", scenePath, "deadbeef", new Date().toISOString());
 
       db.prepare(`
         INSERT INTO characters (character_id, project_id, name, file_path)
@@ -867,21 +879,27 @@ describe("reference link search tools", () => {
         relation: "informs",
       });
 
-      const tools = makeToolHarness(db, { writable: true });
+      const tools = makeToolHarness(db, { syncDir, writable: true });
       const result = await tools.call("suggest_scene_references", {
         scene_id: "sc-001",
         project_id: "test-novel",
         mode: "apply",
       });
 
-      assert.equal(result.applied_count, 0);
-      assert.equal(result.failed_count, 1);
-      assert.equal(result.failed_links.length, 1);
-      assert.equal(result.failed_links[0].target_doc_id, "ref-vampirism");
-      assert.equal(result.failed_links[0].stage, "metadata");
-      assert.equal(result.failed_links[0].code, "ENOENT");
+      assert.equal(result.applied_count, 1);
+      assert.equal(result.compatibility_output.refreshed, false);
+      assert.equal(result.compatibility_diagnostics[0].severity, "warning");
+      assert.equal(result.compatibility_diagnostics[0].details.scene_id, "sc-001");
+      assert.equal(result.compatibility_diagnostics[0].details.project_id, "test-novel");
+      const row = db.prepare(`
+        SELECT COUNT(*) AS count
+        FROM reference_links
+        WHERE source_kind = 'scene' AND source_project_id = 'test-novel' AND source_id = 'sc-001' AND target_doc_id = 'ref-vampirism'
+      `).get();
+      assert.equal(row.count, 1);
     } finally {
       db.close();
+      fs.rmSync(syncDir, { recursive: true, force: true });
     }
   });
 });

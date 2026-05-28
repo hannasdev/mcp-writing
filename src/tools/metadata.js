@@ -80,6 +80,30 @@ function backupMutationFields(backupResult) {
   };
 }
 
+function normalizeStringList(value) {
+  if (Array.isArray(value)) {
+    return value.map((entry) => String(entry).trim()).filter(Boolean);
+  }
+  if (typeof value === "string") {
+    return value.split(",").map((entry) => entry.trim()).filter(Boolean);
+  }
+  return [];
+}
+
+function uniqueSorted(values) {
+  return [...new Set(values.map((value) => String(value).trim()).filter(Boolean))].sort();
+}
+
+function buildCompatibilityOutput({ refreshed, diagnostics = [], role = "generated_transparency" } = {}) {
+  return {
+    role,
+    generated_transparency: true,
+    mutation_surface: false,
+    refreshed: Boolean(refreshed),
+    diagnostics,
+  };
+}
+
 function getProvidedStructuralSceneMetadataFields(fields) {
   return STRUCTURAL_SCENE_METADATA_FIELDS.filter((field) => Object.hasOwn(fields, field));
 }
@@ -362,6 +386,57 @@ function resolveReferenceLinkSource({
   });
 }
 
+function getProjectUniverseId(db, projectId) {
+  return db.prepare(`SELECT universe_id FROM projects WHERE project_id = ?`).get(projectId)?.universe_id ?? null;
+}
+
+function resolveCharacterForProject(db, { characterId, projectId }) {
+  const universeId = getProjectUniverseId(db, projectId);
+  return db.prepare(`
+    SELECT character_id, project_id, universe_id, name
+    FROM characters
+    WHERE character_id = ?
+      AND (
+        project_id = ?
+        OR (universe_id IS NOT NULL AND universe_id = ?)
+        OR (project_id IS NULL AND universe_id IS NULL)
+      )
+    LIMIT 1
+  `).get(characterId, projectId, universeId);
+}
+
+function resolvePlaceForProject(db, { placeId, projectId }) {
+  const universeId = getProjectUniverseId(db, projectId);
+  return db.prepare(`
+    SELECT place_id, project_id, universe_id, name
+    FROM places
+    WHERE place_id = ?
+      AND (
+        project_id = ?
+        OR (universe_id IS NOT NULL AND universe_id = ?)
+        OR (project_id IS NULL AND universe_id IS NULL)
+      )
+    LIMIT 1
+  `).get(placeId, projectId, universeId);
+}
+
+function querySceneRelationshipSnapshot(db, { sceneId, projectId }) {
+  return {
+    characters: db.prepare(`
+      SELECT character_id
+      FROM scene_characters
+      WHERE scene_id = ? AND project_id = ?
+      ORDER BY character_id
+    `).all(sceneId, projectId).map(row => row.character_id),
+    places: db.prepare(`
+      SELECT place_id
+      FROM scene_places
+      WHERE scene_id = ? AND project_id = ?
+      ORDER BY place_id
+    `).all(sceneId, projectId).map(row => row.place_id),
+  };
+}
+
 export function registerMetadataTools(s, {
   db,
   SYNC_DIR,
@@ -371,6 +446,638 @@ export function registerMetadataTools(s, {
   jsonResponse,
   createCanonicalWorldEntity,
 }) {
+  async function trackThreadArcLink({ project_id, thread_id, thread_name, scene_id, beat, status }, { operation }) {
+    if (!SYNC_DIR_WRITABLE) {
+      return errorResponse("READ_ONLY", "Cannot write thread links: sync dir is read-only.");
+    }
+    const projectIdCheck = validateProjectId(project_id);
+    if (!projectIdCheck.ok) {
+      return errorResponse("INVALID_PROJECT_ID", projectIdCheck.reason, { project_id });
+    }
+
+    const existingThread = db.prepare(`SELECT thread_id, project_id FROM threads WHERE thread_id = ?`).get(thread_id);
+    if (existingThread && existingThread.project_id !== project_id) {
+      return errorResponse(
+        "CONFLICT",
+        `Thread '${thread_id}' already exists in project '${existingThread.project_id}', cannot reuse it for project '${project_id}'.`
+      );
+    }
+
+    const scene = db.prepare(`SELECT scene_id FROM scenes WHERE scene_id = ? AND project_id = ?`).get(scene_id, project_id);
+    if (!scene) {
+      return errorResponse("NOT_FOUND", `Scene '${scene_id}' not found in project '${project_id}'.`);
+    }
+
+    try {
+      db.exec("BEGIN");
+      db.prepare(`
+        INSERT INTO threads (thread_id, project_id, name, status)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT (thread_id) DO UPDATE SET
+          name = excluded.name,
+          status = excluded.status
+      `).run(thread_id, project_id, thread_name, status ?? "active");
+
+      db.prepare(`
+        INSERT INTO scene_threads (scene_id, project_id, thread_id, beat)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT (scene_id, project_id, thread_id) DO UPDATE SET
+          beat = excluded.beat
+      `).run(scene_id, project_id, thread_id, beat ?? null);
+      db.exec("COMMIT");
+    } catch (err) {
+      try {
+        db.exec("ROLLBACK");
+      } catch (rollbackErr) {
+        void rollbackErr;
+      }
+      return errorResponse("IO_ERROR", `Failed to track thread arc '${thread_id}' for scene '${scene_id}': ${err.message}`);
+    }
+
+    const thread = db.prepare(`SELECT * FROM threads WHERE thread_id = ?`).get(thread_id);
+    const link = db.prepare(`SELECT scene_id, project_id, thread_id, beat FROM scene_threads WHERE scene_id = ? AND project_id = ? AND thread_id = ?`)
+      .get(scene_id, project_id, thread_id);
+    const backupResult = refreshProjectScopedBackupAfterMutation(db, {
+      syncDir: SYNC_DIR,
+      projectId: project_id,
+      applicationVersion: MCP_SERVER_VERSION,
+      operation,
+      actor: createToolActor(operation),
+      affected: {
+        threads: [thread_id],
+        scenes: [scene_id],
+      },
+      summary: `Tracked thread "${thread_id}" for scene "${scene_id}".`,
+      before: null,
+      after: {
+        thread,
+        link,
+      },
+    });
+
+    return jsonResponse({
+      ok: true,
+      action: operation === "upsert_thread_link" ? "upserted" : "tracked",
+      thread,
+      link,
+      mutation_order: ["validated_request", "sqlite_commit", "project_backup_refresh"],
+      ...backupMutationFields(backupResult),
+    });
+  }
+
+  function writeReferenceLinkCompatibilityOutput({ sourceKind, sourceFilePath, targetDocId, relation }) {
+    if (sourceKind === "scene") {
+      persistSceneReferenceLink({
+        scenePath: sourceFilePath,
+        syncDir: SYNC_DIR,
+        targetDocId,
+        relation,
+      });
+    } else if (sourceKind === "character") {
+      persistCharacterReferenceLink({
+        characterPath: sourceFilePath,
+        syncDir: SYNC_DIR,
+        targetDocId,
+        relation,
+      });
+    } else if (sourceKind === "place") {
+      persistPlaceReferenceLink({
+        placePath: sourceFilePath,
+        syncDir: SYNC_DIR,
+        targetDocId,
+        relation,
+      });
+    } else {
+      persistReferenceDocLink({
+        filePath: sourceFilePath,
+        syncDir: SYNC_DIR,
+        targetDocId,
+        relation,
+      });
+    }
+  }
+
+  async function linkReferenceEvidence({
+    source_kind,
+    source_id,
+    source_project_id,
+    target_doc_id,
+    relation,
+  }, { operation }) {
+    if (!SYNC_DIR_WRITABLE) {
+      return errorResponse("READ_ONLY", "Cannot write reference links: sync dir is read-only.");
+    }
+
+    const normalizedRelation = relation.trim().toLowerCase();
+    if (!/^[a-z][a-z0-9_-]*$/.test(normalizedRelation)) {
+      return errorResponse(
+        "VALIDATION_ERROR",
+        "Relation is normalized to lowercase and must match [a-z][a-z0-9_-]* after normalization (for example: 'informs' or 'history_of').",
+        { relation }
+      );
+    }
+
+    const targetDoc = db.prepare(`
+      SELECT doc_id, project_id
+      FROM reference_docs
+      WHERE doc_id = ?
+    `).get(target_doc_id);
+    if (!targetDoc) {
+      return errorResponse("NOT_FOUND", `Target reference doc '${target_doc_id}' not found.`);
+    }
+
+    const sourceResolution = resolveReferenceLinkSource({
+      db,
+      errorResponse,
+      sourceKind: source_kind,
+      sourceId: source_id,
+      sourceProjectId: source_project_id,
+      targetDocId: target_doc_id,
+    });
+    if (sourceResolution.error) {
+      return sourceResolution.error;
+    }
+    const { resolvedSourceProjectId, sourceFilePath } = sourceResolution.value;
+
+    try {
+      db.exec("BEGIN");
+      upsertExplicitReferenceLinkRow(db, {
+        sourceKind: source_kind,
+        sourceProjectId: resolvedSourceProjectId,
+        sourceId: source_id,
+        targetDocId: target_doc_id,
+        relation: normalizedRelation,
+      });
+      db.exec("COMMIT");
+    } catch (err) {
+      try {
+        db.exec("ROLLBACK");
+      } catch (rollbackErr) {
+        void rollbackErr;
+      }
+      return errorResponse("IO_ERROR", `Failed to link reference evidence in SQLite: ${err.message}`);
+    }
+
+    const link = db.prepare(`
+      SELECT source_kind, source_project_id, source_id, target_doc_id, relation, origin
+      FROM reference_links
+      WHERE source_kind = ? AND source_project_id = ? AND source_id = ? AND target_doc_id = ? AND relation = ?
+    `).get(source_kind, resolvedSourceProjectId, source_id, target_doc_id, normalizedRelation);
+    const backupProjectId = resolvedSourceProjectId || targetDoc.project_id || null;
+    const backupResult = refreshProjectScopedBackupAfterMutation(db, {
+      syncDir: SYNC_DIR,
+      projectId: backupProjectId,
+      applicationVersion: MCP_SERVER_VERSION,
+      operation,
+      actor: createToolActor(operation),
+      affected: {
+        reference_docs: [target_doc_id],
+        sources: [`${source_kind}:${source_id}`],
+      },
+      summary: `Linked ${source_kind} evidence from "${source_id}" to "${target_doc_id}".`,
+      before: null,
+      after: {
+        link,
+      },
+    });
+
+    const compatibilityDiagnostics = [];
+    if (!sourceFilePath) {
+      compatibilityDiagnostics.push({
+        code: "STALE_PATH",
+        severity: "warning",
+        message: `Canonical reference link was committed, but ${source_kind} '${source_id}' has no indexed file path for generated compatibility output.`,
+        next_step: "Treat SQLite and project backup artifacts as current. Run sync, inspect the indexed source path, then retry link_reference_evidence if compatibility output is still needed.",
+        details: {
+          source_kind,
+          source_id,
+          source_project_id: resolvedSourceProjectId,
+          target_doc_id,
+          indexed_path: null,
+        },
+      });
+    } else {
+      try {
+        writeReferenceLinkCompatibilityOutput({
+          sourceKind: source_kind,
+          sourceFilePath,
+          targetDocId: target_doc_id,
+          relation: normalizedRelation,
+        });
+      } catch (err) {
+        compatibilityDiagnostics.push({
+          code: err?.code ?? "COMPATIBILITY_OUTPUT_FAILED",
+          severity: "warning",
+          message: `Canonical reference link was committed, but generated compatibility metadata for ${source_kind} '${source_id}' could not be refreshed: ${err.message}`,
+          next_step: "Treat SQLite and project backup artifacts as current. Run sync, inspect the indexed source path, then retry link_reference_evidence if compatibility output is still needed.",
+          details: {
+            source_kind,
+            source_id,
+            source_project_id: resolvedSourceProjectId,
+            target_doc_id,
+            indexed_path: sourceFilePath,
+          },
+        });
+      }
+    }
+
+    return jsonResponse({
+      ok: true,
+      action: operation === "upsert_reference_link" ? "upserted" : "linked",
+      link,
+      mutation_order: [
+        "validated_request",
+        "sqlite_commit",
+        "project_backup_refresh",
+        "compatibility_output_refresh",
+      ],
+      compatibility_output: {
+        generated_transparency: true,
+        mutation_surface: false,
+        refreshed: compatibilityDiagnostics.length === 0,
+      },
+      compatibility_diagnostics: compatibilityDiagnostics,
+      ...backupMutationFields(backupResult),
+    });
+  }
+
+  async function connectCharacterPlaceEvidence({
+    project_id,
+    scene_id,
+    character_id,
+    place_id,
+    note,
+  }) {
+    if (!SYNC_DIR_WRITABLE) {
+      return errorResponse("READ_ONLY", "Cannot connect character/place evidence: sync dir is read-only.");
+    }
+    const projectIdCheck = validateProjectId(project_id);
+    if (!projectIdCheck.ok) {
+      return errorResponse("INVALID_PROJECT_ID", projectIdCheck.reason, { project_id });
+    }
+
+    const scene = db.prepare(`
+      SELECT scene_id, project_id, file_path
+      FROM scenes
+      WHERE scene_id = ? AND project_id = ?
+    `).get(scene_id, project_id);
+    if (!scene) {
+      return errorResponse("NOT_FOUND", `Scene '${scene_id}' not found in project '${project_id}'.`);
+    }
+
+    const character = resolveCharacterForProject(db, { characterId: character_id, projectId: project_id });
+    if (!character) {
+      return errorResponse("NOT_FOUND", `Character '${character_id}' is not indexed for project '${project_id}' or its universe.`);
+    }
+    const place = resolvePlaceForProject(db, { placeId: place_id, projectId: project_id });
+    if (!place) {
+      return errorResponse("NOT_FOUND", `Place '${place_id}' is not indexed for project '${project_id}' or its universe.`);
+    }
+
+    const before = querySceneRelationshipSnapshot(db, { sceneId: scene_id, projectId: project_id });
+    try {
+      db.exec("BEGIN");
+      db.prepare(`
+        INSERT OR IGNORE INTO scene_characters (scene_id, project_id, character_id)
+        VALUES (?, ?, ?)
+      `).run(scene_id, project_id, character_id);
+      db.prepare(`
+        INSERT OR IGNORE INTO scene_places (scene_id, project_id, place_id)
+        VALUES (?, ?, ?)
+      `).run(scene_id, project_id, place_id);
+      db.exec("COMMIT");
+    } catch (err) {
+      try {
+        db.exec("ROLLBACK");
+      } catch (rollbackErr) {
+        void rollbackErr;
+      }
+      return errorResponse("IO_ERROR", `Failed to connect character/place evidence for scene '${scene_id}': ${err.message}`);
+    }
+
+    const after = querySceneRelationshipSnapshot(db, { sceneId: scene_id, projectId: project_id });
+    const backupResult = refreshProjectScopedBackupAfterMutation(db, {
+      syncDir: SYNC_DIR,
+      projectId: project_id,
+      applicationVersion: MCP_SERVER_VERSION,
+      operation: "connect_character_place_evidence",
+      actor: createToolActor("connect_character_place_evidence"),
+      affected: {
+        scenes: [scene_id],
+        characters: [character_id],
+        places: [place_id],
+      },
+      summary: `Connected character "${character_id}" and place "${place_id}" as evidence in scene "${scene_id}".`,
+      before: {
+        scene_relationships: before,
+      },
+      after: {
+        scene_relationships: after,
+      },
+      metadata: {
+        note: note ?? null,
+      },
+    });
+
+    const compatibilityDiagnostics = [];
+    if (!scene.file_path) {
+      compatibilityDiagnostics.push({
+        code: "STALE_PATH",
+        severity: "warning",
+        message: `Canonical scene relationship evidence was committed, but scene '${scene_id}' has no indexed file path for generated compatibility output.`,
+        next_step: "Treat SQLite and project backup artifacts as current. Run sync and inspect the indexed scene path before retrying compatibility output.",
+        details: {
+          scene_id,
+          project_id,
+          indexed_path: null,
+        },
+      });
+    } else {
+      try {
+        const { sourceMeta } = readSourceMeta(scene.file_path, SYNC_DIR, { writable: true });
+        writeMeta(scene.file_path, {
+          ...sourceMeta,
+          characters: uniqueSorted([...normalizeStringList(sourceMeta.characters), character_id]),
+          places: uniqueSorted([...normalizeStringList(sourceMeta.places), place_id]),
+        }, { syncDir: SYNC_DIR });
+      } catch (err) {
+        compatibilityDiagnostics.push({
+          code: err?.code ?? "COMPATIBILITY_OUTPUT_FAILED",
+          severity: "warning",
+          message: `Canonical scene relationship evidence was committed, but generated scene metadata compatibility output could not be refreshed: ${err.message}`,
+          next_step: "Treat SQLite and project backup artifacts as current. Run sync and inspect the indexed scene path before retrying compatibility output.",
+          details: {
+            scene_id,
+            project_id,
+            indexed_path: scene.file_path,
+          },
+        });
+      }
+    }
+
+    return jsonResponse({
+      ok: true,
+      action: "connected",
+      scene_id,
+      project_id,
+      character_id,
+      place_id,
+      note: note ?? null,
+      mutation_order: [
+        "validated_request",
+        "sqlite_commit",
+        "project_backup_refresh",
+        "compatibility_output_refresh",
+      ],
+      compatibility_output: buildCompatibilityOutput({
+        refreshed: compatibilityDiagnostics.length === 0,
+        diagnostics: compatibilityDiagnostics,
+      }),
+      ...backupMutationFields(backupResult),
+    });
+  }
+
+  async function recordCharacterRelationshipBeat({
+    project_id,
+    from_character,
+    to_character,
+    relationship_type,
+    strength,
+    scene_id,
+    note,
+  }) {
+    if (!SYNC_DIR_WRITABLE) {
+      return errorResponse("READ_ONLY", "Cannot record character relationship beats: sync dir is read-only.");
+    }
+    const projectIdCheck = validateProjectId(project_id);
+    if (!projectIdCheck.ok) {
+      return errorResponse("INVALID_PROJECT_ID", projectIdCheck.reason, { project_id });
+    }
+    if (from_character === to_character) {
+      return errorResponse("VALIDATION_ERROR", "from_character and to_character must be different characters.");
+    }
+
+    const fromCharacter = resolveCharacterForProject(db, { characterId: from_character, projectId: project_id });
+    if (!fromCharacter) {
+      return errorResponse("NOT_FOUND", `Character '${from_character}' is not indexed for project '${project_id}' or its universe.`);
+    }
+    const toCharacter = resolveCharacterForProject(db, { characterId: to_character, projectId: project_id });
+    if (!toCharacter) {
+      return errorResponse("NOT_FOUND", `Character '${to_character}' is not indexed for project '${project_id}' or its universe.`);
+    }
+    const scene = db.prepare(`
+      SELECT scene_id, project_id
+      FROM scenes
+      WHERE scene_id = ? AND project_id = ?
+    `).get(scene_id, project_id);
+    if (!scene) {
+      return errorResponse("NOT_FOUND", `Scene '${scene_id}' not found in project '${project_id}'.`);
+    }
+
+    const normalizedRelationshipType = relationship_type.trim().toLowerCase();
+    if (!/^[a-z][a-z0-9_-]*$/.test(normalizedRelationshipType)) {
+      return errorResponse(
+        "VALIDATION_ERROR",
+        "relationship_type is normalized to lowercase and must match [a-z][a-z0-9_-]* after normalization.",
+        { relationship_type }
+      );
+    }
+    const normalizedNote = note?.trim() || null;
+    const before = db.prepare(`
+      SELECT from_character, to_character, relationship_type, strength, scene_id, note
+      FROM character_relationships
+      WHERE from_character = ? AND to_character = ? AND relationship_type = ? AND scene_id = ? AND COALESCE(note, '') = COALESCE(?, '')
+    `).all(from_character, to_character, normalizedRelationshipType, scene_id, normalizedNote);
+
+    try {
+      db.exec("BEGIN");
+      db.prepare(`
+        DELETE FROM character_relationships
+        WHERE from_character = ? AND to_character = ? AND relationship_type = ? AND scene_id = ? AND COALESCE(note, '') = COALESCE(?, '')
+      `).run(from_character, to_character, normalizedRelationshipType, scene_id, normalizedNote);
+      db.prepare(`
+        INSERT INTO character_relationships (from_character, to_character, relationship_type, strength, scene_id, note)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).run(from_character, to_character, normalizedRelationshipType, strength ?? null, scene_id, normalizedNote);
+      db.exec("COMMIT");
+    } catch (err) {
+      try {
+        db.exec("ROLLBACK");
+      } catch (rollbackErr) {
+        void rollbackErr;
+      }
+      return errorResponse("IO_ERROR", `Failed to record relationship beat for '${from_character}' and '${to_character}': ${err.message}`);
+    }
+
+    const relationship = db.prepare(`
+      SELECT from_character, to_character, relationship_type, strength, scene_id, note
+      FROM character_relationships
+      WHERE from_character = ? AND to_character = ? AND relationship_type = ? AND scene_id = ? AND COALESCE(note, '') = COALESCE(?, '')
+    `).get(from_character, to_character, normalizedRelationshipType, scene_id, normalizedNote);
+    const backupResult = refreshProjectScopedBackupAfterMutation(db, {
+      syncDir: SYNC_DIR,
+      projectId: project_id,
+      applicationVersion: MCP_SERVER_VERSION,
+      operation: "record_character_relationship_beat",
+      actor: createToolActor("record_character_relationship_beat"),
+      affected: {
+        scenes: [scene_id],
+        characters: [from_character, to_character],
+      },
+      summary: `Recorded "${normalizedRelationshipType}" beat for "${from_character}" and "${to_character}" in scene "${scene_id}".`,
+      before: {
+        relationships: before,
+      },
+      after: {
+        relationship,
+      },
+    });
+
+    return jsonResponse({
+      ok: true,
+      action: "recorded",
+      relationship,
+      mutation_order: ["validated_request", "sqlite_commit", "project_backup_refresh"],
+      compatibility_output: {
+        role: "none",
+        reason: "Character relationship beats are canonical SQLite state and have no sidecar compatibility output in M4.",
+      },
+      ...backupMutationFields(backupResult),
+    });
+  }
+
+  async function auditRelationshipMetadata({ project_id }) {
+    const projectFilter = project_id ? `WHERE project_id = ?` : "";
+    const params = project_id ? [project_id] : [];
+    const scenes = db.prepare(`
+      SELECT scene_id, project_id, file_path, metadata_stale
+      FROM scenes
+      ${projectFilter}
+      ORDER BY project_id, scene_id
+    `).all(...params);
+    const characters = db.prepare(`
+      SELECT character_id, project_id, universe_id, file_path
+      FROM characters
+      ${projectFilter}
+      ORDER BY character_id
+    `).all(...params);
+    const places = db.prepare(`
+      SELECT place_id, project_id, universe_id, file_path
+      FROM places
+      ${projectFilter}
+      ORDER BY place_id
+    `).all(...params);
+
+    const diagnostics = [];
+    for (const scene of scenes) {
+      if (scene.metadata_stale) {
+        diagnostics.push({
+          type: "stale_scene_relationship_index",
+          severity: "warning",
+          message: `Scene '${scene.scene_id}' has stale metadata; relationship indexes may lag prose.`,
+          scene_id: scene.scene_id,
+          project_id: scene.project_id,
+          next_step: "Use enrich_scene or enrich_scene_characters_batch dry_run to review prose-derived repairs before applying.",
+        });
+      }
+      try {
+        const { sourceMeta } = readSourceMeta(scene.file_path, SYNC_DIR, { writable: false });
+        if (sourceMeta.threads) {
+          diagnostics.push({
+            type: "sidecar_threads_compatibility_input",
+            severity: "info",
+            message: `Scene '${scene.scene_id}' still has sidecar thread metadata; use track_thread_arc for current thread authority.`,
+            scene_id: scene.scene_id,
+            project_id: scene.project_id,
+          });
+        }
+      } catch (err) {
+        diagnostics.push({
+          type: "scene_relationship_metadata_unreadable",
+          severity: "warning",
+          message: `Could not read scene metadata for '${scene.scene_id}': ${err.message}`,
+          scene_id: scene.scene_id,
+          project_id: scene.project_id,
+        });
+      }
+    }
+
+    for (const character of characters) {
+      if (!character.file_path) continue;
+      try {
+        const { sourceMeta } = readSourceMeta(character.file_path, SYNC_DIR, { writable: false });
+        if (normalizeStringList(sourceMeta.tags).length > 0) {
+          diagnostics.push({
+            type: "character_tags_review_note",
+            severity: "info",
+            message: `Character '${character.character_id}' has sidecar tags; M4 treats these as compatibility/review notes, not relationship authority.`,
+            character_id: character.character_id,
+          });
+        }
+      } catch {
+        // Character prose/metadata files are compatibility output for this audit.
+      }
+    }
+
+    for (const place of places) {
+      if (!place.file_path) continue;
+      try {
+        const { sourceMeta } = readSourceMeta(place.file_path, SYNC_DIR, { writable: false });
+        if (normalizeStringList(sourceMeta.associated_characters).length > 0) {
+          diagnostics.push({
+            type: "place_associated_characters_review_note",
+            severity: "info",
+            message: `Place '${place.place_id}' has associated_characters sidecar metadata; use connect_character_place_evidence for current scene-backed authority.`,
+            place_id: place.place_id,
+          });
+        }
+        if (normalizeStringList(sourceMeta.tags).length > 0) {
+          diagnostics.push({
+            type: "place_tags_review_note",
+            severity: "info",
+            message: `Place '${place.place_id}' has sidecar tags; M4 treats these as compatibility/review notes, not relationship authority.`,
+            place_id: place.place_id,
+          });
+        }
+      } catch {
+        // Place prose/metadata files are compatibility output for this audit.
+      }
+    }
+
+    return jsonResponse({
+      ok: true,
+      project_id: project_id ?? null,
+      audit_authority: {
+        canonical_relationship_sources: [
+          "scene_characters",
+          "scene_places",
+          "threads",
+          "scene_threads",
+          "character_relationships",
+          "reference_links",
+        ],
+        compatibility_sources: [
+          "scene sidecar characters/places/tags/threads",
+          "character sidecar tags",
+          "place sidecar associated_characters/tags",
+        ],
+        compatibility_mutation_surface: false,
+      },
+      diagnostics,
+      summary: {
+        diagnostics_count: diagnostics.length,
+        stale_scene_count: diagnostics.filter(diagnostic => diagnostic.type === "stale_scene_relationship_index").length,
+        compatibility_note_count: diagnostics.filter(diagnostic => diagnostic.severity === "info").length,
+      },
+      next_steps: [
+        "Use connect_character_place_evidence for scene-backed character/place relationships.",
+        "Use record_character_relationship_beat for relationship arcs between characters.",
+        "Use link_reference_evidence for explicit reference evidence.",
+        "Use export_project_backup when a fresh recovery snapshot is needed.",
+      ],
+    });
+  }
+
   // ---- create_character_sheet ---------------------------------------------
   s.tool(
     "create_character_sheet",
@@ -529,249 +1236,102 @@ export function registerMetadataTools(s, {
     }
   );
 
+  // ---- track_thread_arc ----------------------------------------------------
+  s.tool(
+    "track_thread_arc",
+    "Track a storyline, subplot, or recurring arc through a scene by recording the scene's thread beat. This is the outcome-level workflow for thread relationship changes: callers provide story intent, while SQLite thread tables, backup refresh, and rollback stay implementation details.",
+    {
+      project_id: z.string().describe("Project the thread belongs to (e.g. 'the-lamb')."),
+      thread_id: z.string().describe("Stable thread ID for the arc being tracked (e.g. 'thread-reconciliation')."),
+      thread_name: z.string().describe("Human-readable thread or arc name."),
+      scene_id: z.string().describe("Scene that carries this thread beat (e.g. 'sc-011-sebastian')."),
+      beat: z.string().optional().describe("Optional story beat for this scene in the thread, such as setup, escalation, reveal, reversal, or payoff."),
+      status: z.string().optional().describe("Thread status (e.g. 'active', 'resolved'). Defaults to 'active'."),
+    },
+    async (args) => trackThreadArcLink(args, { operation: "track_thread_arc" })
+  );
+
   // ---- upsert_thread_link --------------------------------------------------
   s.tool(
     "upsert_thread_link",
-    "Create or update a thread and link it to a scene. Idempotent: if the link already exists, updates its beat. Only available when the sync dir is writable.",
+    "Compatibility name for track_thread_arc. Prefer track_thread_arc when recording story intent; this retained alias still validates, writes SQLite first, refreshes project backups, and rolls back failed canonical writes.",
     {
       project_id: z.string().describe("Project the thread belongs to (e.g. 'the-lamb')."),
-      thread_id: z.string().describe("Thread ID (e.g. 'thread-reconciliation')."),
-      thread_name: z.string().describe("Thread display name."),
-      scene_id: z.string().describe("Scene to link to the thread (e.g. 'sc-011-sebastian')."),
-      beat: z.string().optional().describe("Optional thread-specific beat label for this scene."),
+      thread_id: z.string().describe("Stable thread ID for the arc being tracked (e.g. 'thread-reconciliation')."),
+      thread_name: z.string().describe("Human-readable thread or arc name."),
+      scene_id: z.string().describe("Scene that carries this thread beat (e.g. 'sc-011-sebastian')."),
+      beat: z.string().optional().describe("Optional story beat for this scene in the thread, such as setup, escalation, reveal, reversal, or payoff."),
       status: z.string().optional().describe("Thread status (e.g. 'active', 'resolved'). Defaults to 'active'."),
     },
-    async ({ project_id, thread_id, thread_name, scene_id, beat, status }) => {
-      if (!SYNC_DIR_WRITABLE) {
-        return errorResponse("READ_ONLY", "Cannot write thread links: sync dir is read-only.");
-      }
-      const projectIdCheck = validateProjectId(project_id);
-      if (!projectIdCheck.ok) {
-        return errorResponse("INVALID_PROJECT_ID", projectIdCheck.reason, { project_id });
-      }
+    async (args) => trackThreadArcLink(args, { operation: "upsert_thread_link" })
+  );
 
-      const existingThread = db.prepare(`SELECT thread_id, project_id FROM threads WHERE thread_id = ?`).get(thread_id);
-      if (existingThread && existingThread.project_id !== project_id) {
-        return errorResponse(
-          "CONFLICT",
-          `Thread '${thread_id}' already exists in project '${existingThread.project_id}', cannot reuse it for project '${project_id}'.`
-        );
-      }
-
-      const scene = db.prepare(`SELECT scene_id FROM scenes WHERE scene_id = ? AND project_id = ?`).get(scene_id, project_id);
-      if (!scene) {
-        return errorResponse("NOT_FOUND", `Scene '${scene_id}' not found in project '${project_id}'.`);
-      }
-
-      db.prepare(`
-        INSERT INTO threads (thread_id, project_id, name, status)
-        VALUES (?, ?, ?, ?)
-        ON CONFLICT (thread_id) DO UPDATE SET
-          name = excluded.name,
-          status = excluded.status
-      `).run(thread_id, project_id, thread_name, status ?? "active");
-
-      db.prepare(`
-        INSERT INTO scene_threads (scene_id, project_id, thread_id, beat)
-        VALUES (?, ?, ?, ?)
-        ON CONFLICT (scene_id, project_id, thread_id) DO UPDATE SET
-          beat = excluded.beat
-      `).run(scene_id, project_id, thread_id, beat ?? null);
-
-      const thread = db.prepare(`SELECT * FROM threads WHERE thread_id = ?`).get(thread_id);
-      const link = db.prepare(`SELECT scene_id, project_id, thread_id, beat FROM scene_threads WHERE scene_id = ? AND project_id = ? AND thread_id = ?`)
-        .get(scene_id, project_id, thread_id);
-      const backupResult = refreshProjectScopedBackupAfterMutation(db, {
-        syncDir: SYNC_DIR,
-        projectId: project_id,
-        applicationVersion: MCP_SERVER_VERSION,
-        operation: "upsert_thread_link",
-        actor: createToolActor("upsert_thread_link"),
-        affected: {
-          threads: [thread_id],
-          scenes: [scene_id],
-        },
-        summary: `Upserted thread "${thread_id}" link for scene "${scene_id}".`,
-        before: null,
-        after: {
-          thread,
-          link,
-        },
-      });
-
-      return jsonResponse({
-        ok: true,
-        action: "upserted",
-        thread,
-        link,
-        ...backupMutationFields(backupResult),
-      });
-    }
+  // ---- link_reference_evidence --------------------------------------------
+  s.tool(
+    "link_reference_evidence",
+    "Link scene, character, place, or reference evidence to a reference document. This is the outcome-level workflow for evidence relationships: SQLite commits first, project backup artifacts refresh after commit, and sidecar/frontmatter compatibility output is refreshed only as generated transparency.",
+    {
+      source_kind: z.enum(["scene", "character", "place", "reference"]).describe("Evidence source kind."),
+      source_id: z.string().describe("Source scene_id, character_id, place_id, or reference doc_id."),
+      source_project_id: z.string().optional().describe("Optional project scope for the source. For scene/character/place sources, use this to disambiguate an ambiguous source_id across projects. For reference sources, when provided, it is treated as an ownership check and must match the source reference doc's project."),
+      target_doc_id: z.string().describe("Target reference doc_id."),
+      relation: z.string().describe("Evidence relationship label (for example: 'informs', 'related', 'history_of'). The value is trimmed and lowercased before validation."),
+    },
+    async (args) => linkReferenceEvidence(args, { operation: "link_reference_evidence" })
   );
 
   // ---- upsert_reference_link -----------------------------------------------
   s.tool(
     "upsert_reference_link",
-    "Create or update an explicit reference link from a scene, character, place, or reference doc to a target reference doc. If a link already exists between the same source and target, this updates the relation. Only available when the sync dir is writable.",
+    "Compatibility name for link_reference_evidence. Prefer link_reference_evidence when recording story evidence; this retained alias still validates, commits SQLite first, refreshes project backups, and treats sidecar/frontmatter output as generated compatibility.",
     {
-      source_kind: z.enum(["scene", "character", "place", "reference"]).describe("Link source kind."),
+      source_kind: z.enum(["scene", "character", "place", "reference"]).describe("Evidence source kind."),
       source_id: z.string().describe("Source scene_id, character_id, place_id, or reference doc_id."),
       source_project_id: z.string().optional().describe("Optional project scope for the source. For scene/character/place sources, use this to disambiguate an ambiguous source_id across projects. For reference sources, when provided, it is treated as an ownership check and must match the source reference doc's project."),
       target_doc_id: z.string().describe("Target reference doc_id."),
-      relation: z.string().describe("Relationship label (for example: 'informs', 'related', 'history_of'). The value is trimmed and lowercased before validation."),
+      relation: z.string().describe("Evidence relationship label (for example: 'informs', 'related', 'history_of'). The value is trimmed and lowercased before validation."),
     },
-    async ({ source_kind, source_id, source_project_id, target_doc_id, relation }) => {
-      if (!SYNC_DIR_WRITABLE) {
-        return errorResponse("READ_ONLY", "Cannot write reference links: sync dir is read-only.");
-      }
+    async (args) => linkReferenceEvidence(args, { operation: "upsert_reference_link" })
+  );
 
-      const normalizedRelation = relation.trim().toLowerCase();
-      if (!/^[a-z][a-z0-9_-]*$/.test(normalizedRelation)) {
-        return errorResponse(
-          "VALIDATION_ERROR",
-          "Relation is normalized to lowercase and must match [a-z][a-z0-9_-]* after normalization (for example: 'informs' or 'history_of').",
-          { relation }
-        );
-      }
+  // ---- connect_character_place_evidence ------------------------------------
+  s.tool(
+    "connect_character_place_evidence",
+    "Connect a character and place as scene-backed story evidence. This is the outcome-level workflow for character/place association: SQLite scene relationship indexes commit first, project backups refresh after commit, and scene sidecar characters/places are refreshed only as generated compatibility output.",
+    {
+      project_id: z.string().describe("Project the scene belongs to (e.g. 'the-lamb')."),
+      scene_id: z.string().describe("Scene that provides the evidence for this character/place association."),
+      character_id: z.string().describe("Character present in the scene. Use list_characters to find valid IDs."),
+      place_id: z.string().describe("Place present in the scene. Use list_places to find valid IDs."),
+      note: z.string().optional().describe("Optional review note explaining the evidence. Stored in operation history, not in compatibility sidecars."),
+    },
+    async (args) => connectCharacterPlaceEvidence(args)
+  );
 
-      const targetDoc = db.prepare(`
-        SELECT doc_id, project_id
-        FROM reference_docs
-        WHERE doc_id = ?
-      `).get(target_doc_id);
-      if (!targetDoc) {
-        return errorResponse("NOT_FOUND", `Target reference doc '${target_doc_id}' not found.`);
-      }
+  // ---- record_character_relationship_beat ----------------------------------
+  s.tool(
+    "record_character_relationship_beat",
+    "Record how two characters relate in a specific scene. This outcome-level workflow writes character relationship beats directly to SQLite, validates scene evidence, refreshes project backups after commit, and does not require callers to know the character_relationships table.",
+    {
+      project_id: z.string().describe("Project the scene evidence belongs to (e.g. 'the-lamb')."),
+      from_character: z.string().describe("First character_id in the relationship beat."),
+      to_character: z.string().describe("Second character_id in the relationship beat."),
+      relationship_type: z.string().describe("Relationship label such as trusts, protects, fears, betrays, or reconciles. Trimmed and lowercased before validation."),
+      strength: z.string().optional().describe("Optional qualitative strength or direction for this scene beat."),
+      scene_id: z.string().describe("Scene that provides the evidence for this relationship beat."),
+      note: z.string().optional().describe("Optional short evidence note for this beat."),
+    },
+    async (args) => recordCharacterRelationshipBeat(args)
+  );
 
-      const sourceResolution = resolveReferenceLinkSource({
-        db,
-        errorResponse,
-        sourceKind: source_kind,
-        sourceId: source_id,
-        sourceProjectId: source_project_id,
-        targetDocId: target_doc_id,
-      });
-      if (sourceResolution.error) {
-        return sourceResolution.error;
-      }
-      const { resolvedSourceProjectId, sourceFilePath } = sourceResolution.value;
-
-      try {
-        if (source_kind === "scene") {
-          if (!sourceFilePath) {
-            return errorResponse("STALE_PATH", `Scene '${source_id}' has no indexed file path. Run sync() to refresh.`, {
-              source_id,
-              source_project_id: resolvedSourceProjectId,
-            });
-          }
-          persistSceneReferenceLink({
-            scenePath: sourceFilePath,
-            syncDir: SYNC_DIR,
-            targetDocId: target_doc_id,
-            relation: normalizedRelation,
-          });
-        } else if (source_kind === "character") {
-          if (!sourceFilePath) {
-            return errorResponse("STALE_PATH", `Character '${source_id}' has no indexed file path. Run sync() to refresh.`, {
-              source_id,
-              source_project_id: resolvedSourceProjectId,
-            });
-          }
-          persistCharacterReferenceLink({
-            characterPath: sourceFilePath,
-            syncDir: SYNC_DIR,
-            targetDocId: target_doc_id,
-            relation: normalizedRelation,
-          });
-        } else if (source_kind === "place") {
-          if (!sourceFilePath) {
-            return errorResponse("STALE_PATH", `Place '${source_id}' has no indexed file path. Run sync() to refresh.`, {
-              source_id,
-              source_project_id: resolvedSourceProjectId,
-            });
-          }
-          persistPlaceReferenceLink({
-            placePath: sourceFilePath,
-            syncDir: SYNC_DIR,
-            targetDocId: target_doc_id,
-            relation: normalizedRelation,
-          });
-        } else {
-          if (!sourceFilePath) {
-            return errorResponse("STALE_PATH", `Reference doc '${source_id}' has no indexed file path. Run sync() to refresh.`, {
-              source_id,
-            });
-          }
-          persistReferenceDocLink({
-            filePath: sourceFilePath,
-            syncDir: SYNC_DIR,
-            targetDocId: target_doc_id,
-            relation: normalizedRelation,
-          });
-        }
-      } catch (err) {
-        if (err?.code === "ENOENT") {
-          return errorResponse(
-            "STALE_PATH",
-            `Source file for ${source_kind} '${source_id}' not found at indexed path — run sync() to refresh.`,
-            { indexed_path: sourceFilePath }
-          );
-        }
-        if (err?.name === "CoreValidationError") {
-          return errorResponse(err.code, err.message, err.details);
-        }
-        return errorResponse("IO_ERROR", `Failed to persist link metadata: ${err.message}`);
-      }
-
-      try {
-        db.exec("BEGIN");
-        upsertExplicitReferenceLinkRow(db, {
-          sourceKind: source_kind,
-          sourceProjectId: resolvedSourceProjectId,
-          sourceId: source_id,
-          targetDocId: target_doc_id,
-          relation: normalizedRelation,
-        });
-        db.exec("COMMIT");
-      } catch (err) {
-        try {
-          db.exec("ROLLBACK");
-        } catch (rollbackErr) {
-          void rollbackErr;
-        }
-        throw err;
-      }
-
-      const link = db.prepare(`
-        SELECT source_kind, source_project_id, source_id, target_doc_id, relation, origin
-        FROM reference_links
-        WHERE source_kind = ? AND source_project_id = ? AND source_id = ? AND target_doc_id = ? AND relation = ?
-      `).get(source_kind, resolvedSourceProjectId, source_id, target_doc_id, normalizedRelation);
-      const backupProjectId = resolvedSourceProjectId || targetDoc.project_id || null;
-      const backupResult = refreshProjectScopedBackupAfterMutation(db, {
-        syncDir: SYNC_DIR,
-        projectId: backupProjectId,
-        applicationVersion: MCP_SERVER_VERSION,
-        operation: "upsert_reference_link",
-        actor: createToolActor("upsert_reference_link"),
-        affected: {
-          reference_docs: [target_doc_id],
-          sources: [`${source_kind}:${source_id}`],
-        },
-        summary: `Upserted ${source_kind} reference link from "${source_id}" to "${target_doc_id}".`,
-        before: null,
-        after: {
-          link,
-        },
-      });
-
-      return jsonResponse({
-        ok: true,
-        action: "upserted",
-        link,
-        ...backupMutationFields(backupResult),
-      });
-    }
+  // ---- audit_relationship_metadata -----------------------------------------
+  s.tool(
+    "audit_relationship_metadata",
+    "Review relationship metadata authority, stale indexes, and retained compatibility notes without mutating SQLite or files. Use this before repair work when character/place associations, sidecar tags, scene threads, or recovery readiness look stale or ambiguous.",
+    {
+      project_id: z.string().optional().describe("Optional project scope for the audit."),
+    },
+    async (args) => auditRelationshipMetadata(args)
   );
 
   // ---- create_chapter ------------------------------------------------------
@@ -1746,7 +2306,7 @@ export function registerMetadataTools(s, {
   // ---- update_character_sheet ----------------------------------------------
   s.tool(
     "update_character_sheet",
-    "Update structured metadata fields for a character (role, arc_summary, traits, etc). Writes to the .meta.yaml sidecar — never modifies the prose notes file. Changes are immediately reflected in the index. Only available when the sync dir is writable.",
+    "Update canonical character profile fields such as name, role, arc_summary, first_appearance, and traits. SQLite commits first, project backups refresh after commit, and the .meta.yaml file is refreshed only as generated compatibility output; prose notes are never modified.",
     {
       character_id: z.string().describe("The character_id to update (e.g. 'char-mira-nystrom'). Use list_characters to find valid IDs."),
       fields: z.object({
@@ -1765,82 +2325,122 @@ export function registerMetadataTools(s, {
       if (!char) {
         return errorResponse("NOT_FOUND", `Character '${character_id}' not found.`);
       }
+      const beforeTraits = db.prepare(`SELECT trait FROM character_traits WHERE character_id = ? ORDER BY trait`)
+        .all(character_id).map(row => row.trait);
+      const nextCharacter = {
+        name: fields.name ?? char.name,
+        role: Object.hasOwn(fields, "role") ? fields.role ?? null : char.role,
+        arc_summary: Object.hasOwn(fields, "arc_summary") ? fields.arc_summary ?? null : char.arc_summary,
+        first_appearance: Object.hasOwn(fields, "first_appearance") ? fields.first_appearance ?? null : char.first_appearance,
+      };
+      const nextTraits = fields.traits ? uniqueSorted(fields.traits) : beforeTraits;
       try {
-        const { meta } = readMeta(char.file_path, SYNC_DIR, { writable: true });
-        const updated = { ...meta, ...fields };
-        writeMeta(char.file_path, updated, { syncDir: SYNC_DIR });
-
+        db.exec("BEGIN");
         db.prepare(`
           UPDATE characters SET name = ?, role = ?, arc_summary = ?, first_appearance = ?
           WHERE character_id = ?
         `).run(
-          updated.name ?? meta.name, updated.role ?? null,
-          updated.arc_summary ?? null, updated.first_appearance ?? null,
+          nextCharacter.name, nextCharacter.role,
+          nextCharacter.arc_summary, nextCharacter.first_appearance,
           character_id
         );
         if (fields.traits) {
           db.prepare(`DELETE FROM character_traits WHERE character_id = ?`).run(character_id);
-          for (const t of fields.traits) {
+          for (const t of nextTraits) {
             db.prepare(`INSERT OR IGNORE INTO character_traits (character_id, trait) VALUES (?, ?)`).run(character_id, t);
           }
         }
-        const backupResult = refreshProjectScopedBackupAfterMutation(db, {
-          syncDir: SYNC_DIR,
-          projectId: char.project_id,
-          applicationVersion: MCP_SERVER_VERSION,
-          operation: "update_character_sheet",
-          actor: createToolActor("update_character_sheet"),
-          affected: {
-            characters: [character_id],
-          },
-          summary: `Updated character sheet "${character_id}".`,
-          before: {
-            character: {
-              character_id,
-              project_id: char.project_id,
-              universe_id: char.universe_id,
-              name: char.name,
-              role: char.role,
-              arc_summary: char.arc_summary,
-              first_appearance: char.first_appearance,
-            },
-          },
-          after: {
-            character: {
-              character_id,
-              project_id: char.project_id,
-              universe_id: char.universe_id,
-              name: updated.name ?? meta.name ?? null,
-              role: updated.role ?? null,
-              arc_summary: updated.arc_summary ?? null,
-              first_appearance: updated.first_appearance ?? null,
-            },
-          },
-        });
-
-        return jsonResponse({
-          ok: true,
-          action: "updated",
-          message: `Updated character sheet for '${character_id}'.`,
-          character_id,
-          ...backupMutationFields(backupResult),
-        });
+        db.exec("COMMIT");
       } catch (err) {
-        if (err?.name === "CoreValidationError") {
-          return errorResponse(err.code, err.message, err.details);
+        try {
+          db.exec("ROLLBACK");
+        } catch (rollbackErr) {
+          void rollbackErr;
         }
-        if (err.code === "ENOENT") {
-          return errorResponse("STALE_PATH", `Character file for '${character_id}' not found at indexed path — the file may have moved. Run sync() to refresh.`, { indexed_path: char.file_path });
-        }
-        return errorResponse("IO_ERROR", `Failed to write character metadata for '${character_id}': ${err.message}`);
+        return errorResponse("IO_ERROR", `Failed to update canonical character metadata for '${character_id}': ${err.message}`);
       }
+
+      const backupResult = refreshProjectScopedBackupAfterMutation(db, {
+        syncDir: SYNC_DIR,
+        projectId: char.project_id,
+        applicationVersion: MCP_SERVER_VERSION,
+        operation: "update_character_sheet",
+        actor: createToolActor("update_character_sheet"),
+        affected: {
+          characters: [character_id],
+        },
+        summary: `Updated character sheet "${character_id}".`,
+        before: {
+          character: {
+            character_id,
+            project_id: char.project_id,
+            universe_id: char.universe_id,
+            name: char.name,
+            role: char.role,
+            arc_summary: char.arc_summary,
+            first_appearance: char.first_appearance,
+            traits: beforeTraits,
+          },
+        },
+        after: {
+          character: {
+            character_id,
+            project_id: char.project_id,
+            universe_id: char.universe_id,
+            ...nextCharacter,
+            traits: nextTraits,
+          },
+        },
+      });
+
+      const compatibilityDiagnostics = [];
+      try {
+        if (!char.file_path) {
+          throw Object.assign(new Error("character has no indexed file path"), { code: "STALE_PATH" });
+        }
+        const { meta } = readMeta(char.file_path, SYNC_DIR, { writable: true });
+        writeMeta(char.file_path, {
+          ...meta,
+          ...nextCharacter,
+          traits: nextTraits,
+        }, { syncDir: SYNC_DIR });
+      } catch (err) {
+        compatibilityDiagnostics.push({
+          code: err?.code ?? "COMPATIBILITY_OUTPUT_FAILED",
+          severity: "warning",
+          message: `Canonical character metadata was committed, but generated compatibility output for '${character_id}' could not be refreshed: ${err.message}`,
+          next_step: "Treat SQLite and project backup artifacts as current. Run sync and inspect the indexed character path before retrying compatibility output.",
+          details: {
+            character_id,
+            indexed_path: char.file_path,
+          },
+        });
+      }
+
+      return jsonResponse({
+        ok: true,
+        action: "updated",
+        message: `Updated character sheet for '${character_id}'.`,
+        character_id,
+        mutation_order: [
+          "validated_request",
+          "sqlite_commit",
+          "project_backup_refresh",
+          "compatibility_output_refresh",
+        ],
+        compatibility_output: buildCompatibilityOutput({
+          refreshed: compatibilityDiagnostics.length === 0,
+          diagnostics: compatibilityDiagnostics,
+        }),
+        ...backupMutationFields(backupResult),
+      });
     }
   );
 
   // ---- update_place_sheet --------------------------------------------------
   s.tool(
     "update_place_sheet",
-    "Update structured metadata fields for a place (name, associated_characters, tags). Writes to the .meta.yaml sidecar — never modifies the prose notes file. Changes are immediately reflected in the index. Only available when the sync dir is writable.",
+    "Update canonical place profile fields and retained compatibility notes. The place name commits to SQLite first and refreshes project backups; associated_characters and tags are compatibility/review metadata only. For current character/place relationship authority, use connect_character_place_evidence.",
     {
       place_id: z.string().describe("The place_id to update (e.g. 'place-harbor-district'). Use list_places to find valid IDs."),
       fields: z.object({
@@ -1857,14 +2457,25 @@ export function registerMetadataTools(s, {
       if (!place) {
         return errorResponse("NOT_FOUND", `Place '${place_id}' not found.`);
       }
-      try {
-        const { meta } = readMeta(place.file_path, SYNC_DIR, { writable: true });
-        const updated = { ...meta, ...fields };
-        writeMeta(place.file_path, updated, { syncDir: SYNC_DIR });
+      const hasCanonicalNameUpdate = Object.hasOwn(fields, "name");
+      const nextName = fields.name ?? place.name;
+      let backupResult = emptyBackupMutationResult();
 
-        db.prepare(`UPDATE places SET name = ? WHERE place_id = ?`)
-          .run(updated.name ?? meta.name ?? place_id, place_id);
-        const backupResult = refreshProjectScopedBackupAfterMutation(db, {
+      if (hasCanonicalNameUpdate) {
+        try {
+          db.exec("BEGIN");
+          db.prepare(`UPDATE places SET name = ? WHERE place_id = ?`)
+            .run(nextName, place_id);
+          db.exec("COMMIT");
+        } catch (err) {
+          try {
+            db.exec("ROLLBACK");
+          } catch (rollbackErr) {
+            void rollbackErr;
+          }
+          return errorResponse("IO_ERROR", `Failed to update canonical place metadata for '${place_id}': ${err.message}`);
+        }
+        backupResult = refreshProjectScopedBackupAfterMutation(db, {
           syncDir: SYNC_DIR,
           projectId: place.project_id,
           applicationVersion: MCP_SERVER_VERSION,
@@ -1887,34 +2498,68 @@ export function registerMetadataTools(s, {
               place_id,
               project_id: place.project_id,
               universe_id: place.universe_id,
-              name: updated.name ?? meta.name ?? place_id,
+              name: nextName,
             },
           },
         });
-
-        return jsonResponse({
-          ok: true,
-          action: "updated",
-          message: `Updated place sheet for '${place_id}'.`,
-          place_id,
-          ...backupMutationFields(backupResult),
-        });
-      } catch (err) {
-        if (err?.name === "CoreValidationError") {
-          return errorResponse(err.code, err.message, err.details);
-        }
-        if (err.code === "ENOENT") {
-          return errorResponse("STALE_PATH", `Place file for '${place_id}' not found at indexed path — the file may have moved. Run sync() to refresh.`, { indexed_path: place.file_path });
-        }
-        return errorResponse("IO_ERROR", `Failed to write place metadata for '${place_id}': ${err.message}`);
       }
+
+      const compatibilityDiagnostics = [];
+      try {
+        if (!place.file_path) {
+          throw Object.assign(new Error("place has no indexed file path"), { code: "STALE_PATH" });
+        }
+        const { meta } = readMeta(place.file_path, SYNC_DIR, { writable: true });
+        const updated = { ...meta, ...fields, name: nextName };
+        writeMeta(place.file_path, updated, { syncDir: SYNC_DIR });
+      } catch (err) {
+        compatibilityDiagnostics.push({
+          code: err?.code ?? "COMPATIBILITY_OUTPUT_FAILED",
+          severity: "warning",
+          message: `Place metadata was updated, but generated compatibility output for '${place_id}' could not be refreshed: ${err.message}`,
+          next_step: "Treat SQLite and project backup artifacts as current for canonical place fields. Use connect_character_place_evidence for relationship authority.",
+          details: {
+            place_id,
+            indexed_path: place.file_path,
+          },
+        });
+      }
+
+      return jsonResponse({
+        ok: true,
+        action: "updated",
+        message: `Updated place sheet for '${place_id}'.`,
+        place_id,
+        canonical_mutation: hasCanonicalNameUpdate,
+        mutation_order: hasCanonicalNameUpdate
+          ? [
+              "validated_request",
+              "sqlite_commit",
+              "project_backup_refresh",
+              "compatibility_output_refresh",
+            ]
+          : [
+              "validated_request",
+              "compatibility_review_note_refresh",
+            ],
+        compatibility_output: buildCompatibilityOutput({
+          refreshed: compatibilityDiagnostics.length === 0,
+          diagnostics: compatibilityDiagnostics,
+          role: hasCanonicalNameUpdate ? "generated_transparency" : "review_note",
+        }),
+        non_canonical_fields: ["associated_characters", "tags"].filter(field => Object.hasOwn(fields, field)),
+        next_step: Object.hasOwn(fields, "associated_characters")
+          ? "Use connect_character_place_evidence to make scene-backed character/place associations authoritative."
+          : undefined,
+        ...backupMutationFields(backupResult),
+      });
     }
   );
 
   // ---- flag_scene ----------------------------------------------------------
   s.tool(
     "flag_scene",
-    "Attach a continuity or review note to a scene. Flags are appended to the sidecar file and accumulate over time — they are never overwritten. Use this to record continuity problems, revision notes, or questions you want to revisit.",
+    "Attach a continuity or review note to a scene as compatibility review metadata. Flags are not canonical relationship authority and do not mutate SQLite; use audit_relationship_metadata, connect_character_place_evidence, record_character_relationship_beat, or link_reference_evidence when the note identifies relationship repair work.",
     {
       scene_id:   z.string().describe("The scene_id to flag (e.g. 'sc-012-open-to-anyone')."),
       project_id: z.string().describe("Project the scene belongs to (e.g. 'the-lamb')."),
@@ -1934,7 +2579,21 @@ export function registerMetadataTools(s, {
         const flags = sourceMeta.flags ?? [];
         flags.push({ note, flagged_at: new Date().toISOString() });
         writeMeta(scene.file_path, { ...sourceMeta, flags }, { syncDir: SYNC_DIR });
-        return { content: [{ type: "text", text: `Flagged scene '${scene_id}': ${note}` }] };
+        return jsonResponse({
+          ok: true,
+          action: "flagged",
+          message: `Flagged scene '${scene_id}': ${note}`,
+          scene_id,
+          project_id,
+          compatibility_output: {
+            role: "review_note",
+            generated_transparency: false,
+            mutation_surface: false,
+            canonical_mutation: false,
+            refreshed: true,
+          },
+          next_step: "If this flag identifies relationship drift, use audit_relationship_metadata before applying an outcome-level repair.",
+        });
       } catch (err) {
         if (err?.name === "CoreValidationError") {
           return errorResponse(err.code, err.message, err.details);

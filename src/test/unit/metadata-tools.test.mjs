@@ -94,6 +94,37 @@ function seedReferenceDoc(db, { docId, projectId, title }) {
   `).run(docId, projectId, null, "world", title, null, referencePath);
 }
 
+function seedCharacter(db, { characterId, projectId, name = characterId, filePath = null }) {
+  const characterPath = filePath ?? path.join(SEED_TMP_DIR, `${projectId ?? "global"}-${characterId}-${++seedCounter}.md`);
+  if (!filePath) {
+    fs.writeFileSync(
+      characterPath,
+      `---\ncharacter_id: ${characterId}\nname: ${name}\n---\nCharacter notes.`,
+      "utf8"
+    );
+  }
+  db.prepare(`
+    INSERT INTO characters (
+      character_id, project_id, universe_id, name, role, arc_summary, first_appearance, file_path
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(characterId, projectId, null, name, null, null, null, characterPath);
+}
+
+function seedPlace(db, { placeId, projectId, name = placeId, filePath = null }) {
+  const placePath = filePath ?? path.join(SEED_TMP_DIR, `${projectId ?? "global"}-${placeId}-${++seedCounter}.md`);
+  if (!filePath) {
+    fs.writeFileSync(
+      placePath,
+      `---\nplace_id: ${placeId}\nname: ${name}\n---\nPlace notes.`,
+      "utf8"
+    );
+  }
+  db.prepare(`
+    INSERT INTO places (place_id, project_id, universe_id, name, file_path)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(placeId, projectId, null, name, placePath);
+}
+
 describe("metadata upsert_reference_link tool", () => {
   test("returns READ_ONLY when writable mode is disabled", async () => {
     const db = openDb(":memory:");
@@ -179,6 +210,16 @@ describe("metadata upsert_reference_link tool", () => {
       });
       assert.equal(created.ok, true);
       assert.equal(created.link.relation, "informs");
+      assert.deepEqual(created.mutation_order, [
+        "validated_request",
+        "sqlite_commit",
+        "project_backup_refresh",
+        "compatibility_output_refresh",
+      ]);
+      assert.equal(created.compatibility_output.generated_transparency, true);
+      assert.equal(created.compatibility_output.mutation_surface, false);
+      assert.equal(created.compatibility_output.refreshed, true);
+      assert.deepEqual(created.compatibility_diagnostics, []);
 
       const updated = await tools.call("upsert_reference_link", {
         source_kind: "scene",
@@ -197,6 +238,87 @@ describe("metadata upsert_reference_link tool", () => {
       `).all();
       assert.equal(rows.length, 1);
       assert.equal(rows[0].relation, "history_of");
+    } finally {
+      db.close();
+    }
+  });
+
+  test("link_reference_evidence exposes the outcome-oriented reference workflow", async () => {
+    const db = openDb(":memory:");
+    try {
+      seedProject(db, "test-novel");
+      seedScene(db, { sceneId: "sc-evidence", projectId: "test-novel" });
+      seedReferenceDoc(db, { docId: "ref-evidence", projectId: "test-novel", title: "Evidence Ref" });
+
+      const tools = makeToolHarness(db);
+      const parsed = await tools.call("link_reference_evidence", {
+        source_kind: "scene",
+        source_id: "sc-evidence",
+        source_project_id: "test-novel",
+        target_doc_id: "ref-evidence",
+        relation: "Informs",
+      });
+
+      assert.equal(parsed.ok, true);
+      assert.equal(parsed.action, "linked");
+      assert.equal(parsed.link.source_kind, "scene");
+      assert.equal(parsed.link.source_project_id, "test-novel");
+      assert.equal(parsed.link.source_id, "sc-evidence");
+      assert.equal(parsed.link.target_doc_id, "ref-evidence");
+      assert.equal(parsed.link.relation, "informs");
+      assert.deepEqual(parsed.mutation_order, [
+        "validated_request",
+        "sqlite_commit",
+        "project_backup_refresh",
+        "compatibility_output_refresh",
+      ]);
+      assert.equal(parsed.compatibility_output.generated_transparency, true);
+      assert.equal(parsed.compatibility_output.mutation_surface, false);
+      assert.equal(parsed.compatibility_output.refreshed, true);
+
+      const row = db.prepare(`
+        SELECT relation, origin
+        FROM reference_links
+        WHERE source_kind = 'scene' AND source_project_id = 'test-novel' AND source_id = 'sc-evidence' AND target_doc_id = 'ref-evidence'
+      `).get();
+      assert.equal(row.relation, "informs");
+      assert.equal(row.origin, "explicit");
+    } finally {
+      db.close();
+    }
+  });
+
+  test("link_reference_evidence commits SQLite when compatibility output is stale", async () => {
+    const db = openDb(":memory:");
+    try {
+      seedProject(db, "test-novel");
+      seedScene(db, { sceneId: "sc-stale-output", projectId: "test-novel" });
+      seedReferenceDoc(db, { docId: "ref-stale-output", projectId: "test-novel", title: "Stale Output Ref" });
+      const filePath = db.prepare(`SELECT file_path FROM scenes WHERE scene_id = ? AND project_id = ?`)
+        .get("sc-stale-output", "test-novel").file_path;
+      fs.rmSync(filePath, { force: true });
+
+      const tools = makeToolHarness(db);
+      const parsed = await tools.call("link_reference_evidence", {
+        source_kind: "scene",
+        source_id: "sc-stale-output",
+        source_project_id: "test-novel",
+        target_doc_id: "ref-stale-output",
+        relation: "informs",
+      });
+
+      assert.equal(parsed.ok, true);
+      assert.equal(parsed.compatibility_output.refreshed, false);
+      assert.equal(parsed.compatibility_diagnostics[0].severity, "warning");
+      assert.equal(parsed.compatibility_diagnostics[0].details.indexed_path, filePath);
+
+      const row = db.prepare(`
+        SELECT relation, origin
+        FROM reference_links
+        WHERE source_kind = 'scene' AND source_project_id = 'test-novel' AND source_id = 'sc-stale-output' AND target_doc_id = 'ref-stale-output'
+      `).get();
+      assert.equal(row.relation, "informs");
+      assert.equal(row.origin, "explicit");
     } finally {
       db.close();
     }
@@ -275,6 +397,204 @@ describe("metadata upsert_reference_link tool", () => {
 
       assert.equal(parsed.ok, false);
       assert.equal(parsed.error.code, "VALIDATION_ERROR");
+    } finally {
+      db.close();
+    }
+  });
+});
+
+describe("metadata relationship outcome tools", () => {
+  test("connect_character_place_evidence writes scene relationship indexes before compatibility output", async () => {
+    const db = openDb(":memory:");
+    try {
+      seedProject(db, "test-novel");
+      seedScene(db, { sceneId: "sc-evidence", projectId: "test-novel" });
+      seedCharacter(db, { characterId: "char-mira", projectId: "test-novel", name: "Mira" });
+      seedPlace(db, { placeId: "place-harbor", projectId: "test-novel", name: "Harbor" });
+
+      const tools = makeToolHarness(db);
+      const parsed = await tools.call("connect_character_place_evidence", {
+        project_id: "test-novel",
+        scene_id: "sc-evidence",
+        character_id: "char-mira",
+        place_id: "place-harbor",
+        note: "Mira reaches the harbor here.",
+      });
+
+      assert.equal(parsed.ok, true);
+      assert.equal(parsed.action, "connected");
+      assert.deepEqual(parsed.mutation_order, [
+        "validated_request",
+        "sqlite_commit",
+        "project_backup_refresh",
+        "compatibility_output_refresh",
+      ]);
+      assert.equal(parsed.compatibility_output.mutation_surface, false);
+
+      const sceneCharacter = db.prepare(`
+        SELECT character_id
+        FROM scene_characters
+        WHERE scene_id = 'sc-evidence' AND project_id = 'test-novel'
+      `).get();
+      const scenePlace = db.prepare(`
+        SELECT place_id
+        FROM scene_places
+        WHERE scene_id = 'sc-evidence' AND project_id = 'test-novel'
+      `).get();
+      assert.equal(sceneCharacter.character_id, "char-mira");
+      assert.equal(scenePlace.place_id, "place-harbor");
+    } finally {
+      db.close();
+    }
+  });
+
+  test("connect_character_place_evidence warns when scene compatibility output has no usable indexed path", async () => {
+    const db = openDb(":memory:");
+    try {
+      seedProject(db, "test-novel");
+      db.prepare(`
+        INSERT INTO scenes (
+          scene_id, project_id, title, file_path, prose_checksum, metadata_stale, updated_at
+        ) VALUES (?, ?, ?, ?, ?, 0, ?)
+      `).run("sc-no-path", "test-novel", "Scene Without Path", "", "deadbeef", new Date().toISOString());
+      seedCharacter(db, { characterId: "char-mira", projectId: "test-novel", name: "Mira" });
+      seedPlace(db, { placeId: "place-harbor", projectId: "test-novel", name: "Harbor" });
+
+      const tools = makeToolHarness(db);
+      const parsed = await tools.call("connect_character_place_evidence", {
+        project_id: "test-novel",
+        scene_id: "sc-no-path",
+        character_id: "char-mira",
+        place_id: "place-harbor",
+      });
+
+      assert.equal(parsed.ok, true);
+      assert.equal(parsed.compatibility_output.refreshed, false);
+      assert.equal(parsed.compatibility_output.diagnostics[0].code, "STALE_PATH");
+      assert.equal(parsed.compatibility_output.diagnostics[0].details.indexed_path, null);
+
+      const sceneCharacter = db.prepare(`
+        SELECT character_id
+        FROM scene_characters
+        WHERE scene_id = 'sc-no-path' AND project_id = 'test-novel'
+      `).get();
+      const scenePlace = db.prepare(`
+        SELECT place_id
+        FROM scene_places
+        WHERE scene_id = 'sc-no-path' AND project_id = 'test-novel'
+      `).get();
+      assert.equal(sceneCharacter.character_id, "char-mira");
+      assert.equal(scenePlace.place_id, "place-harbor");
+    } finally {
+      db.close();
+    }
+  });
+
+  test("record_character_relationship_beat writes canonical relationship beats without sidecar output", async () => {
+    const db = openDb(":memory:");
+    try {
+      seedProject(db, "test-novel");
+      seedScene(db, { sceneId: "sc-trust", projectId: "test-novel" });
+      seedCharacter(db, { characterId: "char-elena", projectId: "test-novel", name: "Elena" });
+      seedCharacter(db, { characterId: "char-marcus", projectId: "test-novel", name: "Marcus" });
+
+      const tools = makeToolHarness(db);
+      const parsed = await tools.call("record_character_relationship_beat", {
+        project_id: "test-novel",
+        from_character: "char-elena",
+        to_character: "char-marcus",
+        relationship_type: "Trusts",
+        strength: "fragile",
+        scene_id: "sc-trust",
+        note: "Elena chooses to tell Marcus the truth.",
+      });
+
+      assert.equal(parsed.ok, true);
+      assert.equal(parsed.relationship.relationship_type, "trusts");
+      assert.equal(parsed.compatibility_output.role, "none");
+      assert.deepEqual(parsed.mutation_order, [
+        "validated_request",
+        "sqlite_commit",
+        "project_backup_refresh",
+      ]);
+
+      const row = db.prepare(`
+        SELECT relationship_type, strength, scene_id, note
+        FROM character_relationships
+        WHERE from_character = 'char-elena' AND to_character = 'char-marcus'
+      `).get();
+      assert.equal(row.relationship_type, "trusts");
+      assert.equal(row.strength, "fragile");
+      assert.equal(row.scene_id, "sc-trust");
+    } finally {
+      db.close();
+    }
+  });
+
+  test("audit_relationship_metadata classifies retained sidecar fields as compatibility notes", async () => {
+    const db = openDb(":memory:");
+    try {
+      seedProject(db, "test-novel");
+      seedScene(db, { sceneId: "sc-audit", projectId: "test-novel" });
+      const characterPath = path.join(SEED_TMP_DIR, `audit-char-${++seedCounter}.md`);
+      fs.writeFileSync(
+        characterPath,
+        "---\ncharacter_id: char-audit\nname: Audit Character\ntags:\n  - legacy-tag\n---\nCharacter notes.",
+        "utf8"
+      );
+      seedCharacter(db, {
+        characterId: "char-audit",
+        projectId: "test-novel",
+        name: "Audit Character",
+        filePath: characterPath,
+      });
+      const placePath = path.join(SEED_TMP_DIR, `audit-place-${++seedCounter}.md`);
+      fs.writeFileSync(
+        placePath,
+        "---\nplace_id: place-audit\nname: Audit Place\nassociated_characters:\n  - char-audit\ntags:\n  - legacy-place\n---\nPlace notes.",
+        "utf8"
+      );
+      seedPlace(db, {
+        placeId: "place-audit",
+        projectId: "test-novel",
+        name: "Audit Place",
+        filePath: placePath,
+      });
+
+      const tools = makeToolHarness(db);
+      const parsed = await tools.call("audit_relationship_metadata", {
+        project_id: "test-novel",
+      });
+
+      assert.equal(parsed.ok, true);
+      assert.equal(parsed.audit_authority.compatibility_mutation_surface, false);
+      assert.ok(parsed.diagnostics.some(diagnostic => diagnostic.type === "character_tags_review_note"));
+      assert.ok(parsed.diagnostics.some(diagnostic => diagnostic.type === "place_associated_characters_review_note"));
+      assert.ok(parsed.next_steps.includes("Use connect_character_place_evidence for scene-backed character/place relationships."));
+    } finally {
+      db.close();
+    }
+  });
+
+  test("update_character_sheet commits SQLite even when compatibility output cannot refresh", async () => {
+    const db = openDb(":memory:");
+    try {
+      seedProject(db, "test-novel");
+      seedCharacter(db, { characterId: "char-missing-file", projectId: "test-novel", name: "Missing File" });
+      const filePath = db.prepare(`SELECT file_path FROM characters WHERE character_id = ?`).get("char-missing-file").file_path;
+      fs.rmSync(filePath, { force: true });
+
+      const tools = makeToolHarness(db);
+      const parsed = await tools.call("update_character_sheet", {
+        character_id: "char-missing-file",
+        fields: { arc_summary: "Canonical update survives missing compatibility output." },
+      });
+
+      assert.equal(parsed.ok, true);
+      assert.equal(parsed.compatibility_output.refreshed, false);
+      assert.equal(parsed.compatibility_output.diagnostics[0].severity, "warning");
+      const row = db.prepare(`SELECT arc_summary FROM characters WHERE character_id = ?`).get("char-missing-file");
+      assert.equal(row.arc_summary, "Canonical update survives missing compatibility output.");
     } finally {
       db.close();
     }

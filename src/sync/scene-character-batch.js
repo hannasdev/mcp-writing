@@ -234,6 +234,15 @@ export async function runSceneCharacterBatch({ syncDir, args, onProgress, should
     cancelled: Boolean(typeof shouldCancel === "function" && shouldCancel() && processed_scenes < targetScenes.length),
     project_id,
     dry_run: Boolean(dry_run),
+    relationship_authority: {
+      canonical_owner: "SQLite scene_characters",
+      compatibility_source: "scene sidecar characters",
+      compatibility_mutation_surface: false,
+      apply_order: dry_run ? "preview_only" : "compatibility_output_then_sync_index",
+      note: dry_run
+        ? "Dry run only reviews prose-derived character repairs."
+        : "M4 retains this batch repair as a prose-derived compatibility path; completion syncs the SQLite relationship index and refreshes backups for changed scenes.",
+    },
     total_scenes: targetScenes.length,
     processed_scenes,
     scenes_changed,

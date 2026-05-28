@@ -676,7 +676,7 @@ export function registerSyncTools(s, {
 
   s.tool(
     "enrich_scene_characters_batch",
-    "Start an asynchronous batch job that infers scene character mentions and updates scene metadata links. Version 1 uses canonical character names only (no aliases). Defaults to dry_run=true.",
+    "Start an asynchronous prose-derived relationship repair job that infers scene character mentions and updates scene character links. Defaults to dry_run=true; apply mode retains scene sidecar characters as compatibility output, then syncs SQLite scene_characters and refreshes project backups for changed scenes.",
     {
       project_id: z.string().describe("Project ID (e.g. 'the-lamb' or 'universe-1/book-1-the-lamb')."),
       scene_ids: z.array(z.string()).optional().describe("Optional allowlist of scene IDs to process before other filters are applied."),
@@ -684,7 +684,7 @@ export function registerSyncTools(s, {
       chapter: z.number().int().optional().describe("Optional read-scope compatibility alias resolved through canonical chapter identity. Not a structural mutation target."),
       chapter_id: z.string().optional().describe("Optional canonical chapter identifier."),
       only_stale: z.boolean().optional().describe("If true, only process scenes currently marked metadata_stale."),
-      dry_run: z.boolean().optional().describe("If true (default), returns preview results without writing sidecars."),
+      dry_run: z.boolean().optional().describe("If true (default), returns preview results without writing compatibility metadata."),
       replace_mode: z.enum(["merge", "replace"]).optional().describe("merge (default): add inferred IDs; replace: overwrite characters with inferred IDs."),
       max_scenes: z.number().int().positive().optional().describe("Hard guardrail for resolved scene count (default: 200)."),
       include_match_details: z.boolean().optional().describe("If true, include extra match diagnostics per scene."),
@@ -805,6 +805,18 @@ export function registerSyncTools(s, {
             });
             completedJob.result = {
               ...completedJob.result,
+              mutation_order: [
+                "prose_inference",
+                "compatibility_output_refresh",
+                "sqlite_sync_index",
+                "project_backup_refresh",
+              ],
+              compatibility_output: {
+                role: "prose_derived_repair_output",
+                generated_transparency: true,
+                mutation_surface: false,
+                refreshed: true,
+              },
               ...backupMutationFields(backupResult),
             };
           }

@@ -979,6 +979,9 @@ describe("enrich_scene_characters_batch tool", () => {
     assert.equal(done.job.result.project_id, "test-novel");
     assert.equal(typeof done.job.result.total_scenes, "number");
     assert.equal(typeof done.job.result.processed_scenes, "number");
+    assert.equal(done.job.result.relationship_authority.canonical_owner, "SQLite scene_characters");
+    assert.equal(done.job.result.relationship_authority.compatibility_mutation_surface, false);
+    assert.equal(done.job.result.relationship_authority.apply_order, "preview_only");
     assert.ok(Array.isArray(done.job.result.results));
     assert.equal(typeof done.job.progress?.total_scenes, "number");
     assert.equal(typeof done.job.progress?.processed_scenes, "number");
@@ -1115,6 +1118,15 @@ describe("enrich_scene_characters_batch tool", () => {
       assert.equal(done.job.result.ok, true);
       assert.equal(done.job.result.scenes_changed, 1);
       assert.equal(done.job.result.links_added >= 1, true);
+      assert.equal(done.job.result.relationship_authority.canonical_owner, "SQLite scene_characters");
+      assert.equal(done.job.result.relationship_authority.apply_order, "compatibility_output_then_sync_index");
+      assert.deepEqual(done.job.result.mutation_order, [
+        "prose_inference",
+        "compatibility_output_refresh",
+        "sqlite_sync_index",
+        "project_backup_refresh",
+      ]);
+      assert.equal(done.job.result.compatibility_output.mutation_surface, false);
       assert.equal(done.job.result.backup_refresh.ok, true);
       assert.deepEqual(done.job.result.backup_warnings, []);
 
