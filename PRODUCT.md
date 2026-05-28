@@ -9,12 +9,13 @@ It supports metadata-first reasoning, explicit prose editing workflows, and revi
 
 ## Product Status
 
-Active initiative: [Architecture Alignment Follow-up](docs/initiatives/active/architecture-alignment-follow-up/prd.md), implementing milestone M5 Deprecation, Migration, and Documentation.
+Active initiative: None selected.
 
-Current focus: Document remaining sidecar compatibility roles, migration posture, workflow guidance, release-log expectations, and generated tool guidance after PR #225 delivered outcome-oriented relationship workflows.
+Current focus: Select the next initiative from the deferred backlog or a new planning cycle.
 
-Most recent completed initiative: [Database Backup and Recovery](docs/initiatives/done/database-backup-recovery/prd.md).
+Most recent completed initiative: [Architecture Alignment Follow-up](docs/initiatives/done/architecture-alignment-follow-up/prd.md).
 
+Architecture Alignment Follow-up completed the managed sync preservation, sidecar write-boundary, outcome-oriented relationship workflow, and sidecar compatibility documentation slices that closed the known target-architecture follow-up gaps.
 Database Backup and Recovery added deterministic project backup bundles, trust/freshness diagnostics, advisory operation history, automatic backup refresh after sanctioned canonical mutations, dry-run restore planning, transactional restore application, and operational backup/restore documentation.
 Docker, CI, and Deployment Workflow made Docker a supported way to build, run, smoke-test, and deploy Writing MCP, with a documented container contract, Compose workflow, CI smoke coverage, and deployment-readiness guidance.
 Target Architecture Migration completed the structural manuscript state consolidation scope.
@@ -50,7 +51,7 @@ For structural manuscript state, use [Managed Structure Contract](docs/foundatio
 
 - [Features](FEATURES.md) — shipped product capabilities and links to completed initiative docs
 - [Backlog](BACKLOG.md) — deferred product work that is not currently active
-- [Architecture Alignment Follow-up](docs/initiatives/active/architecture-alignment-follow-up/prd.md) — active initiative documenting sidecar compatibility, migration, and deprecation expectations
+- [Architecture Alignment Follow-up](docs/initiatives/done/architecture-alignment-follow-up/prd.md) — completed initiative documenting sidecar compatibility, migration, deprecation expectations, and relationship workflow alignment
 - [Database Backup and Recovery](docs/initiatives/done/database-backup-recovery/prd.md) — completed initiative for Git-reviewable recovery artifacts and explicit restore workflows for SQLite-canonical state
 - [Conceptual Target Architecture](docs/foundations/target-architecture.md) — idealized architectural model for evaluating future structure, tooling, and workflow decisions
 - [Managed Structure Contract](docs/foundations/managed-structure-contract.md) — design boundaries for structural mutation, generated transparency, import, and maintenance workflows
