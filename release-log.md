@@ -12,7 +12,7 @@ This complements `CHANGELOG.md`:
 - Why it matters: Authors, maintainers, and AI agents can safely update editorial metadata without accidentally changing compatibility mirrors for SQLite-canonical scene structure.
 - Who is affected: Authors, maintainers, and AI agents using scene metadata, enrichment, flagging, reference-link, or character-normalization workflows on managed projects.
 - Action needed: Use `list_chapters`, `assign_scene_to_chapter`, `move_scene`, `rename_chapter`, or `reorder_chapter` for intentional structure changes; keep generic metadata tools for non-structural updates.
-- PR: TBD
+- PR: [#224](https://github.com/hannasdev/mcp-writing/pull/224)
 
 ### 2026-05-28 — Preserve managed structure when representation files are missing
 
