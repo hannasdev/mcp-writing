@@ -1,11 +1,12 @@
 # Architecture Alignment Follow-up
 
-**Status:** Deferred backlog (not active)
+**Status:** Backlog initiative in progress by milestone
 
 This initiative records target-architecture alignment gaps discovered during
 periodic reviews. It is a holding place for missing parts, correction
-candidates, and follow-up work that should not be lost, but it is not active
-implementation scope until explicitly prioritized.
+candidates, and follow-up work that should not be lost. M0–M2 have been
+accepted and implemented through the managed sync preservation slice; M3–M5
+remain deferred until explicitly prioritized.
 
 Implementation sequencing lives in [milestones.md](milestones.md). The M0
 metadata ownership inventory lives in [inventory.md](inventory.md).

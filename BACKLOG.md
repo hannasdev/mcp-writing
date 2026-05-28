@@ -26,7 +26,7 @@ Add optional project-scoped Parts, Acts, or other larger structural sections abo
 
 Track target-architecture alignment gaps found during reviews, including managed-sync canonical deletion risks and structural sidecar mirror drift from generic metadata updates.
 
-**Status:** Deferred backlog (not active). Initial findings are logged for future prioritization; no behavior changes are active yet.
+**Status:** Backlog initiative in progress by milestone. M0–M2 are accepted, including managed sync preservation behavior; M3–M5 remain deferred for future prioritization.
 
 ### 📊 [Embedding-Based Search](docs/initiatives/backlog/embeddings-search/prd.md) 📋
 

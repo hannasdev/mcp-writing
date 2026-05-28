@@ -1,10 +1,11 @@
 # Architecture Alignment Follow-up — Milestones
 
-**Status:** Deferred backlog (not active)
+**Status:** Backlog initiative in progress by milestone
 
 This milestone plan breaks the Architecture Alignment Follow-up PRD into
 independently reviewable slices. Use [prd.md](prd.md) for product framing and
 this document for sequencing, gates, and implementation readiness.
+M0–M2 are accepted; M3–M5 remain deferred for future prioritization.
 
 ## Objective
 
