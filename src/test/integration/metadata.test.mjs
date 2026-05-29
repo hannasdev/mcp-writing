@@ -188,6 +188,14 @@ describe("update_scene_metadata tool", () => {
     });
     const marcusScenes = JSON.parse(marcusScenesText);
     assert.ok(marcusScenes.results.some((row) => row.scene_id === "sc-m0-relationship-characterization"));
+
+    await callWriteTool("sync");
+
+    const retainedPlaceSearchText = await callWriteTool("search_metadata", {
+      query: uniquePlaceId,
+    });
+    const retainedPlaceSearch = JSON.parse(retainedPlaceSearchText);
+    assert.ok(retainedPlaceSearch.results.some((row) => row.scene_id === "sc-m0-relationship-characterization"));
   });
 });
 

@@ -11,7 +11,7 @@ It supports metadata-first reasoning, explicit prose editing workflows, and revi
 
 Active initiative: [Relationship Metadata Boundary](docs/initiatives/active/relationship-metadata-boundary/prd.md).
 
-Current focus: Relationship Metadata Boundary M0 is implemented in the active branch and pending review; M1 is the next planned implementation slice after M0 is accepted.
+Current focus: Relationship Metadata Boundary M0 establishes the contract decision and characterization baseline; M1 is the next planned implementation slice.
 
 Most recent completed initiative: [Architecture Alignment Follow-up](docs/initiatives/done/architecture-alignment-follow-up/prd.md).
 
