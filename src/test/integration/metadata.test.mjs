@@ -144,6 +144,59 @@ describe("update_scene_metadata tool", () => {
     assert.notEqual(sidecar.chapter_id, "ch-08-chapter-8");
     assert.notEqual(sidecar.chapter_title, "Chapter 8");
   });
+
+  test("characterizes current characters and places updates as independent sidecar-first index mutations", async () => {
+    const sceneDir = path.join(writeSyncDir, "projects", "test-novel", "scenes");
+    fs.mkdirSync(sceneDir, { recursive: true });
+    const scenePath = path.join(sceneDir, "sc-m0-relationship-characterization.md");
+    const sidecarFile = path.join(sceneDir, "sc-m0-relationship-characterization.meta.yaml");
+    const uniquePlaceId = "m0characterizationyard";
+    const placeDir = path.join(writeSyncDir, "projects", "test-novel", "world", "places");
+    fs.mkdirSync(placeDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(placeDir, `${uniquePlaceId}.md`),
+      `---\nplace_id: ${uniquePlaceId}\nname: M0 Characterization Yard\n---\nA temporary place sheet for M0 characterization.`,
+      "utf8"
+    );
+    fs.writeFileSync(
+      scenePath,
+      `---\nscene_id: sc-m0-relationship-characterization\ntitle: M0 Relationship Characterization\ncharacters:\n  - elena\nplaces:\n  - ${uniquePlaceId}\n---\nM0 relationship characterization prose.`,
+      "utf8"
+    );
+
+    await callWriteTool("sync");
+
+    const updateText = await callWriteTool("update_scene_metadata", {
+      scene_id: "sc-m0-relationship-characterization",
+      project_id: "test-novel",
+      fields: {
+        characters: ["marcus"],
+        places: [],
+      },
+    });
+    const updateParsed = JSON.parse(updateText);
+    assert.equal(updateParsed.ok, true, updateText);
+
+    const sidecar = yaml.load(fs.readFileSync(sidecarFile, "utf8"));
+    assert.deepEqual(sidecar.characters, ["marcus"]);
+    assert.deepEqual(sidecar.places, []);
+
+    const marcusScenesText = await callWriteTool("find_scenes", {
+      project_id: "test-novel",
+      character: "marcus",
+      page_size: 200,
+    });
+    const marcusScenes = JSON.parse(marcusScenesText);
+    assert.ok(marcusScenes.results.some((row) => row.scene_id === "sc-m0-relationship-characterization"));
+
+    await callWriteTool("sync");
+
+    const retainedPlaceSearchText = await callWriteTool("search_metadata", {
+      query: uniquePlaceId,
+    });
+    const retainedPlaceSearch = JSON.parse(retainedPlaceSearchText);
+    assert.ok(retainedPlaceSearch.results.some((row) => row.scene_id === "sc-m0-relationship-characterization"));
+  });
 });
 
 describe("assign_scene_to_chapter tool", () => {

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import yaml from "js-yaml";
 import { openDb } from "../../core/db.js";
 import { registerMetadataTools } from "../../tools/metadata.js";
 
@@ -83,6 +84,25 @@ function seedScene(db, { sceneId, projectId }) {
       scene_id, project_id, title, file_path, prose_checksum, metadata_stale, updated_at
     ) VALUES (?, ?, ?, ?, ?, 0, ?)
   `).run(sceneId, projectId, sceneId, scenePath, "deadbeef", new Date().toISOString());
+}
+
+function seedProjectSceneFile(db, { sceneId, projectId, metadata = {} }) {
+  seedCounter += 1;
+  const sceneDir = path.join(SEED_TMP_DIR, "projects", projectId, "scenes");
+  fs.mkdirSync(sceneDir, { recursive: true });
+  const scenePath = path.join(sceneDir, `${sceneId}-${seedCounter}.md`);
+  const frontmatter = yaml.dump({
+    scene_id: sceneId,
+    title: sceneId,
+    ...metadata,
+  });
+  fs.writeFileSync(scenePath, `---\n${frontmatter}---\nScene prose.`, "utf8");
+  db.prepare(`
+    INSERT INTO scenes (
+      scene_id, project_id, title, file_path, prose_checksum, metadata_stale, updated_at
+    ) VALUES (?, ?, ?, ?, ?, 0, ?)
+  `).run(sceneId, projectId, sceneId, scenePath, "deadbeef", new Date().toISOString());
+  return scenePath;
 }
 
 function seedReferenceDoc(db, { docId, projectId, title }) {
@@ -403,6 +423,69 @@ describe("metadata upsert_reference_link tool", () => {
 
       assert.equal(parsed.ok, false);
       assert.equal(parsed.error.code, "VALIDATION_ERROR");
+    } finally {
+      db.close();
+    }
+  });
+});
+
+describe("metadata update_scene_metadata relationship-field characterization", () => {
+  test("currently writes characters and places to the sidecar before rebuilding scene relationship indexes", async () => {
+    const db = openDb(":memory:");
+    try {
+      seedProject(db, "test-novel");
+      seedCharacter(db, { characterId: "char-elena", projectId: "test-novel", name: "Elena" });
+      seedCharacter(db, { characterId: "char-marcus", projectId: "test-novel", name: "Marcus" });
+      seedPlace(db, { placeId: "place-harbor", projectId: "test-novel", name: "Harbor" });
+      const scenePath = seedProjectSceneFile(db, {
+        sceneId: "sc-relationship-characterization",
+        projectId: "test-novel",
+        metadata: {
+          characters: ["char-elena"],
+          places: ["place-harbor"],
+        },
+      });
+      db.prepare(`
+        INSERT INTO scene_characters (scene_id, project_id, character_id)
+        VALUES (?, ?, ?)
+      `).run("sc-relationship-characterization", "test-novel", "char-elena");
+      db.prepare(`
+        INSERT INTO scene_places (scene_id, project_id, place_id)
+        VALUES (?, ?, ?)
+      `).run("sc-relationship-characterization", "test-novel", "place-harbor");
+
+      const tools = makeToolHarness(db);
+      const parsed = await tools.call("update_scene_metadata", {
+        scene_id: "sc-relationship-characterization",
+        project_id: "test-novel",
+        fields: {
+          characters: ["char-marcus"],
+          places: [],
+        },
+      });
+
+      assert.equal(parsed.ok, true);
+      assert.equal(parsed.action, "updated");
+
+      const sidecar = yaml.load(fs.readFileSync(scenePath.replace(/\.md$/, ".meta.yaml"), "utf8"));
+      assert.deepEqual(sidecar.characters, ["char-marcus"]);
+      assert.deepEqual(sidecar.places, []);
+
+      const sceneCharacters = db.prepare(`
+        SELECT character_id
+        FROM scene_characters
+        WHERE scene_id = ? AND project_id = ?
+        ORDER BY character_id
+      `).all("sc-relationship-characterization", "test-novel").map((row) => row.character_id);
+      const scenePlaces = db.prepare(`
+        SELECT place_id
+        FROM scene_places
+        WHERE scene_id = ? AND project_id = ?
+        ORDER BY place_id
+      `).all("sc-relationship-characterization", "test-novel").map((row) => row.place_id);
+
+      assert.deepEqual(sceneCharacters, ["char-marcus"]);
+      assert.deepEqual(scenePlaces, []);
     } finally {
       db.close();
     }

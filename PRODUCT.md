@@ -9,9 +9,9 @@ It supports metadata-first reasoning, explicit prose editing workflows, and revi
 
 ## Product Status
 
-Active initiative: None selected.
+Active initiative: [Relationship Metadata Boundary](docs/initiatives/active/relationship-metadata-boundary/prd.md).
 
-Current focus: Select the next initiative from the deferred backlog or a new planning cycle.
+Current focus: Relationship Metadata Boundary M0 establishes the contract decision and characterization baseline; M1 is the next planned implementation slice.
 
 Most recent completed initiative: [Architecture Alignment Follow-up](docs/initiatives/done/architecture-alignment-follow-up/prd.md).
 
@@ -51,6 +51,7 @@ For structural manuscript state, use [Managed Structure Contract](docs/foundatio
 
 - [Features](FEATURES.md) — shipped product capabilities and links to completed initiative docs
 - [Backlog](BACKLOG.md) — deferred product work that is not currently active
+- [Relationship Metadata Boundary](docs/initiatives/active/relationship-metadata-boundary/prd.md) — active initiative for closing the remaining sidecar-first scene character/place relationship mutation path
 - [Architecture Alignment Follow-up](docs/initiatives/done/architecture-alignment-follow-up/prd.md) — completed initiative documenting sidecar compatibility, migration, deprecation expectations, and relationship workflow alignment
 - [Database Backup and Recovery](docs/initiatives/done/database-backup-recovery/prd.md) — completed initiative for Git-reviewable recovery artifacts and explicit restore workflows for SQLite-canonical state
 - [Conceptual Target Architecture](docs/foundations/target-architecture.md) — idealized architectural model for evaluating future structure, tooling, and workflow decisions

@@ -1,6 +1,6 @@
 # Relationship Metadata Boundary — Milestones
 
-**Status:** Deferred backlog (not active)
+**Status:** Active — M0 selected
 
 Use [prd.md](prd.md) for product framing and this document for sequencing,
 review gates, and implementation readiness.
@@ -22,6 +22,8 @@ legacy compatibility and keeping the repository coherent after each slice.
 
 ## M0 — Contract Decision And Characterization
 
+Status: Implemented in branch; pending review.
+
 Goal: make the current behavior and target contract reviewable before changing
 tool behavior.
 
@@ -29,12 +31,24 @@ Deliverables:
 
 - Characterization tests for current `update_scene_metadata` handling of
   `characters` and `places`.
-- A documented contract decision choosing strict rejection or
-  compatibility-only behavior for those fields.
-- If compatibility-only behavior remains an option, a decision on how it avoids
-  delayed canonical mutation through ordinary sync.
+- A documented contract decision choosing strict rejection for those fields in
+  M1.
+- Documentation explaining why compatibility-only behavior was not selected:
+  writing ordinary sidecar `characters` or `places` would risk delayed
+  canonical mutation through ordinary sync unless a separate ignored storage
+  shape or sync-rule change existed.
 - Identification of any known clients or docs that still recommend generic
   metadata updates for relationship changes.
+- A decision on whether `connect_character_place_evidence` is sufficient for
+  character-only or place-only scene evidence, or whether that replacement
+  guidance needs a future named workflow.
+- Explicit confirmation that scene-character and scene-place links are
+  independent optional relationships: a scene can have zero, one, or many
+  sheet-backed character links and zero, one, or many sheet-backed place links,
+  without requiring both sides.
+- A documented product rule that scene `characters` and `places` metadata is
+  sheet-backed only; unsheeted people or locations remain prose context until a
+  deliberate sheet-creation workflow promotes them.
 - Explicit confirmation that `tags`, `status`, `flags`, and `versions` remain
   outside this initiative.
 
@@ -43,14 +57,26 @@ Acceptance criteria:
 - Reviewers can see the before/after contract from tests and docs.
 - The chosen contract is consistent with the Managed Structure Contract.
 - The migration path preserves legacy sync/import compatibility.
-- Compatibility-only behavior, if chosen, cannot write ordinary fields that
-  ordinary sync later adopts as canonical relationship state.
+- The chosen contract preserves independent optional scene-character and
+  scene-place cardinality instead of requiring paired character/place evidence.
+- The chosen contract does not promote unsheeted named people or locations into
+  canonical scene relationship metadata.
+- The selected strict contract avoids writing ordinary fields that ordinary sync
+  later adopts as canonical relationship state.
 - No public behavior changes are included beyond characterization or docs.
 
 Required validation:
 
 - `node --experimental-sqlite --test src/test/unit/metadata-tools.test.mjs`
 - `node --experimental-sqlite --test src/test/integration/metadata.test.mjs`
+
+Activation notes:
+
+- No production behavior change in M0.
+- M0 selected strict rejection, so no compatibility-only storage shape or sync
+  rule is introduced.
+- Carry release-log expectations forward to the first milestone that changes
+  the public `update_scene_metadata` contract.
 
 Out of scope:
 
@@ -76,13 +102,10 @@ Deliverables:
 
 Acceptance criteria:
 
-- A call to `update_scene_metadata` with `characters` or `places` either fails
-  with a clear relationship-boundary error or stores only non-authoritative
-  compatibility/review metadata without changing canonical relationship rows,
-  depending on the M0 decision.
-- If compatibility/review metadata is retained, subsequent ordinary sync does
-  not convert that retained metadata into canonical relationship rows.
-- The tool response names the correct relationship workflow for daily work.
+- A call to `update_scene_metadata` with `characters` or `places` fails with a
+  clear relationship-boundary error and does not write scene sidecar metadata.
+- The rejection response names the correct relationship/audit workflows for
+  daily work and compatibility review.
 - Existing allowed metadata fields continue to work.
 - Sidecar structural compatibility fields remain preserved.
 - Canonical relationship indexes do not change through sidecar-first generic
