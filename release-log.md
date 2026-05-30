@@ -12,7 +12,7 @@ This complements `CHANGELOG.md`:
 - Why it matters: Authors, maintainers, and AI agents can keep older sidecar-based projects searchable without letting stale compatibility metadata silently overwrite canonical relationship rows.
 - Who is affected: Authors, maintainers, and AI agents running sync, Scrivener import/merge, scene character enrichment, or `audit_relationship_metadata` on projects with retained sidecar/frontmatter `characters` or `places`.
 - Action needed: Use `audit_relationship_metadata` when sync reports relationship compatibility drift, then inspect stable IDs with `find_scenes`, `list_characters`, and `list_places` before applying outcome-level relationship repairs.
-- PR: TBD
+- PR: [#231](https://github.com/hannasdev/mcp-writing/pull/231)
 
 ### 2026-05-30 — Guard generic scene relationship metadata updates
 
