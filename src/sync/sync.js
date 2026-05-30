@@ -1290,7 +1290,7 @@ export function readSceneFileForSync(syncDir, file, { writable = false } = {}) {
   };
 }
 
-function resolveSceneCharacterCompatibilityId(db, value) {
+export function resolveSceneCharacterCompatibilityId(db, value) {
   let characterId = value;
   if (!/^char-/.test(value)) {
     let row = db.prepare(`SELECT character_id FROM characters WHERE lower(name) = lower(?)`).get(value);

@@ -823,6 +823,44 @@ describe("metadata relationship outcome tools", () => {
     }
   });
 
+  test("audit_relationship_metadata resolves legacy character names before drift comparison", async () => {
+    const db = openDb(":memory:");
+    try {
+      seedProject(db, "test-novel");
+      seedCharacter(db, {
+        characterId: "char-elena-vasquez",
+        projectId: "test-novel",
+        name: "Elena Vasquez",
+      });
+      seedProjectSceneFile(db, {
+        sceneId: "sc-audit-name-compat",
+        projectId: "test-novel",
+        metadata: {
+          characters: "Elena Vasquez",
+        },
+      });
+      db.prepare(`
+        INSERT INTO scene_characters (scene_id, project_id, character_id)
+        VALUES (?, ?, ?)
+      `).run("sc-audit-name-compat", "test-novel", "char-elena-vasquez");
+
+      const tools = makeToolHarness(db);
+      const parsed = await tools.call("audit_relationship_metadata", {
+        project_id: "test-novel",
+      });
+
+      const compatibilityInput = parsed.diagnostics.find(diagnostic =>
+        diagnostic.type === "scene_relationship_compatibility_input"
+      );
+      assert.equal(parsed.ok, true);
+      assert.equal(parsed.summary.compatibility_drift_count, 0);
+      assert.deepEqual(compatibilityInput.compatibility.characters, ["char-elena-vasquez"]);
+      assert.deepEqual(compatibilityInput.canonical.characters, ["char-elena-vasquez"]);
+    } finally {
+      db.close();
+    }
+  });
+
   test("audit_relationship_metadata ignores absent compatibility relationship fields when checking drift", async () => {
     const db = openDb(":memory:");
     try {

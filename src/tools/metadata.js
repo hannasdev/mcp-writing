@@ -2,7 +2,7 @@ import { z } from "zod";
 import fs from "node:fs";
 import path from "node:path";
 import matter from "gray-matter";
-import { readMeta, readSourceMeta, writeMeta, indexSceneFile, isManagedStructureProject, normalizeSceneMetaForPath } from "../sync/sync.js";
+import { readMeta, readSourceMeta, writeMeta, indexSceneFile, isManagedStructureProject, normalizeSceneMetaForPath, resolveSceneCharacterCompatibilityId } from "../sync/sync.js";
 import { validateProjectId, validateUniverseId } from "../sync/importer.js";
 import { resolveValidatedChapterFilter } from "../core/chapter-resolution.js";
 import {
@@ -460,14 +460,16 @@ function sameStringSet(a, b) {
   return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
-function normalizeSceneRelationshipCompatibilityFields(sourceMeta) {
+function normalizeSceneRelationshipCompatibilityFields(db, sourceMeta) {
   const hasCharactersField = Object.hasOwn(sourceMeta, "characters");
   const hasPlacesField = Object.hasOwn(sourceMeta, "places");
   return {
     has_relationship_fields: hasCharactersField || hasPlacesField,
     has_characters_field: hasCharactersField,
     has_places_field: hasPlacesField,
-    characters: normalizeStringList(sourceMeta.characters).filter((value) => !isVersionContinuityMarker(value)),
+    characters: normalizeStringList(sourceMeta.characters)
+      .filter((value) => !isVersionContinuityMarker(value))
+      .map((value) => resolveSceneCharacterCompatibilityId(db, value)),
     places: normalizeStringList(sourceMeta.places),
   };
 }
@@ -1089,7 +1091,7 @@ export function registerMetadataTools(s, {
       }
       try {
         const { sourceMeta } = readSourceMeta(scene.file_path, SYNC_DIR, { writable: false });
-        const compatibilityRelationships = normalizeSceneRelationshipCompatibilityFields(sourceMeta);
+        const compatibilityRelationships = normalizeSceneRelationshipCompatibilityFields(db, sourceMeta);
         if (compatibilityRelationships.has_relationship_fields) {
           const canonicalRelationships = querySceneRelationshipSnapshot(db, {
             sceneId: scene.scene_id,
