@@ -1322,8 +1322,8 @@ function sameStringSet(a, b) {
   return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
-function selectRelationshipIndexValues({ sceneId, projectId, relationshipKind, existing, compatibility, compatibilityMode, hasCompatibilityField }) {
-  if (!hasCompatibilityField && existing.length > 0) {
+function selectRelationshipIndexValues({ sceneId, projectId, relationshipKind, existing, compatibility, compatibilityMode, hasCompatibilityField, hasExistingScene }) {
+  if (!hasCompatibilityField) {
     return {
       values: existing,
       diagnostic: null,
@@ -1335,7 +1335,7 @@ function selectRelationshipIndexValues({ sceneId, projectId, relationshipKind, e
       diagnostic: null,
     };
   }
-  if (existing.length > 0 && !sameStringSet(existing, compatibility)) {
+  if (hasExistingScene && !sameStringSet(existing, compatibility)) {
     return {
       values: existing,
       diagnostic: {
@@ -1362,7 +1362,7 @@ function relationshipCompatibilityFieldsFromMeta(meta = {}) {
   };
 }
 
-function buildSceneRelationshipIndexPlan(db, { meta, projectId, compatibilityMode = "preserve_existing", compatibilityFields = relationshipCompatibilityFieldsFromMeta(meta) }) {
+function buildSceneRelationshipIndexPlan(db, { meta, projectId, compatibilityMode = "preserve_existing", compatibilityFields = relationshipCompatibilityFieldsFromMeta(meta), hasExistingScene = false }) {
   const compatibilityCharacters = [];
   const compatibilityVersionMarkers = [];
   for (const value of normalizeMetadataList(meta.characters)) {
@@ -1393,6 +1393,7 @@ function buildSceneRelationshipIndexPlan(db, { meta, projectId, compatibilityMod
     compatibility: compatibilityCharacters,
     compatibilityMode,
     hasCompatibilityField: compatibilityFields.characters,
+    hasExistingScene,
   });
   const placeSelection = selectRelationshipIndexValues({
     sceneId: meta.scene_id,
@@ -1402,6 +1403,7 @@ function buildSceneRelationshipIndexPlan(db, { meta, projectId, compatibilityMod
     compatibility: compatibilityPlaces,
     compatibilityMode,
     hasCompatibilityField: compatibilityFields.places,
+    hasExistingScene,
   });
 
   return {
@@ -1553,6 +1555,7 @@ export function indexSceneFile(db, syncDir, file, meta, prose, { observedStructu
     projectId: project_id,
     compatibilityMode: relationshipCompatibilityMode,
     compatibilityFields: relationshipCompatibilityFields,
+    hasExistingScene: Boolean(existing),
   });
   const tagValues = [
     ...normalizeMetadataList(meta.tags),
@@ -1563,6 +1566,7 @@ export function indexSceneFile(db, syncDir, file, meta, prose, { observedStructu
   db.prepare(`DELETE FROM scene_characters WHERE scene_id = ? AND project_id = ?`).run(meta.scene_id, project_id);
   db.prepare(`DELETE FROM scene_places WHERE scene_id = ? AND project_id = ?`).run(meta.scene_id, project_id);
   db.prepare(`DELETE FROM scene_tags WHERE scene_id = ? AND project_id = ?`).run(meta.scene_id, project_id);
+  db.prepare(`DELETE FROM scenes_fts WHERE scene_id = ? AND project_id = ?`).run(meta.scene_id, project_id);
 
   for (const cid of relationshipIndexPlan.characters) {
     db.prepare(`INSERT OR IGNORE INTO scene_characters (scene_id, project_id, character_id) VALUES (?, ?, ?)`).run(
@@ -1591,7 +1595,7 @@ export function indexSceneFile(db, syncDir, file, meta, prose, { observedStructu
     .filter(Boolean)
     .join(" ");
 
-  db.prepare(`INSERT OR REPLACE INTO scenes_fts (scene_id, project_id, logline, title, keywords) VALUES (?, ?, ?, ?, ?)`).run(
+  db.prepare(`INSERT INTO scenes_fts (scene_id, project_id, logline, title, keywords) VALUES (?, ?, ?, ?, ?)`).run(
     meta.scene_id,
     project_id,
     meta.logline ?? meta.synopsis ?? "",

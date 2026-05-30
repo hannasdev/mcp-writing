@@ -2403,6 +2403,52 @@ describe("syncAll", () => {
     fs.rmSync(dir, { recursive: true });
   });
 
+  test("ordinary sync preserves intentionally empty canonical relationships on drift", () => {
+    const dir = makeTempSync();
+    const db = openDb(":memory:");
+    writeScene(dir, "sc-cleared", {
+      characters: "elena",
+      places: "harbor",
+    });
+
+    syncAll(db, dir, { quiet: true });
+    db.prepare(`
+      DELETE FROM scene_characters
+      WHERE scene_id = ? AND project_id = ?
+    `).run("sc-cleared", "test-novel");
+    db.prepare(`
+      DELETE FROM scene_places
+      WHERE scene_id = ? AND project_id = ?
+    `).run("sc-cleared", "test-novel");
+
+    const result = syncAll(db, dir, { quiet: true });
+
+    assert.equal(result.warningSummary.relationship_compatibility_drift.count, 2);
+    assert.equal(
+      db.prepare(`
+        SELECT COUNT(*) AS count
+        FROM scene_characters
+        WHERE scene_id = 'sc-cleared' AND project_id = 'test-novel'
+      `).get().count,
+      0
+    );
+    assert.equal(
+      db.prepare(`
+        SELECT COUNT(*) AS count
+        FROM scene_places
+        WHERE scene_id = 'sc-cleared' AND project_id = 'test-novel'
+      `).get().count,
+      0
+    );
+    assert.equal(
+      db.prepare(`SELECT COUNT(*) AS count FROM scenes_fts WHERE scenes_fts MATCH ?`).get("elena").count,
+      0
+    );
+
+    db.close();
+    fs.rmSync(dir, { recursive: true });
+  });
+
   test("adopt compatibility sync preserves canonical rows when compatibility fields are absent", () => {
     const dir = makeTempSync();
     const db = openDb(":memory:");
