@@ -2336,6 +2336,175 @@ describe("syncAll", () => {
     fs.rmSync(dir, { recursive: true });
   });
 
+  test("indexes legacy relationship compatibility once and preserves canonical rows on drift", () => {
+    const dir = makeTempSync();
+    const db = openDb(":memory:");
+    writeScene(dir, "sc-compat", {
+      characters: "elena, v7.3",
+      places: "harbor",
+    });
+
+    syncAll(db, dir, { quiet: true });
+
+    assert.deepEqual(
+      db.prepare(`
+        SELECT character_id
+        FROM scene_characters
+        WHERE scene_id = 'sc-compat' AND project_id = 'test-novel'
+        ORDER BY character_id
+      `).all().map((row) => row.character_id),
+      ["elena"]
+    );
+    assert.deepEqual(
+      db.prepare(`
+        SELECT place_id
+        FROM scene_places
+        WHERE scene_id = 'sc-compat' AND project_id = 'test-novel'
+        ORDER BY place_id
+      `).all().map((row) => row.place_id),
+      ["harbor"]
+    );
+    assert.equal(
+      db.prepare(`SELECT COUNT(*) AS count FROM scenes_fts WHERE scenes_fts MATCH ?`).get('"v7.3"').count,
+      1
+    );
+
+    writeScene(dir, "sc-compat", {
+      characters: "marcus",
+      places: "square",
+    });
+    const driftResult = syncAll(db, dir, { quiet: true });
+
+    assert.equal(driftResult.warningSummary.relationship_compatibility_drift.count, 2);
+    assert.deepEqual(
+      db.prepare(`
+        SELECT character_id
+        FROM scene_characters
+        WHERE scene_id = 'sc-compat' AND project_id = 'test-novel'
+        ORDER BY character_id
+      `).all().map((row) => row.character_id),
+      ["elena"]
+    );
+    assert.deepEqual(
+      db.prepare(`
+        SELECT place_id
+        FROM scene_places
+        WHERE scene_id = 'sc-compat' AND project_id = 'test-novel'
+        ORDER BY place_id
+      `).all().map((row) => row.place_id),
+      ["harbor"]
+    );
+    assert.equal(
+      db.prepare(`SELECT COUNT(*) AS count FROM scenes_fts WHERE scenes_fts MATCH ?`).get("marcus").count,
+      0
+    );
+
+    db.close();
+    fs.rmSync(dir, { recursive: true });
+  });
+
+  test("ordinary sync preserves intentionally empty canonical relationships on drift", () => {
+    const dir = makeTempSync();
+    const db = openDb(":memory:");
+    writeScene(dir, "sc-cleared", {
+      characters: "elena",
+      places: "harbor",
+    });
+
+    syncAll(db, dir, { quiet: true });
+    db.prepare(`
+      DELETE FROM scene_characters
+      WHERE scene_id = ? AND project_id = ?
+    `).run("sc-cleared", "test-novel");
+    db.prepare(`
+      DELETE FROM scene_places
+      WHERE scene_id = ? AND project_id = ?
+    `).run("sc-cleared", "test-novel");
+
+    const result = syncAll(db, dir, { quiet: true });
+
+    assert.equal(result.warningSummary.relationship_compatibility_drift.count, 2);
+    assert.equal(
+      db.prepare(`
+        SELECT COUNT(*) AS count
+        FROM scene_characters
+        WHERE scene_id = 'sc-cleared' AND project_id = 'test-novel'
+      `).get().count,
+      0
+    );
+    assert.equal(
+      db.prepare(`
+        SELECT COUNT(*) AS count
+        FROM scene_places
+        WHERE scene_id = 'sc-cleared' AND project_id = 'test-novel'
+      `).get().count,
+      0
+    );
+    assert.equal(
+      db.prepare(`SELECT COUNT(*) AS count FROM scenes_fts WHERE scenes_fts MATCH ?`).get("elena").count,
+      0
+    );
+
+    db.close();
+    fs.rmSync(dir, { recursive: true });
+  });
+
+  test("adopt compatibility sync preserves canonical rows when compatibility fields are absent", () => {
+    const dir = makeTempSync();
+    const db = openDb(":memory:");
+    const scenePath = path.join(dir, "projects", "test-novel", "scenes", "sc-no-compat.md");
+    fs.writeFileSync(
+      scenePath,
+      [
+        "---",
+        "scene_id: sc-no-compat",
+        "title: Scene without compatibility fields",
+        "part: 1",
+        "chapter: 1",
+        "---",
+        "Prose content for scene sc-no-compat.",
+      ].join("\n")
+    );
+
+    syncAll(db, dir, { quiet: true });
+    db.prepare(`
+      INSERT INTO scene_characters (scene_id, project_id, character_id)
+      VALUES (?, ?, ?)
+    `).run("sc-no-compat", "test-novel", "canonicalcharacter");
+    db.prepare(`
+      INSERT INTO scene_places (scene_id, project_id, place_id)
+      VALUES (?, ?, ?)
+    `).run("sc-no-compat", "test-novel", "canonicalplace");
+
+    const result = syncAll(db, dir, {
+      quiet: true,
+      relationshipCompatibilityMode: "adopt_compatibility",
+    });
+
+    assert.equal(result.warningSummary.relationship_compatibility_drift, undefined);
+    assert.deepEqual(
+      db.prepare(`
+        SELECT character_id
+        FROM scene_characters
+        WHERE scene_id = 'sc-no-compat' AND project_id = 'test-novel'
+        ORDER BY character_id
+      `).all().map((row) => row.character_id),
+      ["canonicalcharacter"]
+    );
+    assert.deepEqual(
+      db.prepare(`
+        SELECT place_id
+        FROM scene_places
+        WHERE scene_id = 'sc-no-compat' AND project_id = 'test-novel'
+        ORDER BY place_id
+      `).all().map((row) => row.place_id),
+      ["canonicalplace"]
+    );
+
+    db.close();
+    fs.rmSync(dir, { recursive: true });
+  });
+
   test("populates FTS table", () => {
     const dir = makeTempSync();
     const db = openDb(":memory:");

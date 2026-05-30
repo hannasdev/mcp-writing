@@ -299,6 +299,24 @@ export function normalizeReferenceIdList(values) {
   )];
 }
 
+function normalizeMetadataList(values) {
+  const rawValues = Array.isArray(values)
+    ? values
+    : typeof values === "string"
+      ? values.split(",")
+      : [];
+
+  return [...new Set(
+    rawValues
+      .map(value => String(value).trim())
+      .filter(Boolean)
+  )];
+}
+
+function isVersionContinuityMarker(value) {
+  return /^v\d[\d.a-z]*$/i.test(String(value).trim());
+}
+
 function normalizeReferenceRelation(value, fallbackRelation) {
   const normalized = String(value ?? fallbackRelation ?? "").trim().toLowerCase();
   if (/^[a-z][a-z0-9_-]*$/.test(normalized)) return normalized;
@@ -1272,7 +1290,131 @@ export function readSceneFileForSync(syncDir, file, { writable = false } = {}) {
   };
 }
 
-export function indexSceneFile(db, syncDir, file, meta, prose, { observedStructure, managedStructure = false } = {}) {
+export function resolveSceneCharacterCompatibilityId(db, value) {
+  let characterId = value;
+  if (!/^char-/.test(value)) {
+    let row = db.prepare(`SELECT character_id FROM characters WHERE lower(name) = lower(?)`).get(value);
+    if (!row) {
+      const words = value.toLowerCase().split(/\s+/).filter(Boolean);
+      const all = db.prepare(`SELECT character_id, name FROM characters`).all();
+      const match = all.find(r =>
+        words.every(w => r.name.toLowerCase().includes(w))
+      );
+      if (match) row = match;
+    }
+    if (row) characterId = row.character_id;
+  }
+  return characterId;
+}
+
+function querySceneRelationshipIds(db, { sceneId, projectId, table, idColumn }) {
+  return db.prepare(`
+    SELECT ${idColumn} AS id
+    FROM ${table}
+    WHERE scene_id = ? AND project_id = ?
+    ORDER BY ${idColumn}
+  `).all(sceneId, projectId).map((row) => row.id);
+}
+
+function sameStringSet(a, b) {
+  const left = [...new Set(a.map(String))].sort();
+  const right = [...new Set(b.map(String))].sort();
+  return left.length === right.length && left.every((value, index) => value === right[index]);
+}
+
+function selectRelationshipIndexValues({ sceneId, projectId, relationshipKind, existing, compatibility, compatibilityMode, hasCompatibilityField, hasExistingScene }) {
+  if (!hasCompatibilityField) {
+    return {
+      values: existing,
+      diagnostic: null,
+    };
+  }
+  if (compatibilityMode === "adopt_compatibility") {
+    return {
+      values: compatibility,
+      diagnostic: null,
+    };
+  }
+  if (hasExistingScene && !sameStringSet(existing, compatibility)) {
+    return {
+      values: existing,
+      diagnostic: {
+        type: "relationship_compatibility_drift",
+        relationship_kind: relationshipKind,
+        scene_id: sceneId,
+        project_id: projectId,
+        canonical_values: existing,
+        compatibility_values: compatibility,
+        message: `Relationship compatibility drift for scene "${sceneId}" in project "${projectId}": sidecar ${relationshipKind} differ from SQLite ${relationshipKind}; preserved SQLite relationship rows. Run audit_relationship_metadata before applying an outcome-level repair.`,
+      },
+    };
+  }
+  return {
+    values: compatibility,
+    diagnostic: null,
+  };
+}
+
+function relationshipCompatibilityFieldsFromMeta(meta = {}) {
+  return {
+    characters: Object.hasOwn(meta, "characters"),
+    places: Object.hasOwn(meta, "places"),
+  };
+}
+
+function buildSceneRelationshipIndexPlan(db, { meta, projectId, compatibilityMode = "preserve_existing", compatibilityFields = relationshipCompatibilityFieldsFromMeta(meta), hasExistingScene = false }) {
+  const compatibilityCharacters = [];
+  const compatibilityVersionMarkers = [];
+  for (const value of normalizeMetadataList(meta.characters)) {
+    if (isVersionContinuityMarker(value)) {
+      compatibilityVersionMarkers.push(value);
+      continue;
+    }
+    compatibilityCharacters.push(resolveSceneCharacterCompatibilityId(db, value));
+  }
+  const compatibilityPlaces = normalizeMetadataList(meta.places);
+  const existingCharacters = querySceneRelationshipIds(db, {
+    sceneId: meta.scene_id,
+    projectId,
+    table: "scene_characters",
+    idColumn: "character_id",
+  });
+  const existingPlaces = querySceneRelationshipIds(db, {
+    sceneId: meta.scene_id,
+    projectId,
+    table: "scene_places",
+    idColumn: "place_id",
+  });
+  const characterSelection = selectRelationshipIndexValues({
+    sceneId: meta.scene_id,
+    projectId,
+    relationshipKind: "characters",
+    existing: existingCharacters,
+    compatibility: compatibilityCharacters,
+    compatibilityMode,
+    hasCompatibilityField: compatibilityFields.characters,
+    hasExistingScene,
+  });
+  const placeSelection = selectRelationshipIndexValues({
+    sceneId: meta.scene_id,
+    projectId,
+    relationshipKind: "places",
+    existing: existingPlaces,
+    compatibility: compatibilityPlaces,
+    compatibilityMode,
+    hasCompatibilityField: compatibilityFields.places,
+    hasExistingScene,
+  });
+
+  return {
+    characters: characterSelection.values,
+    places: placeSelection.values,
+    compatibilityVersionMarkers,
+    diagnostics: [characterSelection.diagnostic, placeSelection.diagnostic].filter(Boolean),
+  };
+}
+
+export function indexSceneFile(db, syncDir, file, meta, prose, { observedStructure, managedStructure = false, relationshipCompatibilityMode = "preserve_existing", relationshipCompatibilityFields } = {}) {
   const canonicalIndexPlan = buildCanonicalIndexPlan(db, syncDir, file, meta, observedStructure, { managedStructure });
   const { universeId: universe_id, projectId: project_id } = canonicalIndexPlan;
   const { chapterStructure } = canonicalIndexPlan.observedStructure;
@@ -1408,58 +1550,44 @@ export function indexSceneFile(db, syncDir, file, meta, prose, { observedStructu
     new Date().toISOString()
   );
 
+  const relationshipIndexPlan = buildSceneRelationshipIndexPlan(db, {
+    meta,
+    projectId: project_id,
+    compatibilityMode: relationshipCompatibilityMode,
+    compatibilityFields: relationshipCompatibilityFields,
+    hasExistingScene: Boolean(existing),
+  });
+  const tagValues = [
+    ...normalizeMetadataList(meta.tags),
+    ...relationshipIndexPlan.compatibilityVersionMarkers,
+    ...normalizeMetadataList(meta.versions),
+  ];
+
   db.prepare(`DELETE FROM scene_characters WHERE scene_id = ? AND project_id = ?`).run(meta.scene_id, project_id);
   db.prepare(`DELETE FROM scene_places WHERE scene_id = ? AND project_id = ?`).run(meta.scene_id, project_id);
   db.prepare(`DELETE FROM scene_tags WHERE scene_id = ? AND project_id = ?`).run(meta.scene_id, project_id);
+  db.prepare(`DELETE FROM scenes_fts WHERE scene_id = ? AND project_id = ?`).run(meta.scene_id, project_id);
 
-  for (const c of (meta.characters ?? [])) {
-    // Version continuity markers (e.g. v7.3, v3.3b) are tracked as tags, not characters
-    if (/^v\d[\d.a-z]*$/i.test(c)) {
-      db.prepare(`INSERT OR IGNORE INTO scene_tags (scene_id, project_id, tag) VALUES (?, ?, ?)`).run(meta.scene_id, project_id, c);
-      continue;
-    }
-    let cid = c;
-    // If the value looks like a name rather than an ID, try to resolve it
-    if (!/^char-/.test(c)) {
-      // 1. Exact name match (case-insensitive)
-      let row = db.prepare(`SELECT character_id FROM characters WHERE lower(name) = lower(?)`).get(c);
-      // 2. Word-overlap: all words in the keyword appear in the stored name
-      //    Handles "Victor Sidorin" → "Victor Alexeyvich Sidorin"
-      if (!row) {
-        const words = c.toLowerCase().split(/\s+/).filter(Boolean);
-        const all = db.prepare(`SELECT character_id, name FROM characters`).all();
-        const match = all.find(r =>
-          words.every(w => r.name.toLowerCase().includes(w))
-        );
-        if (match) row = match;
-      }
-      if (row) cid = row.character_id;
-    }
+  for (const cid of relationshipIndexPlan.characters) {
     db.prepare(`INSERT OR IGNORE INTO scene_characters (scene_id, project_id, character_id) VALUES (?, ?, ?)`).run(
       meta.scene_id, project_id, cid
     );
   }
-  for (const p of (meta.places ?? [])) {
+  for (const p of relationshipIndexPlan.places) {
     db.prepare(`INSERT OR IGNORE INTO scene_places (scene_id, project_id, place_id) VALUES (?, ?, ?)`).run(
       meta.scene_id, project_id, p
     );
   }
-  for (const t of (meta.tags ?? [])) {
+  for (const t of tagValues) {
     db.prepare(`INSERT OR IGNORE INTO scene_tags (scene_id, project_id, tag) VALUES (?, ?, ?)`).run(
       meta.scene_id, project_id, t
     );
   }
-  for (const v of (meta.versions ?? [])) {
-    db.prepare(`INSERT OR IGNORE INTO scene_tags (scene_id, project_id, tag) VALUES (?, ?, ?)`).run(
-      meta.scene_id, project_id, v
-    );
-  }
 
   const keywordTokens = [
-    ...(meta.tags ?? []),
-    ...(meta.characters ?? []),
-    ...(meta.places ?? []),
-    ...(meta.versions ?? []),
+    ...tagValues,
+    ...relationshipIndexPlan.characters,
+    ...relationshipIndexPlan.places,
   ]
     .filter(Boolean)
     .map(String)
@@ -1467,7 +1595,7 @@ export function indexSceneFile(db, syncDir, file, meta, prose, { observedStructu
     .filter(Boolean)
     .join(" ");
 
-  db.prepare(`INSERT OR REPLACE INTO scenes_fts (scene_id, project_id, logline, title, keywords) VALUES (?, ?, ?, ?, ?)`).run(
+  db.prepare(`INSERT INTO scenes_fts (scene_id, project_id, logline, title, keywords) VALUES (?, ?, ?, ?, ?)`).run(
     meta.scene_id,
     project_id,
     meta.logline ?? meta.synopsis ?? "",
@@ -1493,7 +1621,13 @@ export function indexSceneFile(db, syncDir, file, meta, prose, { observedStructu
     relation: "informs",
   });
 
-  return { isStale, chapterId, warning: chapterWarning, canonicalIndexPlan };
+  return {
+    isStale,
+    chapterId,
+    warning: chapterWarning,
+    canonicalIndexPlan,
+    relationshipCompatibilityDiagnostics: relationshipIndexPlan.diagnostics,
+  };
 }
 
 export function isManagedStructureProject(db, projectId) {
@@ -1564,6 +1698,7 @@ const WARNING_TYPE_LABELS = {
   unobserved_canonical_scene: "Unobserved canonical scene",
   missing_canonical_chapter: "Missing canonical chapter",
   missing_canonical_epigraph: "Missing canonical epigraph",
+  relationship_compatibility_drift: "Relationship compatibility drift",
   nested_mirror: "Ignored nested mirror path",
 };
 
@@ -1578,6 +1713,7 @@ const WARNING_PATTERNS = [
   { type: "unobserved_canonical_scene", re: /^Managed sync preserved canonical scene not observed during sync scan:/ },
   { type: "missing_canonical_chapter", re: /^Managed sync preserved canonical chapter missing from filesystem:/ },
   { type: "missing_canonical_epigraph", re: /^Managed sync preserved canonical epigraph missing from filesystem:/ },
+  { type: "relationship_compatibility_drift", re: /^Relationship compatibility drift/ },
   { type: "nested_mirror",          re: /^Ignored nested mirror path:/ },
 ];
 
@@ -1598,7 +1734,7 @@ export function buildWarningSummary(warnings) {
   return summary;
 }
 
-export function syncAll(db, syncDir, { quiet = false, writable = false } = {}) {
+export function syncAll(db, syncDir, { quiet = false, writable = false, relationshipCompatibilityMode = "preserve_existing" } = {}) {
   // Reset per-run inference cache so filesystem changes between sync calls
   // (for example after imports or path repairs) are reflected immediately.
   UNIVERSE_PROJECT_ROOT_CACHE.clear();
@@ -1701,12 +1837,17 @@ export function syncAll(db, syncDir, { quiet = false, writable = false } = {}) {
       const result = indexSceneFile(db, syncDir, file, meta, prose, {
         observedStructure: structureObservation,
         managedStructure: managedProjectIds.has(project_id),
+        relationshipCompatibilityMode,
+        relationshipCompatibilityFields: relationshipCompatibilityFieldsFromMeta(sourceMeta),
       });
       const canonicalDiagnostics = result.canonicalIndexPlan?.diagnostics ?? [];
       if (canonicalDiagnostics.length) {
         for (const diagnostic of canonicalDiagnostics) warnings.push(diagnostic.message);
       } else if (result.warning) {
         warnings.push(result.warning);
+      }
+      for (const diagnostic of result.relationshipCompatibilityDiagnostics ?? []) {
+        warnings.push(diagnostic.message);
       }
       if (result.chapterId) {
         const chapterKey = `${result.chapterId}::${project_id}`;

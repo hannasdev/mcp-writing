@@ -470,7 +470,10 @@ export function registerSyncTools(s, {
 
       let syncResult = null;
       if (!dry_run && !preflight && auto_sync) {
-        syncResult = syncAll(db, SYNC_DIR, { writable: SYNC_DIR_WRITABLE });
+        syncResult = syncAll(db, SYNC_DIR, {
+          writable: SYNC_DIR_WRITABLE,
+          relationshipCompatibilityMode: "adopt_compatibility",
+        });
       }
 
       return jsonResponse({
@@ -572,7 +575,10 @@ export function registerSyncTools(s, {
         },
         onComplete: (completedJob) => {
           if (!auto_sync || dry_run || preflight || completedJob.status !== "completed") return;
-          const syncResult = syncAll(db, SYNC_DIR, { writable: SYNC_DIR_WRITABLE });
+          const syncResult = syncAll(db, SYNC_DIR, {
+            writable: SYNC_DIR_WRITABLE,
+            relationshipCompatibilityMode: "adopt_compatibility",
+          });
           if (completedJob.result && completedJob.result.ok) {
             completedJob.result.sync = {
               indexed: syncResult.indexed,
@@ -652,7 +658,10 @@ export function registerSyncTools(s, {
         },
         onComplete: (completedJob) => {
           if (!auto_sync || dry_run || completedJob.status !== "completed") return;
-          const syncResult = syncAll(db, SYNC_DIR, { writable: SYNC_DIR_WRITABLE });
+          const syncResult = syncAll(db, SYNC_DIR, {
+            writable: SYNC_DIR_WRITABLE,
+            relationshipCompatibilityMode: "adopt_compatibility",
+          });
           if (completedJob.result && completedJob.result.ok) {
             completedJob.result.sync = {
               indexed: syncResult.indexed,
@@ -776,7 +785,10 @@ export function registerSyncTools(s, {
         onComplete: (completedJob) => {
           if (dry_run || completedJob.status !== "completed" || !completedJob.result?.ok) return;
 
-          syncAll(db, SYNC_DIR, { writable: SYNC_DIR_WRITABLE });
+          syncAll(db, SYNC_DIR, {
+            writable: SYNC_DIR_WRITABLE,
+            relationshipCompatibilityMode: "adopt_compatibility",
+          });
 
           const changedScenes = (completedJob.result.results ?? [])
             .filter(row => row.status === "changed")
@@ -980,6 +992,7 @@ export function registerSyncTools(s, {
         writeMeta(scene.file_path, sourceUpdatedMeta, { syncDir: SYNC_DIR });
         indexSceneFile(db, SYNC_DIR, scene.file_path, updatedMeta, prose, {
           managedStructure: isManagedStructureProject(db, scene.project_id),
+          relationshipCompatibilityMode: "adopt_compatibility",
         });
         db.prepare(`UPDATE scenes SET metadata_stale = 0 WHERE scene_id = ? AND project_id = ?`)
           .run(scene.scene_id, scene.project_id);

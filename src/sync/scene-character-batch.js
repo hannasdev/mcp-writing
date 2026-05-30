@@ -57,6 +57,16 @@ function resolveCharacterEntry(entry, characterRows) {
   return resolveCharacterReference(entry, characterRows);
 }
 
+function normalizeCompatibilityCharacters(value) {
+  const rawValues = Array.isArray(value)
+    ? value
+    : typeof value === "string"
+      ? value.split(",")
+      : [];
+
+  return [...new Set(rawValues.map(String).map(character => character.trim()).filter(Boolean))];
+}
+
 function pruneLessSpecificCharacters(characterIds, fullNameMatches, characterRows) {
   const kept = new Set(characterIds);
 
@@ -140,7 +150,7 @@ export async function runSceneCharacterBatch({ syncDir, args, onProgress, should
       const { content: prose } = matter(raw);
       const { sourceMeta: meta } = readSourceMeta(scene.file_path, syncDir, { writable: !dry_run });
 
-      const before_characters = [...new Set((meta.characters ?? []).map(String).filter(Boolean))];
+      const before_characters = normalizeCompatibilityCharacters(meta.characters);
       const normalized_before_characters = [...new Set(
         before_characters
           .map(character => resolveCharacterEntry(character, normalizedCharacterRows))

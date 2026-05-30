@@ -1,6 +1,6 @@
 # Relationship Metadata Boundary — Milestones
 
-**Status:** Active — M1 selected
+**Status:** Active — M2 selected
 
 Use [prd.md](prd.md) for product framing and this document for sequencing,
 review gates, and implementation readiness.
@@ -86,7 +86,7 @@ Out of scope:
 
 ## M1 — Generic Metadata Relationship Guardrail
 
-Status: Selected for implementation.
+Status: Implemented on main by PR #230.
 
 Goal: stop `update_scene_metadata` from silently converting sidecar-first
 character/place edits into canonical relationship authority.
@@ -126,6 +126,8 @@ Out of scope:
 - Bulk relationship editing.
 
 ## M2 — Compatibility Sync And Audit Alignment
+
+Status: Selected for implementation.
 
 Goal: keep legacy projects usable while making compatibility authority visible.
 

@@ -11,7 +11,7 @@ It supports metadata-first reasoning, explicit prose editing workflows, and revi
 
 Active initiative: [Relationship Metadata Boundary](docs/initiatives/active/relationship-metadata-boundary/prd.md).
 
-Current focus: Relationship Metadata Boundary M1 applies the strict relationship guardrail to `update_scene_metadata`.
+Current focus: Relationship Metadata Boundary M2 aligns legacy sync compatibility and relationship audit diagnostics.
 
 Most recent completed initiative: [Architecture Alignment Follow-up](docs/initiatives/done/architecture-alignment-follow-up/prd.md).
 
