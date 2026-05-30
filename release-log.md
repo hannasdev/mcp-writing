@@ -6,6 +6,14 @@ This complements `CHANGELOG.md`:
 - `CHANGELOG.md` is technical and release-oriented.
 - This log is plain-language and outcome-oriented.
 
+### 2026-05-30 — Make relationship compatibility drift visible
+
+- What changed: Ordinary sync now preserves SQLite scene character/place authority when legacy sidecar relationship fields drift, reports relationship compatibility warnings, and keeps import or repair flows as the deliberate compatibility adoption path.
+- Why it matters: Authors, maintainers, and AI agents can keep older sidecar-based projects searchable without letting stale compatibility metadata silently overwrite canonical relationship rows.
+- Who is affected: Authors, maintainers, and AI agents running sync, Scrivener import/merge, scene character enrichment, or `audit_relationship_metadata` on projects with retained sidecar/frontmatter `characters` or `places`.
+- Action needed: Use `audit_relationship_metadata` when sync reports relationship compatibility drift, then inspect stable IDs with `find_scenes`, `list_characters`, and `list_places` before applying outcome-level relationship repairs.
+- PR: TBD
+
 ### 2026-05-30 — Guard generic scene relationship metadata updates
 
 - What changed: `update_scene_metadata` now rejects scene `characters` and `places` fields and points callers to relationship and audit workflows instead of accepting sidecar-first relationship edits.
