@@ -1213,7 +1213,7 @@ export function registerMetadataTools(s, {
         compatibility_note_count: diagnostics.filter(diagnostic => diagnostic.severity === "info").length,
       },
       next_steps: [
-        "Use connect_character_place_evidence for scene-backed character/place relationships.",
+        "Use connect_character_place_evidence only for paired scene-backed character/place evidence.",
         "Use record_character_relationship_beat for relationship arcs between characters.",
         "Use link_reference_evidence for explicit reference evidence.",
         "Use export_project_backup when a fresh recovery snapshot is needed.",
@@ -1440,7 +1440,7 @@ export function registerMetadataTools(s, {
   // ---- connect_character_place_evidence ------------------------------------
   s.tool(
     "connect_character_place_evidence",
-    "Connect a character and place as scene-backed story evidence. This is the outcome-level workflow for character/place association: SQLite scene relationship indexes commit first, project backups refresh after commit, and scene sidecar characters/places are refreshed only as generated compatibility output.",
+    "Connect a character and place as paired scene-backed story evidence. This outcome-level workflow is for sheet-backed character/place associations only: SQLite scene relationship indexes commit first, project backups refresh after commit, and scene sidecar characters/places are refreshed only as generated compatibility output. Character-only or place-only scene evidence is not handled by update_scene_metadata and needs a deliberately named workflow if promoted later.",
     {
       project_id: z.string().describe("Project the scene belongs to (e.g. 'the-lamb')."),
       scene_id: z.string().describe("Scene that provides the evidence for this character/place association."),
@@ -1470,7 +1470,7 @@ export function registerMetadataTools(s, {
   // ---- audit_relationship_metadata -----------------------------------------
   s.tool(
     "audit_relationship_metadata",
-    "Review relationship metadata authority, stale indexes, and retained compatibility notes without mutating SQLite or files. Use this before repair work when character/place associations, sidecar tags, scene threads, or recovery readiness look stale or ambiguous.",
+    "Review relationship metadata authority, stale indexes, retained compatibility notes, and scene character/place sidecar drift without mutating SQLite or files. Use this before repair work when character/place associations, sidecar tags, scene threads, or recovery readiness look stale or ambiguous.",
     {
       project_id: z.string().optional().describe("Optional project scope for the audit."),
     },
@@ -2344,7 +2344,7 @@ export function registerMetadataTools(s, {
   // ---- update_scene_metadata -----------------------------------------------
   s.tool(
     "update_scene_metadata",
-    "Update one or more non-structural, non-relationship metadata fields for a scene. Writes only supplied allowed fields to the .meta.yaml sidecar and preserves existing structural compatibility fields; it never modifies prose, mirrors path-derived structure, or changes scene character/place relationship authority. Structural fields (part, chapter, chapter_id, chapter_title, timeline_position) are rejected here; use list_chapters plus assign_scene_to_chapter, move_scene, rename_chapter, or reorder_chapter for structure changes. Relationship fields (characters, places) are rejected here; use discovery workflows plus connect_character_place_evidence for paired sheet-backed character/place evidence, and audit_relationship_metadata for legacy sidecar/frontmatter relationship review. Allowed changes are immediately reflected in the index. Only available when the sync dir is writable.",
+    "Update one or more non-structural, non-relationship metadata fields for a scene. Writes only supplied allowed fields to the .meta.yaml sidecar and preserves existing structural compatibility fields; it never modifies prose, mirrors path-derived structure, or changes scene character/place relationship authority. Structural fields (part, chapter, chapter_id, chapter_title, timeline_position) are rejected here; use list_chapters plus assign_scene_to_chapter, move_scene, rename_chapter, or reorder_chapter for structure changes. Relationship fields (characters, places) are rejected here; use discovery workflows plus connect_character_place_evidence for paired sheet-backed character/place evidence, and audit_relationship_metadata for legacy sidecar/frontmatter relationship review. Character-only or place-only scene evidence is intentionally not changed through this generic metadata tool. Allowed changes are immediately reflected in the index. Only available when the sync dir is writable.",
     {
       scene_id:   z.string().describe("The scene_id to update (e.g. 'sc-011-sebastian')."),
       project_id: z.string().describe("Project the scene belongs to (e.g. 'the-lamb')."),
@@ -2361,8 +2361,8 @@ export function registerMetadataTools(s, {
         timeline_position: z.number().int().optional().describe("Rejected by update_scene_metadata. Use move_scene for ordering changes."),
         story_time:        z.string().optional(),
         tags:              z.array(z.string()).optional(),
-        characters:        z.array(z.string()).optional().describe("Rejected by update_scene_metadata. Use find_scenes, list_characters, list_places, connect_character_place_evidence for paired sheet-backed evidence, and audit_relationship_metadata for compatibility review."),
-        places:            z.array(z.string()).optional().describe("Rejected by update_scene_metadata. Use find_scenes, list_characters, list_places, connect_character_place_evidence for paired sheet-backed evidence, and audit_relationship_metadata for compatibility review."),
+        characters:        z.array(z.string()).optional().describe("Rejected by update_scene_metadata. Use find_scenes, list_characters, list_places, connect_character_place_evidence for paired sheet-backed evidence, and audit_relationship_metadata for compatibility review; character-only evidence needs a deliberately named workflow."),
+        places:            z.array(z.string()).optional().describe("Rejected by update_scene_metadata. Use find_scenes, list_characters, list_places, connect_character_place_evidence for paired sheet-backed evidence, and audit_relationship_metadata for compatibility review; place-only evidence needs a deliberately named workflow."),
       }).describe("Fields to update. Only supplied keys are changed."),
     },
     async ({ scene_id, project_id, fields }) => {
@@ -2607,7 +2607,7 @@ export function registerMetadataTools(s, {
   // ---- update_place_sheet --------------------------------------------------
   s.tool(
     "update_place_sheet",
-    "Update canonical place profile fields and retained compatibility notes. The place name commits to SQLite first and refreshes project backups; associated_characters and tags are compatibility/review metadata only. For current character/place relationship authority, use connect_character_place_evidence.",
+    "Update canonical place profile fields and retained compatibility notes. The place name commits to SQLite first and refreshes project backups; associated_characters and tags are compatibility/review metadata only. For paired scene-backed character/place evidence, use connect_character_place_evidence.",
     {
       place_id: z.string().describe("The place_id to update (e.g. 'place-harbor-district'). Use list_places to find valid IDs."),
       fields: z.object({
@@ -2716,7 +2716,7 @@ export function registerMetadataTools(s, {
         }),
         non_canonical_fields: ["associated_characters", "tags"].filter(field => Object.hasOwn(fields, field)),
         next_step: Object.hasOwn(fields, "associated_characters")
-          ? "Use connect_character_place_evidence to make scene-backed character/place associations authoritative."
+          ? "Use connect_character_place_evidence only when paired scene-backed character/place evidence should become authoritative."
           : undefined,
         ...backupMutationFields(backupResult),
       });
