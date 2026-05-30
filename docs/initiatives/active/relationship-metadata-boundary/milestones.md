@@ -1,6 +1,6 @@
 # Relationship Metadata Boundary — Milestones
 
-**Status:** Active — M2 selected
+**Status:** Active — M3 selected
 
 Use [prd.md](prd.md) for product framing and this document for sequencing,
 review gates, and implementation readiness.
@@ -127,7 +127,7 @@ Out of scope:
 
 ## M2 — Compatibility Sync And Audit Alignment
 
-Status: Selected for implementation.
+Status: Implemented on main by PR #231.
 
 Goal: keep legacy projects usable while making compatibility authority visible.
 
@@ -163,6 +163,8 @@ Out of scope:
 - New repair workflows beyond guidance unless M1 reveals a blocker.
 
 ## M3 — Workflow And Documentation Update
+
+Status: Selected for implementation.
 
 Goal: make the new boundary discoverable for humans, AI agents, and generated
 tool consumers.
