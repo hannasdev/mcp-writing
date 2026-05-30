@@ -519,7 +519,7 @@ describe("metadata update_scene_metadata relationship guardrail", () => {
         sceneId: "sc-relationship-allowed-update",
         projectId: "test-novel",
         metadata: {
-          characters: ["sidecarstalecharacter", "v7.3"],
+          characters: "sidecarstalecharacter, v7.3",
           places: ["sidecarstaleplace"],
           logline: "Original logline.",
           versions: ["v8.1"],
@@ -554,7 +554,7 @@ describe("metadata update_scene_metadata relationship guardrail", () => {
       assert.equal(sidecar.status, "revision");
       assert.deepEqual(sidecar.tags, ["relationship-boundary"]);
       assert.equal(sidecar.story_time, "Act II night");
-      assert.deepEqual(sidecar.characters, ["sidecarstalecharacter", "v7.3"]);
+      assert.equal(sidecar.characters, "sidecarstalecharacter, v7.3");
       assert.deepEqual(sidecar.places, ["sidecarstaleplace"]);
       assert.deepEqual(sidecar.versions, ["v8.1"]);
 

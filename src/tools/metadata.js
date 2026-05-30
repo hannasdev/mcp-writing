@@ -480,13 +480,13 @@ function isVersionContinuityMarker(value) {
 }
 
 function buildSceneMetadataSearchKeywords(meta, relationshipSnapshot) {
-  const compatibilityVersionMarkers = (meta.characters ?? []).filter(isVersionContinuityMarker);
+  const compatibilityVersionMarkers = normalizeStringList(meta.characters).filter(isVersionContinuityMarker);
   return [
-    ...(meta.tags ?? []),
+    ...normalizeStringList(meta.tags),
     ...compatibilityVersionMarkers,
     ...relationshipSnapshot.characters,
     ...relationshipSnapshot.places,
-    ...(meta.versions ?? []),
+    ...normalizeStringList(meta.versions),
   ]
     .filter(Boolean)
     .map(String)
