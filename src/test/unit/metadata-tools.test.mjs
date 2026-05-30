@@ -429,8 +429,8 @@ describe("metadata upsert_reference_link tool", () => {
   });
 });
 
-describe("metadata update_scene_metadata relationship-field characterization", () => {
-  test("currently writes characters and places to the sidecar before rebuilding scene relationship indexes", async () => {
+describe("metadata update_scene_metadata relationship guardrail", () => {
+  test("rejects characters and places before writing sidecar metadata or relationship indexes", async () => {
     const db = openDb(":memory:");
     try {
       seedProject(db, "test-novel");
@@ -454,6 +454,10 @@ describe("metadata update_scene_metadata relationship-field characterization", (
         VALUES (?, ?, ?)
       `).run("sc-relationship-characterization", "test-novel", "place-harbor");
 
+      const sidecarPath = scenePath.replace(/\.md$/, ".meta.yaml");
+      const sourceBefore = fs.readFileSync(scenePath, "utf8");
+      assert.equal(fs.existsSync(sidecarPath), false);
+
       const tools = makeToolHarness(db);
       const parsed = await tools.call("update_scene_metadata", {
         scene_id: "sc-relationship-characterization",
@@ -464,12 +468,24 @@ describe("metadata update_scene_metadata relationship-field characterization", (
         },
       });
 
-      assert.equal(parsed.ok, true);
-      assert.equal(parsed.action, "updated");
-
-      const sidecar = yaml.load(fs.readFileSync(scenePath.replace(/\.md$/, ".meta.yaml"), "utf8"));
-      assert.deepEqual(sidecar.characters, ["char-marcus"]);
-      assert.deepEqual(sidecar.places, []);
+      assert.equal(parsed.ok, false);
+      assert.equal(parsed.error.code, "VALIDATION_ERROR");
+      assert.match(parsed.error.message, /relationship-boundary fields/);
+      assert.deepEqual(parsed.error.details.blocked_fields, ["characters", "places"]);
+      assert.deepEqual(parsed.error.details.relationship_tools, [
+        "connect_character_place_evidence",
+        "audit_relationship_metadata",
+      ]);
+      assert.ok(parsed.error.details.discovery_workflows.includes("find_scenes"));
+      assert.ok(parsed.error.details.discovery_workflows.includes("list_characters"));
+      assert.ok(parsed.error.details.discovery_workflows.includes("list_places"));
+      assert.match(parsed.error.details.next_step, /connect_character_place_evidence/);
+      assert.match(parsed.error.details.next_step, /audit_relationship_metadata/);
+      assert.match(parsed.error.details.next_step, /find_scenes/);
+      assert.match(parsed.error.details.next_step, /paired sheet-backed character\/place evidence/);
+      assert.match(parsed.error.details.next_step, /Character-only or place-only/);
+      assert.equal(fs.existsSync(sidecarPath), false);
+      assert.equal(fs.readFileSync(scenePath, "utf8"), sourceBefore);
 
       const sceneCharacters = db.prepare(`
         SELECT character_id
@@ -484,8 +500,77 @@ describe("metadata update_scene_metadata relationship-field characterization", (
         ORDER BY place_id
       `).all("sc-relationship-characterization", "test-novel").map((row) => row.place_id);
 
+      assert.deepEqual(sceneCharacters, ["char-elena"]);
+      assert.deepEqual(scenePlaces, ["place-harbor"]);
+    } finally {
+      db.close();
+    }
+  });
+
+  test("continues to update allowed editorial metadata without changing relationship indexes", async () => {
+    const db = openDb(":memory:");
+    try {
+      seedProject(db, "test-novel");
+      seedCharacter(db, { characterId: "char-elena", projectId: "test-novel", name: "Elena" });
+      seedCharacter(db, { characterId: "char-marcus", projectId: "test-novel", name: "Marcus" });
+      seedPlace(db, { placeId: "place-harbor", projectId: "test-novel", name: "Harbor" });
+      seedPlace(db, { placeId: "place-square", projectId: "test-novel", name: "Square" });
+      const scenePath = seedProjectSceneFile(db, {
+        sceneId: "sc-relationship-allowed-update",
+        projectId: "test-novel",
+        metadata: {
+          characters: ["char-elena"],
+          places: ["place-harbor"],
+          logline: "Original logline.",
+        },
+      });
+      db.prepare(`
+        INSERT INTO scene_characters (scene_id, project_id, character_id)
+        VALUES (?, ?, ?)
+      `).run("sc-relationship-allowed-update", "test-novel", "char-marcus");
+      db.prepare(`
+        INSERT INTO scene_places (scene_id, project_id, place_id)
+        VALUES (?, ?, ?)
+      `).run("sc-relationship-allowed-update", "test-novel", "place-square");
+
+      const tools = makeToolHarness(db);
+      const parsed = await tools.call("update_scene_metadata", {
+        scene_id: "sc-relationship-allowed-update",
+        project_id: "test-novel",
+        fields: {
+          logline: "Allowed editorial update.",
+          status: "revision",
+          tags: ["relationship-boundary"],
+          story_time: "Act II night",
+        },
+      });
+
+      assert.equal(parsed.ok, true);
+      assert.equal(parsed.action, "updated");
+
+      const sidecar = yaml.load(fs.readFileSync(scenePath.replace(/\.md$/, ".meta.yaml"), "utf8"));
+      assert.equal(sidecar.logline, "Allowed editorial update.");
+      assert.equal(sidecar.status, "revision");
+      assert.deepEqual(sidecar.tags, ["relationship-boundary"]);
+      assert.equal(sidecar.story_time, "Act II night");
+      assert.deepEqual(sidecar.characters, ["char-elena"]);
+      assert.deepEqual(sidecar.places, ["place-harbor"]);
+
+      const sceneCharacters = db.prepare(`
+        SELECT character_id
+        FROM scene_characters
+        WHERE scene_id = ? AND project_id = ?
+        ORDER BY character_id
+      `).all("sc-relationship-allowed-update", "test-novel").map((row) => row.character_id);
+      const scenePlaces = db.prepare(`
+        SELECT place_id
+        FROM scene_places
+        WHERE scene_id = ? AND project_id = ?
+        ORDER BY place_id
+      `).all("sc-relationship-allowed-update", "test-novel").map((row) => row.place_id);
+
       assert.deepEqual(sceneCharacters, ["char-marcus"]);
-      assert.deepEqual(scenePlaces, []);
+      assert.deepEqual(scenePlaces, ["place-square"]);
     } finally {
       db.close();
     }

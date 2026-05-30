@@ -34,6 +34,7 @@ import {
 } from "../structure/project-backup-refresh.js";
 
 const STRUCTURAL_SCENE_METADATA_FIELDS = ["part", "chapter", "chapter_id", "chapter_title", "timeline_position"];
+const RELATIONSHIP_SCENE_METADATA_FIELDS = ["characters", "places"];
 
 function emptyBackupMutationResult() {
   return {
@@ -106,6 +107,22 @@ function buildCompatibilityOutput({ refreshed, diagnostics = [], role = "generat
 
 function getProvidedStructuralSceneMetadataFields(fields) {
   return STRUCTURAL_SCENE_METADATA_FIELDS.filter((field) => Object.hasOwn(fields, field));
+}
+
+function getProvidedRelationshipSceneMetadataFields(fields) {
+  return RELATIONSHIP_SCENE_METADATA_FIELDS.filter((field) => Object.hasOwn(fields, field));
+}
+
+function buildRelationshipMetadataBoundaryDetails({ projectId, sceneId, blockedFields }) {
+  return {
+    project_id: projectId,
+    scene_id: sceneId,
+    blocked_fields: blockedFields,
+    boundary: "scene_relationship_metadata",
+    relationship_tools: ["connect_character_place_evidence", "audit_relationship_metadata"],
+    discovery_workflows: ["describe_workflows", "find_scenes", "list_characters", "list_places"],
+    next_step: "Use find_scenes, list_characters, and list_places to identify stable IDs. Use connect_character_place_evidence only when the scene proves paired sheet-backed character/place evidence; use audit_relationship_metadata to review legacy sidecar/frontmatter relationship fields. Character-only or place-only scene evidence is not changed through update_scene_metadata.",
+  };
 }
 
 function persistReferenceDocLink({ filePath, syncDir, targetDocId, relation }) {
@@ -435,6 +452,27 @@ function querySceneRelationshipSnapshot(db, { sceneId, projectId }) {
       ORDER BY place_id
     `).all(sceneId, projectId).map(row => row.place_id),
   };
+}
+
+function restoreSceneRelationshipSnapshot(db, { sceneId, projectId, snapshot }) {
+  db.prepare(`DELETE FROM scene_characters WHERE scene_id = ? AND project_id = ?`).run(sceneId, projectId);
+  db.prepare(`DELETE FROM scene_places WHERE scene_id = ? AND project_id = ?`).run(sceneId, projectId);
+
+  const insertCharacter = db.prepare(`
+    INSERT OR IGNORE INTO scene_characters (scene_id, project_id, character_id)
+    VALUES (?, ?, ?)
+  `);
+  for (const characterId of snapshot.characters) {
+    insertCharacter.run(sceneId, projectId, characterId);
+  }
+
+  const insertPlace = db.prepare(`
+    INSERT OR IGNORE INTO scene_places (scene_id, project_id, place_id)
+    VALUES (?, ?, ?)
+  `);
+  for (const placeId of snapshot.places) {
+    insertPlace.run(sceneId, projectId, placeId);
+  }
 }
 
 export function registerMetadataTools(s, {
@@ -2214,7 +2252,7 @@ export function registerMetadataTools(s, {
   // ---- update_scene_metadata -----------------------------------------------
   s.tool(
     "update_scene_metadata",
-    "Update one or more non-structural metadata fields for a scene. Writes only supplied non-structural fields to the .meta.yaml sidecar and preserves existing structural compatibility fields; it never modifies prose or mirrors path-derived structure. Structural fields (part, chapter, chapter_id, chapter_title, timeline_position) are rejected here; use list_chapters plus assign_scene_to_chapter, move_scene, rename_chapter, or reorder_chapter for structure changes. Changes are immediately reflected in the index. Only available when the sync dir is writable.",
+    "Update one or more non-structural, non-relationship metadata fields for a scene. Writes only supplied allowed fields to the .meta.yaml sidecar and preserves existing structural compatibility fields; it never modifies prose, mirrors path-derived structure, or changes scene character/place relationship authority. Structural fields (part, chapter, chapter_id, chapter_title, timeline_position) are rejected here; use list_chapters plus assign_scene_to_chapter, move_scene, rename_chapter, or reorder_chapter for structure changes. Relationship fields (characters, places) are rejected here; use discovery workflows plus connect_character_place_evidence for paired sheet-backed character/place evidence, and audit_relationship_metadata for legacy sidecar/frontmatter relationship review. Allowed changes are immediately reflected in the index. Only available when the sync dir is writable.",
     {
       scene_id:   z.string().describe("The scene_id to update (e.g. 'sc-011-sebastian')."),
       project_id: z.string().describe("Project the scene belongs to (e.g. 'the-lamb')."),
@@ -2231,8 +2269,8 @@ export function registerMetadataTools(s, {
         timeline_position: z.number().int().optional().describe("Rejected by update_scene_metadata. Use move_scene for ordering changes."),
         story_time:        z.string().optional(),
         tags:              z.array(z.string()).optional(),
-        characters:        z.array(z.string()).optional(),
-        places:            z.array(z.string()).optional(),
+        characters:        z.array(z.string()).optional().describe("Rejected by update_scene_metadata. Use find_scenes, list_characters, list_places, connect_character_place_evidence for paired sheet-backed evidence, and audit_relationship_metadata for compatibility review."),
+        places:            z.array(z.string()).optional().describe("Rejected by update_scene_metadata. Use find_scenes, list_characters, list_places, connect_character_place_evidence for paired sheet-backed evidence, and audit_relationship_metadata for compatibility review."),
       }).describe("Fields to update. Only supplied keys are changed."),
     },
     async ({ scene_id, project_id, fields }) => {
@@ -2243,6 +2281,18 @@ export function registerMetadataTools(s, {
         .get(scene_id, project_id);
       if (!scene) {
         return errorResponse("NOT_FOUND", `Scene '${scene_id}' not found in project '${project_id}'.`);
+      }
+      const relationshipFields = getProvidedRelationshipSceneMetadataFields(fields);
+      if (relationshipFields.length > 0) {
+        return errorResponse(
+          "VALIDATION_ERROR",
+          "update_scene_metadata cannot change relationship-boundary fields characters or places. Scene relationship metadata is sheet-backed and must use outcome-level relationship workflows, not generic sidecar metadata writes.",
+          buildRelationshipMetadataBoundaryDetails({
+            projectId: project_id,
+            sceneId: scene_id,
+            blockedFields: relationshipFields,
+          })
+        );
       }
       const structuralFields = getProvidedStructuralSceneMetadataFields(fields);
       if (structuralFields.length > 0) {
@@ -2258,6 +2308,7 @@ export function registerMetadataTools(s, {
         );
       }
       try {
+        const relationshipSnapshot = querySceneRelationshipSnapshot(db, { sceneId: scene_id, projectId: project_id });
         const { sourceMeta } = readSourceMeta(scene.file_path, SYNC_DIR, { writable: true });
         const updated = { ...sourceMeta, ...fields };
         writeMeta(scene.file_path, updated, { syncDir: SYNC_DIR });
@@ -2266,6 +2317,11 @@ export function registerMetadataTools(s, {
         const { content: prose } = matter(fs.readFileSync(scene.file_path, "utf8"));
         indexSceneFile(db, SYNC_DIR, scene.file_path, normalizedUpdated, prose, {
           managedStructure: isManagedStructureProject(db, project_id),
+        });
+        restoreSceneRelationshipSnapshot(db, {
+          sceneId: scene_id,
+          projectId: project_id,
+          snapshot: relationshipSnapshot,
         });
         const backupResult = refreshProjectScopedBackupAfterMutation(db, {
           syncDir: SYNC_DIR,
