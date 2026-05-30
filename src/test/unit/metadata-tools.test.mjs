@@ -511,27 +511,27 @@ describe("metadata update_scene_metadata relationship guardrail", () => {
     const db = openDb(":memory:");
     try {
       seedProject(db, "test-novel");
-      seedCharacter(db, { characterId: "char-elena", projectId: "test-novel", name: "Elena" });
-      seedCharacter(db, { characterId: "char-marcus", projectId: "test-novel", name: "Marcus" });
-      seedPlace(db, { placeId: "place-harbor", projectId: "test-novel", name: "Harbor" });
-      seedPlace(db, { placeId: "place-square", projectId: "test-novel", name: "Square" });
+      seedCharacter(db, { characterId: "sidecarstalecharacter", projectId: "test-novel", name: "Stale Sidecar Character" });
+      seedCharacter(db, { characterId: "canonicalcharacter", projectId: "test-novel", name: "Canonical Character" });
+      seedPlace(db, { placeId: "sidecarstaleplace", projectId: "test-novel", name: "Stale Sidecar Place" });
+      seedPlace(db, { placeId: "canonicalplace", projectId: "test-novel", name: "Canonical Place" });
       const scenePath = seedProjectSceneFile(db, {
         sceneId: "sc-relationship-allowed-update",
         projectId: "test-novel",
         metadata: {
-          characters: ["char-elena"],
-          places: ["place-harbor"],
+          characters: ["sidecarstalecharacter"],
+          places: ["sidecarstaleplace"],
           logline: "Original logline.",
         },
       });
       db.prepare(`
         INSERT INTO scene_characters (scene_id, project_id, character_id)
         VALUES (?, ?, ?)
-      `).run("sc-relationship-allowed-update", "test-novel", "char-marcus");
+      `).run("sc-relationship-allowed-update", "test-novel", "canonicalcharacter");
       db.prepare(`
         INSERT INTO scene_places (scene_id, project_id, place_id)
         VALUES (?, ?, ?)
-      `).run("sc-relationship-allowed-update", "test-novel", "place-square");
+      `).run("sc-relationship-allowed-update", "test-novel", "canonicalplace");
 
       const tools = makeToolHarness(db);
       const parsed = await tools.call("update_scene_metadata", {
@@ -553,8 +553,8 @@ describe("metadata update_scene_metadata relationship guardrail", () => {
       assert.equal(sidecar.status, "revision");
       assert.deepEqual(sidecar.tags, ["relationship-boundary"]);
       assert.equal(sidecar.story_time, "Act II night");
-      assert.deepEqual(sidecar.characters, ["char-elena"]);
-      assert.deepEqual(sidecar.places, ["place-harbor"]);
+      assert.deepEqual(sidecar.characters, ["sidecarstalecharacter"]);
+      assert.deepEqual(sidecar.places, ["sidecarstaleplace"]);
 
       const sceneCharacters = db.prepare(`
         SELECT character_id
@@ -569,8 +569,25 @@ describe("metadata update_scene_metadata relationship guardrail", () => {
         ORDER BY place_id
       `).all("sc-relationship-allowed-update", "test-novel").map((row) => row.place_id);
 
-      assert.deepEqual(sceneCharacters, ["char-marcus"]);
-      assert.deepEqual(scenePlaces, ["place-square"]);
+      assert.deepEqual(sceneCharacters, ["canonicalcharacter"]);
+      assert.deepEqual(scenePlaces, ["canonicalplace"]);
+
+      assert.equal(
+        db.prepare(`SELECT COUNT(*) AS count FROM scenes_fts WHERE scenes_fts MATCH ?`).get("sidecarstalecharacter").count,
+        0
+      );
+      assert.equal(
+        db.prepare(`SELECT COUNT(*) AS count FROM scenes_fts WHERE scenes_fts MATCH ?`).get("sidecarstaleplace").count,
+        0
+      );
+      assert.equal(
+        db.prepare(`SELECT COUNT(*) AS count FROM scenes_fts WHERE scenes_fts MATCH ?`).get("canonicalcharacter").count,
+        1
+      );
+      assert.equal(
+        db.prepare(`SELECT COUNT(*) AS count FROM scenes_fts WHERE scenes_fts MATCH ?`).get("canonicalplace").count,
+        1
+      );
     } finally {
       db.close();
     }

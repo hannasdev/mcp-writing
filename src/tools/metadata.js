@@ -475,6 +475,28 @@ function restoreSceneRelationshipSnapshot(db, { sceneId, projectId, snapshot }) 
   }
 }
 
+function buildSceneMetadataSearchKeywords(meta, relationshipSnapshot) {
+  return [
+    ...(meta.tags ?? []),
+    ...relationshipSnapshot.characters,
+    ...relationshipSnapshot.places,
+    ...(meta.versions ?? []),
+  ]
+    .filter(Boolean)
+    .map(String)
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .join(" ");
+}
+
+function restoreSceneRelationshipSearchKeywords(db, { sceneId, projectId, meta, snapshot }) {
+  db.prepare(`
+    UPDATE scenes_fts
+    SET keywords = ?
+    WHERE scene_id = ? AND project_id = ?
+  `).run(buildSceneMetadataSearchKeywords(meta, snapshot), sceneId, projectId);
+}
+
 export function registerMetadataTools(s, {
   db,
   SYNC_DIR,
@@ -2321,6 +2343,12 @@ export function registerMetadataTools(s, {
         restoreSceneRelationshipSnapshot(db, {
           sceneId: scene_id,
           projectId: project_id,
+          snapshot: relationshipSnapshot,
+        });
+        restoreSceneRelationshipSearchKeywords(db, {
+          sceneId: scene_id,
+          projectId: project_id,
+          meta: normalizedUpdated,
           snapshot: relationshipSnapshot,
         });
         const backupResult = refreshProjectScopedBackupAfterMutation(db, {
