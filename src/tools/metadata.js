@@ -454,6 +454,34 @@ function querySceneRelationshipSnapshot(db, { sceneId, projectId }) {
   };
 }
 
+function sameStringSet(a, b) {
+  const left = [...new Set(a.map(String))].sort();
+  const right = [...new Set(b.map(String))].sort();
+  return left.length === right.length && left.every((value, index) => value === right[index]);
+}
+
+function normalizeSceneRelationshipCompatibilityFields(sourceMeta) {
+  const hasCharactersField = Object.hasOwn(sourceMeta, "characters");
+  const hasPlacesField = Object.hasOwn(sourceMeta, "places");
+  return {
+    has_relationship_fields: hasCharactersField || hasPlacesField,
+    has_characters_field: hasCharactersField,
+    has_places_field: hasPlacesField,
+    characters: normalizeStringList(sourceMeta.characters).filter((value) => !isVersionContinuityMarker(value)),
+    places: normalizeStringList(sourceMeta.places),
+  };
+}
+
+function sceneRelationshipCompatibilityHasDrift(canonicalRelationships, compatibilityRelationships) {
+  return (
+    compatibilityRelationships.has_characters_field &&
+    !sameStringSet(canonicalRelationships.characters, compatibilityRelationships.characters)
+  ) || (
+    compatibilityRelationships.has_places_field &&
+    !sameStringSet(canonicalRelationships.places, compatibilityRelationships.places)
+  );
+}
+
 function restoreSceneRelationshipSnapshot(db, { sceneId, projectId, snapshot }) {
   db.prepare(`DELETE FROM scene_characters WHERE scene_id = ? AND project_id = ?`).run(sceneId, projectId);
   db.prepare(`DELETE FROM scene_places WHERE scene_id = ? AND project_id = ?`).run(sceneId, projectId);
@@ -1061,6 +1089,39 @@ export function registerMetadataTools(s, {
       }
       try {
         const { sourceMeta } = readSourceMeta(scene.file_path, SYNC_DIR, { writable: false });
+        const compatibilityRelationships = normalizeSceneRelationshipCompatibilityFields(sourceMeta);
+        if (compatibilityRelationships.has_relationship_fields) {
+          const canonicalRelationships = querySceneRelationshipSnapshot(db, {
+            sceneId: scene.scene_id,
+            projectId: scene.project_id,
+          });
+          diagnostics.push({
+            type: "scene_relationship_compatibility_input",
+            severity: "info",
+            message: `Scene '${scene.scene_id}' retains sidecar/frontmatter character/place relationship fields as compatibility input; SQLite scene relationship rows remain canonical.`,
+            scene_id: scene.scene_id,
+            project_id: scene.project_id,
+            compatibility: compatibilityRelationships,
+            canonical: canonicalRelationships,
+            authority: {
+              canonical_owner: "SQLite scene_characters/scene_places",
+              compatibility_mutation_surface: false,
+            },
+            next_step: "Use this as migration or review evidence only. Use outcome-level relationship tools for current repairs.",
+          });
+          if (sceneRelationshipCompatibilityHasDrift(canonicalRelationships, compatibilityRelationships)) {
+            diagnostics.push({
+              type: "scene_relationship_compatibility_drift",
+              severity: "warning",
+              message: `Scene '${scene.scene_id}' sidecar/frontmatter relationship fields disagree with canonical SQLite relationship rows.`,
+              scene_id: scene.scene_id,
+              project_id: scene.project_id,
+              compatibility: compatibilityRelationships,
+              canonical: canonicalRelationships,
+              next_step: "Treat SQLite relationship rows as canonical. Use find_scenes, list_characters, and list_places to inspect stable IDs; use connect_character_place_evidence for paired sheet-backed evidence or leave character-only/place-only repairs to a deliberately named future workflow.",
+            });
+          }
+        }
         if (sourceMeta.threads) {
           diagnostics.push({
             type: "sidecar_threads_compatibility_input",
@@ -1146,6 +1207,7 @@ export function registerMetadataTools(s, {
       summary: {
         diagnostics_count: diagnostics.length,
         stale_scene_count: diagnostics.filter(diagnostic => diagnostic.type === "stale_scene_relationship_index").length,
+        compatibility_drift_count: diagnostics.filter(diagnostic => diagnostic.type === "scene_relationship_compatibility_drift").length,
         compatibility_note_count: diagnostics.filter(diagnostic => diagnostic.severity === "info").length,
       },
       next_steps: [

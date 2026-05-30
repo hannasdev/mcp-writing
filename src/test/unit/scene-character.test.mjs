@@ -239,6 +239,30 @@ describe("runSceneCharacterBatch", () => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
+  test("merge mode accepts scalar legacy character compatibility metadata", async () => {
+    const { dir } = makeBatchFixture();
+    const filePath = writeBatchScene(dir, "sc-001", "No named character appears here.", "Elena Vasquez");
+
+    const result = await runSceneCharacterBatch({
+      syncDir: dir,
+      args: {
+        project_id: "test-novel",
+        dry_run: true,
+        replace_mode: "merge",
+        target_scenes: [{ scene_id: "sc-001", project_id: "test-novel", file_path: filePath }],
+        character_rows: [
+          { character_id: "char-elena-vasquez", name: "Elena Vasquez" },
+        ],
+      },
+    });
+
+    assert.equal(result.failed_scenes, 0);
+    assert.deepEqual(result.results[0].before_characters, ["Elena Vasquez"]);
+    assert.deepEqual(result.results[0].after_characters, ["char-elena-vasquez"]);
+
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
   test("removes a less specific existing id when a more specific full-name match is inferred", async () => {
     const { dir } = makeBatchFixture();
     const filePath = writeBatchScene(dir, "sc-001", "Victor Alexeyevich Sidorin studies the report.", ["char-victor-sidorin"]);

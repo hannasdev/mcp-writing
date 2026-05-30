@@ -777,6 +777,92 @@ describe("metadata relationship outcome tools", () => {
     }
   });
 
+  test("audit_relationship_metadata reports scene relationship compatibility drift", async () => {
+    const db = openDb(":memory:");
+    try {
+      seedProject(db, "test-novel");
+      seedCharacter(db, { characterId: "canonicalcharacter", projectId: "test-novel", name: "Canonical Character" });
+      seedPlace(db, { placeId: "canonicalplace", projectId: "test-novel", name: "Canonical Place" });
+      seedProjectSceneFile(db, {
+        sceneId: "sc-audit-drift",
+        projectId: "test-novel",
+        metadata: {
+          characters: "sidecarstalecharacter, v7.3",
+          places: ["sidecarstaleplace"],
+        },
+      });
+      db.prepare(`
+        INSERT INTO scene_characters (scene_id, project_id, character_id)
+        VALUES (?, ?, ?)
+      `).run("sc-audit-drift", "test-novel", "canonicalcharacter");
+      db.prepare(`
+        INSERT INTO scene_places (scene_id, project_id, place_id)
+        VALUES (?, ?, ?)
+      `).run("sc-audit-drift", "test-novel", "canonicalplace");
+
+      const tools = makeToolHarness(db);
+      const parsed = await tools.call("audit_relationship_metadata", {
+        project_id: "test-novel",
+      });
+
+      const compatibilityInput = parsed.diagnostics.find(diagnostic =>
+        diagnostic.type === "scene_relationship_compatibility_input"
+      );
+      const drift = parsed.diagnostics.find(diagnostic =>
+        diagnostic.type === "scene_relationship_compatibility_drift"
+      );
+      assert.equal(parsed.ok, true);
+      assert.equal(parsed.summary.compatibility_drift_count, 1);
+      assert.deepEqual(compatibilityInput.compatibility.characters, ["sidecarstalecharacter"]);
+      assert.deepEqual(compatibilityInput.compatibility.places, ["sidecarstaleplace"]);
+      assert.deepEqual(drift.canonical.characters, ["canonicalcharacter"]);
+      assert.deepEqual(drift.canonical.places, ["canonicalplace"]);
+      assert.match(drift.next_step, /Treat SQLite relationship rows as canonical/);
+    } finally {
+      db.close();
+    }
+  });
+
+  test("audit_relationship_metadata ignores absent compatibility relationship fields when checking drift", async () => {
+    const db = openDb(":memory:");
+    try {
+      seedProject(db, "test-novel");
+      seedCharacter(db, { characterId: "canonicalcharacter", projectId: "test-novel", name: "Canonical Character" });
+      seedPlace(db, { placeId: "canonicalplace", projectId: "test-novel", name: "Canonical Place" });
+      seedProjectSceneFile(db, {
+        sceneId: "sc-audit-partial-fields",
+        projectId: "test-novel",
+        metadata: {
+          characters: ["canonicalcharacter"],
+        },
+      });
+      db.prepare(`
+        INSERT INTO scene_characters (scene_id, project_id, character_id)
+        VALUES (?, ?, ?)
+      `).run("sc-audit-partial-fields", "test-novel", "canonicalcharacter");
+      db.prepare(`
+        INSERT INTO scene_places (scene_id, project_id, place_id)
+        VALUES (?, ?, ?)
+      `).run("sc-audit-partial-fields", "test-novel", "canonicalplace");
+
+      const tools = makeToolHarness(db);
+      const parsed = await tools.call("audit_relationship_metadata", {
+        project_id: "test-novel",
+      });
+
+      const compatibilityInput = parsed.diagnostics.find(diagnostic =>
+        diagnostic.type === "scene_relationship_compatibility_input"
+      );
+      assert.equal(parsed.ok, true);
+      assert.equal(parsed.summary.compatibility_drift_count, 0);
+      assert.equal(compatibilityInput.compatibility.has_characters_field, true);
+      assert.equal(compatibilityInput.compatibility.has_places_field, false);
+      assert.deepEqual(compatibilityInput.canonical.places, ["canonicalplace"]);
+    } finally {
+      db.close();
+    }
+  });
+
   test("audit_relationship_metadata includes universe-scoped compatibility notes for a project", async () => {
     const db = openDb(":memory:");
     try {
