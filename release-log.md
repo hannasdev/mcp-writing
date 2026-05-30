@@ -6,6 +6,14 @@ This complements `CHANGELOG.md`:
 - `CHANGELOG.md` is technical and release-oriented.
 - This log is plain-language and outcome-oriented.
 
+### 2026-05-30 — Guard generic scene relationship metadata updates
+
+- What changed: `update_scene_metadata` now rejects scene `characters` and `places` fields and points callers to relationship and audit workflows instead of accepting sidecar-first relationship edits.
+- Why it matters: Authors and AI agents get a clearer boundary between editorial scene metadata and SQLite-canonical relationship evidence, reducing accidental relationship changes from generic metadata patches.
+- Who is affected: Authors, maintainers, and AI agents that previously sent character or place lists through `update_scene_metadata`.
+- Action needed: Use `find_scenes`, `list_characters`, and `list_places` to identify stable IDs, then use `connect_character_place_evidence` for paired sheet-backed evidence or `audit_relationship_metadata` for legacy sidecar/frontmatter review.
+- PR: TBD
+
 ### 2026-05-28 — Document sidecar compatibility and migration posture
 
 - What changed: Added sidecar compatibility and migration guidance, updated setup, product, architecture, and agent docs, and added workflow discovery guidance for projects or prompts that still treat `.meta.yaml` files as mutation surfaces.
