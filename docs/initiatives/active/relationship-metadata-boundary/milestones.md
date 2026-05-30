@@ -1,6 +1,6 @@
 # Relationship Metadata Boundary — Milestones
 
-**Status:** Active — M0 selected
+**Status:** Active — M1 selected
 
 Use [prd.md](prd.md) for product framing and this document for sequencing,
 review gates, and implementation readiness.
@@ -22,7 +22,7 @@ legacy compatibility and keeping the repository coherent after each slice.
 
 ## M0 — Contract Decision And Characterization
 
-Status: Implemented in branch; pending review.
+Status: Implemented on main.
 
 Goal: make the current behavior and target contract reviewable before changing
 tool behavior.
@@ -85,6 +85,8 @@ Out of scope:
 - Changing sync indexing behavior.
 
 ## M1 — Generic Metadata Relationship Guardrail
+
+Status: Selected for implementation.
 
 Goal: stop `update_scene_metadata` from silently converting sidecar-first
 character/place edits into canonical relationship authority.

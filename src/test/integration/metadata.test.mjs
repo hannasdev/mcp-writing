@@ -145,7 +145,7 @@ describe("update_scene_metadata tool", () => {
     assert.notEqual(sidecar.chapter_title, "Chapter 8");
   });
 
-  test("characterizes current characters and places updates as independent sidecar-first index mutations", async () => {
+  test("rejects characters and places updates before sidecar writes or relationship reindexing", async () => {
     const sceneDir = path.join(writeSyncDir, "projects", "test-novel", "scenes");
     fs.mkdirSync(sceneDir, { recursive: true });
     const scenePath = path.join(sceneDir, "sc-m0-relationship-characterization.md");
@@ -165,29 +165,47 @@ describe("update_scene_metadata tool", () => {
     );
 
     await callWriteTool("sync");
+    const sidecarBefore = fs.existsSync(sidecarFile) ? fs.readFileSync(sidecarFile, "utf8") : null;
 
     const updateText = await callWriteTool("update_scene_metadata", {
       scene_id: "sc-m0-relationship-characterization",
       project_id: "test-novel",
       fields: {
-        characters: ["marcus"],
-        places: [],
+        characters: ["m1blockedcharacter"],
+        places: ["m1blockedplace"],
       },
     });
     const updateParsed = JSON.parse(updateText);
-    assert.equal(updateParsed.ok, true, updateText);
+    assert.equal(updateParsed.ok, false, updateText);
+    assert.equal(updateParsed.error.code, "VALIDATION_ERROR");
+    assert.match(updateParsed.error.message, /relationship-boundary fields/);
+    assert.deepEqual(updateParsed.error.details.blocked_fields, ["characters", "places"]);
+    assert.ok(updateParsed.error.details.relationship_tools.includes("connect_character_place_evidence"));
+    assert.ok(updateParsed.error.details.relationship_tools.includes("audit_relationship_metadata"));
+    assert.ok(updateParsed.error.details.discovery_workflows.includes("find_scenes"));
+    assert.ok(updateParsed.error.details.discovery_workflows.includes("list_characters"));
+    assert.ok(updateParsed.error.details.discovery_workflows.includes("list_places"));
+    assert.match(updateParsed.error.details.next_step, /connect_character_place_evidence/);
+    assert.match(updateParsed.error.details.next_step, /audit_relationship_metadata/);
+    assert.match(updateParsed.error.details.next_step, /paired sheet-backed character\/place evidence/);
 
-    const sidecar = yaml.load(fs.readFileSync(sidecarFile, "utf8"));
-    assert.deepEqual(sidecar.characters, ["marcus"]);
-    assert.deepEqual(sidecar.places, []);
+    const sidecarAfter = fs.existsSync(sidecarFile) ? fs.readFileSync(sidecarFile, "utf8") : null;
+    assert.equal(sidecarAfter, sidecarBefore);
 
-    const marcusScenesText = await callWriteTool("find_scenes", {
+    const elenaScenesText = await callWriteTool("find_scenes", {
       project_id: "test-novel",
-      character: "marcus",
+      character: "elena",
       page_size: 200,
     });
-    const marcusScenes = JSON.parse(marcusScenesText);
-    assert.ok(marcusScenes.results.some((row) => row.scene_id === "sc-m0-relationship-characterization"));
+    const elenaScenes = JSON.parse(elenaScenesText);
+    assert.ok(elenaScenes.results.some((row) => row.scene_id === "sc-m0-relationship-characterization"));
+
+    const blockedSearchText = await callWriteTool("search_metadata", {
+      query: "m1blockedcharacter",
+    });
+    const blockedSearch = JSON.parse(blockedSearchText);
+    assert.equal(blockedSearch.ok, false);
+    assert.equal(blockedSearch.error.code, "NO_RESULTS");
 
     await callWriteTool("sync");
 
@@ -196,6 +214,13 @@ describe("update_scene_metadata tool", () => {
     });
     const retainedPlaceSearch = JSON.parse(retainedPlaceSearchText);
     assert.ok(retainedPlaceSearch.results.some((row) => row.scene_id === "sc-m0-relationship-characterization"));
+
+    const blockedPlaceSearchText = await callWriteTool("search_metadata", {
+      query: "m1blockedplace",
+    });
+    const blockedPlaceSearch = JSON.parse(blockedPlaceSearchText);
+    assert.equal(blockedPlaceSearch.ok, false);
+    assert.equal(blockedPlaceSearch.error.code, "NO_RESULTS");
   });
 });
 
