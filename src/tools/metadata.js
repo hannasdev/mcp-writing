@@ -475,9 +475,15 @@ function restoreSceneRelationshipSnapshot(db, { sceneId, projectId, snapshot }) 
   }
 }
 
+function isVersionContinuityMarker(value) {
+  return /^v\d[\d.a-z]*$/i.test(String(value).trim());
+}
+
 function buildSceneMetadataSearchKeywords(meta, relationshipSnapshot) {
+  const compatibilityVersionMarkers = (meta.characters ?? []).filter(isVersionContinuityMarker);
   return [
     ...(meta.tags ?? []),
+    ...compatibilityVersionMarkers,
     ...relationshipSnapshot.characters,
     ...relationshipSnapshot.places,
     ...(meta.versions ?? []),
