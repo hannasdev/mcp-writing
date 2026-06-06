@@ -28,9 +28,8 @@ Instead of feeding an entire manuscript to an AI and hoping it fits in the conte
 
 **Current status:**
 - **Core platform complete:** Metadata-first analysis, SQLite-canonical structural and relationship metadata, compatibility sidecar maintenance, AI-assisted prose editing with confirmation + git history, review bundles, and Scrivener Direct extraction are all implemented.
-- **Recently completed:** Database Backup and Recovery added project backup export, freshness diagnostics, advisory operation history, automatic backup refresh after sanctioned project-scoped canonical mutations, dry-run restore planning, transactional restore application, and backup/restore operations guidance.
-- **Previous milestone:** Docker, CI, and Deployment Workflow made Docker a supported way to build, run, smoke-test, and deploy Writing MCP.
-- **Active development:** Relationship Metadata Boundary M3, aligning workflow and generated documentation around SQLite-canonical relationship authority.
+- **Recently completed:** Relationship Metadata Boundary closed the sidecar-first scene relationship mutation path, added SQLite-first paired and one-sided evidence workflows, and preserved legacy sidecar/frontmatter compatibility for sync and import.
+- **Active development:** No initiative is currently selected.
 - **Deferred backlog:** OpenClaw integration, client-agnostic setup, divisions, and embeddings search.
 - **Ideas and open questions:** tracked separately so future exploration does not distort the active roadmap.
 
