@@ -11,7 +11,7 @@ It supports metadata-first reasoning, explicit prose editing workflows, and revi
 
 Active initiative: [Relationship Metadata Boundary](docs/initiatives/active/relationship-metadata-boundary/prd.md).
 
-Current focus: Relationship Metadata Boundary M3 updates workflow and generated documentation for the relationship metadata boundary.
+Current focus: Relationship Metadata Boundary M4 adds independent scene-character and scene-place evidence workflows.
 
 Most recent completed initiative: [Architecture Alignment Follow-up](docs/initiatives/done/architecture-alignment-follow-up/prd.md).
 

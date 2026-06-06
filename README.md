@@ -153,7 +153,7 @@ Outcome: subplot structure stays visible and auditable, which reduces dropped th
 Goal: keep indexes accurate without manually re-tagging everything.
 
 1. After rewriting scenes, call `enrich_scene` to re-derive lightweight metadata from current prose.
-2. Use `update_scene_metadata` for intentional editorial fields (for example, beat, POV, status, and tags). It rejects scene `characters` and `places`; use `connect_character_place_evidence` when a scene proves paired sheet-backed character/place evidence, and keep one-sided scene links for a deliberately named relationship workflow. Use `audit_relationship_metadata` for retained sidecar/frontmatter relationship fields. Use `list_chapters` plus `assign_scene_to_chapter` or `move_scene` for chapter placement and ordering.
+2. Use `update_scene_metadata` for intentional editorial fields (for example, beat, POV, status, and tags). It rejects scene `characters` and `places`; use `connect_character_place_evidence` when a scene proves paired sheet-backed character/place evidence, `connect_scene_character_evidence` for character-only evidence, and `connect_scene_place_evidence` for place-only evidence. Use `audit_relationship_metadata` for retained sidecar/frontmatter relationship fields. Use `list_chapters` plus `assign_scene_to_chapter` or `move_scene` for chapter placement and ordering.
 3. Use `search_metadata` and `find_scenes` to verify scenes are discoverable under the expected filters.
 
 Outcome: your AI assistant can reliably find the right scenes without drifting from the manuscript.

@@ -1,6 +1,6 @@
 # Relationship Metadata Boundary — Architecture Notes
 
-**Status:** Active — M3 selected
+**Status:** Active — M4 selected
 
 ## Context
 
@@ -222,8 +222,9 @@ If a future compatibility-only behavior is reconsidered, callers should receive:
 - an explicit `compatibility_only` indicator;
 - a statement that canonical relationship rows were not changed;
 - next-step guidance to use the appropriate relationship workflow for
-  authority: `connect_character_place_evidence` for paired evidence, or the
-  one-sided scene evidence workflows once they are available.
+  authority: `connect_character_place_evidence` for paired evidence,
+  `connect_scene_character_evidence` for character-only evidence, or
+  `connect_scene_place_evidence` for place-only evidence.
 
 Compatibility-only behavior must not write ordinary `characters` or `places`
 sidecar fields that existing sync treats as relationship input unless sync is

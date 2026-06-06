@@ -123,6 +123,48 @@ describe("search tools integration suite", { concurrency: 1 }, () => {
 
     await callWriteTool("enrich_scene", { scene_id: "sc-003", project_id: "test-novel" });
   });
+
+  test("finds one-sided scene relationship indexes from evidence workflows", async () => {
+    const sceneDir = path.join(writeSyncDir, "projects", "test-novel", "scenes");
+    fs.mkdirSync(sceneDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(sceneDir, "sc-search-character-only.md"),
+      "---\nscene_id: sc-search-character-only\ntitle: Search Character Only\n---\nElena appears here without a place link.",
+      "utf8"
+    );
+    fs.writeFileSync(
+      path.join(sceneDir, "sc-search-place-only.md"),
+      "---\nscene_id: sc-search-place-only\ntitle: Search Place Only\n---\nThe harbor district matters here without a character link.",
+      "utf8"
+    );
+
+    await callWriteTool("sync");
+    await callWriteTool("connect_scene_character_evidence", {
+      project_id: "test-novel",
+      scene_id: "sc-search-character-only",
+      character_id: "elena",
+    });
+    await callWriteTool("connect_scene_place_evidence", {
+      project_id: "test-novel",
+      scene_id: "sc-search-place-only",
+      place_id: "harbor-district",
+    });
+
+    const characterText = await callWriteTool("find_scenes", {
+      project_id: "test-novel",
+      character: "elena",
+      page_size: 200,
+    });
+    const characterParsed = JSON.parse(characterText);
+    assert.ok(characterParsed.results.some((row) => row.scene_id === "sc-search-character-only"));
+
+    const placeText = await callWriteTool("search_metadata", {
+      query: '"harbor-district"',
+      page_size: 200,
+    });
+    const placeParsed = JSON.parse(placeText);
+    assert.ok(placeParsed.results.some((row) => row.scene_id === "sc-search-place-only"));
+  });
 });
 
 describe("get_scene_prose tool", () => {

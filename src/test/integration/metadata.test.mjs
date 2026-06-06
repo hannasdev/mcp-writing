@@ -181,6 +181,8 @@ describe("update_scene_metadata tool", () => {
     assert.match(updateParsed.error.message, /relationship-boundary fields/);
     assert.deepEqual(updateParsed.error.details.blocked_fields, ["characters", "places"]);
     assert.ok(updateParsed.error.details.relationship_tools.includes("connect_character_place_evidence"));
+    assert.ok(updateParsed.error.details.relationship_tools.includes("connect_scene_character_evidence"));
+    assert.ok(updateParsed.error.details.relationship_tools.includes("connect_scene_place_evidence"));
     assert.ok(updateParsed.error.details.relationship_tools.includes("audit_relationship_metadata"));
     assert.ok(updateParsed.error.details.discovery_workflows.includes("find_scenes"));
     assert.ok(updateParsed.error.details.discovery_workflows.includes("list_characters"));
@@ -221,6 +223,79 @@ describe("update_scene_metadata tool", () => {
     const blockedPlaceSearch = JSON.parse(blockedPlaceSearchText);
     assert.equal(blockedPlaceSearch.ok, false);
     assert.equal(blockedPlaceSearch.error.code, "NO_RESULTS");
+  });
+});
+
+describe("one-sided scene evidence tools", () => {
+  test("connect_scene_character_evidence and connect_scene_place_evidence expose one-sided links to search", async () => {
+    const sceneDir = path.join(writeSyncDir, "projects", "test-novel", "scenes");
+    fs.mkdirSync(sceneDir, { recursive: true });
+    const characterScenePath = path.join(sceneDir, "sc-m4-character-only.md");
+    const characterSidecarPath = path.join(sceneDir, "sc-m4-character-only.meta.yaml");
+    const placeScenePath = path.join(sceneDir, "sc-m4-place-only.md");
+    const placeSidecarPath = path.join(sceneDir, "sc-m4-place-only.meta.yaml");
+    fs.writeFileSync(
+      characterScenePath,
+      "---\nscene_id: sc-m4-character-only\ntitle: M4 Character Only\n---\nElena appears without a specific place beat.",
+      "utf8"
+    );
+    fs.writeFileSync(
+      placeScenePath,
+      "---\nscene_id: sc-m4-place-only\ntitle: M4 Place Only\n---\nThe harbor district matters without a specific character beat.",
+      "utf8"
+    );
+
+    await callWriteTool("sync");
+
+    const characterText = await callWriteTool("connect_scene_character_evidence", {
+      project_id: "test-novel",
+      scene_id: "sc-m4-character-only",
+      character_id: "elena",
+      note: "Elena is present, but no place association is intended.",
+    });
+    const characterParsed = JSON.parse(characterText);
+    assert.equal(characterParsed.ok, true, characterText);
+    assert.deepEqual(characterParsed.scene_relationships, {
+      characters: ["elena"],
+      places: [],
+    });
+    assert.equal(characterParsed.operation_history.appended, true);
+    assert.equal(characterParsed.backup_refresh.ok, true);
+
+    const placeText = await callWriteTool("connect_scene_place_evidence", {
+      project_id: "test-novel",
+      scene_id: "sc-m4-place-only",
+      place_id: "harbor-district",
+      note: "The location matters without a specific character association.",
+    });
+    const placeParsed = JSON.parse(placeText);
+    assert.equal(placeParsed.ok, true, placeText);
+    assert.deepEqual(placeParsed.scene_relationships, {
+      characters: [],
+      places: ["harbor-district"],
+    });
+
+    const characterSidecar = yaml.load(fs.readFileSync(characterSidecarPath, "utf8"));
+    const placeSidecar = yaml.load(fs.readFileSync(placeSidecarPath, "utf8"));
+    assert.deepEqual(characterSidecar.characters, ["elena"]);
+    assert.deepEqual(characterSidecar.places, []);
+    assert.deepEqual(placeSidecar.characters, []);
+    assert.deepEqual(placeSidecar.places, ["harbor-district"]);
+
+    const elenaScenesText = await callWriteTool("find_scenes", {
+      project_id: "test-novel",
+      character: "elena",
+      page_size: 200,
+    });
+    const elenaScenes = JSON.parse(elenaScenesText);
+    assert.ok(elenaScenes.results.some((row) => row.scene_id === "sc-m4-character-only"));
+
+    const harborSearchText = await callWriteTool("search_metadata", {
+      query: '"harbor-district"',
+      page_size: 200,
+    });
+    const harborSearch = JSON.parse(harborSearchText);
+    assert.ok(harborSearch.results.some((row) => row.scene_id === "sc-m4-place-only"));
   });
 });
 
