@@ -483,7 +483,7 @@ describe("metadata update_scene_metadata relationship guardrail", () => {
       assert.match(parsed.error.details.next_step, /audit_relationship_metadata/);
       assert.match(parsed.error.details.next_step, /find_scenes/);
       assert.match(parsed.error.details.next_step, /paired sheet-backed character\/place evidence/);
-      assert.match(parsed.error.details.next_step, /Character-only or place-only/);
+      assert.match(parsed.error.details.next_step, /Independent character-only or place-only scene links remain valid/);
       assert.equal(fs.existsSync(sidecarPath), false);
       assert.equal(fs.readFileSync(scenePath, "utf8"), sourceBefore);
 
@@ -771,7 +771,7 @@ describe("metadata relationship outcome tools", () => {
       assert.equal(parsed.audit_authority.compatibility_mutation_surface, false);
       assert.ok(parsed.diagnostics.some(diagnostic => diagnostic.type === "character_tags_review_note"));
       assert.ok(parsed.diagnostics.some(diagnostic => diagnostic.type === "place_associated_characters_review_note"));
-      assert.ok(parsed.next_steps.includes("Use connect_character_place_evidence for scene-backed character/place relationships."));
+      assert.ok(parsed.next_steps.includes("Use connect_character_place_evidence when scene-backed character/place evidence is paired; independent one-sided links remain valid but need a deliberately named workflow."));
     } finally {
       db.close();
     }

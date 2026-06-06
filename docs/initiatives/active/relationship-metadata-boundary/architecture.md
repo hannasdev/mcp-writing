@@ -1,6 +1,6 @@
 # Relationship Metadata Boundary — Architecture Notes
 
-**Status:** Active — M2 selected
+**Status:** Active — M3 selected
 
 ## Context
 
@@ -49,10 +49,11 @@ character, or both. The model should not require paired character/place
 evidence.
 
 Outcome-level relationship workflows already commit SQLite first for current
-relationship work:
+relationship work, but the current character/place evidence coverage is not yet
+complete for independent one-sided links:
 
 - `track_thread_arc`
-- `connect_character_place_evidence`
+- `connect_character_place_evidence` for paired character/place evidence
 - `record_character_relationship_beat`
 - `link_reference_evidence`
 - `suggest_scene_references` in apply mode
@@ -105,6 +106,7 @@ through sidecar-first writes.
 | --- | --- | --- | --- |
 | `characters` and `places` in `update_scene_metadata` | M0 selected strict rejection for M1. | Clearest agent/user contract, matches structural-field rejection, and avoids delayed canonical mutation through ordinary sync. | Compatibility-only writes would require a review-only storage shape or sync-rule change; M0 does not select that path. |
 | Scene character/place cardinality | Preserve independent optional links. | Scenes do not always have sheet-backed characters or places, and a valid scene can have one side without the other. | Treat character/place evidence as a required pair, which would misrepresent common manuscript cases. |
+| One-sided scene relationship workflows | Add `connect_scene_character_evidence` and `connect_scene_place_evidence` after M3 guidance is corrected. | The model permits independent character and place links, so daily-work writes need explicit outcome tools that do not fabricate a pair. | Defer the gap to backlog, which would leave the initiative closing one authority leak while preserving a missing replacement path. |
 | Unsheeted people or locations in scene metadata | Do not treat them as relationship metadata. | Scene relationship authority should reference stable, sheet-backed entity IDs rather than freeform prose mentions. | A future review-note or entity-promotion workflow could capture candidates without indexing them as canonical relationships. |
 | Legacy sync handling | Preserve indexing from existing sidecar/frontmatter fields. | Import is a special mode and existing projects need continuity. | Require an explicit migration before indexing legacy relationship fields. |
 | Backup refresh | Refresh backups after canonical relationship workflows, not after compatibility-only writes. | Recovery snapshots should represent canonical state. | Refresh backup after all sidecar metadata writes, even if non-canonical. |
@@ -131,7 +133,7 @@ Disallowed daily-work role:
 
 Owned role:
 
-- current scene-backed, sheet-backed character/place relationship authority;
+- current scene-backed, sheet-backed paired character/place evidence authority;
 - SQLite-first commit;
 - project backup refresh;
 - generated compatibility sidecar refresh when possible.
@@ -142,8 +144,30 @@ Boundary:
 - not a complete replacement for independent character-only or place-only
   sheet-backed scene links;
 - not responsible for unsheeted people or locations that appear only in prose;
-- may need a future companion workflow if sheet-backed character-only or
-  place-only scene evidence becomes a daily-work need.
+- must not be documented as the daily-work path for one-sided scene evidence.
+
+### One-Sided Scene Evidence Workflows
+
+Owned role:
+
+- `connect_scene_character_evidence` records sheet-backed character evidence for
+  a scene without requiring a place;
+- `connect_scene_place_evidence` records sheet-backed place evidence for a scene
+  without requiring a character;
+- SQLite-first commit;
+- project backup refresh;
+- generated compatibility sidecar refresh when possible.
+
+Boundary:
+
+- require stable `scene_id` plus a stable sheet-backed `character_id` or
+  `place_id`;
+- do not create character or place sheets from freeform prose mentions;
+- do not delete the other side of an existing relationship set;
+- when compatibility output refreshes, regenerate the full scene `characters`
+  and `places` compatibility representation from canonical indexes rather than
+  preserving stale legacy sidecar values as authority;
+- do not replace bulk repair, unlink/delete, or entity-promotion workflows.
 
 ### Sync And Import
 
@@ -172,6 +196,9 @@ The migration is behavioral:
 
 - current relationship changes should stop using generic metadata writes;
 - docs and workflow guidance should route callers to relationship tools;
+- paired evidence should route to `connect_character_place_evidence`, while
+  character-only and place-only evidence should route to
+  `connect_scene_character_evidence` and `connect_scene_place_evidence`;
 - audit diagnostics should help identify retained sidecar fields and stale
   relationship indexes;
 - generated compatibility output can continue as long as it is labeled
@@ -194,7 +221,9 @@ If a future compatibility-only behavior is reconsidered, callers should receive:
 
 - an explicit `compatibility_only` indicator;
 - a statement that canonical relationship rows were not changed;
-- next-step guidance to use `connect_character_place_evidence` for authority.
+- next-step guidance to use the appropriate relationship workflow for
+  authority: `connect_character_place_evidence` for paired evidence, or the
+  one-sided scene evidence workflows once they are available.
 
 Compatibility-only behavior must not write ordinary `characters` or `places`
 sidecar fields that existing sync treats as relationship input unless sync is
@@ -216,6 +245,9 @@ path. Otherwise the canonical mutation is merely delayed until the next sync.
   rule that prevents adoption as canonical relationship rows.
 - **Ambiguous character or place identity:** relationship workflows reject or
   require explicit IDs instead of guessing from names.
+- **Paired workflow overreach:** guidance that routes one-sided evidence through
+  `connect_character_place_evidence` misrepresents the model; M3 must keep docs
+  precise and M4 must add one-sided workflows.
 - **Existing clients use old metadata path:** M0 selected strict rejection for
   M1; the implementation should provide a stable error and replacement
   guidance.
@@ -236,13 +268,11 @@ Required validation should combine:
 - unit tests for tool contract and DB mutation behavior;
 - integration tests through MCP tool calls;
 - sync/import compatibility tests for legacy sidecar fields;
+- paired, character-only, and place-only relationship workflow tests;
 - generated docs checks for tool guidance;
 - full PR gate before merge.
 
 ## Remaining Open Questions
 
-1. What workflow should handle character-only or place-only sheet-backed scene
-   evidence now that scene-character and scene-place links are explicitly
-   independent optional relationships?
-2. Should a later initiative promote scene tags to a clearer canonical schema,
+1. Should a later initiative promote scene tags to a clearer canonical schema,
    or are they intentionally retained as search/editorial metadata?

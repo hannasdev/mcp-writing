@@ -609,7 +609,7 @@ export function registerSearchTools(s, {
   // ---- get_place_sheet -----------------------------------------------------
   s.tool(
     "get_place_sheet",
-    "Get full place details, including canonical sheet content plus retained sidecar associated_characters and tags as compatibility/review notes. Use connect_character_place_evidence for current scene-backed character/place authority. Response shape note: returns a structured envelope (`results`, `total_count`) with one result row.",
+    "Get full place details, including canonical sheet content plus retained sidecar associated_characters and tags as compatibility/review notes. Use connect_character_place_evidence when scene-backed character/place evidence is paired; independent place-only links remain valid and need an explicit relationship workflow rather than a place-sheet read. Response shape note: returns a structured envelope (`results`, `total_count`) with one result row.",
     {
       place_id: z.string().describe("The place_id to look up (e.g. 'place-harbor-district'). Use list_places to find valid IDs."),
     },

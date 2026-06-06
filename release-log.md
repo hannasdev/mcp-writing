@@ -6,6 +6,14 @@ This complements `CHANGELOG.md`:
 - `CHANGELOG.md` is technical and release-oriented.
 - This log is plain-language and outcome-oriented.
 
+### 2026-05-30 — Clarify relationship workflow guidance
+
+- What changed: Updated workflow, setup, sidecar compatibility, and generated tool guidance so scene `characters` and `places` route to audit/outcome workflows instead of generic metadata or sidecar edits.
+- Why it matters: Authors and AI agents get clearer next steps after the relationship metadata boundary changes without implying that scene relationship links must be paired.
+- Who is affected: Authors, maintainers, and AI agents using `describe_workflows`, generated tool docs, setup docs, or sidecar compatibility guidance for scene relationship repair.
+- Action needed: Use `audit_relationship_metadata` before repairing retained sidecar/frontmatter relationship fields; use `connect_character_place_evidence` when the evidence is paired, and leave character-only/place-only repairs for a deliberately named workflow.
+- PR: [#232](https://github.com/hannasdev/mcp-writing/pull/232)
+
 ### 2026-05-30 — Make relationship compatibility drift visible
 
 - What changed: Ordinary sync now preserves SQLite scene character/place authority when legacy sidecar relationship fields drift, reports relationship compatibility warnings, and keeps import or repair flows as the deliberate compatibility adoption path.

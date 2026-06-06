@@ -1,6 +1,6 @@
 # Relationship Metadata Boundary — Milestones
 
-**Status:** Active — M2 selected
+**Status:** Active — M3 selected
 
 Use [prd.md](prd.md) for product framing and this document for sequencing,
 review gates, and implementation readiness.
@@ -19,6 +19,8 @@ legacy compatibility and keeping the repository coherent after each slice.
 - Preserve SQLite as canonical for scene-backed character/place relationships.
 - Keep project backups refreshed after canonical relationship mutations.
 - Keep public tools outcome-oriented.
+- Preserve independent scene-character and scene-place cardinality; do not
+  force valid one-sided links through paired character/place evidence.
 
 ## M0 — Contract Decision And Characterization
 
@@ -127,7 +129,7 @@ Out of scope:
 
 ## M2 — Compatibility Sync And Audit Alignment
 
-Status: Selected for implementation.
+Status: Implemented on main by PR #231.
 
 Goal: keep legacy projects usable while making compatibility authority visible.
 
@@ -164,6 +166,8 @@ Out of scope:
 
 ## M3 — Workflow And Documentation Update
 
+Status: Selected for implementation.
+
 Goal: make the new boundary discoverable for humans, AI agents, and generated
 tool consumers.
 
@@ -173,6 +177,8 @@ Deliverables:
   relationship tools.
 - Update `describe_workflows` so relationship repair and sidecar migration
   guidance routes to outcome-level tools.
+- Ensure guidance distinguishes paired character/place evidence from valid
+  character-only and place-only scene links.
 - Regenerate `docs/agents/tools.md`.
 - Update user/agent docs if they mention sidecar relationship editing or
   generic metadata relationship updates.
@@ -183,7 +189,14 @@ Acceptance criteria:
 - Generated tool docs match the source tool descriptions.
 - Workflow guidance no longer implies generic sidecar editing is a daily
   relationship mutation path.
-- Users and agents get actionable replacement workflows.
+- Users and agents get actionable replacement workflows for paired evidence,
+  while character-only and place-only evidence are clearly named as valid
+  one-sided links that M4 will support.
+- Generated docs and `describe_workflows` do not recommend
+  `connect_character_place_evidence` for character-only or place-only evidence.
+- M3 docs do not present `connect_scene_character_evidence` or
+  `connect_scene_place_evidence` as callable workflows before M4 implements
+  them.
 - Any breaking or compatibility-sensitive behavior is documented.
 
 Required validation:
@@ -194,9 +207,67 @@ Required validation:
 
 Out of scope:
 
+- Implementing new one-sided relationship workflows.
 - Broad documentation rewrites unrelated to relationship authority.
 
-## M4 — End-To-End Regression And Release Readiness
+## M4 — Independent Scene Evidence Workflows
+
+Goal: add explicit SQLite-first workflows for valid scene-character and
+scene-place links that are not paired character/place evidence.
+
+Deliverables:
+
+- Add `connect_scene_character_evidence` for sheet-backed character evidence in
+  a scene without requiring a paired place.
+- Add `connect_scene_place_evidence` for sheet-backed place evidence in a scene
+  without requiring a paired character.
+- Keep `connect_character_place_evidence` as the paired association workflow.
+- Refresh project backups and operation history after successful canonical
+  one-sided relationship commits.
+- Refresh scene sidecar compatibility output after canonical commit when
+  possible by regenerating the full scene `characters` and `places`
+  compatibility representation from canonical indexes, and report
+  compatibility-output failure as a warning.
+- Update tool descriptions, workflow guidance, generated docs, and release-log
+  notes so paired and one-sided evidence paths are distinct.
+
+Acceptance criteria:
+
+- Character-only scene evidence can add a `scene_characters` relationship row
+  without requiring or creating a `scene_places` row.
+- Place-only scene evidence can add a `scene_places` relationship row without
+  requiring or creating a `scene_characters` row.
+- One-sided workflows validate stable scene, character, and place IDs and reject
+  unsheeted/freeform names.
+- One-sided workflows are idempotent for already-linked scene/entity pairs.
+- Backup artifacts and operation history refresh after successful canonical
+  commits.
+- Compatibility sidecar refresh is generated output from canonical indexes for
+  both scene `characters` and `places`; it does not preserve stale legacy values
+  as write authority and does not become write authority for canonical
+  relationship rows.
+- Existing paired `connect_character_place_evidence` behavior remains
+  SQLite-first and does not regress.
+- Focused search/read coverage can observe character-only and place-only
+  indexes without broad review-bundle or styleguide regression work in M4.
+
+Required validation:
+
+- `node --experimental-sqlite --test src/test/unit/metadata-tools.test.mjs`
+- `node --experimental-sqlite --test src/test/integration/metadata.test.mjs`
+- `node --experimental-sqlite --test src/test/integration/search.test.mjs`
+- `npm run docs`
+- `npm run check:static`
+
+Out of scope:
+
+- Bulk relationship editing.
+- Relationship deletion or unlink workflows.
+- Promoting unsheeted prose mentions into character or place sheets.
+- Redesigning tags, flags, status, versions, or place associated-character
+  notes.
+
+## M5 — End-To-End Regression And Release Readiness
 
 Goal: prove the boundary holds across common writing workflows before PR
 completion.
@@ -205,6 +276,8 @@ Deliverables:
 
 - End-to-end integration coverage for relationship mutation, metadata update,
   sync compatibility, search reads, and backup freshness.
+- Regression coverage for paired, character-only, and place-only scene
+  relationship links.
 - Regression coverage for review bundles or other consumers if they depend on
   scene character/place indexes.
 - Final PR description that calls out migration behavior and any compatibility
@@ -212,12 +285,16 @@ Deliverables:
 
 Acceptance criteria:
 
-- `connect_character_place_evidence` remains the daily-work relationship write
-  path and refreshes backups after canonical commit.
+- `connect_character_place_evidence` remains the paired relationship write path
+  and refreshes backups after canonical commit.
+- `connect_scene_character_evidence` and `connect_scene_place_evidence` cover
+  one-sided daily relationship writes and refresh backups after canonical
+  commit.
 - `update_scene_metadata` no longer creates hidden canonical relationship
   changes from sidecar-first writes.
 - Legacy sync/import compatibility still works.
-- Search, arc, and bundle consumers still read relationship indexes correctly.
+- Search, arc, and bundle consumers still read paired and one-sided relationship
+  indexes correctly.
 - Maintainers have clear release notes for any changed client behavior.
 
 Required validation:

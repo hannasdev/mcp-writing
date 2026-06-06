@@ -14,7 +14,7 @@ for structure or relationships once a project is managed by Writing MCP.
 | Scene identity and import linkage | SQLite after import/sync | Import compatibility input and generated compatibility output |
 | Chapter placement, chapter titles, ordering, epigraph links | SQLite via explicit structure tools | Generated compatibility output and drift signal |
 | Thread beats | SQLite via `track_thread_arc` | Deprecated/import compatibility input |
-| Scene character/place evidence | SQLite via `connect_character_place_evidence` and sync indexes | Compatibility input/output; retained batch repair output |
+| Scene character/place evidence | SQLite scene relationship indexes via outcome workflows and explicit repair/import modes | Compatibility input/output; retained batch repair output |
 | Character relationship beats | SQLite via `record_character_relationship_beat` | No active sidecar authority |
 | Reference links | SQLite via `link_reference_evidence` or reference suggestion apply workflows | Generated compatibility output and legacy alias input |
 | Character/place names and profile fields | SQLite via sheet update tools | Generated compatibility output |
@@ -33,9 +33,9 @@ Use this migration posture instead:
    changes: `list_chapters`, `assign_scene_to_chapter`, `move_scene`,
    `rename_chapter`, `reorder_chapter`, and `attach_epigraph`.
 4. Use relationship outcome tools for story metadata:
-   `track_thread_arc`, `connect_character_place_evidence`,
-   `record_character_relationship_beat`, `link_reference_evidence`, and
-   `audit_relationship_metadata`.
+   `track_thread_arc`, `connect_character_place_evidence` for paired
+   sheet-backed character/place evidence, `record_character_relationship_beat`,
+   `link_reference_evidence`, and `audit_relationship_metadata`.
 5. Treat sidecar-only flags, tags, status, and associated-character notes as
    compatibility/review notes. Do not rely on them as canonical relationship
    authority unless a future release promotes the field into SQLite.
@@ -46,6 +46,8 @@ Use this migration posture instead:
 
 - Do not edit sidecar chapter, order, thread, character/place relationship, or
   reference-link fields as the normal way to change a managed project.
+- Do not send scene `characters` or `places` through `update_scene_metadata`;
+  that tool is for non-relationship editorial metadata.
 - Do not treat generated sidecars, structure exports, review bundles, or project
   backups as competing sources of truth.
 - Do not use Scrivener import conventions as daily mutation rules after the

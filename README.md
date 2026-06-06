@@ -30,7 +30,7 @@ Instead of feeding an entire manuscript to an AI and hoping it fits in the conte
 - **Core platform complete:** Metadata-first analysis, SQLite-canonical structural and relationship metadata, compatibility sidecar maintenance, AI-assisted prose editing with confirmation + git history, review bundles, and Scrivener Direct extraction are all implemented.
 - **Recently completed:** Database Backup and Recovery added project backup export, freshness diagnostics, advisory operation history, automatic backup refresh after sanctioned project-scoped canonical mutations, dry-run restore planning, transactional restore application, and backup/restore operations guidance.
 - **Previous milestone:** Docker, CI, and Deployment Workflow made Docker a supported way to build, run, smoke-test, and deploy Writing MCP.
-- **Active development:** Architecture Alignment Follow-up M5, documenting sidecar compatibility, migration, and deprecation expectations.
+- **Active development:** Relationship Metadata Boundary M3, aligning workflow and generated documentation around SQLite-canonical relationship authority.
 - **Deferred backlog:** OpenClaw integration, client-agnostic setup, divisions, and embeddings search.
 - **Ideas and open questions:** tracked separately so future exploration does not distort the active roadmap.
 
@@ -153,7 +153,7 @@ Outcome: subplot structure stays visible and auditable, which reduces dropped th
 Goal: keep indexes accurate without manually re-tagging everything.
 
 1. After rewriting scenes, call `enrich_scene` to re-derive lightweight metadata from current prose.
-2. Use `update_scene_metadata` for intentional editorial fields (for example, beat, POV, status, and tags); use `list_chapters` plus `assign_scene_to_chapter` or `move_scene` for chapter placement and ordering. Numeric chapter filters are compatibility aliases for read scopes, not mutation targets.
+2. Use `update_scene_metadata` for intentional editorial fields (for example, beat, POV, status, and tags). It rejects scene `characters` and `places`; use `connect_character_place_evidence` when a scene proves paired sheet-backed character/place evidence, and keep one-sided scene links for a deliberately named relationship workflow. Use `audit_relationship_metadata` for retained sidecar/frontmatter relationship fields. Use `list_chapters` plus `assign_scene_to_chapter` or `move_scene` for chapter placement and ordering.
 3. Use `search_metadata` and `find_scenes` to verify scenes are discoverable under the expected filters.
 
 Outcome: your AI assistant can reliably find the right scenes without drifting from the manuscript.
@@ -179,7 +179,7 @@ Goal: rebuild scene-to-character links in a controlled way after imported prose 
 4. Re-run `enrich_scene_characters_batch` with `dry_run=false` once the preview looks correct.
 5. If you want a destructive overwrite instead of additive merge behavior, use `replace_mode=replace` with `confirm_replace=true` deliberately.
 
-Outcome: character-link maintenance becomes a preview-first batch operation instead of a one-off regex script or manual sidecar cleanup.
+Outcome: character-link maintenance becomes a preview-first relationship repair operation instead of a one-off regex script or manual sidecar cleanup.
 
 ### 6) Post-upgrade recovery after legacy migration warnings
 

@@ -390,6 +390,11 @@ describe("describe_workflows tool", () => {
     assert.ok(tools.includes("suggest_scene_references"));
     assert.equal(tools.includes("upsert_thread_link"), false);
     assert.equal(tools.includes("upsert_reference_link"), false);
+    const characterPlaceStep = workflow.steps.find(step => step.tool === "connect_character_place_evidence");
+    assert.match(characterPlaceStep.note, /paired sheet-backed character\/place evidence/);
+    assert.match(characterPlaceStep.note, /Independent character-only or place-only scene links remain valid/);
+    const auditStep = workflow.steps.find(step => step.tool === "audit_relationship_metadata");
+    assert.match(auditStep.note, /compatibility drift/);
     const evidenceStep = workflow.steps.find(step => step.tool === "link_reference_evidence");
     assert.match(evidenceStep.note, /SQLite commits first/);
     assert.match(evidenceStep.note, /generated transparency/);
@@ -411,8 +416,11 @@ describe("describe_workflows tool", () => {
     assert.ok(tools.includes("track_thread_arc"));
     assert.ok(tools.includes("connect_character_place_evidence"));
     assert.ok(tools.includes("link_reference_evidence"));
+    const auditStep = workflow.steps.find(step => step.tool === "audit_relationship_metadata");
+    assert.match(auditStep.note, /not generic metadata writes/);
     const relationshipStep = workflow.steps.find(step => step.tool === "connect_character_place_evidence");
     assert.match(relationshipStep.note, /instead of editing sidecar/);
+    assert.match(relationshipStep.note, /update_scene_metadata/);
   });
 
   test("backup recovery workflow apply guidance includes reviewed checksum", async () => {

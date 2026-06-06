@@ -262,8 +262,12 @@ Use this rule of thumb:
 - Daily structure changes use tools such as `assign_scene_to_chapter`,
   `move_scene`, `rename_chapter`, `reorder_chapter`, and `attach_epigraph`.
 - Daily relationship changes use tools such as `track_thread_arc`,
-  `connect_character_place_evidence`, `record_character_relationship_beat`,
-  and `link_reference_evidence`.
+  `connect_character_place_evidence` when a scene proves paired
+  sheet-backed character/place evidence, `record_character_relationship_beat`,
+  and `link_reference_evidence`. Independent character-only and place-only
+  scene links remain valid model states; use `audit_relationship_metadata`
+  before repair work when retained sidecar/frontmatter relationship fields may
+  be stale.
 - Sidecar-only flags, status, tags, and place associated-character notes are
   compatibility/review metadata unless a future release promotes or removes
   them.
@@ -299,6 +303,10 @@ Prose starts here...
 ```
 
 Alternatively, metadata can live in a sidecar file named `<scene-file>.meta.yaml` alongside the prose file. In managed projects, treat that file as compatibility input/output rather than the preferred daily mutation surface for structure or relationships.
+
+The example `characters` and `places` fields are setup/import compatibility
+input. After the project is managed, do not change scene relationship authority
+by editing those fields or by sending them to `update_scene_metadata`.
 
 ### Project structure
 
