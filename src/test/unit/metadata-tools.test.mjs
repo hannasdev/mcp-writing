@@ -879,6 +879,61 @@ describe("metadata relationship outcome tools", () => {
     }
   });
 
+  test("connect_scene_character_evidence rolls back FTS refresh when reinsert fails", async () => {
+    const db = openDb(":memory:");
+    try {
+      seedProject(db, "test-novel");
+      seedCharacter(db, { characterId: "char-mira", projectId: "test-novel", name: "Mira" });
+      const scenePath = path.join(SEED_TMP_DIR, `test-novel-sc-fts-rollback-${++seedCounter}.md`);
+      fs.writeFileSync(scenePath, "---\nscene_id: sc-fts-rollback\ntitle:\n  nested: invalid\n---\nScene prose.", "utf8");
+      db.prepare(`
+        INSERT INTO scenes (
+          scene_id, project_id, title, file_path, prose_checksum, metadata_stale, updated_at
+        ) VALUES (?, ?, ?, ?, ?, 0, ?)
+      `).run("sc-fts-rollback", "test-novel", "Existing Rollback Title", scenePath, "deadbeef", new Date().toISOString());
+      db.prepare(`
+        INSERT INTO scenes_fts (scene_id, project_id, logline, title, keywords)
+        VALUES (?, ?, ?, ?, ?)
+      `).run(
+        "sc-fts-rollback",
+        "test-novel",
+        "rollback logline token",
+        "rollback title token",
+        "rollback legacy keyword"
+      );
+
+      const tools = makeToolHarness(db);
+      const parsed = await tools.call("connect_scene_character_evidence", {
+        project_id: "test-novel",
+        scene_id: "sc-fts-rollback",
+        character_id: "char-mira",
+      });
+
+      assert.equal(parsed.ok, true);
+      assert.equal(parsed.compatibility_output.refreshed, false);
+      assert.equal(parsed.compatibility_output.diagnostics[0].severity, "warning");
+      assert.equal(
+        db.prepare(`SELECT COUNT(*) AS count FROM scene_characters WHERE scene_id = ? AND project_id = ? AND character_id = ?`)
+          .get("sc-fts-rollback", "test-novel", "char-mira").count,
+        1
+      );
+      assert.equal(
+        db.prepare(`SELECT COUNT(*) AS count FROM scenes_fts WHERE scenes_fts MATCH ?`).get('"rollback logline token"').count,
+        1
+      );
+      assert.equal(
+        db.prepare(`SELECT COUNT(*) AS count FROM scenes_fts WHERE scenes_fts MATCH ?`).get('"rollback title token"').count,
+        1
+      );
+      assert.equal(
+        db.prepare(`SELECT COUNT(*) AS count FROM scenes_fts WHERE scenes_fts MATCH ?`).get('"rollback legacy keyword"').count,
+        1
+      );
+    } finally {
+      db.close();
+    }
+  });
+
   test("connect_scene_place_evidence adds only a place link and preserves existing character links", async () => {
     const db = openDb(":memory:");
     try {

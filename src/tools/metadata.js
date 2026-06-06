@@ -536,17 +536,29 @@ function restoreSceneRelationshipSearchKeywords(db, { sceneId, projectId, meta, 
     FROM scenes_fts
     WHERE scene_id = ? AND project_id = ?
   `).get(sceneId, projectId);
-  db.prepare(`DELETE FROM scenes_fts WHERE scene_id = ? AND project_id = ?`).run(sceneId, projectId);
-  db.prepare(`
-    INSERT INTO scenes_fts (scene_id, project_id, logline, title, keywords)
-    VALUES (?, ?, ?, ?, ?)
-  `).run(
-    sceneId,
-    projectId,
-    meta.logline ?? meta.synopsis ?? existingFts?.logline ?? "",
-    meta.title ?? existingFts?.title ?? "",
-    buildSceneMetadataSearchKeywords(meta, snapshot),
-  );
+  try {
+    db.exec("SAVEPOINT scene_relationship_fts_refresh");
+    db.prepare(`DELETE FROM scenes_fts WHERE scene_id = ? AND project_id = ?`).run(sceneId, projectId);
+    db.prepare(`
+      INSERT INTO scenes_fts (scene_id, project_id, logline, title, keywords)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(
+      sceneId,
+      projectId,
+      meta.logline ?? meta.synopsis ?? existingFts?.logline ?? "",
+      meta.title ?? existingFts?.title ?? "",
+      buildSceneMetadataSearchKeywords(meta, snapshot),
+    );
+    db.exec("RELEASE scene_relationship_fts_refresh");
+  } catch (err) {
+    try {
+      db.exec("ROLLBACK TO scene_relationship_fts_refresh");
+      db.exec("RELEASE scene_relationship_fts_refresh");
+    } catch (rollbackErr) {
+      void rollbackErr;
+    }
+    throw err;
+  }
 }
 
 function writeSceneRelationshipCompatibilityOutput({ db, sceneId, projectId, scenePath, syncDir, snapshot }) {
