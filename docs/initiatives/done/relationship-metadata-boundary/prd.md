@@ -1,6 +1,8 @@
 # PRD: Relationship Metadata Boundary
 
-**Status:** Active — M4 selected
+**Status:** Done
+
+Completed: 2026-06-06.
 
 Created: 2026-05-28.
 Activated: 2026-05-29.

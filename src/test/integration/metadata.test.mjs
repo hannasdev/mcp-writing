@@ -299,6 +299,191 @@ describe("one-sided scene evidence tools", () => {
   });
 });
 
+describe("relationship metadata boundary M5 regression", () => {
+  test("paired, one-sided, blocked metadata, legacy sync, reads, bundles, and backups stay aligned", async () => {
+    const sceneDir = path.join(writeSyncDir, "projects", "test-novel", "scenes");
+    fs.mkdirSync(sceneDir, { recursive: true });
+    const scenes = {
+      paired: {
+        id: "sc-m5-relationship-paired",
+        title: "M5 Relationship Paired",
+        prose: "Elena returns to the harbor district with paired relationship evidence.",
+      },
+      characterOnly: {
+        id: "sc-m5-relationship-character-only",
+        title: "M5 Relationship Character Only",
+        prose: "Elena appears in a private beat with no place relationship evidence.",
+      },
+      placeOnly: {
+        id: "sc-m5-relationship-place-only",
+        title: "M5 Relationship Place Only",
+        prose: "The harbor district matters here with no character relationship evidence.",
+      },
+      legacy: {
+        id: "sc-m5-relationship-legacy",
+        title: "M5 Relationship Legacy",
+        prose: "Legacy sidecar compatibility still names Marcus and the harbor district.",
+      },
+    };
+
+    for (const [index, scene] of Object.values(scenes).entries()) {
+      const relationshipFields = scene.id === scenes.legacy.id
+        ? "characters:\n  - marcus\nplaces:\n  - harbor-district\n"
+        : "";
+      fs.writeFileSync(
+        path.join(sceneDir, `${scene.id}.md`),
+        `---\nscene_id: ${scene.id}\ntitle: ${scene.title}\ntimeline_position: ${90 + index}\n${relationshipFields}---\n${scene.prose}`,
+        "utf8"
+      );
+    }
+
+    await callWriteTool("sync");
+
+    const pairedText = await callWriteTool("connect_character_place_evidence", {
+      project_id: "test-novel",
+      scene_id: scenes.paired.id,
+      character_id: "elena",
+      place_id: "harbor-district",
+      note: "M5 paired regression evidence.",
+    });
+    const pairedParsed = JSON.parse(pairedText);
+    assert.equal(pairedParsed.ok, true, pairedText);
+    assert.deepEqual(pairedParsed.mutation_order, [
+      "validated_request",
+      "sqlite_commit",
+      "project_backup_refresh",
+      "compatibility_output_refresh",
+    ]);
+    assert.equal(pairedParsed.operation_history.appended, true);
+    assert.equal(pairedParsed.backup_refresh.ok, true);
+    assert.deepEqual(pairedParsed.backup_warnings, []);
+    assert.equal(pairedParsed.compatibility_output.mutation_surface, false);
+
+    const characterText = await callWriteTool("connect_scene_character_evidence", {
+      project_id: "test-novel",
+      scene_id: scenes.characterOnly.id,
+      character_id: "elena",
+      note: "M5 character-only regression evidence.",
+    });
+    const characterParsed = JSON.parse(characterText);
+    assert.equal(characterParsed.ok, true, characterText);
+    assert.deepEqual(characterParsed.scene_relationships, {
+      characters: ["elena"],
+      places: [],
+    });
+    assert.equal(characterParsed.operation_history.appended, true);
+    assert.equal(characterParsed.backup_refresh.ok, true);
+    assert.deepEqual(characterParsed.backup_warnings, []);
+
+    const placeText = await callWriteTool("connect_scene_place_evidence", {
+      project_id: "test-novel",
+      scene_id: scenes.placeOnly.id,
+      place_id: "harbor-district",
+      note: "M5 place-only regression evidence.",
+    });
+    const placeParsed = JSON.parse(placeText);
+    assert.equal(placeParsed.ok, true, placeText);
+    assert.deepEqual(placeParsed.scene_relationships, {
+      characters: [],
+      places: ["harbor-district"],
+    });
+    assert.equal(placeParsed.operation_history.appended, true);
+    assert.equal(placeParsed.backup_refresh.ok, true);
+    assert.deepEqual(placeParsed.backup_warnings, []);
+
+    const characterSidecarPath = path.join(sceneDir, `${scenes.characterOnly.id}.meta.yaml`);
+    const characterSidecarBefore = fs.readFileSync(characterSidecarPath, "utf8");
+    const blockedText = await callWriteTool("update_scene_metadata", {
+      project_id: "test-novel",
+      scene_id: scenes.characterOnly.id,
+      fields: {
+        characters: ["marcus"],
+        places: ["harbor-district"],
+      },
+    });
+    const blockedParsed = JSON.parse(blockedText);
+    assert.equal(blockedParsed.ok, false, blockedText);
+    assert.equal(blockedParsed.error.code, "VALIDATION_ERROR");
+    assert.deepEqual(blockedParsed.error.details.blocked_fields, ["characters", "places"]);
+    assert.equal(fs.readFileSync(characterSidecarPath, "utf8"), characterSidecarBefore);
+
+    const backupDiagnosticText = await callWriteTool("diagnose_project_backups", {
+      project_id: "test-novel",
+    });
+    const backupDiagnosticParsed = JSON.parse(backupDiagnosticText);
+    assert.equal(backupDiagnosticParsed.ok, true, backupDiagnosticText);
+    assert.equal(backupDiagnosticParsed.trust.status, "current");
+
+    await callWriteTool("sync");
+
+    const elenaArcText = await callWriteTool("get_arc", {
+      project_id: "test-novel",
+      character_id: "elena",
+      page_size: 200,
+    });
+    const elenaArc = JSON.parse(elenaArcText);
+    assert.ok(elenaArc.results.some((row) => row.scene_id === scenes.paired.id));
+    assert.ok(elenaArc.results.some((row) => row.scene_id === scenes.characterOnly.id));
+
+    const marcusArcText = await callWriteTool("get_arc", {
+      project_id: "test-novel",
+      character_id: "marcus",
+      page_size: 200,
+    });
+    const marcusArc = JSON.parse(marcusArcText);
+    assert.ok(marcusArc.results.some((row) => row.scene_id === scenes.legacy.id));
+    assert.equal(marcusArc.results.some((row) => row.scene_id === scenes.characterOnly.id), false);
+
+    const elenaScenesText = await callWriteTool("find_scenes", {
+      project_id: "test-novel",
+      character: "elena",
+      page_size: 200,
+    });
+    const elenaScenes = JSON.parse(elenaScenesText);
+    assert.ok(elenaScenes.results.some((row) => row.scene_id === scenes.paired.id));
+    assert.ok(elenaScenes.results.some((row) => row.scene_id === scenes.characterOnly.id));
+
+    const harborSearchText = await callWriteTool("search_metadata", {
+      query: '"harbor-district"',
+      page_size: 200,
+    });
+    const harborSearch = JSON.parse(harborSearchText);
+    assert.ok(harborSearch.results.some((row) => row.scene_id === scenes.paired.id));
+    assert.ok(harborSearch.results.some((row) => row.scene_id === scenes.placeOnly.id));
+    assert.ok(harborSearch.results.some((row) => row.scene_id === scenes.legacy.id));
+
+    const proseText = await callWriteTool("get_scene_prose", {
+      project_id: "test-novel",
+      scene_id: scenes.placeOnly.id,
+    });
+    assert.ok(proseText.includes(scenes.placeOnly.prose), `Expected place-only prose, got: ${proseText.slice(0, 300)}`);
+
+    const bundleText = await callWriteTool("preview_review_bundle", {
+      project_id: "test-novel",
+      profile: "outline_discussion",
+      scene_ids: [scenes.paired.id, scenes.characterOnly.id],
+    });
+    const bundleParsed = JSON.parse(bundleText);
+    assert.equal(bundleParsed.ok, true, bundleText);
+    assert.deepEqual(
+      bundleParsed.ordering.map((row) => row.scene_id).sort(),
+      [scenes.characterOnly.id, scenes.paired.id].sort()
+    );
+
+    const operationsPath = path.join(writeSyncDir, "project-backups", "test-novel", "operations.jsonl");
+    const operationRecords = fs.readFileSync(operationsPath, "utf8").trimEnd().split("\n").map((line) => JSON.parse(line));
+    const recentRelationshipOperations = operationRecords.slice(-3).map((record) => ({
+      operation: record.operation,
+      scenes: record.affected.scenes,
+    }));
+    assert.deepEqual(recentRelationshipOperations, [
+      { operation: "connect_character_place_evidence", scenes: [scenes.paired.id] },
+      { operation: "connect_scene_character_evidence", scenes: [scenes.characterOnly.id] },
+      { operation: "connect_scene_place_evidence", scenes: [scenes.placeOnly.id] },
+    ]);
+  });
+});
+
 describe("assign_scene_to_chapter tool", () => {
   test("assigns an unchaptered scene and reflects it in chapter-aware reads", async () => {
     const sceneDir = path.join(writeSyncDir, "projects", "test-novel", "scenes");

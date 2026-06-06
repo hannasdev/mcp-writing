@@ -1,9 +1,12 @@
 # Relationship Metadata Boundary — Milestones
 
-**Status:** Active — M4 selected
+**Status:** Done
 
 Use [prd.md](prd.md) for product framing and this document for sequencing,
 review gates, and implementation readiness.
+M0–M5 are accepted.
+
+Current focus: None — initiative closed.
 
 ## Objective
 
@@ -212,7 +215,7 @@ Out of scope:
 
 ## M4 — Independent Scene Evidence Workflows
 
-Status: Selected for implementation.
+Status: Implemented on main by PR #233.
 
 Goal: add explicit SQLite-first workflows for valid scene-character and
 scene-place links that are not paired character/place evidence.
@@ -270,6 +273,8 @@ Out of scope:
   notes.
 
 ## M5 — End-To-End Regression And Release Readiness
+
+Status: Accepted.
 
 Goal: prove the boundary holds across common writing workflows before PR
 completion.

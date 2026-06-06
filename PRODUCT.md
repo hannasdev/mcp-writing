@@ -9,12 +9,13 @@ It supports metadata-first reasoning, explicit prose editing workflows, and revi
 
 ## Product Status
 
-Active initiative: [Relationship Metadata Boundary](docs/initiatives/active/relationship-metadata-boundary/prd.md).
+Active initiative: None currently selected.
 
-Current focus: Relationship Metadata Boundary M4 adds independent scene-character and scene-place evidence workflows.
+Current focus: Consolidation after Relationship Metadata Boundary completion.
 
-Most recent completed initiative: [Architecture Alignment Follow-up](docs/initiatives/done/architecture-alignment-follow-up/prd.md).
+Most recent completed initiative: [Relationship Metadata Boundary](docs/initiatives/done/relationship-metadata-boundary/prd.md).
 
+Relationship Metadata Boundary closed the sidecar-first scene relationship mutation path, preserved legacy sidecar/frontmatter compatibility, added paired and one-sided SQLite-first evidence workflows, and proved end-to-end regression coverage for relationship mutation, search/read consumers, sync compatibility, and backup freshness.
 Architecture Alignment Follow-up completed the managed sync preservation, sidecar write-boundary, outcome-oriented relationship workflow, and sidecar compatibility documentation slices that closed the known target-architecture follow-up gaps.
 Database Backup and Recovery added deterministic project backup bundles, trust/freshness diagnostics, advisory operation history, automatic backup refresh after sanctioned canonical mutations, dry-run restore planning, transactional restore application, and operational backup/restore documentation.
 Docker, CI, and Deployment Workflow made Docker a supported way to build, run, smoke-test, and deploy Writing MCP, with a documented container contract, Compose workflow, CI smoke coverage, and deployment-readiness guidance.
@@ -51,7 +52,7 @@ For structural manuscript state, use [Managed Structure Contract](docs/foundatio
 
 - [Features](FEATURES.md) — shipped product capabilities and links to completed initiative docs
 - [Backlog](BACKLOG.md) — deferred product work that is not currently active
-- [Relationship Metadata Boundary](docs/initiatives/active/relationship-metadata-boundary/prd.md) — active initiative for closing the remaining sidecar-first scene character/place relationship mutation path
+- [Relationship Metadata Boundary](docs/initiatives/done/relationship-metadata-boundary/prd.md) — completed initiative closing the remaining sidecar-first scene character/place relationship mutation path
 - [Architecture Alignment Follow-up](docs/initiatives/done/architecture-alignment-follow-up/prd.md) — completed initiative documenting sidecar compatibility, migration, deprecation expectations, and relationship workflow alignment
 - [Database Backup and Recovery](docs/initiatives/done/database-backup-recovery/prd.md) — completed initiative for Git-reviewable recovery artifacts and explicit restore workflows for SQLite-canonical state
 - [Conceptual Target Architecture](docs/foundations/target-architecture.md) — idealized architectural model for evaluating future structure, tooling, and workflow decisions

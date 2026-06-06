@@ -1,6 +1,6 @@
 # Relationship Metadata Boundary — Architecture Notes
 
-**Status:** Active — M4 selected
+**Status:** Done
 
 ## Context
 
