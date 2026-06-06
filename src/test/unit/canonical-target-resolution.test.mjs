@@ -205,6 +205,43 @@ describe("canonical target resolution", () => {
     }
   });
 
+  test("rejects empty and whitespace-only targets before display-field matching", () => {
+    const db = openDb(":memory:");
+    try {
+      seedProject(db, "test-novel");
+      seedScene(db, { projectId: "test-novel", sceneId: "sc-empty-title", title: null });
+      seedCharacter(db, { characterId: "char-empty-name", projectId: "test-novel", name: "" });
+      seedPlace(db, { placeId: "place-empty-name", projectId: "test-novel", name: "" });
+
+      const sceneResult = resolveSceneTarget(db, {
+        projectId: "test-novel",
+        input: "   ",
+      });
+      const characterResult = resolveCharacterTargetForProject(db, {
+        projectId: "test-novel",
+        input: "\t",
+      });
+      const placeResult = resolvePlaceTargetForProject(db, {
+        projectId: "test-novel",
+        input: "",
+      });
+
+      for (const [kind, result] of [
+        ["scene", sceneResult],
+        ["character", characterResult],
+        ["place", placeResult],
+      ]) {
+        assert.equal(result.ok, false);
+        assert.equal(result.error.code, "NOT_FOUND");
+        assert.equal(result.error.details.lookup_kind, kind);
+        assert.deepEqual(result.error.details.candidate_matches, []);
+        assert.match(result.error.details.next_step, kind === "scene" ? /find_scenes/ : kind === "character" ? /list_characters/ : /list_places/);
+      }
+    } finally {
+      db.close();
+    }
+  });
+
   test("resolves relationship-scoped characters by project, universe, and global records only", () => {
     const db = openDb(":memory:");
     try {

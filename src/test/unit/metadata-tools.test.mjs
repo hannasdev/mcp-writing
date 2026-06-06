@@ -1030,46 +1030,241 @@ describe("metadata relationship outcome tools", () => {
     }
   });
 
-  test("one-sided scene evidence workflows reject freeform names that are not sheet-backed IDs", async () => {
+  test("relationship evidence workflows resolve unambiguous human-shaped inputs to canonical IDs", async () => {
     const db = openDb(":memory:");
     try {
       seedProject(db, "test-novel");
-      seedScene(db, { sceneId: "sc-freeform-rejected", projectId: "test-novel" });
+      seedCharacter(db, { characterId: "char-mira", projectId: "test-novel", name: "Mira Nystrom" });
+      seedPlace(db, { placeId: "place-harbor", projectId: "test-novel", name: "Harbor District" });
+      const scenePath = seedProjectSceneFile(db, {
+        sceneId: "sc-human-shaped",
+        projectId: "test-novel",
+        metadata: {
+          characters: ["stale-sidecar-character"],
+          places: ["stale-sidecar-place"],
+        },
+      });
+      db.prepare(`UPDATE scenes SET title = ? WHERE scene_id = ? AND project_id = ?`)
+        .run("Harbor Argument", "sc-human-shaped", "test-novel");
 
       const tools = makeToolHarness(db);
-      const characterResult = await tools.call("connect_scene_character_evidence", {
+      const pairedResult = await tools.call("connect_character_place_evidence", {
         project_id: "test-novel",
-        scene_id: "sc-freeform-rejected",
-        character_id: "Mira Nystrom",
-      });
-      const placeResult = await tools.call("connect_scene_place_evidence", {
-        project_id: "test-novel",
-        scene_id: "sc-freeform-rejected",
-        place_id: "The old harbor",
+        scene_id: "harbor argument",
+        character_id: "mira nystrom",
+        place_id: "HARBOR DISTRICT",
+        note: "Human-shaped paired evidence.",
       });
 
-      assert.equal(characterResult.ok, false);
-      assert.equal(characterResult.error.code, "NOT_FOUND");
-      assert.equal(characterResult.error.details.lookup_kind, "character");
-      assert.equal(characterResult.error.details.input, "Mira Nystrom");
-      assert.equal(characterResult.error.details.project_id, "test-novel");
-      assert.equal(characterResult.error.details.scene_id, "sc-freeform-rejected");
-      assert.match(characterResult.error.details.next_step, /list_characters/);
-      assert.equal(placeResult.ok, false);
-      assert.equal(placeResult.error.code, "NOT_FOUND");
-      assert.equal(placeResult.error.details.lookup_kind, "place");
-      assert.equal(placeResult.error.details.input, "The old harbor");
-      assert.equal(placeResult.error.details.project_id, "test-novel");
-      assert.equal(placeResult.error.details.scene_id, "sc-freeform-rejected");
-      assert.match(placeResult.error.details.next_step, /list_places/);
+      assert.equal(pairedResult.ok, true);
+      assert.equal(pairedResult.scene_id, "sc-human-shaped");
+      assert.equal(pairedResult.character_id, "char-mira");
+      assert.equal(pairedResult.place_id, "place-harbor");
+      assert.deepEqual(pairedResult.resolved_from, {
+        scene_id: {
+          input: "harbor argument",
+          matched_field: "title",
+          match_type: "case_insensitive_title",
+          id: "sc-human-shaped",
+        },
+        character_id: {
+          input: "mira nystrom",
+          matched_field: "name",
+          match_type: "case_insensitive_name",
+          id: "char-mira",
+        },
+        place_id: {
+          input: "HARBOR DISTRICT",
+          matched_field: "name",
+          match_type: "case_insensitive_name",
+          id: "place-harbor",
+        },
+      });
+      assert.equal(pairedResult.operation_history.appended, true);
+      assert.equal(pairedResult.backup_refresh.ok, true);
       assert.equal(
-        db.prepare(`SELECT COUNT(*) AS count FROM scene_characters WHERE scene_id = ? AND project_id = ?`).get("sc-freeform-rejected", "test-novel").count,
+        db.prepare(`
+          SELECT COUNT(*) AS count
+          FROM scene_characters
+          WHERE scene_id = ? AND project_id = ? AND character_id = ?
+        `).get("sc-human-shaped", "test-novel", "char-mira").count,
+        1
+      );
+      assert.equal(
+        db.prepare(`
+          SELECT COUNT(*) AS count
+          FROM scene_places
+          WHERE scene_id = ? AND project_id = ? AND place_id = ?
+        `).get("sc-human-shaped", "test-novel", "place-harbor").count,
+        1
+      );
+
+      const sidecar = yaml.load(fs.readFileSync(scenePath.replace(/\.md$/, ".meta.yaml"), "utf8"));
+      assert.deepEqual(sidecar.characters, ["char-mira"]);
+      assert.deepEqual(sidecar.places, ["place-harbor"]);
+    } finally {
+      db.close();
+    }
+  });
+
+  test("relationship evidence workflows reject ambiguous names without side effects", async () => {
+    const db = openDb(":memory:");
+    try {
+      const projectId = "negative-ambiguous";
+      seedProject(db, projectId, { universeId: "shared-universe" });
+      seedCharacter(db, { characterId: "char-project-mira", projectId, name: "Mira" });
+      seedCharacter(db, { characterId: "char-shared-mira", projectId: null, universeId: "shared-universe", name: "mira" });
+      seedPlace(db, { placeId: "place-harbor", projectId, name: "Harbor District" });
+      const scenePath = seedProjectSceneFile(db, {
+        sceneId: "sc-ambiguous-rejected",
+        projectId,
+      });
+      const sidecarPath = scenePath.replace(/\.md$/, ".meta.yaml");
+      const sceneBefore = fs.readFileSync(scenePath, "utf8");
+
+      const tools = makeToolHarness(db);
+      const result = await tools.call("connect_character_place_evidence", {
+        project_id: projectId,
+        scene_id: "sc-ambiguous-rejected",
+        character_id: "Mira",
+        place_id: "place-harbor",
+      });
+
+      assert.equal(result.ok, false);
+      assert.equal(result.error.code, "AMBIGUOUS_TARGET");
+      assert.equal(result.error.details.lookup_kind, "character");
+      assert.equal(result.error.details.input, "Mira");
+      assert.equal(result.error.details.scene_id, "sc-ambiguous-rejected");
+      assert.deepEqual(
+        result.error.details.candidate_matches.map(candidate => candidate.id),
+        ["char-project-mira", "char-shared-mira"]
+      );
+      assert.equal(result.operation_history, undefined);
+      assert.equal(result.backup_refresh, undefined);
+      assert.equal(
+        db.prepare(`SELECT COUNT(*) AS count FROM scene_characters WHERE scene_id = ? AND project_id = ?`).get("sc-ambiguous-rejected", projectId).count,
         0
       );
       assert.equal(
-        db.prepare(`SELECT COUNT(*) AS count FROM scene_places WHERE scene_id = ? AND project_id = ?`).get("sc-freeform-rejected", "test-novel").count,
+        db.prepare(`SELECT COUNT(*) AS count FROM scene_places WHERE scene_id = ? AND project_id = ?`).get("sc-ambiguous-rejected", projectId).count,
         0
       );
+      assert.equal(fs.readFileSync(scenePath, "utf8"), sceneBefore);
+      assert.equal(fs.existsSync(sidecarPath), false);
+      assert.equal(fs.existsSync(path.join(SEED_TMP_DIR, "project-backups", projectId)), false);
+    } finally {
+      db.close();
+    }
+  });
+
+  test("relationship evidence workflows return suggestions without mutating state", async () => {
+    const db = openDb(":memory:");
+    try {
+      const projectId = "negative-suggestion";
+      seedProject(db, projectId);
+      seedPlace(db, { placeId: "place-harbor-district", projectId, name: "Harbor District" });
+      const scenePath = seedProjectSceneFile(db, {
+        sceneId: "sc-suggestion-rejected",
+        projectId,
+      });
+      const sidecarPath = scenePath.replace(/\.md$/, ".meta.yaml");
+      const sceneBefore = fs.readFileSync(scenePath, "utf8");
+
+      const tools = makeToolHarness(db);
+      const result = await tools.call("connect_scene_place_evidence", {
+        project_id: projectId,
+        scene_id: "sc-suggestion-rejected",
+        place_id: "Harbor",
+      });
+
+      assert.equal(result.ok, false);
+      assert.equal(result.error.code, "NOT_FOUND");
+      assert.equal(result.error.details.lookup_kind, "place");
+      assert.equal(result.error.details.input, "Harbor");
+      assert.equal(result.error.details.scene_id, "sc-suggestion-rejected");
+      assert.deepEqual(
+        result.error.details.candidate_matches.map(candidate => ({
+          id: candidate.id,
+          matched_field: candidate.matched_field,
+          match_type: candidate.match_type,
+        })),
+        [{
+          id: "place-harbor-district",
+          matched_field: "place_id",
+          match_type: "near_match_suggestion",
+        }]
+      );
+      assert.equal(result.operation_history, undefined);
+      assert.equal(result.backup_refresh, undefined);
+      assert.equal(
+        db.prepare(`SELECT COUNT(*) AS count FROM scene_places WHERE scene_id = ? AND project_id = ?`).get("sc-suggestion-rejected", projectId).count,
+        0
+      );
+      assert.equal(fs.readFileSync(scenePath, "utf8"), sceneBefore);
+      assert.equal(fs.existsSync(sidecarPath), false);
+      assert.equal(fs.existsSync(path.join(SEED_TMP_DIR, "project-backups", projectId)), false);
+    } finally {
+      db.close();
+    }
+  });
+
+  test("relationship evidence workflows reject whitespace-only targets without side effects", async () => {
+    const db = openDb(":memory:");
+    try {
+      const projectId = "negative-whitespace";
+      seedProject(db, projectId);
+      seedCharacter(db, { characterId: "char-empty-name", projectId, name: "" });
+      seedPlace(db, { placeId: "place-empty-name", projectId, name: "" });
+      const scenePath = seedProjectSceneFile(db, {
+        sceneId: "sc-empty-title",
+        projectId,
+      });
+      db.prepare(`UPDATE scenes SET title = ? WHERE scene_id = ? AND project_id = ?`)
+        .run(null, "sc-empty-title", projectId);
+      const sidecarPath = scenePath.replace(/\.md$/, ".meta.yaml");
+      const sceneBefore = fs.readFileSync(scenePath, "utf8");
+
+      const tools = makeToolHarness(db);
+      const sceneResult = await tools.call("connect_character_place_evidence", {
+        project_id: projectId,
+        scene_id: "   ",
+        character_id: "char-empty-name",
+        place_id: "place-empty-name",
+      });
+      const characterResult = await tools.call("connect_scene_character_evidence", {
+        project_id: projectId,
+        scene_id: "sc-empty-title",
+        character_id: "\t",
+      });
+      const placeResult = await tools.call("connect_scene_place_evidence", {
+        project_id: projectId,
+        scene_id: "sc-empty-title",
+        place_id: " \n ",
+      });
+
+      for (const [kind, result] of [
+        ["scene", sceneResult],
+        ["character", characterResult],
+        ["place", placeResult],
+      ]) {
+        assert.equal(result.ok, false);
+        assert.equal(result.error.code, "NOT_FOUND");
+        assert.equal(result.error.details.lookup_kind, kind);
+        assert.deepEqual(result.error.details.candidate_matches, []);
+        assert.equal(result.operation_history, undefined);
+        assert.equal(result.backup_refresh, undefined);
+      }
+      assert.equal(
+        db.prepare(`SELECT COUNT(*) AS count FROM scene_characters WHERE scene_id = ? AND project_id = ?`).get("sc-empty-title", projectId).count,
+        0
+      );
+      assert.equal(
+        db.prepare(`SELECT COUNT(*) AS count FROM scene_places WHERE scene_id = ? AND project_id = ?`).get("sc-empty-title", projectId).count,
+        0
+      );
+      assert.equal(fs.readFileSync(scenePath, "utf8"), sceneBefore);
+      assert.equal(fs.existsSync(sidecarPath), false);
+      assert.equal(fs.existsSync(path.join(SEED_TMP_DIR, "project-backups", projectId)), false);
     } finally {
       db.close();
     }

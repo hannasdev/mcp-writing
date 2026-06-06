@@ -249,12 +249,28 @@ describe("one-sided scene evidence tools", () => {
 
     const characterText = await callWriteTool("connect_scene_character_evidence", {
       project_id: "test-novel",
-      scene_id: "sc-m4-character-only",
-      character_id: "elena",
+      scene_id: "m4 character only",
+      character_id: "Elena Voss",
       note: "Elena is present, but no place association is intended.",
     });
     const characterParsed = JSON.parse(characterText);
     assert.equal(characterParsed.ok, true, characterText);
+    assert.equal(characterParsed.scene_id, "sc-m4-character-only");
+    assert.equal(characterParsed.character_id, "elena");
+    assert.deepEqual(characterParsed.resolved_from, {
+      scene_id: {
+        input: "m4 character only",
+        matched_field: "title",
+        match_type: "case_insensitive_title",
+        id: "sc-m4-character-only",
+      },
+      character_id: {
+        input: "Elena Voss",
+        matched_field: "name",
+        match_type: "case_insensitive_name",
+        id: "elena",
+      },
+    });
     assert.deepEqual(characterParsed.scene_relationships, {
       characters: ["elena"],
       places: [],
@@ -264,12 +280,28 @@ describe("one-sided scene evidence tools", () => {
 
     const placeText = await callWriteTool("connect_scene_place_evidence", {
       project_id: "test-novel",
-      scene_id: "sc-m4-place-only",
-      place_id: "harbor-district",
+      scene_id: "m4 place only",
+      place_id: "The Harbor District",
       note: "The location matters without a specific character association.",
     });
     const placeParsed = JSON.parse(placeText);
     assert.equal(placeParsed.ok, true, placeText);
+    assert.equal(placeParsed.scene_id, "sc-m4-place-only");
+    assert.equal(placeParsed.place_id, "harbor-district");
+    assert.deepEqual(placeParsed.resolved_from, {
+      scene_id: {
+        input: "m4 place only",
+        matched_field: "title",
+        match_type: "case_insensitive_title",
+        id: "sc-m4-place-only",
+      },
+      place_id: {
+        input: "The Harbor District",
+        matched_field: "name",
+        match_type: "case_insensitive_name",
+        id: "harbor-district",
+      },
+    });
     assert.deepEqual(placeParsed.scene_relationships, {
       characters: [],
       places: ["harbor-district"],
@@ -314,28 +346,30 @@ describe("one-sided scene evidence tools", () => {
     const missingCharacterText = await callWriteTool("connect_character_place_evidence", {
       project_id: "test-novel",
       scene_id: "sc-001",
-      character_id: "Elena Voss",
+      character_id: "Elena Vosz",
       place_id: "harbor-district",
     });
     const missingCharacter = JSON.parse(missingCharacterText);
     assert.equal(missingCharacter.ok, false);
     assert.equal(missingCharacter.error.code, "NOT_FOUND");
     assert.equal(missingCharacter.error.details.lookup_kind, "character");
-    assert.equal(missingCharacter.error.details.input, "Elena Voss");
+    assert.equal(missingCharacter.error.details.input, "Elena Vosz");
     assert.equal(missingCharacter.error.details.scene_id, "sc-001");
+    assert.ok(missingCharacter.error.details.candidate_matches.some(candidate => candidate.id === "elena"));
     assert.match(missingCharacter.error.details.next_step, /list_characters/);
 
     const missingPlaceText = await callWriteTool("connect_scene_place_evidence", {
       project_id: "test-novel",
       scene_id: "sc-001",
-      place_id: "The Harbor District",
+      place_id: "The Harbor Distrikt",
     });
     const missingPlace = JSON.parse(missingPlaceText);
     assert.equal(missingPlace.ok, false);
     assert.equal(missingPlace.error.code, "NOT_FOUND");
     assert.equal(missingPlace.error.details.lookup_kind, "place");
-    assert.equal(missingPlace.error.details.input, "The Harbor District");
+    assert.equal(missingPlace.error.details.input, "The Harbor Distrikt");
     assert.equal(missingPlace.error.details.scene_id, "sc-001");
+    assert.ok(missingPlace.error.details.candidate_matches.some(candidate => candidate.id === "harbor-district"));
     assert.match(missingPlace.error.details.next_step, /list_places/);
   });
 });
@@ -382,13 +416,36 @@ describe("relationship metadata boundary M5 regression", () => {
 
     const pairedText = await callWriteTool("connect_character_place_evidence", {
       project_id: "test-novel",
-      scene_id: scenes.paired.id,
-      character_id: "elena",
-      place_id: "harbor-district",
+      scene_id: scenes.paired.title,
+      character_id: "ELENA VOSS",
+      place_id: "the harbor district",
       note: "M5 paired regression evidence.",
     });
     const pairedParsed = JSON.parse(pairedText);
     assert.equal(pairedParsed.ok, true, pairedText);
+    assert.equal(pairedParsed.scene_id, scenes.paired.id);
+    assert.equal(pairedParsed.character_id, "elena");
+    assert.equal(pairedParsed.place_id, "harbor-district");
+    assert.deepEqual(pairedParsed.resolved_from, {
+      scene_id: {
+        input: scenes.paired.title,
+        matched_field: "title",
+        match_type: "case_insensitive_title",
+        id: scenes.paired.id,
+      },
+      character_id: {
+        input: "ELENA VOSS",
+        matched_field: "name",
+        match_type: "case_insensitive_name",
+        id: "elena",
+      },
+      place_id: {
+        input: "the harbor district",
+        matched_field: "name",
+        match_type: "case_insensitive_name",
+        id: "harbor-district",
+      },
+    });
     assert.deepEqual(pairedParsed.mutation_order, [
       "validated_request",
       "sqlite_commit",

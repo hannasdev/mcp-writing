@@ -2,7 +2,7 @@
 
 **Status:** Active
 
-Current implementation target: M2 - Shared Canonical Target Resolver.
+Current implementation target: M3 - Forgiving Relationship Evidence Inputs.
 
 Created: 2026-06-06.
 

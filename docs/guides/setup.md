@@ -268,6 +268,9 @@ Use this rule of thumb:
   evidence, `record_character_relationship_beat`, and
   `link_reference_evidence`. Use `audit_relationship_metadata` before repair
   work when retained sidecar/frontmatter relationship fields may be stale.
+  Relationship evidence tools prefer canonical IDs but also accept
+  unambiguous scene titles, character names, place names, and case variants;
+  ambiguous or suggested-only matches fail without mutating state.
 - Sidecar-only flags, status, tags, and place associated-character notes are
   compatibility/review metadata unless a future release promotes or removes
   them.

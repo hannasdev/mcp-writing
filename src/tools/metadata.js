@@ -6,6 +6,11 @@ import { readMeta, readSourceMeta, writeMeta, indexSceneFile, isManagedStructure
 import { validateProjectId, validateUniverseId } from "../sync/importer.js";
 import { resolveValidatedChapterFilter } from "../core/chapter-resolution.js";
 import {
+  resolveCharacterTargetForProject,
+  resolvePlaceTargetForProject,
+  resolveSceneTarget,
+} from "../core/canonical-target-resolution.js";
+import {
   FILESYSTEM_ARTIFACT_CLASSES,
   assertRegularFileReadTarget,
   resolveBoundaryRootReal,
@@ -130,38 +135,26 @@ function buildRelationshipMetadataBoundaryDetails({ projectId, sceneId, blockedF
   };
 }
 
-function relationshipEvidenceNotFoundDetails({ lookupKind, input, projectId, sceneId }) {
-  const details = {
-    lookup_kind: lookupKind,
-    input,
-    project_id: projectId,
-  };
-  if (sceneId !== undefined) {
-    details.scene_id = sceneId;
-  }
-
-  if (lookupKind === "scene") {
-    return {
-      ...details,
-      next_step: "Use find_scenes with the project_id to confirm the canonical scene_id, then retry the relationship evidence tool.",
-    };
-  }
-
-  if (lookupKind === "character") {
-    return {
-      ...details,
-      next_step: "Use list_characters to find the stable character_id for this project or universe, then retry the relationship evidence tool.",
-    };
-  }
-
-  return {
-    ...details,
-    next_step: "Use list_places to find the stable place_id for this project or universe, then retry the relationship evidence tool.",
-  };
-}
-
 function alreadyLinkedRelationshipNextStep({ entityKind }) {
   return `This ${entityKind} was already linked to the scene, so no canonical relationship rows changed. Use the scene_relationships field in this response to inspect current links; call get_scene_prose with the scene_id and project_id if prose context is needed.`;
+}
+
+function mergeResolvedFrom(...resolutions) {
+  const merged = {};
+  for (const resolution of resolutions) {
+    if (resolution?.resolved_from) {
+      Object.assign(merged, resolution.resolved_from);
+    }
+  }
+  return Object.keys(merged).length > 0 ? merged : undefined;
+}
+
+function relationshipEvidenceResolutionError(errorResponse, resolution, { sceneId } = {}) {
+  const details = {
+    ...(resolution.error.details ?? {}),
+    ...(sceneId !== undefined ? { scene_id: sceneId } : {}),
+  };
+  return errorResponse(resolution.error.code, resolution.error.message, details);
 }
 
 function persistReferenceDocLink({ filePath, syncDir, targetDocId, relation }) {
@@ -459,21 +452,6 @@ function resolveCharacterForProject(db, { characterId, projectId }) {
       )
     LIMIT 1
   `).get(characterId, projectId, universeId);
-}
-
-function resolvePlaceForProject(db, { placeId, projectId }) {
-  const universeId = getProjectUniverseId(db, projectId);
-  return db.prepare(`
-    SELECT place_id, project_id, universe_id, name
-    FROM places
-    WHERE place_id = ?
-      AND (
-        project_id = ?
-        OR (universe_id IS NOT NULL AND universe_id = ?)
-        OR (project_id IS NULL AND universe_id IS NULL)
-      )
-    LIMIT 1
-  `).get(placeId, projectId, universeId);
 }
 
 function querySceneRelationshipSnapshot(db, { sceneId, projectId }) {
@@ -890,61 +868,53 @@ export function registerMetadataTools(s, {
       return errorResponse("INVALID_PROJECT_ID", projectIdCheck.reason, { project_id });
     }
 
+    const sceneResolution = resolveSceneTarget(db, {
+      projectId: project_id,
+      input: scene_id,
+      argumentName: "scene_id",
+    });
+    if (!sceneResolution.ok) {
+      return relationshipEvidenceResolutionError(errorResponse, sceneResolution);
+    }
+    const canonicalSceneId = sceneResolution.scene_id;
+
     const scene = db.prepare(`
       SELECT scene_id, project_id, file_path
       FROM scenes
       WHERE scene_id = ? AND project_id = ?
-    `).get(scene_id, project_id);
-    if (!scene) {
-      return errorResponse(
-        "NOT_FOUND",
-        `Scene '${scene_id}' not found in project '${project_id}'.`,
-        relationshipEvidenceNotFoundDetails({
-          lookupKind: "scene",
-          input: scene_id,
-          projectId: project_id,
-        })
-      );
-    }
+    `).get(canonicalSceneId, project_id);
 
-    const character = resolveCharacterForProject(db, { characterId: character_id, projectId: project_id });
-    if (!character) {
-      return errorResponse(
-        "NOT_FOUND",
-        `Character '${character_id}' is not indexed for project '${project_id}' or its universe.`,
-        relationshipEvidenceNotFoundDetails({
-          lookupKind: "character",
-          input: character_id,
-          projectId: project_id,
-          sceneId: scene_id,
-        })
-      );
+    const characterResolution = resolveCharacterTargetForProject(db, {
+      projectId: project_id,
+      input: character_id,
+      argumentName: "character_id",
+    });
+    if (!characterResolution.ok) {
+      return relationshipEvidenceResolutionError(errorResponse, characterResolution, { sceneId: canonicalSceneId });
     }
-    const place = resolvePlaceForProject(db, { placeId: place_id, projectId: project_id });
-    if (!place) {
-      return errorResponse(
-        "NOT_FOUND",
-        `Place '${place_id}' is not indexed for project '${project_id}' or its universe.`,
-        relationshipEvidenceNotFoundDetails({
-          lookupKind: "place",
-          input: place_id,
-          projectId: project_id,
-          sceneId: scene_id,
-        })
-      );
-    }
+    const canonicalCharacterId = characterResolution.character_id;
 
-    const before = querySceneRelationshipSnapshot(db, { sceneId: scene_id, projectId: project_id });
+    const placeResolution = resolvePlaceTargetForProject(db, {
+      projectId: project_id,
+      input: place_id,
+      argumentName: "place_id",
+    });
+    if (!placeResolution.ok) {
+      return relationshipEvidenceResolutionError(errorResponse, placeResolution, { sceneId: canonicalSceneId });
+    }
+    const canonicalPlaceId = placeResolution.place_id;
+
+    const before = querySceneRelationshipSnapshot(db, { sceneId: canonicalSceneId, projectId: project_id });
     try {
       db.exec("BEGIN");
       db.prepare(`
         INSERT OR IGNORE INTO scene_characters (scene_id, project_id, character_id)
         VALUES (?, ?, ?)
-      `).run(scene_id, project_id, character_id);
+      `).run(canonicalSceneId, project_id, canonicalCharacterId);
       db.prepare(`
         INSERT OR IGNORE INTO scene_places (scene_id, project_id, place_id)
         VALUES (?, ?, ?)
-      `).run(scene_id, project_id, place_id);
+      `).run(canonicalSceneId, project_id, canonicalPlaceId);
       db.exec("COMMIT");
     } catch (err) {
       try {
@@ -952,10 +922,10 @@ export function registerMetadataTools(s, {
       } catch (rollbackErr) {
         void rollbackErr;
       }
-      return errorResponse("IO_ERROR", `Failed to connect character/place evidence for scene '${scene_id}': ${err.message}`);
+      return errorResponse("IO_ERROR", `Failed to connect character/place evidence for scene '${canonicalSceneId}': ${err.message}`);
     }
 
-    const after = querySceneRelationshipSnapshot(db, { sceneId: scene_id, projectId: project_id });
+    const after = querySceneRelationshipSnapshot(db, { sceneId: canonicalSceneId, projectId: project_id });
     const backupResult = refreshProjectScopedBackupAfterMutation(db, {
       syncDir: SYNC_DIR,
       projectId: project_id,
@@ -963,11 +933,11 @@ export function registerMetadataTools(s, {
       operation: "connect_character_place_evidence",
       actor: createToolActor("connect_character_place_evidence"),
       affected: {
-        scenes: [scene_id],
-        characters: [character_id],
-        places: [place_id],
+        scenes: [canonicalSceneId],
+        characters: [canonicalCharacterId],
+        places: [canonicalPlaceId],
       },
-      summary: `Connected character "${character_id}" and place "${place_id}" as evidence in scene "${scene_id}".`,
+      summary: `Connected character "${canonicalCharacterId}" and place "${canonicalPlaceId}" as evidence in scene "${canonicalSceneId}".`,
       before: {
         scene_relationships: before,
       },
@@ -984,10 +954,10 @@ export function registerMetadataTools(s, {
       compatibilityDiagnostics.push({
         code: "STALE_PATH",
         severity: "warning",
-        message: `Canonical scene relationship evidence was committed, but scene '${scene_id}' has no indexed file path for generated compatibility output.`,
+        message: `Canonical scene relationship evidence was committed, but scene '${canonicalSceneId}' has no indexed file path for generated compatibility output.`,
         next_step: "Treat SQLite and project backup artifacts as current. Run sync and inspect the indexed scene path before retrying compatibility output.",
         details: {
-          scene_id,
+          scene_id: canonicalSceneId,
           project_id,
           indexed_path: null,
         },
@@ -996,7 +966,7 @@ export function registerMetadataTools(s, {
       try {
         writeSceneRelationshipCompatibilityOutput({
           db,
-          sceneId: scene_id,
+          sceneId: canonicalSceneId,
           projectId: project_id,
           scenePath: scene.file_path,
           syncDir: SYNC_DIR,
@@ -1009,7 +979,7 @@ export function registerMetadataTools(s, {
           message: `Canonical scene relationship evidence was committed, but generated scene metadata compatibility output could not be refreshed: ${err.message}`,
           next_step: "Treat SQLite and project backup artifacts as current. Run sync and inspect the indexed scene path before retrying compatibility output.",
           details: {
-            scene_id,
+            scene_id: canonicalSceneId,
             project_id,
             indexed_path: scene.file_path,
           },
@@ -1017,13 +987,15 @@ export function registerMetadataTools(s, {
       }
     }
 
+    const resolvedFrom = mergeResolvedFrom(sceneResolution, characterResolution, placeResolution);
     return jsonResponse({
       ok: true,
       action: "connected",
-      scene_id,
+      scene_id: canonicalSceneId,
       project_id,
-      character_id,
-      place_id,
+      character_id: canonicalCharacterId,
+      place_id: canonicalPlaceId,
+      ...(resolvedFrom ? { resolved_from: resolvedFrom } : {}),
       note: note ?? null,
       mutation_order: [
         "validated_request",
@@ -1059,45 +1031,36 @@ export function registerMetadataTools(s, {
       return errorResponse("INVALID_PROJECT_ID", projectIdCheck.reason, { project_id });
     }
 
+    const sceneResolution = resolveSceneTarget(db, {
+      projectId: project_id,
+      input: scene_id,
+      argumentName: "scene_id",
+    });
+    if (!sceneResolution.ok) {
+      return relationshipEvidenceResolutionError(errorResponse, sceneResolution);
+    }
+    const canonicalSceneId = sceneResolution.scene_id;
+
     const scene = db.prepare(`
       SELECT scene_id, project_id, file_path
       FROM scenes
       WHERE scene_id = ? AND project_id = ?
-    `).get(scene_id, project_id);
-    if (!scene) {
-      return errorResponse(
-        "NOT_FOUND",
-        `Scene '${scene_id}' not found in project '${project_id}'.`,
-        relationshipEvidenceNotFoundDetails({
-          lookupKind: "scene",
-          input: scene_id,
-          projectId: project_id,
-        })
-      );
-    }
+    `).get(canonicalSceneId, project_id);
 
-    if (!resolveEntity(entity_id)) {
-      const label = entityKind[0].toUpperCase() + entityKind.slice(1);
-      return errorResponse(
-        "NOT_FOUND",
-        `${label} '${entity_id}' is not indexed for project '${project_id}' or its universe.`,
-        relationshipEvidenceNotFoundDetails({
-          lookupKind: entityKind,
-          input: entity_id,
-          projectId: project_id,
-          sceneId: scene_id,
-        })
-      );
+    const entityResolution = resolveEntity(entity_id);
+    if (!entityResolution.ok) {
+      return relationshipEvidenceResolutionError(errorResponse, entityResolution, { sceneId: canonicalSceneId });
     }
+    const canonicalEntityId = entityResolution[idField];
 
-    const before = querySceneRelationshipSnapshot(db, { sceneId: scene_id, projectId: project_id });
-    const alreadyLinked = before[entityKind === "character" ? "characters" : "places"].includes(entity_id);
+    const before = querySceneRelationshipSnapshot(db, { sceneId: canonicalSceneId, projectId: project_id });
+    const alreadyLinked = before[entityKind === "character" ? "characters" : "places"].includes(canonicalEntityId);
     try {
       db.exec("BEGIN");
       db.prepare(`
         INSERT OR IGNORE INTO ${tableName} (scene_id, project_id, ${idField})
         VALUES (?, ?, ?)
-      `).run(scene_id, project_id, entity_id);
+      `).run(canonicalSceneId, project_id, canonicalEntityId);
       db.exec("COMMIT");
     } catch (err) {
       try {
@@ -1105,10 +1068,10 @@ export function registerMetadataTools(s, {
       } catch (rollbackErr) {
         void rollbackErr;
       }
-      return errorResponse("IO_ERROR", `Failed to connect scene ${entityKind} evidence for scene '${scene_id}': ${err.message}`);
+      return errorResponse("IO_ERROR", `Failed to connect scene ${entityKind} evidence for scene '${canonicalSceneId}': ${err.message}`);
     }
 
-    const after = querySceneRelationshipSnapshot(db, { sceneId: scene_id, projectId: project_id });
+    const after = querySceneRelationshipSnapshot(db, { sceneId: canonicalSceneId, projectId: project_id });
     const backupResult = refreshProjectScopedBackupAfterMutation(db, {
       syncDir: SYNC_DIR,
       projectId: project_id,
@@ -1116,10 +1079,10 @@ export function registerMetadataTools(s, {
       operation,
       actor: createToolActor(operation),
       affected: {
-        scenes: [scene_id],
-        [`${entityKind}s`]: [entity_id],
+        scenes: [canonicalSceneId],
+        [`${entityKind}s`]: [canonicalEntityId],
       },
-      summary: `Connected ${entityKind} "${entity_id}" as evidence in scene "${scene_id}".`,
+      summary: `Connected ${entityKind} "${canonicalEntityId}" as evidence in scene "${canonicalSceneId}".`,
       before: {
         scene_relationships: before,
       },
@@ -1136,10 +1099,10 @@ export function registerMetadataTools(s, {
       compatibilityDiagnostics.push({
         code: "STALE_PATH",
         severity: "warning",
-        message: `Canonical scene ${entityKind} evidence was committed, but scene '${scene_id}' has no indexed file path for generated compatibility output.`,
+        message: `Canonical scene ${entityKind} evidence was committed, but scene '${canonicalSceneId}' has no indexed file path for generated compatibility output.`,
         next_step: "Treat SQLite and project backup artifacts as current. Run sync and inspect the indexed scene path before retrying compatibility output.",
         details: {
-          scene_id,
+          scene_id: canonicalSceneId,
           project_id,
           indexed_path: null,
         },
@@ -1148,7 +1111,7 @@ export function registerMetadataTools(s, {
       try {
         writeSceneRelationshipCompatibilityOutput({
           db,
-          sceneId: scene_id,
+          sceneId: canonicalSceneId,
           projectId: project_id,
           scenePath: scene.file_path,
           syncDir: SYNC_DIR,
@@ -1161,7 +1124,7 @@ export function registerMetadataTools(s, {
           message: `Canonical scene ${entityKind} evidence was committed, but generated scene metadata compatibility output could not be refreshed: ${err.message}`,
           next_step: "Treat SQLite and project backup artifacts as current. Run sync and inspect the indexed scene path before retrying compatibility output.",
           details: {
-            scene_id,
+            scene_id: canonicalSceneId,
             project_id,
             indexed_path: scene.file_path,
           },
@@ -1169,6 +1132,7 @@ export function registerMetadataTools(s, {
       }
     }
 
+    const resolvedFrom = mergeResolvedFrom(sceneResolution, entityResolution);
     return jsonResponse({
       ok: true,
       action: "connected",
@@ -1177,9 +1141,10 @@ export function registerMetadataTools(s, {
       ...(alreadyLinked
         ? { next_step: alreadyLinkedRelationshipNextStep({ entityKind }) }
         : {}),
-      scene_id,
+      scene_id: canonicalSceneId,
       project_id,
-      [idField]: entity_id,
+      [idField]: canonicalEntityId,
+      ...(resolvedFrom ? { resolved_from: resolvedFrom } : {}),
       note: note ?? null,
       scene_relationships: after,
       mutation_order: [
@@ -1207,7 +1172,11 @@ export function registerMetadataTools(s, {
       entityKind: "character",
       idField: "character_id",
       tableName: "scene_characters",
-      resolveEntity: (characterId) => resolveCharacterForProject(db, { characterId, projectId: args.project_id }),
+      resolveEntity: (characterId) => resolveCharacterTargetForProject(db, {
+        projectId: args.project_id,
+        input: characterId,
+        argumentName: "character_id",
+      }),
     });
   }
 
@@ -1222,7 +1191,11 @@ export function registerMetadataTools(s, {
       entityKind: "place",
       idField: "place_id",
       tableName: "scene_places",
-      resolveEntity: (placeId) => resolvePlaceForProject(db, { placeId, projectId: args.project_id }),
+      resolveEntity: (placeId) => resolvePlaceTargetForProject(db, {
+        projectId: args.project_id,
+        input: placeId,
+        argumentName: "place_id",
+      }),
     });
   }
 
@@ -1733,12 +1706,12 @@ export function registerMetadataTools(s, {
   // ---- connect_character_place_evidence ------------------------------------
   s.tool(
     "connect_character_place_evidence",
-    "Connect a character and place as paired scene-backed story evidence. This outcome-level workflow covers sheet-backed character/place associations: SQLite scene relationship indexes commit first, project backups refresh after commit, and scene sidecar characters/places are regenerated only as generated compatibility output from canonical indexes. Use connect_scene_character_evidence or connect_scene_place_evidence for one-sided scene evidence.",
+    "Connect a character and place as paired scene-backed story evidence. This outcome-level workflow covers sheet-backed character/place associations: SQLite scene relationship indexes commit first, project backups refresh after commit, and scene sidecar characters/places are regenerated only as generated compatibility output from canonical indexes. Canonical IDs are preferred; unambiguous case-insensitive scene titles, character names, place names, and ID variants are resolved to canonical IDs before mutation. Ambiguous or suggested-only matches fail without mutating state. Use connect_scene_character_evidence or connect_scene_place_evidence for one-sided scene evidence.",
     {
       project_id: z.string().describe("Project the scene belongs to (e.g. 'the-lamb')."),
-      scene_id: z.string().describe("Scene that provides the evidence for this character/place association."),
-      character_id: z.string().describe("Character present in the scene. Use list_characters to find valid IDs."),
-      place_id: z.string().describe("Place present in the scene. Use list_places to find valid IDs."),
+      scene_id: z.string().describe("Scene that provides the evidence. Prefer canonical scene_id; an unambiguous case-insensitive scene_id or unique scene title in this project is also accepted."),
+      character_id: z.string().describe("Character present in the scene. Prefer canonical character_id; an unambiguous case-insensitive character_id or character name in this project/universe scope is also accepted."),
+      place_id: z.string().describe("Place present in the scene. Prefer canonical place_id; an unambiguous case-insensitive place_id or place name in this project/universe scope is also accepted."),
       note: z.string().optional().describe("Optional review note explaining the evidence. Stored in operation history, not in compatibility sidecars."),
     },
     async (args) => connectCharacterPlaceEvidence(args)
@@ -1747,11 +1720,11 @@ export function registerMetadataTools(s, {
   // ---- connect_scene_character_evidence -----------------------------------
   s.tool(
     "connect_scene_character_evidence",
-    "Connect a sheet-backed character to a scene without requiring paired place evidence. This outcome-level workflow records character-only scene evidence in SQLite first, refreshes project backups after commit, and regenerates scene sidecar characters/places only as generated compatibility output from canonical indexes.",
+    "Connect a sheet-backed character to a scene without requiring paired place evidence. This outcome-level workflow records character-only scene evidence in SQLite first, refreshes project backups after commit, and regenerates scene sidecar characters/places only as generated compatibility output from canonical indexes. Canonical IDs are preferred; unambiguous case-insensitive scene titles, character names, and ID variants are resolved to canonical IDs before mutation. Ambiguous or suggested-only matches fail without mutating state.",
     {
       project_id: z.string().describe("Project the scene belongs to (e.g. 'the-lamb')."),
-      scene_id: z.string().describe("Scene that provides the evidence for this character."),
-      character_id: z.string().describe("Sheet-backed character_id present in the scene. Use list_characters to find valid IDs; freeform names are rejected."),
+      scene_id: z.string().describe("Scene that provides the evidence. Prefer canonical scene_id; an unambiguous case-insensitive scene_id or unique scene title in this project is also accepted."),
+      character_id: z.string().describe("Sheet-backed character present in the scene. Prefer canonical character_id; an unambiguous case-insensitive character_id or character name in this project/universe scope is also accepted."),
       note: z.string().optional().describe("Optional review note explaining the evidence. Stored in operation history, not in compatibility sidecars."),
     },
     async (args) => connectSceneCharacterEvidence(args)
@@ -1760,11 +1733,11 @@ export function registerMetadataTools(s, {
   // ---- connect_scene_place_evidence ---------------------------------------
   s.tool(
     "connect_scene_place_evidence",
-    "Connect a sheet-backed place to a scene without requiring paired character evidence. This outcome-level workflow records place-only scene evidence in SQLite first, refreshes project backups after commit, and regenerates scene sidecar characters/places only as generated compatibility output from canonical indexes.",
+    "Connect a sheet-backed place to a scene without requiring paired character evidence. This outcome-level workflow records place-only scene evidence in SQLite first, refreshes project backups after commit, and regenerates scene sidecar characters/places only as generated compatibility output from canonical indexes. Canonical IDs are preferred; unambiguous case-insensitive scene titles, place names, and ID variants are resolved to canonical IDs before mutation. Ambiguous or suggested-only matches fail without mutating state.",
     {
       project_id: z.string().describe("Project the scene belongs to (e.g. 'the-lamb')."),
-      scene_id: z.string().describe("Scene that provides the evidence for this place."),
-      place_id: z.string().describe("Sheet-backed place_id present in the scene. Use list_places to find valid IDs; freeform names are rejected."),
+      scene_id: z.string().describe("Scene that provides the evidence. Prefer canonical scene_id; an unambiguous case-insensitive scene_id or unique scene title in this project is also accepted."),
+      place_id: z.string().describe("Sheet-backed place present in the scene. Prefer canonical place_id; an unambiguous case-insensitive place_id or place name in this project/universe scope is also accepted."),
       note: z.string().optional().describe("Optional review note explaining the evidence. Stored in operation history, not in compatibility sidecars."),
     },
     async (args) => connectScenePlaceEvidence(args)
