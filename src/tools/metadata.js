@@ -531,6 +531,11 @@ function buildSceneMetadataSearchKeywords(meta, relationshipSnapshot) {
 }
 
 function restoreSceneRelationshipSearchKeywords(db, { sceneId, projectId, meta, snapshot }) {
+  const existingFts = db.prepare(`
+    SELECT logline, title
+    FROM scenes_fts
+    WHERE scene_id = ? AND project_id = ?
+  `).get(sceneId, projectId);
   db.prepare(`DELETE FROM scenes_fts WHERE scene_id = ? AND project_id = ?`).run(sceneId, projectId);
   db.prepare(`
     INSERT INTO scenes_fts (scene_id, project_id, logline, title, keywords)
@@ -538,8 +543,8 @@ function restoreSceneRelationshipSearchKeywords(db, { sceneId, projectId, meta, 
   `).run(
     sceneId,
     projectId,
-    meta.logline ?? meta.synopsis ?? "",
-    meta.title ?? "",
+    meta.logline ?? meta.synopsis ?? existingFts?.logline ?? "",
+    meta.title ?? existingFts?.title ?? "",
     buildSceneMetadataSearchKeywords(meta, snapshot),
   );
 }

@@ -826,6 +826,59 @@ describe("metadata relationship outcome tools", () => {
     }
   });
 
+  test("connect_scene_character_evidence preserves existing FTS title and logline when source metadata omits them", async () => {
+    const db = openDb(":memory:");
+    try {
+      seedProject(db, "test-novel");
+      seedCharacter(db, { characterId: "char-mira", projectId: "test-novel", name: "Mira" });
+      const scenePath = path.join(SEED_TMP_DIR, `test-novel-sc-preserve-fts-${++seedCounter}.md`);
+      fs.writeFileSync(scenePath, "---\nscene_id: sc-preserve-fts\n---\nScene prose.", "utf8");
+      db.prepare(`
+        INSERT INTO scenes (
+          scene_id, project_id, title, file_path, prose_checksum, metadata_stale, updated_at
+        ) VALUES (?, ?, ?, ?, ?, 0, ?)
+      `).run("sc-preserve-fts", "test-novel", "Existing Search Title", scenePath, "deadbeef", new Date().toISOString());
+      db.prepare(`
+        INSERT INTO scenes_fts (scene_id, project_id, logline, title, keywords)
+        VALUES (?, ?, ?, ?, ?)
+      `).run(
+        "sc-preserve-fts",
+        "test-novel",
+        "original logline token",
+        "original title token",
+        "legacy relationship keyword"
+      );
+
+      const tools = makeToolHarness(db);
+      const parsed = await tools.call("connect_scene_character_evidence", {
+        project_id: "test-novel",
+        scene_id: "sc-preserve-fts",
+        character_id: "char-mira",
+      });
+
+      assert.equal(parsed.ok, true);
+      assert.equal(parsed.compatibility_output.refreshed, true);
+      assert.equal(
+        db.prepare(`SELECT COUNT(*) AS count FROM scenes_fts WHERE scenes_fts MATCH ?`).get('"original logline token"').count,
+        1
+      );
+      assert.equal(
+        db.prepare(`SELECT COUNT(*) AS count FROM scenes_fts WHERE scenes_fts MATCH ?`).get('"original title token"').count,
+        1
+      );
+      assert.equal(
+        db.prepare(`SELECT COUNT(*) AS count FROM scenes_fts WHERE scenes_fts MATCH ?`).get('"char-mira"').count,
+        1
+      );
+      assert.equal(
+        db.prepare(`SELECT COUNT(*) AS count FROM scenes_fts WHERE scenes_fts MATCH ?`).get('"legacy relationship keyword"').count,
+        0
+      );
+    } finally {
+      db.close();
+    }
+  });
+
   test("connect_scene_place_evidence adds only a place link and preserves existing character links", async () => {
     const db = openDb(":memory:");
     try {
