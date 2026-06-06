@@ -1,6 +1,6 @@
 # Relationship Metadata Boundary — Milestones
 
-**Status:** Active — M3 selected
+**Status:** Active — M4 selected
 
 Use [prd.md](prd.md) for product framing and this document for sequencing,
 review gates, and implementation readiness.
@@ -166,7 +166,7 @@ Out of scope:
 
 ## M3 — Workflow And Documentation Update
 
-Status: Selected for implementation.
+Status: Implemented on main by PR #232.
 
 Goal: make the new boundary discoverable for humans, AI agents, and generated
 tool consumers.
@@ -211,6 +211,8 @@ Out of scope:
 - Broad documentation rewrites unrelated to relationship authority.
 
 ## M4 — Independent Scene Evidence Workflows
+
+Status: Selected for implementation.
 
 Goal: add explicit SQLite-first workflows for valid scene-character and
 scene-place links that are not paired character/place evidence.

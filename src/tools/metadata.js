@@ -119,9 +119,14 @@ function buildRelationshipMetadataBoundaryDetails({ projectId, sceneId, blockedF
     scene_id: sceneId,
     blocked_fields: blockedFields,
     boundary: "scene_relationship_metadata",
-    relationship_tools: ["connect_character_place_evidence", "audit_relationship_metadata"],
+    relationship_tools: [
+      "connect_character_place_evidence",
+      "connect_scene_character_evidence",
+      "connect_scene_place_evidence",
+      "audit_relationship_metadata",
+    ],
     discovery_workflows: ["describe_workflows", "find_scenes", "list_characters", "list_places"],
-    next_step: "Use find_scenes, list_characters, and list_places to identify stable IDs. Use connect_character_place_evidence when the scene proves paired sheet-backed character/place evidence; use audit_relationship_metadata to review legacy sidecar/frontmatter relationship fields. Independent character-only or place-only scene links remain valid, but are not changed through update_scene_metadata.",
+    next_step: "Use find_scenes, list_characters, and list_places to identify stable IDs. Use connect_character_place_evidence when the scene proves paired sheet-backed character/place evidence, connect_scene_character_evidence for character-only evidence, connect_scene_place_evidence for place-only evidence, and audit_relationship_metadata to review legacy sidecar/frontmatter relationship fields.",
   };
 }
 
@@ -526,11 +531,33 @@ function buildSceneMetadataSearchKeywords(meta, relationshipSnapshot) {
 }
 
 function restoreSceneRelationshipSearchKeywords(db, { sceneId, projectId, meta, snapshot }) {
+  db.prepare(`DELETE FROM scenes_fts WHERE scene_id = ? AND project_id = ?`).run(sceneId, projectId);
   db.prepare(`
-    UPDATE scenes_fts
-    SET keywords = ?
-    WHERE scene_id = ? AND project_id = ?
-  `).run(buildSceneMetadataSearchKeywords(meta, snapshot), sceneId, projectId);
+    INSERT INTO scenes_fts (scene_id, project_id, logline, title, keywords)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(
+    sceneId,
+    projectId,
+    meta.logline ?? meta.synopsis ?? "",
+    meta.title ?? "",
+    buildSceneMetadataSearchKeywords(meta, snapshot),
+  );
+}
+
+function writeSceneRelationshipCompatibilityOutput({ db, sceneId, projectId, scenePath, syncDir, snapshot }) {
+  const { sourceMeta } = readSourceMeta(scenePath, syncDir, { writable: true });
+  const nextMeta = {
+    ...sourceMeta,
+    characters: uniqueSorted(snapshot.characters),
+    places: uniqueSorted(snapshot.places),
+  };
+  writeMeta(scenePath, nextMeta, { syncDir });
+  restoreSceneRelationshipSearchKeywords(db, {
+    sceneId,
+    projectId,
+    meta: nextMeta,
+    snapshot,
+  });
 }
 
 export function registerMetadataTools(s, {
@@ -890,12 +917,14 @@ export function registerMetadataTools(s, {
       });
     } else {
       try {
-        const { sourceMeta } = readSourceMeta(scene.file_path, SYNC_DIR, { writable: true });
-        writeMeta(scene.file_path, {
-          ...sourceMeta,
-          characters: uniqueSorted([...normalizeStringList(sourceMeta.characters), character_id]),
-          places: uniqueSorted([...normalizeStringList(sourceMeta.places), place_id]),
-        }, { syncDir: SYNC_DIR });
+        writeSceneRelationshipCompatibilityOutput({
+          db,
+          sceneId: scene_id,
+          projectId: project_id,
+          scenePath: scene.file_path,
+          syncDir: SYNC_DIR,
+          snapshot: after,
+        });
       } catch (err) {
         compatibilityDiagnostics.push({
           code: err?.code ?? "COMPATIBILITY_OUTPUT_FAILED",
@@ -930,6 +959,173 @@ export function registerMetadataTools(s, {
         diagnostics: compatibilityDiagnostics,
       }),
       ...backupMutationFields(backupResult),
+    });
+  }
+
+  async function connectOneSidedSceneEvidence({
+    project_id,
+    scene_id,
+    entity_id,
+    note,
+  }, {
+    operation,
+    entityKind,
+    idField,
+    tableName,
+    resolveEntity,
+  }) {
+    if (!SYNC_DIR_WRITABLE) {
+      return errorResponse("READ_ONLY", `Cannot connect scene ${entityKind} evidence: sync dir is read-only.`);
+    }
+    const projectIdCheck = validateProjectId(project_id);
+    if (!projectIdCheck.ok) {
+      return errorResponse("INVALID_PROJECT_ID", projectIdCheck.reason, { project_id });
+    }
+
+    const scene = db.prepare(`
+      SELECT scene_id, project_id, file_path
+      FROM scenes
+      WHERE scene_id = ? AND project_id = ?
+    `).get(scene_id, project_id);
+    if (!scene) {
+      return errorResponse("NOT_FOUND", `Scene '${scene_id}' not found in project '${project_id}'.`);
+    }
+
+    const entity = resolveEntity(entity_id);
+    if (!entity) {
+      const label = entityKind[0].toUpperCase() + entityKind.slice(1);
+      return errorResponse("NOT_FOUND", `${label} '${entity_id}' is not indexed for project '${project_id}' or its universe.`);
+    }
+
+    const before = querySceneRelationshipSnapshot(db, { sceneId: scene_id, projectId: project_id });
+    const alreadyLinked = before[entityKind === "character" ? "characters" : "places"].includes(entity_id);
+    try {
+      db.exec("BEGIN");
+      db.prepare(`
+        INSERT OR IGNORE INTO ${tableName} (scene_id, project_id, ${idField})
+        VALUES (?, ?, ?)
+      `).run(scene_id, project_id, entity_id);
+      db.exec("COMMIT");
+    } catch (err) {
+      try {
+        db.exec("ROLLBACK");
+      } catch (rollbackErr) {
+        void rollbackErr;
+      }
+      return errorResponse("IO_ERROR", `Failed to connect scene ${entityKind} evidence for scene '${scene_id}': ${err.message}`);
+    }
+
+    const after = querySceneRelationshipSnapshot(db, { sceneId: scene_id, projectId: project_id });
+    const backupResult = refreshProjectScopedBackupAfterMutation(db, {
+      syncDir: SYNC_DIR,
+      projectId: project_id,
+      applicationVersion: MCP_SERVER_VERSION,
+      operation,
+      actor: createToolActor(operation),
+      affected: {
+        scenes: [scene_id],
+        [`${entityKind}s`]: [entity_id],
+      },
+      summary: `Connected ${entityKind} "${entity_id}" as evidence in scene "${scene_id}".`,
+      before: {
+        scene_relationships: before,
+      },
+      after: {
+        scene_relationships: after,
+      },
+      metadata: {
+        note: note ?? null,
+      },
+    });
+
+    const compatibilityDiagnostics = [];
+    if (!scene.file_path) {
+      compatibilityDiagnostics.push({
+        code: "STALE_PATH",
+        severity: "warning",
+        message: `Canonical scene ${entityKind} evidence was committed, but scene '${scene_id}' has no indexed file path for generated compatibility output.`,
+        next_step: "Treat SQLite and project backup artifacts as current. Run sync and inspect the indexed scene path before retrying compatibility output.",
+        details: {
+          scene_id,
+          project_id,
+          indexed_path: null,
+        },
+      });
+    } else {
+      try {
+        writeSceneRelationshipCompatibilityOutput({
+          db,
+          sceneId: scene_id,
+          projectId: project_id,
+          scenePath: scene.file_path,
+          syncDir: SYNC_DIR,
+          snapshot: after,
+        });
+      } catch (err) {
+        compatibilityDiagnostics.push({
+          code: err?.code ?? "COMPATIBILITY_OUTPUT_FAILED",
+          severity: "warning",
+          message: `Canonical scene ${entityKind} evidence was committed, but generated scene metadata compatibility output could not be refreshed: ${err.message}`,
+          next_step: "Treat SQLite and project backup artifacts as current. Run sync and inspect the indexed scene path before retrying compatibility output.",
+          details: {
+            scene_id,
+            project_id,
+            indexed_path: scene.file_path,
+          },
+        });
+      }
+    }
+
+    return jsonResponse({
+      ok: true,
+      action: "connected",
+      already_linked: alreadyLinked,
+      scene_id,
+      project_id,
+      [idField]: entity_id,
+      note: note ?? null,
+      scene_relationships: after,
+      mutation_order: [
+        "validated_request",
+        "sqlite_commit",
+        "project_backup_refresh",
+        "compatibility_output_refresh",
+      ],
+      compatibility_output: buildCompatibilityOutput({
+        refreshed: compatibilityDiagnostics.length === 0,
+        diagnostics: compatibilityDiagnostics,
+      }),
+      ...backupMutationFields(backupResult),
+    });
+  }
+
+  async function connectSceneCharacterEvidence(args) {
+    return connectOneSidedSceneEvidence({
+      project_id: args.project_id,
+      scene_id: args.scene_id,
+      entity_id: args.character_id,
+      note: args.note,
+    }, {
+      operation: "connect_scene_character_evidence",
+      entityKind: "character",
+      idField: "character_id",
+      tableName: "scene_characters",
+      resolveEntity: (characterId) => resolveCharacterForProject(db, { characterId, projectId: args.project_id }),
+    });
+  }
+
+  async function connectScenePlaceEvidence(args) {
+    return connectOneSidedSceneEvidence({
+      project_id: args.project_id,
+      scene_id: args.scene_id,
+      entity_id: args.place_id,
+      note: args.note,
+    }, {
+      operation: "connect_scene_place_evidence",
+      entityKind: "place",
+      idField: "place_id",
+      tableName: "scene_places",
+      resolveEntity: (placeId) => resolvePlaceForProject(db, { placeId, projectId: args.project_id }),
     });
   }
 
@@ -1120,7 +1316,7 @@ export function registerMetadataTools(s, {
               project_id: scene.project_id,
               compatibility: compatibilityRelationships,
               canonical: canonicalRelationships,
-              next_step: "Treat SQLite relationship rows as canonical. Use find_scenes, list_characters, and list_places to inspect stable IDs; use connect_character_place_evidence when evidence is paired, and leave independent character-only/place-only repairs to a deliberately named future workflow.",
+              next_step: "Treat SQLite relationship rows as canonical. Use find_scenes, list_characters, and list_places to inspect stable IDs; use connect_character_place_evidence when evidence is paired, connect_scene_character_evidence for character-only evidence, and connect_scene_place_evidence for place-only evidence.",
             });
           }
         }
@@ -1213,7 +1409,7 @@ export function registerMetadataTools(s, {
         compatibility_note_count: diagnostics.filter(diagnostic => diagnostic.severity === "info").length,
       },
       next_steps: [
-        "Use connect_character_place_evidence when scene-backed character/place evidence is paired; independent one-sided links remain valid but need a deliberately named workflow.",
+        "Use connect_character_place_evidence when scene-backed character/place evidence is paired; use connect_scene_character_evidence or connect_scene_place_evidence for one-sided scene evidence.",
         "Use record_character_relationship_beat for relationship arcs between characters.",
         "Use link_reference_evidence for explicit reference evidence.",
         "Use export_project_backup when a fresh recovery snapshot is needed.",
@@ -1440,7 +1636,7 @@ export function registerMetadataTools(s, {
   // ---- connect_character_place_evidence ------------------------------------
   s.tool(
     "connect_character_place_evidence",
-    "Connect a character and place as paired scene-backed story evidence. This outcome-level workflow covers sheet-backed character/place associations: SQLite scene relationship indexes commit first, project backups refresh after commit, and scene sidecar characters/places are refreshed only as generated compatibility output. Independent character-only or place-only scene links remain valid, but are not handled by update_scene_metadata and need a deliberately named workflow if promoted later.",
+    "Connect a character and place as paired scene-backed story evidence. This outcome-level workflow covers sheet-backed character/place associations: SQLite scene relationship indexes commit first, project backups refresh after commit, and scene sidecar characters/places are regenerated only as generated compatibility output from canonical indexes. Use connect_scene_character_evidence or connect_scene_place_evidence for one-sided scene evidence.",
     {
       project_id: z.string().describe("Project the scene belongs to (e.g. 'the-lamb')."),
       scene_id: z.string().describe("Scene that provides the evidence for this character/place association."),
@@ -1449,6 +1645,32 @@ export function registerMetadataTools(s, {
       note: z.string().optional().describe("Optional review note explaining the evidence. Stored in operation history, not in compatibility sidecars."),
     },
     async (args) => connectCharacterPlaceEvidence(args)
+  );
+
+  // ---- connect_scene_character_evidence -----------------------------------
+  s.tool(
+    "connect_scene_character_evidence",
+    "Connect a sheet-backed character to a scene without requiring paired place evidence. This outcome-level workflow records character-only scene evidence in SQLite first, refreshes project backups after commit, and regenerates scene sidecar characters/places only as generated compatibility output from canonical indexes.",
+    {
+      project_id: z.string().describe("Project the scene belongs to (e.g. 'the-lamb')."),
+      scene_id: z.string().describe("Scene that provides the evidence for this character."),
+      character_id: z.string().describe("Sheet-backed character_id present in the scene. Use list_characters to find valid IDs; freeform names are rejected."),
+      note: z.string().optional().describe("Optional review note explaining the evidence. Stored in operation history, not in compatibility sidecars."),
+    },
+    async (args) => connectSceneCharacterEvidence(args)
+  );
+
+  // ---- connect_scene_place_evidence ---------------------------------------
+  s.tool(
+    "connect_scene_place_evidence",
+    "Connect a sheet-backed place to a scene without requiring paired character evidence. This outcome-level workflow records place-only scene evidence in SQLite first, refreshes project backups after commit, and regenerates scene sidecar characters/places only as generated compatibility output from canonical indexes.",
+    {
+      project_id: z.string().describe("Project the scene belongs to (e.g. 'the-lamb')."),
+      scene_id: z.string().describe("Scene that provides the evidence for this place."),
+      place_id: z.string().describe("Sheet-backed place_id present in the scene. Use list_places to find valid IDs; freeform names are rejected."),
+      note: z.string().optional().describe("Optional review note explaining the evidence. Stored in operation history, not in compatibility sidecars."),
+    },
+    async (args) => connectScenePlaceEvidence(args)
   );
 
   // ---- record_character_relationship_beat ----------------------------------
@@ -2344,7 +2566,7 @@ export function registerMetadataTools(s, {
   // ---- update_scene_metadata -----------------------------------------------
   s.tool(
     "update_scene_metadata",
-    "Update one or more non-structural, non-relationship metadata fields for a scene. Writes only supplied allowed fields to the .meta.yaml sidecar and preserves existing structural compatibility fields; it never modifies prose, mirrors path-derived structure, or changes scene character/place relationship authority. Structural fields (part, chapter, chapter_id, chapter_title, timeline_position) are rejected here; use list_chapters plus assign_scene_to_chapter, move_scene, rename_chapter, or reorder_chapter for structure changes. Relationship fields (characters, places) are rejected here; use discovery workflows plus connect_character_place_evidence when evidence is paired, and audit_relationship_metadata for legacy sidecar/frontmatter relationship review. Independent character-only or place-only scene links remain valid, but are intentionally not changed through this generic metadata tool. Allowed changes are immediately reflected in the index. Only available when the sync dir is writable.",
+    "Update one or more non-structural, non-relationship metadata fields for a scene. Writes only supplied allowed fields to the .meta.yaml sidecar and preserves existing structural compatibility fields; it never modifies prose, mirrors path-derived structure, or changes scene character/place relationship authority. Structural fields (part, chapter, chapter_id, chapter_title, timeline_position) are rejected here; use list_chapters plus assign_scene_to_chapter, move_scene, rename_chapter, or reorder_chapter for structure changes. Relationship fields (characters, places) are rejected here; use discovery workflows plus connect_character_place_evidence when evidence is paired, connect_scene_character_evidence for character-only evidence, connect_scene_place_evidence for place-only evidence, and audit_relationship_metadata for legacy sidecar/frontmatter relationship review. Allowed changes are immediately reflected in the index. Only available when the sync dir is writable.",
     {
       scene_id:   z.string().describe("The scene_id to update (e.g. 'sc-011-sebastian')."),
       project_id: z.string().describe("Project the scene belongs to (e.g. 'the-lamb')."),
@@ -2361,8 +2583,8 @@ export function registerMetadataTools(s, {
         timeline_position: z.number().int().optional().describe("Rejected by update_scene_metadata. Use move_scene for ordering changes."),
         story_time:        z.string().optional(),
         tags:              z.array(z.string()).optional(),
-        characters:        z.array(z.string()).optional().describe("Rejected by update_scene_metadata. Use find_scenes, list_characters, list_places, connect_character_place_evidence when evidence is paired, and audit_relationship_metadata for compatibility review; independent character-only evidence remains valid but needs a deliberately named workflow."),
-        places:            z.array(z.string()).optional().describe("Rejected by update_scene_metadata. Use find_scenes, list_characters, list_places, connect_character_place_evidence when evidence is paired, and audit_relationship_metadata for compatibility review; independent place-only evidence remains valid but needs a deliberately named workflow."),
+        characters:        z.array(z.string()).optional().describe("Rejected by update_scene_metadata. Use find_scenes, list_characters, list_places, connect_character_place_evidence when evidence is paired, connect_scene_character_evidence for character-only evidence, and audit_relationship_metadata for compatibility review."),
+        places:            z.array(z.string()).optional().describe("Rejected by update_scene_metadata. Use find_scenes, list_characters, list_places, connect_character_place_evidence when evidence is paired, connect_scene_place_evidence for place-only evidence, and audit_relationship_metadata for compatibility review."),
       }).describe("Fields to update. Only supplied keys are changed."),
     },
     async ({ scene_id, project_id, fields }) => {
@@ -2607,7 +2829,7 @@ export function registerMetadataTools(s, {
   // ---- update_place_sheet --------------------------------------------------
   s.tool(
     "update_place_sheet",
-    "Update canonical place profile fields and retained compatibility notes. The place name commits to SQLite first and refreshes project backups; associated_characters and tags are compatibility/review metadata only. Use connect_character_place_evidence when scene-backed character/place evidence is paired; independent place-only links remain valid but need a deliberately named workflow.",
+    "Update canonical place profile fields and retained compatibility notes. The place name commits to SQLite first and refreshes project backups; associated_characters and tags are compatibility/review metadata only. Use connect_character_place_evidence when scene-backed character/place evidence is paired, or connect_scene_place_evidence when scene evidence is place-only.",
     {
       place_id: z.string().describe("The place_id to update (e.g. 'place-harbor-district'). Use list_places to find valid IDs."),
       fields: z.object({
@@ -2716,7 +2938,7 @@ export function registerMetadataTools(s, {
         }),
         non_canonical_fields: ["associated_characters", "tags"].filter(field => Object.hasOwn(fields, field)),
         next_step: Object.hasOwn(fields, "associated_characters")
-          ? "Use connect_character_place_evidence when paired scene-backed character/place evidence should become authoritative; independent one-sided links remain valid but need a deliberately named workflow."
+          ? "Use connect_character_place_evidence when paired scene-backed character/place evidence should become authoritative; use connect_scene_character_evidence or connect_scene_place_evidence for one-sided scene evidence."
           : undefined,
         ...backupMutationFields(backupResult),
       });

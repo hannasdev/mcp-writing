@@ -384,6 +384,8 @@ describe("describe_workflows tool", () => {
     const tools = workflow.steps.map(step => step.tool);
     assert.ok(tools.includes("track_thread_arc"));
     assert.ok(tools.includes("connect_character_place_evidence"));
+    assert.ok(tools.includes("connect_scene_character_evidence"));
+    assert.ok(tools.includes("connect_scene_place_evidence"));
     assert.ok(tools.includes("record_character_relationship_beat"));
     assert.ok(tools.includes("link_reference_evidence"));
     assert.ok(tools.includes("audit_relationship_metadata"));
@@ -392,7 +394,10 @@ describe("describe_workflows tool", () => {
     assert.equal(tools.includes("upsert_reference_link"), false);
     const characterPlaceStep = workflow.steps.find(step => step.tool === "connect_character_place_evidence");
     assert.match(characterPlaceStep.note, /paired sheet-backed character\/place evidence/);
-    assert.match(characterPlaceStep.note, /Independent character-only or place-only scene links remain valid/);
+    const sceneCharacterStep = workflow.steps.find(step => step.tool === "connect_scene_character_evidence");
+    assert.match(sceneCharacterStep.note, /without a specific place association/);
+    const scenePlaceStep = workflow.steps.find(step => step.tool === "connect_scene_place_evidence");
+    assert.match(scenePlaceStep.note, /without a specific character association/);
     const auditStep = workflow.steps.find(step => step.tool === "audit_relationship_metadata");
     assert.match(auditStep.note, /compatibility drift/);
     const evidenceStep = workflow.steps.find(step => step.tool === "link_reference_evidence");

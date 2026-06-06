@@ -6,12 +6,20 @@ This complements `CHANGELOG.md`:
 - `CHANGELOG.md` is technical and release-oriented.
 - This log is plain-language and outcome-oriented.
 
+### 2026-06-06 — Add one-sided scene evidence workflows
+
+- What changed: Added `connect_scene_character_evidence` and `connect_scene_place_evidence` so character-only and place-only scene evidence can be recorded through SQLite-first outcome workflows without fabricating paired character/place associations.
+- Why it matters: Authors and AI agents can preserve valid one-sided scene relationship links while keeping sidecar `characters` and `places` as generated compatibility output rather than daily-work authority.
+- Who is affected: Authors, maintainers, and AI agents repairing or adding scene-backed character/place evidence after the relationship metadata boundary changes.
+- Action needed: Use `connect_character_place_evidence` for paired evidence, `connect_scene_character_evidence` for character-only evidence, and `connect_scene_place_evidence` for place-only evidence. Continue using `audit_relationship_metadata` before repairing retained sidecar/frontmatter relationship fields.
+- PR: TBD
+
 ### 2026-05-30 — Clarify relationship workflow guidance
 
 - What changed: Updated workflow, setup, sidecar compatibility, and generated tool guidance so scene `characters` and `places` route to audit/outcome workflows instead of generic metadata or sidecar edits.
 - Why it matters: Authors and AI agents get clearer next steps after the relationship metadata boundary changes without implying that scene relationship links must be paired.
 - Who is affected: Authors, maintainers, and AI agents using `describe_workflows`, generated tool docs, setup docs, or sidecar compatibility guidance for scene relationship repair.
-- Action needed: Use `audit_relationship_metadata` before repairing retained sidecar/frontmatter relationship fields; use `connect_character_place_evidence` when the evidence is paired, and leave character-only/place-only repairs for a deliberately named workflow.
+- Action needed: Use `audit_relationship_metadata` before repairing retained sidecar/frontmatter relationship fields; use `connect_character_place_evidence` when the evidence is paired, and do not fabricate missing sides for character-only or place-only evidence.
 - PR: [#232](https://github.com/hannasdev/mcp-writing/pull/232)
 
 ### 2026-05-30 — Make relationship compatibility drift visible
