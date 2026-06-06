@@ -664,7 +664,7 @@ export function registerSearchTools(s, {
     "search_metadata",
     "Keyword/FTS metadata search across scene titles, loglines (synopsis/logline text fields), and indexed metadata keywords (tags/characters/places/versions). Use this when you know likely words or exact metadata values but do not know the scene_id or chapter. This is not semantic search and does not search prose text; use find_scenes for structured filters and get_scene_prose after identifying likely scenes. Supports pagination via page/page_size and auto-paginates large result sets with total_count.",
     {
-      query: z.string().describe("Keyword or FTS5 search terms from indexed metadata (e.g. 'hospital' or a quoted character/place/tag phrase)."),
+      query: z.string().describe("Keyword search terms from indexed metadata (e.g. 'hospital' or a quoted character/place/tag phrase). FTS5 syntax supported."),
       page: z.number().int().min(1).optional().describe("Optional page number for paginated responses (1-based)."),
       page_size: z.number().int().min(1).max(200).optional().describe("Optional page size for paginated responses (default: 20, max: 200)."),
     },

@@ -400,7 +400,7 @@ Keyword/FTS metadata search across scene titles, loglines (synopsis/logline text
 
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |
-| `query` | `string` | Yes | Keyword or FTS5 search terms from indexed metadata (e.g. 'hospital' or a quoted character/place/tag phrase). |
+| `query` | `string` | Yes | Keyword search terms from indexed metadata (e.g. 'hospital' or a quoted character/place/tag phrase). FTS5 syntax supported. |
 | `page` | `integer` | No | Optional page number for paginated responses (1-based). |
 | `page_size` | `integer` | No | Optional page size for paginated responses (default: 20, max: 200). |
 
