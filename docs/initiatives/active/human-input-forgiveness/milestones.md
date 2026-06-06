@@ -2,7 +2,7 @@
 
 **Status:** Active
 
-Current implementation target: M1 - Response Clarity Baseline.
+Current implementation target: M2 - Shared Canonical Target Resolver.
 
 Created: 2026-06-06.
 

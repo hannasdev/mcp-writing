@@ -11,7 +11,7 @@ It supports metadata-first reasoning, explicit prose editing workflows, and revi
 
 Active initiative: [Human Input Forgiveness](docs/initiatives/active/human-input-forgiveness/prd.md).
 
-Current focus: M1 - Response Clarity Baseline.
+Current focus: M2 - Shared Canonical Target Resolver.
 
 Most recent completed initiative: [Relationship Metadata Boundary](docs/initiatives/done/relationship-metadata-boundary/prd.md).
 
