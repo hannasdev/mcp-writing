@@ -1008,8 +1008,7 @@ export function registerMetadataTools(s, {
       return errorResponse("NOT_FOUND", `Scene '${scene_id}' not found in project '${project_id}'.`);
     }
 
-    const entity = resolveEntity(entity_id);
-    if (!entity) {
+    if (!resolveEntity(entity_id)) {
       const label = entityKind[0].toUpperCase() + entityKind.slice(1);
       return errorResponse("NOT_FOUND", `${label} '${entity_id}' is not indexed for project '${project_id}' or its universe.`);
     }
