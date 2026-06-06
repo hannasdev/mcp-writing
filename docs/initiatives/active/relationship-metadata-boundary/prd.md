@@ -86,10 +86,10 @@ In scope:
 - Preserve legacy import and sync compatibility for existing sidecar
   `characters` and `places` fields.
 - Route daily scene-backed relationship changes through deliberately named,
-  SQLite-first outcome workflows: paired character/place evidence through
-  `connect_character_place_evidence`, character-only evidence through
-  `connect_scene_character_evidence`, and place-only evidence through
-  `connect_scene_place_evidence`.
+  SQLite-first outcome workflows. The current M3 slice clarifies that paired
+  character/place evidence uses `connect_character_place_evidence`; M4 adds
+  `connect_scene_character_evidence` for character-only evidence and
+  `connect_scene_place_evidence` for place-only evidence.
 - Treat scene `characters` and `places` metadata as sheet-backed entity
   references only. A character or place should not be promoted into scene
   relationship metadata unless it has a corresponding character or place sheet.
