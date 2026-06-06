@@ -130,6 +130,40 @@ function buildRelationshipMetadataBoundaryDetails({ projectId, sceneId, blockedF
   };
 }
 
+function relationshipEvidenceNotFoundDetails({ lookupKind, input, projectId, sceneId }) {
+  const details = {
+    lookup_kind: lookupKind,
+    input,
+    project_id: projectId,
+  };
+  if (sceneId !== undefined) {
+    details.scene_id = sceneId;
+  }
+
+  if (lookupKind === "scene") {
+    return {
+      ...details,
+      next_step: "Use find_scenes with the project_id to confirm the canonical scene_id, then retry the relationship evidence tool.",
+    };
+  }
+
+  if (lookupKind === "character") {
+    return {
+      ...details,
+      next_step: "Use list_characters to find the stable character_id for this project or universe, then retry the relationship evidence tool.",
+    };
+  }
+
+  return {
+    ...details,
+    next_step: "Use list_places to find the stable place_id for this project or universe, then retry the relationship evidence tool.",
+  };
+}
+
+function alreadyLinkedRelationshipNextStep({ entityKind }) {
+  return `This ${entityKind} was already linked to the scene, so no canonical relationship rows changed. Use the scene_relationships field in this response to inspect current links; call get_scene_prose with the scene_id and project_id if prose context is needed.`;
+}
+
 function persistReferenceDocLink({ filePath, syncDir, targetDocId, relation }) {
   const syncDirAbs = path.resolve(syncDir);
   const syncDirReal = resolveBoundaryRootReal(syncDirAbs);
@@ -862,16 +896,42 @@ export function registerMetadataTools(s, {
       WHERE scene_id = ? AND project_id = ?
     `).get(scene_id, project_id);
     if (!scene) {
-      return errorResponse("NOT_FOUND", `Scene '${scene_id}' not found in project '${project_id}'.`);
+      return errorResponse(
+        "NOT_FOUND",
+        `Scene '${scene_id}' not found in project '${project_id}'.`,
+        relationshipEvidenceNotFoundDetails({
+          lookupKind: "scene",
+          input: scene_id,
+          projectId: project_id,
+        })
+      );
     }
 
     const character = resolveCharacterForProject(db, { characterId: character_id, projectId: project_id });
     if (!character) {
-      return errorResponse("NOT_FOUND", `Character '${character_id}' is not indexed for project '${project_id}' or its universe.`);
+      return errorResponse(
+        "NOT_FOUND",
+        `Character '${character_id}' is not indexed for project '${project_id}' or its universe.`,
+        relationshipEvidenceNotFoundDetails({
+          lookupKind: "character",
+          input: character_id,
+          projectId: project_id,
+          sceneId: scene_id,
+        })
+      );
     }
     const place = resolvePlaceForProject(db, { placeId: place_id, projectId: project_id });
     if (!place) {
-      return errorResponse("NOT_FOUND", `Place '${place_id}' is not indexed for project '${project_id}' or its universe.`);
+      return errorResponse(
+        "NOT_FOUND",
+        `Place '${place_id}' is not indexed for project '${project_id}' or its universe.`,
+        relationshipEvidenceNotFoundDetails({
+          lookupKind: "place",
+          input: place_id,
+          projectId: project_id,
+          sceneId: scene_id,
+        })
+      );
     }
 
     const before = querySceneRelationshipSnapshot(db, { sceneId: scene_id, projectId: project_id });
@@ -1005,12 +1065,29 @@ export function registerMetadataTools(s, {
       WHERE scene_id = ? AND project_id = ?
     `).get(scene_id, project_id);
     if (!scene) {
-      return errorResponse("NOT_FOUND", `Scene '${scene_id}' not found in project '${project_id}'.`);
+      return errorResponse(
+        "NOT_FOUND",
+        `Scene '${scene_id}' not found in project '${project_id}'.`,
+        relationshipEvidenceNotFoundDetails({
+          lookupKind: "scene",
+          input: scene_id,
+          projectId: project_id,
+        })
+      );
     }
 
     if (!resolveEntity(entity_id)) {
       const label = entityKind[0].toUpperCase() + entityKind.slice(1);
-      return errorResponse("NOT_FOUND", `${label} '${entity_id}' is not indexed for project '${project_id}' or its universe.`);
+      return errorResponse(
+        "NOT_FOUND",
+        `${label} '${entity_id}' is not indexed for project '${project_id}' or its universe.`,
+        relationshipEvidenceNotFoundDetails({
+          lookupKind: entityKind,
+          input: entity_id,
+          projectId: project_id,
+          sceneId: scene_id,
+        })
+      );
     }
 
     const before = querySceneRelationshipSnapshot(db, { sceneId: scene_id, projectId: project_id });
@@ -1095,7 +1172,11 @@ export function registerMetadataTools(s, {
     return jsonResponse({
       ok: true,
       action: "connected",
+      outcome: alreadyLinked ? "no_op" : "connected",
       already_linked: alreadyLinked,
+      ...(alreadyLinked
+        ? { next_step: alreadyLinkedRelationshipNextStep({ entityKind }) }
+        : {}),
       scene_id,
       project_id,
       [idField]: entity_id,

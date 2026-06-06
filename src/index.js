@@ -327,6 +327,100 @@ function maxScenesNextStep(matchedCount) {
   return `Re-run with max_scenes set to at least ${matchedCount}.`;
 }
 
+function buildRecommendedNextActions({
+  sceneCount,
+  setupContract,
+  dbMigrationWarnings,
+}) {
+  const recommendations = [];
+
+  if (dbMigrationWarnings.length > 0) {
+    recommendations.push({
+      id: "refresh_index_after_migration_warning",
+      label: "Refresh indexed state",
+      tool: "sync",
+      workflow_id: "parity_recovery",
+      priority: 10,
+      reason: "Database migration warnings are present, so indexed metadata may need a sync before other work.",
+      next_step: "Call sync, then re-run describe_workflows before mutating project state.",
+    });
+  }
+
+  if (sceneCount === 0) {
+    recommendations.push({
+      id: "index_project_content",
+      label: "Index project content",
+      tool: "sync",
+      workflow_id: "first_time_setup",
+      priority: 20,
+      reason: "No scenes are indexed yet, so discovery and scene-reading tools have no project content to inspect.",
+      next_step: "Call sync to index the configured writing folder, then use find_scenes without filters to confirm project_ids.",
+    });
+    recommendations.push({
+      id: "inspect_runtime_configuration",
+      label: "Inspect runtime configuration",
+      tool: "get_runtime_config",
+      workflow_id: "first_time_setup",
+      priority: 30,
+      reason: "Runtime paths and writable state determine whether sync can index the intended manuscript folder.",
+      next_step: "Call get_runtime_config if sync still indexes no scenes or the configured writing folder looks wrong.",
+    });
+    recommendations.push({
+      id: "diagnose_empty_index",
+      label: "Diagnose indexed structure",
+      tool: "diagnose_structure",
+      workflow_id: "parity_recovery",
+      priority: 35,
+      reason: "If sync does not discover scenes, structure diagnostics can explain missing or ambiguous manuscript representations.",
+      next_step: "Call diagnose_structure after sync if the index is still empty or project structure looks unexpected.",
+    });
+  } else {
+    recommendations.push({
+      id: "discover_indexed_scenes",
+      label: "Discover indexed scenes",
+      tool: "find_scenes",
+      workflow_id: "question_driven_discovery",
+      priority: 20,
+      reason: "Scenes are indexed; metadata-first discovery is the safest starting point for most manuscript questions.",
+      next_step: "Call find_scenes with project_id or lightweight filters before loading prose.",
+    });
+    recommendations.push({
+      id: "keyword_metadata_search",
+      label: "Search metadata keywords",
+      tool: "search_metadata",
+      workflow_id: "question_driven_discovery",
+      priority: 30,
+      reason: "Use keyword/FTS metadata search when you know likely titles, logline words, tags, characters, places, or versions.",
+      next_step: "Search exact metadata keywords, then open likely scenes with get_scene_prose if prose context is needed.",
+    });
+    recommendations.push({
+      id: "read_likely_scene",
+      label: "Read a likely scene",
+      tool: "get_scene_prose",
+      workflow_id: "targeted_scene_reading",
+      priority: 35,
+      reason: "Prose should be loaded only after metadata has identified a likely scene.",
+      next_step: "Call get_scene_prose with a specific scene_id and project_id once discovery has narrowed the target.",
+    });
+  }
+
+  if (setupContract?.setup_recommended) {
+    recommendations.push({
+      id: "review_styleguide_setup",
+      label: "Review styleguide setup",
+      tool: "setup_prose_styleguide_config",
+      workflow_id: "styleguide_setup_new",
+      priority: 40,
+      reason: `Styleguide setup status is ${setupContract.styleguide_setup_status}.`,
+      next_step: "Follow context.setup_contract.plan_preview before running styleguide drift checks or enforcement workflows.",
+    });
+  }
+
+  return recommendations
+    .sort((a, b) => a.priority - b.priority)
+    .slice(0, 5);
+}
+
 // ---------------------------------------------------------------------------
 // MCP server factory
 // ---------------------------------------------------------------------------
@@ -444,6 +538,11 @@ function createMcpServer() {
           pending_proposals: pendingProposals.size,
           db_migration_warnings: DB_STARTUP_WARNINGS,
         },
+        recommended_next_actions: buildRecommendedNextActions({
+          sceneCount: scene_count,
+          setupContract: setupContractContextCheck.value,
+          dbMigrationWarnings: DB_STARTUP_WARNINGS,
+        }),
         workflows: WORKFLOW_CATALOGUE,
         notes: [
           "Never write JavaScript or shell scripts to invoke tools. Call them directly.",

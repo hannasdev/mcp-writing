@@ -9,9 +9,9 @@ It supports metadata-first reasoning, explicit prose editing workflows, and revi
 
 ## Product Status
 
-Active initiative: None currently selected.
+Active initiative: [Human Input Forgiveness](docs/initiatives/active/human-input-forgiveness/prd.md).
 
-Current focus: Consolidation after Relationship Metadata Boundary completion.
+Current focus: M1 - Response Clarity Baseline.
 
 Most recent completed initiative: [Relationship Metadata Boundary](docs/initiatives/done/relationship-metadata-boundary/prd.md).
 
@@ -51,6 +51,7 @@ For structural manuscript state, use [Managed Structure Contract](docs/foundatio
 ## For More Details
 
 - [Features](FEATURES.md) — shipped product capabilities and links to completed initiative docs
+- [Human Input Forgiveness](docs/initiatives/active/human-input-forgiveness/prd.md) — active initiative for forgiving request-boundary resolution and compact response guidance while preserving stable canonical IDs
 - [Backlog](BACKLOG.md) — deferred product work that is not currently active
 - [Relationship Metadata Boundary](docs/initiatives/done/relationship-metadata-boundary/prd.md) — completed initiative closing the remaining sidecar-first scene character/place relationship mutation path
 - [Architecture Alignment Follow-up](docs/initiatives/done/architecture-alignment-follow-up/prd.md) — completed initiative documenting sidecar compatibility, migration, deprecation expectations, and relationship workflow alignment

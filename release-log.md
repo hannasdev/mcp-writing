@@ -6,6 +6,14 @@ This complements `CHANGELOG.md`:
 - `CHANGELOG.md` is technical and release-oriented.
 - This log is plain-language and outcome-oriented.
 
+### 2026-06-06 — Clarify next actions and relationship no-op responses
+
+- What changed: Added compact `recommended_next_actions` to `describe_workflows`, added actionable `next_step` details to relationship evidence `NOT_FOUND` responses, marked repeated one-sided scene evidence links with additive `outcome: "no_op"`, and clarified `search_metadata` as keyword/FTS metadata search rather than semantic or prose search.
+- Why it matters: Authors and AI agents get a shorter first action, clearer failed-lookup recovery, and less confusing already-linked responses without weakening stable ID or SQLite-canonical relationship boundaries.
+- Who is affected: Authors, maintainers, and AI agents using workflow discovery, relationship evidence tools, or metadata search.
+- Action needed: Read `recommended_next_actions` before scanning the full workflow catalogue, follow relationship error `next_step` guidance to discover stable IDs, and use `get_scene_prose` after metadata search identifies likely scenes.
+- PR: [#235](https://github.com/hannasdev/mcp-writing/pull/235)
+
 ### 2026-06-06 — Add one-sided scene evidence workflows
 
 - What changed: Added `connect_scene_character_evidence` and `connect_scene_place_evidence` so character-only and place-only scene evidence can be recorded through SQLite-first outcome workflows without fabricating paired character/place associations.
