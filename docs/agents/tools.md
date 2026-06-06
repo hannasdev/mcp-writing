@@ -384,7 +384,7 @@ List indexed places with their place_id and name. Use this mainly as a lookup an
 
 ## get_place_sheet
 
-Get full place details, including canonical sheet content plus retained sidecar associated_characters and tags as compatibility/review notes. Use connect_character_place_evidence for paired scene-backed character/place evidence, not as a generic place metadata editor. Response shape note: returns a structured envelope (`results`, `total_count`) with one result row.
+Get full place details, including canonical sheet content plus retained sidecar associated_characters and tags as compatibility/review notes. Use connect_character_place_evidence when scene-backed character/place evidence is paired; independent place-only links remain valid but are not managed by this read tool. Response shape note: returns a structured envelope (`results`, `total_count`) with one result row.
 
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |
@@ -577,7 +577,7 @@ Compatibility name for link_reference_evidence. Prefer link_reference_evidence w
 
 ## connect_character_place_evidence
 
-Connect a character and place as paired scene-backed story evidence. This outcome-level workflow is for sheet-backed character/place associations only: SQLite scene relationship indexes commit first, project backups refresh after commit, and scene sidecar characters/places are refreshed only as generated compatibility output. Character-only or place-only scene evidence is not handled by update_scene_metadata and needs a deliberately named workflow if promoted later.
+Connect a character and place as paired scene-backed story evidence. This outcome-level workflow covers sheet-backed character/place associations: SQLite scene relationship indexes commit first, project backups refresh after commit, and scene sidecar characters/places are refreshed only as generated compatibility output. Independent character-only or place-only scene links remain valid, but are not handled by update_scene_metadata and need a deliberately named workflow if promoted later.
 
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |
@@ -692,7 +692,7 @@ Assign a scene to a canonical chapter through the explicit structure workflow. W
 
 ## update_scene_metadata
 
-Update one or more non-structural, non-relationship metadata fields for a scene. Writes only supplied allowed fields to the .meta.yaml sidecar and preserves existing structural compatibility fields; it never modifies prose, mirrors path-derived structure, or changes scene character/place relationship authority. Structural fields (part, chapter, chapter_id, chapter_title, timeline_position) are rejected here; use list_chapters plus assign_scene_to_chapter, move_scene, rename_chapter, or reorder_chapter for structure changes. Relationship fields (characters, places) are rejected here; use discovery workflows plus connect_character_place_evidence for paired sheet-backed character/place evidence, and audit_relationship_metadata for legacy sidecar/frontmatter relationship review. Character-only or place-only scene evidence is intentionally not changed through this generic metadata tool. Allowed changes are immediately reflected in the index. Only available when the sync dir is writable.
+Update one or more non-structural, non-relationship metadata fields for a scene. Writes only supplied allowed fields to the .meta.yaml sidecar and preserves existing structural compatibility fields; it never modifies prose, mirrors path-derived structure, or changes scene character/place relationship authority. Structural fields (part, chapter, chapter_id, chapter_title, timeline_position) are rejected here; use list_chapters plus assign_scene_to_chapter, move_scene, rename_chapter, or reorder_chapter for structure changes. Relationship fields (characters, places) are rejected here; use discovery workflows plus connect_character_place_evidence when evidence is paired, and audit_relationship_metadata for legacy sidecar/frontmatter relationship review. Independent character-only or place-only scene links remain valid, but are intentionally not changed through this generic metadata tool. Allowed changes are immediately reflected in the index. Only available when the sync dir is writable.
 
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |
@@ -715,7 +715,7 @@ Update canonical character profile fields such as name, role, arc_summary, first
 
 ## update_place_sheet
 
-Update canonical place profile fields and retained compatibility notes. The place name commits to SQLite first and refreshes project backups; associated_characters and tags are compatibility/review metadata only. For paired scene-backed character/place evidence, use connect_character_place_evidence.
+Update canonical place profile fields and retained compatibility notes. The place name commits to SQLite first and refreshes project backups; associated_characters and tags are compatibility/review metadata only. Use connect_character_place_evidence when scene-backed character/place evidence is paired; independent place-only links remain valid but need a deliberately named workflow.
 
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |

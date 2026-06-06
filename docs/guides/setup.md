@@ -262,10 +262,12 @@ Use this rule of thumb:
 - Daily structure changes use tools such as `assign_scene_to_chapter`,
   `move_scene`, `rename_chapter`, `reorder_chapter`, and `attach_epigraph`.
 - Daily relationship changes use tools such as `track_thread_arc`,
-  `connect_character_place_evidence` for paired sheet-backed character/place
-  evidence, `record_character_relationship_beat`, and
-  `link_reference_evidence`. Use `audit_relationship_metadata` before repair
-  work when retained sidecar/frontmatter relationship fields may be stale.
+  `connect_character_place_evidence` when a scene proves paired
+  sheet-backed character/place evidence, `record_character_relationship_beat`,
+  and `link_reference_evidence`. Independent character-only and place-only
+  scene links remain valid model states; use `audit_relationship_metadata`
+  before repair work when retained sidecar/frontmatter relationship fields may
+  be stale.
 - Sidecar-only flags, status, tags, and place associated-character notes are
   compatibility/review metadata unless a future release promotes or removes
   them.

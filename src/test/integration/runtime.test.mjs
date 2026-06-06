@@ -392,7 +392,7 @@ describe("describe_workflows tool", () => {
     assert.equal(tools.includes("upsert_reference_link"), false);
     const characterPlaceStep = workflow.steps.find(step => step.tool === "connect_character_place_evidence");
     assert.match(characterPlaceStep.note, /paired sheet-backed character\/place evidence/);
-    assert.match(characterPlaceStep.note, /Character-only or place-only scene evidence/);
+    assert.match(characterPlaceStep.note, /Independent character-only or place-only scene links remain valid/);
     const auditStep = workflow.steps.find(step => step.tool === "audit_relationship_metadata");
     assert.match(auditStep.note, /compatibility drift/);
     const evidenceStep = workflow.steps.find(step => step.tool === "link_reference_evidence");
