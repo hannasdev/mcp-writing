@@ -342,6 +342,21 @@ describe("describe_workflows tool", () => {
     assert.equal(parsed.context.setup_contract.plan_preview.flow_id, "styleguide_setup_v1");
     assert.ok(Array.isArray(parsed.context.setup_contract.plan_preview.actions));
     assert.ok(Array.isArray(parsed.context.db_migration_warnings));
+    assert.ok(Array.isArray(parsed.recommended_next_actions));
+    assert.ok(parsed.recommended_next_actions.length >= 3);
+    assert.ok(parsed.recommended_next_actions.length <= 5);
+    assert.ok(text.indexOf('"recommended_next_actions"') < text.indexOf('"workflows"'));
+    assert.equal(
+      parsed.recommended_next_actions.some((action) => action.tool === "describe_workflows"),
+      false
+    );
+    for (const action of parsed.recommended_next_actions) {
+      assert.ok(typeof action.id === "string" && action.id.length > 0);
+      assert.ok(typeof action.label === "string" && action.label.length > 0);
+      assert.ok(typeof action.tool === "string" && action.tool.length > 0);
+      assert.ok(typeof action.reason === "string" && action.reason.length > 0);
+      assert.ok(typeof action.next_step === "string" && action.next_step.length > 0);
+    }
     assert.ok(Array.isArray(parsed.workflows));
     assert.ok(parsed.workflows.length > 0);
     assert.ok(Array.isArray(parsed.notes));

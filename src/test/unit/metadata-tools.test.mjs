@@ -761,6 +761,7 @@ describe("metadata relationship outcome tools", () => {
 
       assert.equal(parsed.ok, true);
       assert.equal(parsed.action, "connected");
+      assert.equal(parsed.outcome, "connected");
       assert.equal(parsed.already_linked, false);
       assert.equal(parsed.character_id, "char-mira");
       assert.equal(parsed.note, "Mira appears without a specific place beat.");
@@ -812,7 +813,11 @@ describe("metadata relationship outcome tools", () => {
         character_id: "char-mira",
       });
       assert.equal(repeated.ok, true);
+      assert.equal(repeated.action, "connected");
+      assert.equal(repeated.outcome, "no_op");
       assert.equal(repeated.already_linked, true);
+      assert.match(repeated.next_step, /already linked/);
+      assert.match(repeated.next_step, /no canonical relationship rows changed/);
       assert.equal(
         db.prepare(`
           SELECT COUNT(*) AS count
@@ -961,6 +966,9 @@ describe("metadata relationship outcome tools", () => {
       });
 
       assert.equal(parsed.ok, true);
+      assert.equal(parsed.action, "connected");
+      assert.equal(parsed.outcome, "connected");
+      assert.equal(parsed.already_linked, false);
       assert.equal(parsed.place_id, "place-harbor");
       assert.deepEqual(parsed.scene_relationships, {
         characters: ["char-elena"],
@@ -993,6 +1001,26 @@ describe("metadata relationship outcome tools", () => {
         db.prepare(`SELECT COUNT(*) AS count FROM scenes_fts WHERE scenes_fts MATCH ?`).get('"stale-sidecar-place"').count,
         0
       );
+
+      const repeated = await tools.call("connect_scene_place_evidence", {
+        project_id: "test-novel",
+        scene_id: "sc-place-only",
+        place_id: "place-harbor",
+      });
+      assert.equal(repeated.ok, true);
+      assert.equal(repeated.action, "connected");
+      assert.equal(repeated.outcome, "no_op");
+      assert.equal(repeated.already_linked, true);
+      assert.match(repeated.next_step, /already linked/);
+      assert.match(repeated.next_step, /no canonical relationship rows changed/);
+      assert.equal(
+        db.prepare(`
+          SELECT COUNT(*) AS count
+          FROM scene_places
+          WHERE scene_id = ? AND project_id = ? AND place_id = ?
+        `).get("sc-place-only", "test-novel", "place-harbor").count,
+        1
+      );
     } finally {
       db.close();
     }
@@ -1018,8 +1046,18 @@ describe("metadata relationship outcome tools", () => {
 
       assert.equal(characterResult.ok, false);
       assert.equal(characterResult.error.code, "NOT_FOUND");
+      assert.equal(characterResult.error.details.lookup_kind, "character");
+      assert.equal(characterResult.error.details.input, "Mira Nystrom");
+      assert.equal(characterResult.error.details.project_id, "test-novel");
+      assert.equal(characterResult.error.details.scene_id, "sc-freeform-rejected");
+      assert.match(characterResult.error.details.next_step, /list_characters/);
       assert.equal(placeResult.ok, false);
       assert.equal(placeResult.error.code, "NOT_FOUND");
+      assert.equal(placeResult.error.details.lookup_kind, "place");
+      assert.equal(placeResult.error.details.input, "The old harbor");
+      assert.equal(placeResult.error.details.project_id, "test-novel");
+      assert.equal(placeResult.error.details.scene_id, "sc-freeform-rejected");
+      assert.match(placeResult.error.details.next_step, /list_places/);
       assert.equal(
         db.prepare(`SELECT COUNT(*) AS count FROM scene_characters WHERE scene_id = ? AND project_id = ?`).get("sc-freeform-rejected", "test-novel").count,
         0

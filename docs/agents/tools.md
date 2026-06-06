@@ -396,11 +396,11 @@ Get full place details, including canonical sheet content plus retained sidecar 
 
 ## search_metadata
 
-Full-text search across scene titles, loglines (synopsis/logline text fields), and metadata keywords (tags/characters/places/versions). Use this when you don't know the exact scene_id or chapter but want to find scenes by topic, theme, or metadata keyword. Not a prose search — use get_scene_prose to read actual text. Supports pagination via page/page_size and auto-paginates large result sets with total_count.
+Keyword/FTS metadata search across scene titles, loglines (synopsis/logline text fields), and indexed metadata keywords (tags/characters/places/versions). Use this when you know likely words or exact metadata values but do not know the scene_id or chapter. This is not semantic search and does not search prose text; use find_scenes for structured filters and get_scene_prose after identifying likely scenes. Supports pagination via page/page_size and auto-paginates large result sets with total_count.
 
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |
-| `query` | `string` | Yes | Search terms (e.g. 'hospital' or 'Sebastian feeding'). FTS5 syntax supported. |
+| `query` | `string` | Yes | Keyword or FTS5 search terms from indexed metadata (e.g. 'hospital' or a quoted character/place/tag phrase). |
 | `page` | `integer` | No | Optional page number for paginated responses (1-based). |
 | `page_size` | `integer` | No | Optional page size for paginated responses (default: 20, max: 200). |
 

@@ -662,9 +662,9 @@ export function registerSearchTools(s, {
   // ---- search_metadata -----------------------------------------------------
   s.tool(
     "search_metadata",
-    "Full-text search across scene titles, loglines (synopsis/logline text fields), and metadata keywords (tags/characters/places/versions). Use this when you don't know the exact scene_id or chapter but want to find scenes by topic, theme, or metadata keyword. Not a prose search — use get_scene_prose to read actual text. Supports pagination via page/page_size and auto-paginates large result sets with total_count.",
+    "Keyword/FTS metadata search across scene titles, loglines (synopsis/logline text fields), and indexed metadata keywords (tags/characters/places/versions). Use this when you know likely words or exact metadata values but do not know the scene_id or chapter. This is not semantic search and does not search prose text; use find_scenes for structured filters and get_scene_prose after identifying likely scenes. Supports pagination via page/page_size and auto-paginates large result sets with total_count.",
     {
-      query: z.string().describe("Search terms (e.g. 'hospital' or 'Sebastian feeding'). FTS5 syntax supported."),
+      query: z.string().describe("Keyword or FTS5 search terms from indexed metadata (e.g. 'hospital' or a quoted character/place/tag phrase)."),
       page: z.number().int().min(1).optional().describe("Optional page number for paginated responses (1-based)."),
       page_size: z.number().int().min(1).max(200).optional().describe("Optional page size for paginated responses (default: 20, max: 200)."),
     },
@@ -682,7 +682,11 @@ export function registerSearchTools(s, {
       }
 
       if (totalCount === 0) {
-        return errorResponse("NO_RESULTS", "No scenes matched the search query.");
+        return errorResponse("NO_RESULTS", "No scenes matched the keyword metadata search query.", {
+          search_type: "keyword_metadata_fts",
+          searched_fields: ["scene.title", "scene.logline", "tags", "characters", "places", "versions"],
+          next_step: "Try exact metadata keywords, quoted character/place/tag names, or find_scenes structured filters. After finding likely scenes, use get_scene_prose for prose context; search_metadata is not semantic or prose search.",
+        });
       }
 
       const shouldPaginate = totalCount > DEFAULT_METADATA_PAGE_SIZE || page !== undefined || page_size !== undefined;

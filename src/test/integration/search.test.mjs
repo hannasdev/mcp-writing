@@ -595,7 +595,14 @@ describe("search_metadata tool", () => {
 
   test("search with no match returns helpful message", async () => {
     const text = await callTool("search_metadata", { query: "dragons" });
-    assert.ok(text.toLowerCase().includes("no scenes"));
+    const parsed = JSON.parse(text);
+    assert.equal(parsed.ok, false);
+    assert.equal(parsed.error.code, "NO_RESULTS");
+    assert.match(parsed.error.message, /keyword metadata search/);
+    assert.equal(parsed.error.details.search_type, "keyword_metadata_fts");
+    assert.ok(parsed.error.details.searched_fields.includes("scene.title"));
+    assert.match(parsed.error.details.next_step, /exact metadata keywords/);
+    assert.match(parsed.error.details.next_step, /not semantic or prose search/);
   });
 
   test("returns INVALID_QUERY on malformed FTS syntax", async () => {

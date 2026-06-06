@@ -5,7 +5,7 @@ export const WORKFLOW_CATALOGUE = [
     use_when: "Start here for most sessions: when the user has a manuscript question, you need to narrow scope, or you are not yet sure which scene matters.",
     steps: [
       { tool: "find_scenes", note: "Use structured metadata filters first when the question already suggests characters, beats, tags, parts, chapters, or POV; numeric chapter values are read-scope aliases, while structure changes require canonical chapter_id workflows." },
-      { tool: "search_metadata", note: "Use this when the question is thematic, fuzzy, or keyword-driven rather than cleanly filterable." },
+      { tool: "search_metadata", note: "Use this when likely title, logline, tag, character, place, or version keywords are known but structured filters are not cleanly available; it is not semantic or prose search." },
       { tool: "get_scene_prose", note: "Escalate to prose only after likely scenes have been identified and metadata is no longer enough." },
       { tool: "flag_scene", note: "Use only when the current task naturally leads to recording a follow-up note for later editorial attention." },
     ],

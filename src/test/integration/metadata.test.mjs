@@ -297,6 +297,47 @@ describe("one-sided scene evidence tools", () => {
     const harborSearch = JSON.parse(harborSearchText);
     assert.ok(harborSearch.results.some((row) => row.scene_id === "sc-m4-place-only"));
   });
+
+  test("relationship evidence NOT_FOUND responses include actionable next steps", async () => {
+    const missingSceneText = await callWriteTool("connect_scene_character_evidence", {
+      project_id: "test-novel",
+      scene_id: "sc-missing-relationship-evidence",
+      character_id: "elena",
+    });
+    const missingScene = JSON.parse(missingSceneText);
+    assert.equal(missingScene.ok, false);
+    assert.equal(missingScene.error.code, "NOT_FOUND");
+    assert.equal(missingScene.error.details.lookup_kind, "scene");
+    assert.equal(missingScene.error.details.input, "sc-missing-relationship-evidence");
+    assert.match(missingScene.error.details.next_step, /find_scenes/);
+
+    const missingCharacterText = await callWriteTool("connect_character_place_evidence", {
+      project_id: "test-novel",
+      scene_id: "sc-001",
+      character_id: "Elena Voss",
+      place_id: "harbor-district",
+    });
+    const missingCharacter = JSON.parse(missingCharacterText);
+    assert.equal(missingCharacter.ok, false);
+    assert.equal(missingCharacter.error.code, "NOT_FOUND");
+    assert.equal(missingCharacter.error.details.lookup_kind, "character");
+    assert.equal(missingCharacter.error.details.input, "Elena Voss");
+    assert.equal(missingCharacter.error.details.scene_id, "sc-001");
+    assert.match(missingCharacter.error.details.next_step, /list_characters/);
+
+    const missingPlaceText = await callWriteTool("connect_scene_place_evidence", {
+      project_id: "test-novel",
+      scene_id: "sc-001",
+      place_id: "The Harbor District",
+    });
+    const missingPlace = JSON.parse(missingPlaceText);
+    assert.equal(missingPlace.ok, false);
+    assert.equal(missingPlace.error.code, "NOT_FOUND");
+    assert.equal(missingPlace.error.details.lookup_kind, "place");
+    assert.equal(missingPlace.error.details.input, "The Harbor District");
+    assert.equal(missingPlace.error.details.scene_id, "sc-001");
+    assert.match(missingPlace.error.details.next_step, /list_places/);
+  });
 });
 
 describe("relationship metadata boundary M5 regression", () => {
