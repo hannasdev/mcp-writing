@@ -12,7 +12,7 @@ This complements `CHANGELOG.md`:
 - Why it matters: Authors and AI agents can use human-facing story names when the intended scene, character, or place is clear, while ambiguous or suggested-only matches still fail without mutating SQLite, sidecar compatibility output, operation history, or backups.
 - Who is affected: Authors, maintainers, and AI agents adding scene-backed character/place evidence.
 - Action needed: Prefer canonical IDs when available, but use unambiguous names or case variants for relationship evidence tools when that is the most natural input. If a tool returns `AMBIGUOUS_TARGET` or `NOT_FOUND` with candidates, choose a canonical ID and retry.
-- PR: TBD
+- PR: [#237](https://github.com/hannasdev/mcp-writing/pull/237)
 
 ### 2026-06-06 — Clarify next actions and relationship no-op responses
 
