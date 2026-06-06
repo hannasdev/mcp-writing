@@ -12,6 +12,7 @@ This complements `CHANGELOG.md`:
 - Why it matters: Authors and AI agents get a shorter first action, clearer failed-lookup recovery, and less confusing already-linked responses without weakening stable ID or SQLite-canonical relationship boundaries.
 - Who is affected: Authors, maintainers, and AI agents using workflow discovery, relationship evidence tools, or metadata search.
 - Action needed: Read `recommended_next_actions` before scanning the full workflow catalogue, follow relationship error `next_step` guidance to discover stable IDs, and use `get_scene_prose` after metadata search identifies likely scenes.
+- PR: [#235](https://github.com/hannasdev/mcp-writing/pull/235)
 
 ### 2026-06-06 — Add one-sided scene evidence workflows
 
