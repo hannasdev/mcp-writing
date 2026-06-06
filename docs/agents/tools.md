@@ -579,40 +579,40 @@ Compatibility name for link_reference_evidence. Prefer link_reference_evidence w
 
 ## connect_character_place_evidence
 
-Connect a character and place as paired scene-backed story evidence. This outcome-level workflow covers sheet-backed character/place associations: SQLite scene relationship indexes commit first, project backups refresh after commit, and scene sidecar characters/places are regenerated only as generated compatibility output from canonical indexes. Use connect_scene_character_evidence or connect_scene_place_evidence for one-sided scene evidence.
+Connect a character and place as paired scene-backed story evidence. This outcome-level workflow covers sheet-backed character/place associations: SQLite scene relationship indexes commit first, project backups refresh after commit, and scene sidecar characters/places are regenerated only as generated compatibility output from canonical indexes. Canonical IDs are preferred; unambiguous case-insensitive scene titles, character names, place names, and ID variants are resolved to canonical IDs before mutation. Ambiguous or suggested-only matches fail without mutating state. Use connect_scene_character_evidence or connect_scene_place_evidence for one-sided scene evidence.
 
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |
 | `project_id` | `string` | Yes | Project the scene belongs to (e.g. 'the-lamb'). |
-| `scene_id` | `string` | Yes | Scene that provides the evidence for this character/place association. |
-| `character_id` | `string` | Yes | Character present in the scene. Use list_characters to find valid IDs. |
-| `place_id` | `string` | Yes | Place present in the scene. Use list_places to find valid IDs. |
+| `scene_id` | `string` | Yes | Scene that provides the evidence. Prefer canonical scene_id; an unambiguous case-insensitive scene_id or unique scene title in this project is also accepted. |
+| `character_id` | `string` | Yes | Character present in the scene. Prefer canonical character_id; an unambiguous case-insensitive character_id or character name in this project/universe scope is also accepted. |
+| `place_id` | `string` | Yes | Place present in the scene. Prefer canonical place_id; an unambiguous case-insensitive place_id or place name in this project/universe scope is also accepted. |
 | `note` | `string` | No | Optional review note explaining the evidence. Stored in operation history, not in compatibility sidecars. |
 
 ---
 
 ## connect_scene_character_evidence
 
-Connect a sheet-backed character to a scene without requiring paired place evidence. This outcome-level workflow records character-only scene evidence in SQLite first, refreshes project backups after commit, and regenerates scene sidecar characters/places only as generated compatibility output from canonical indexes.
+Connect a sheet-backed character to a scene without requiring paired place evidence. This outcome-level workflow records character-only scene evidence in SQLite first, refreshes project backups after commit, and regenerates scene sidecar characters/places only as generated compatibility output from canonical indexes. Canonical IDs are preferred; unambiguous case-insensitive scene titles, character names, and ID variants are resolved to canonical IDs before mutation. Ambiguous or suggested-only matches fail without mutating state.
 
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |
 | `project_id` | `string` | Yes | Project the scene belongs to (e.g. 'the-lamb'). |
-| `scene_id` | `string` | Yes | Scene that provides the evidence for this character. |
-| `character_id` | `string` | Yes | Sheet-backed character_id present in the scene. Use list_characters to find valid IDs; freeform names are rejected. |
+| `scene_id` | `string` | Yes | Scene that provides the evidence. Prefer canonical scene_id; an unambiguous case-insensitive scene_id or unique scene title in this project is also accepted. |
+| `character_id` | `string` | Yes | Sheet-backed character present in the scene. Prefer canonical character_id; an unambiguous case-insensitive character_id or character name in this project/universe scope is also accepted. |
 | `note` | `string` | No | Optional review note explaining the evidence. Stored in operation history, not in compatibility sidecars. |
 
 ---
 
 ## connect_scene_place_evidence
 
-Connect a sheet-backed place to a scene without requiring paired character evidence. This outcome-level workflow records place-only scene evidence in SQLite first, refreshes project backups after commit, and regenerates scene sidecar characters/places only as generated compatibility output from canonical indexes.
+Connect a sheet-backed place to a scene without requiring paired character evidence. This outcome-level workflow records place-only scene evidence in SQLite first, refreshes project backups after commit, and regenerates scene sidecar characters/places only as generated compatibility output from canonical indexes. Canonical IDs are preferred; unambiguous case-insensitive scene titles, place names, and ID variants are resolved to canonical IDs before mutation. Ambiguous or suggested-only matches fail without mutating state.
 
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |
 | `project_id` | `string` | Yes | Project the scene belongs to (e.g. 'the-lamb'). |
-| `scene_id` | `string` | Yes | Scene that provides the evidence for this place. |
-| `place_id` | `string` | Yes | Sheet-backed place_id present in the scene. Use list_places to find valid IDs; freeform names are rejected. |
+| `scene_id` | `string` | Yes | Scene that provides the evidence. Prefer canonical scene_id; an unambiguous case-insensitive scene_id or unique scene title in this project is also accepted. |
+| `place_id` | `string` | Yes | Sheet-backed place present in the scene. Prefer canonical place_id; an unambiguous case-insensitive place_id or place name in this project/universe scope is also accepted. |
 | `note` | `string` | No | Optional review note explaining the evidence. Stored in operation history, not in compatibility sidecars. |
 
 ---

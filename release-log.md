@@ -6,6 +6,14 @@ This complements `CHANGELOG.md`:
 - `CHANGELOG.md` is technical and release-oriented.
 - This log is plain-language and outcome-oriented.
 
+### 2026-06-06 — Accept unambiguous names in relationship evidence tools
+
+- What changed: `connect_character_place_evidence`, `connect_scene_character_evidence`, and `connect_scene_place_evidence` now resolve unambiguous scene titles, character names, place names, and case variants to canonical IDs before writing relationship evidence.
+- Why it matters: Authors and AI agents can use human-facing story names when the intended scene, character, or place is clear, while ambiguous or suggested-only matches still fail without mutating SQLite, sidecar compatibility output, operation history, or backups.
+- Who is affected: Authors, maintainers, and AI agents adding scene-backed character/place evidence.
+- Action needed: Prefer canonical IDs when available, but use unambiguous names or case variants for relationship evidence tools when that is the most natural input. If a tool returns `AMBIGUOUS_TARGET` or `NOT_FOUND` with candidates, choose a canonical ID and retry.
+- PR: TBD
+
 ### 2026-06-06 — Clarify next actions and relationship no-op responses
 
 - What changed: Added compact `recommended_next_actions` to `describe_workflows`, added actionable `next_step` details to relationship evidence `NOT_FOUND` responses, marked repeated one-sided scene evidence links with additive `outcome: "no_op"`, and clarified `search_metadata` as keyword/FTS metadata search rather than semantic or prose search.
