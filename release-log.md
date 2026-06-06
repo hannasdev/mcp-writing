@@ -12,7 +12,7 @@ This complements `CHANGELOG.md`:
 - Why it matters: Authors and AI agents can preserve valid one-sided scene relationship links while keeping sidecar `characters` and `places` as generated compatibility output rather than daily-work authority.
 - Who is affected: Authors, maintainers, and AI agents repairing or adding scene-backed character/place evidence after the relationship metadata boundary changes.
 - Action needed: Use `connect_character_place_evidence` for paired evidence, `connect_scene_character_evidence` for character-only evidence, and `connect_scene_place_evidence` for place-only evidence. Continue using `audit_relationship_metadata` before repairing retained sidecar/frontmatter relationship fields.
-- PR: TBD
+- PR: [#233](https://github.com/hannasdev/mcp-writing/pull/233)
 
 ### 2026-05-30 — Clarify relationship workflow guidance
 
