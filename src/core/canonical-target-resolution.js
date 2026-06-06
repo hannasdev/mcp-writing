@@ -211,6 +211,17 @@ function resolveFromRows({
   formatCandidate,
 }) {
   const normalizedInput = normalizeValue(input);
+  if (!normalizedInput) {
+    return buildResolutionFailure({
+      targetKind,
+      input,
+      projectId,
+      universeId,
+      candidateLimit,
+      candidates: [],
+    });
+  }
+
   const exactIdRows = rows.filter(row => row[idField] === input);
   if (exactIdRows.length === 1) {
     const candidate = formatCandidate(exactIdRows[0], { matchedField: idField, matchType: "exact_id" });

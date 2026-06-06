@@ -1208,6 +1208,68 @@ describe("metadata relationship outcome tools", () => {
     }
   });
 
+  test("relationship evidence workflows reject whitespace-only targets without side effects", async () => {
+    const db = openDb(":memory:");
+    try {
+      const projectId = "negative-whitespace";
+      seedProject(db, projectId);
+      seedCharacter(db, { characterId: "char-empty-name", projectId, name: "" });
+      seedPlace(db, { placeId: "place-empty-name", projectId, name: "" });
+      const scenePath = seedProjectSceneFile(db, {
+        sceneId: "sc-empty-title",
+        projectId,
+      });
+      db.prepare(`UPDATE scenes SET title = ? WHERE scene_id = ? AND project_id = ?`)
+        .run(null, "sc-empty-title", projectId);
+      const sidecarPath = scenePath.replace(/\.md$/, ".meta.yaml");
+      const sceneBefore = fs.readFileSync(scenePath, "utf8");
+
+      const tools = makeToolHarness(db);
+      const sceneResult = await tools.call("connect_character_place_evidence", {
+        project_id: projectId,
+        scene_id: "   ",
+        character_id: "char-empty-name",
+        place_id: "place-empty-name",
+      });
+      const characterResult = await tools.call("connect_scene_character_evidence", {
+        project_id: projectId,
+        scene_id: "sc-empty-title",
+        character_id: "\t",
+      });
+      const placeResult = await tools.call("connect_scene_place_evidence", {
+        project_id: projectId,
+        scene_id: "sc-empty-title",
+        place_id: " \n ",
+      });
+
+      for (const [kind, result] of [
+        ["scene", sceneResult],
+        ["character", characterResult],
+        ["place", placeResult],
+      ]) {
+        assert.equal(result.ok, false);
+        assert.equal(result.error.code, "NOT_FOUND");
+        assert.equal(result.error.details.lookup_kind, kind);
+        assert.deepEqual(result.error.details.candidate_matches, []);
+        assert.equal(result.operation_history, undefined);
+        assert.equal(result.backup_refresh, undefined);
+      }
+      assert.equal(
+        db.prepare(`SELECT COUNT(*) AS count FROM scene_characters WHERE scene_id = ? AND project_id = ?`).get("sc-empty-title", projectId).count,
+        0
+      );
+      assert.equal(
+        db.prepare(`SELECT COUNT(*) AS count FROM scene_places WHERE scene_id = ? AND project_id = ?`).get("sc-empty-title", projectId).count,
+        0
+      );
+      assert.equal(fs.readFileSync(scenePath, "utf8"), sceneBefore);
+      assert.equal(fs.existsSync(sidecarPath), false);
+      assert.equal(fs.existsSync(path.join(SEED_TMP_DIR, "project-backups", projectId)), false);
+    } finally {
+      db.close();
+    }
+  });
+
   test("record_character_relationship_beat writes canonical relationship beats without sidecar output", async () => {
     const db = openDb(":memory:");
     try {
