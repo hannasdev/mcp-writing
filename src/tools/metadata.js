@@ -161,7 +161,7 @@ function relationshipEvidenceNotFoundDetails({ lookupKind, input, projectId, sce
 }
 
 function alreadyLinkedRelationshipNextStep({ entityKind }) {
-  return `This ${entityKind} was already linked to the scene, so no canonical relationship rows changed. Use get_scene_prose or relationship read tools if you need to inspect the existing evidence.`;
+  return `This ${entityKind} was already linked to the scene, so no canonical relationship rows changed. Use the scene_relationships field in this response to inspect current links; call get_scene_prose with the scene_id and project_id if prose context is needed.`;
 }
 
 function persistReferenceDocLink({ filePath, syncDir, targetDocId, relation }) {

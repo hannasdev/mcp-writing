@@ -818,6 +818,8 @@ describe("metadata relationship outcome tools", () => {
       assert.equal(repeated.already_linked, true);
       assert.match(repeated.next_step, /already linked/);
       assert.match(repeated.next_step, /no canonical relationship rows changed/);
+      assert.match(repeated.next_step, /scene_relationships field/);
+      assert.match(repeated.next_step, /get_scene_prose/);
       assert.equal(
         db.prepare(`
           SELECT COUNT(*) AS count
@@ -1013,6 +1015,8 @@ describe("metadata relationship outcome tools", () => {
       assert.equal(repeated.already_linked, true);
       assert.match(repeated.next_step, /already linked/);
       assert.match(repeated.next_step, /no canonical relationship rows changed/);
+      assert.match(repeated.next_step, /scene_relationships field/);
+      assert.match(repeated.next_step, /get_scene_prose/);
       assert.equal(
         db.prepare(`
           SELECT COUNT(*) AS count
