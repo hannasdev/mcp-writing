@@ -53,7 +53,7 @@ function isNearVocabularyMatch(input, value) {
 function cleanVocabularyValues(values) {
   const seen = new Set();
   const cleaned = [];
-  for (const value of values) {
+  for (const value of Array.isArray(values) ? values : []) {
     if (typeof value !== "string") continue;
     const normalized = normalizeVocabularyValue(value);
     if (!normalized) continue;

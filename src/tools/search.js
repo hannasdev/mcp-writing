@@ -184,6 +184,25 @@ function mergeResolvedFilters(...filters) {
   return Object.keys(merged).length > 0 ? merged : undefined;
 }
 
+function valuesForVocabularyResolution(resolution, fallback) {
+  if (!resolution.ok) return [fallback];
+  if (Array.isArray(resolution.case_variants) && resolution.case_variants.length > 0) {
+    return resolution.case_variants.map(candidate => candidate.value);
+  }
+  return [resolution.value];
+}
+
+function addExactValueCondition({ conditions, params, column, values }) {
+  if (!Array.isArray(values) || values.length === 0) return;
+  if (values.length === 1) {
+    conditions.push(`${column} = ?`);
+    params.push(values[0]);
+    return;
+  }
+  conditions.push(`${column} IN (${values.map(() => "?").join(", ")})`);
+  params.push(...values);
+}
+
 export function registerSearchTools(s, {
   db,
   SYNC_DIR,
@@ -290,6 +309,7 @@ export function registerSearchTools(s, {
       }
 
       let resolvedTag = tag;
+      let resolvedTagValues = tag ? [tag] : [];
       if (tag) {
         const resolution = resolveVocabularyValue({
           input: tag,
@@ -299,6 +319,7 @@ export function registerSearchTools(s, {
         });
         if (resolution.ok) {
           resolvedTag = resolution.value;
+          resolvedTagValues = valuesForVocabularyResolution(resolution, tag);
           if (resolution.resolved_from) resolvedFilters.tag = resolution.resolved_from;
         } else if (resolution.candidate_matches.length > 0) {
           vocabularySuggestions.push({
@@ -310,6 +331,7 @@ export function registerSearchTools(s, {
       }
 
       let resolvedBeat = beat;
+      let resolvedBeatValues = beat ? [beat] : [];
       if (beat) {
         const resolution = resolveVocabularyValue({
           input: beat,
@@ -319,6 +341,7 @@ export function registerSearchTools(s, {
         });
         if (resolution.ok) {
           resolvedBeat = resolution.value;
+          resolvedBeatValues = valuesForVocabularyResolution(resolution, beat);
           if (resolution.resolved_from) resolvedFilters.beat = resolution.resolved_from;
         } else if (resolution.candidate_matches.length > 0) {
           vocabularySuggestions.push({
@@ -361,15 +384,27 @@ export function registerSearchTools(s, {
       const params = [];
 
       if (resolvedCharacter) {
-        joins.push(`JOIN scene_characters sc ON sc.scene_id = s.scene_id AND sc.project_id = s.project_id AND lower(sc.character_id) = lower(?)`);
+        joins.push(`JOIN scene_characters sc ON sc.scene_id = s.scene_id AND sc.project_id = s.project_id AND sc.character_id = ?`);
         params.push(resolvedCharacter);
       }
       if (resolvedTag) {
-        joins.push(`JOIN scene_tags st ON st.scene_id = s.scene_id AND st.project_id = s.project_id AND lower(st.tag) = lower(?)`);
-        params.push(resolvedTag);
+        if (resolvedTagValues.length === 1) {
+          joins.push(`JOIN scene_tags st ON st.scene_id = s.scene_id AND st.project_id = s.project_id AND st.tag = ?`);
+          params.push(resolvedTagValues[0]);
+        } else {
+          joins.push(`JOIN scene_tags st ON st.scene_id = s.scene_id AND st.project_id = s.project_id AND st.tag IN (${resolvedTagValues.map(() => "?").join(", ")})`);
+          params.push(...resolvedTagValues);
+        }
       }
       if (project_id)  { conditions.push(`s.project_id = ?`);        params.push(project_id); }
-      if (resolvedBeat) { conditions.push(`lower(s.save_the_cat_beat) = lower(?)`);  params.push(resolvedBeat); }
+      if (resolvedBeat) {
+        addExactValueCondition({
+          conditions,
+          params,
+          column: "s.save_the_cat_beat",
+          values: resolvedBeatValues,
+        });
+      }
       if (part)        { conditions.push(`s.part = ?`);               params.push(part); }
       if (resolvedChapterFilter.chapter) {
         conditions.push(`s.chapter_id = ?`);
@@ -378,7 +413,7 @@ export function registerSearchTools(s, {
         conditions.push(`s.chapter = ?`);
         params.push(chapter);
       }
-      if (resolvedPov) { conditions.push(`lower(s.pov) = lower(?)`);  params.push(resolvedPov); }
+      if (resolvedPov) { conditions.push(`s.pov = ?`);  params.push(resolvedPov); }
 
       if (joins.length)      query += " " + joins.join(" ");
       if (conditions.length) query += " WHERE " + conditions.join(" AND ");

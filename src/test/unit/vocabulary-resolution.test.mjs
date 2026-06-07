@@ -40,6 +40,17 @@ describe("vocabulary resolution", () => {
     );
   });
 
+  test("treats omitted vocabulary values as no candidates", () => {
+    const result = resolveVocabularyValue({
+      input: "Harbor",
+      targetKind: "tag",
+      matchedField: "tag",
+    });
+
+    assert.equal(result.ok, false);
+    assert.deepEqual(result.candidate_matches, []);
+  });
+
   test("does not collapse multiple authored case variants into one resolved value", () => {
     const result = resolveVocabularyValue({
       input: "HARBOR",
