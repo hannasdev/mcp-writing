@@ -338,7 +338,7 @@ export function registerSyncTools(s, {
 
   s.tool(
     "restore_project_from_backup",
-    "Explicitly restore a project from a trusted generated project backup bundle. Defaults to dry-run planning; dry_run=false applies canonical SQLite changes transactionally after the reviewed current snapshot checksum and required destructive or cross-scope confirmations are provided. Responses include compact plan_summary and blocking_requirements for confirmation failures; include_unchanged=false suppresses unchanged row details while preserving summary counts.",
+    "Explicitly restore a project from a trusted generated project backup bundle. Defaults to dry-run planning; dry_run=false applies canonical SQLite changes transactionally after the reviewed current snapshot checksum and required destructive or cross-scope confirmations are provided. Restore plan and confirmation-refusal responses include compact plan_summary details; confirmation refusals include blocking_requirements. include_unchanged=false suppresses unchanged row details while preserving summary counts.",
     {
       project_id: z.string().describe("Project ID to restore (e.g. 'test-novel' or 'universe-1/book-1-the-lamb')."),
       backup_path: z.string().optional().describe("Path under WRITING_SYNC_DIR to a project backup directory, manifest.json, or canonical.snapshot.json. Defaults to project-backups/<project_id>."),
