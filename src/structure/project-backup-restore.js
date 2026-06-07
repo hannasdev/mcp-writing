@@ -899,7 +899,6 @@ function buildPlanDetailPolicy({ includeUnchanged, omittedUnchangedChangeCount }
 }
 
 function applyPlanDetailPolicy(plan, { includeUnchanged }) {
-  const omittedUnchangedChangeCount = plan.changes.filter(change => change.action === "unchanged").length;
   if (includeUnchanged) {
     return {
       plan,
@@ -910,10 +909,20 @@ function applyPlanDetailPolicy(plan, { includeUnchanged }) {
     };
   }
 
+  const visibleChanges = [];
+  let omittedUnchangedChangeCount = 0;
+  for (const change of plan.changes) {
+    if (change.action === "unchanged") {
+      omittedUnchangedChangeCount += 1;
+    } else {
+      visibleChanges.push(change);
+    }
+  }
+
   return {
     plan: {
       ...plan,
-      changes: plan.changes.filter(change => change.action !== "unchanged"),
+      changes: visibleChanges,
     },
     planDetailPolicy: buildPlanDetailPolicy({
       includeUnchanged,
