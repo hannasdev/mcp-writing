@@ -2,7 +2,7 @@
 
 **Status:** Active
 
-Current implementation target: M5 - Extended Vocabulary Resolution.
+Current implementation target: M6 - Documentation, Release Notes, and Feedback Replay.
 
 Created: 2026-06-06.
 
