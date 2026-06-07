@@ -69,11 +69,16 @@ Start with:
 ```
 
 The dry run validates the trusted backup bundle and returns a deterministic plan plus a `current_snapshot_checksum`.
+Use `plan_summary` first for create/update/delete/unchanged counts and destructive or cross-scope risk flags, then inspect `plan.changes` for row-level detail.
+By default the full plan includes unchanged rows for audit compatibility; pass `"include_unchanged": false` to suppress unchanged row details while keeping the summary counts.
 Review the plan before applying it, especially:
 
 - `delete` changes, which remove current SQLite records absent from the backup
 - `cross_scope` changes, which affect universe-scoped records represented by the project backup
 - any `refused` or conflict diagnostics
+
+When an apply request is refused because it is missing the reviewed checksum or required confirmations, read `blocking_requirements` before the longer diagnostics or plan detail.
+It lists the checksum, destructive, and cross-scope confirmations that must be resolved before retrying.
 
 To apply a trusted plan with deletes:
 
@@ -105,6 +110,7 @@ After a successful restore, run `sync`, `diagnose_project_backups`, and `export_
 - Incompatible schema: use a compatible server version or regenerate the bundle with the current version before restoring.
 - Missing prose or reference files: restore the referenced files under `WRITING_SYNC_DIR`, then retry the dry run.
 - Read-only runtime: restore requires a writable sync/runtime configuration when `dry_run=false`.
+- Confirmation refused: run a new dry run if the checksum changed, then retry apply with the reviewed checksum and any required destructive or cross-scope confirmations.
 
 ## Docker and Homeserver Notes
 

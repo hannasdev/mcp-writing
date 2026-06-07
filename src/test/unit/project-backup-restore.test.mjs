@@ -180,6 +180,13 @@ describe("restoreProjectFromBackup", () => {
     assert.equal(result.plan.totals.update, 0);
     assert.equal(result.plan.totals.delete, 0);
     assert.ok(result.plan.totals.unchanged > 0);
+    assert.deepEqual(result.plan_summary.totals, result.plan.totals);
+    assert.equal(result.plan_summary.has_destructive_changes, false);
+    assert.equal(result.plan_summary.has_cross_scope_changes, false);
+    assert.equal(result.plan_detail_policy.include_unchanged, true);
+    assert.equal(result.plan_detail_policy.unchanged_rows_included, true);
+    assert.equal(result.plan_detail_policy.omitted_unchanged_change_count, 0);
+    assert.ok(result.plan.changes.some(change => change.action === "unchanged"));
     assert.deepEqual(result.diagnostics, []);
     assert.deepEqual(
       built.snapshot.character_relationships.map(row => [row.from_character, row.to_character, row.scene_id, row.note]),
@@ -214,6 +221,30 @@ describe("restoreProjectFromBackup", () => {
     assert.ok(result.plan.changes.some(change => change.domain === "chapters" && change.action === "create"));
     assert.ok(result.plan.changes.some(change => change.domain === "scenes" && change.action === "update"));
     assert.ok(result.plan.changes.some(change => change.domain === "scene_tags" && change.action === "delete"));
+  }));
+
+  test("suppresses unchanged restore rows only when requested", () => withFixture(({ db, syncDir, backupDir }) => {
+    exportBackup(db, syncDir, backupDir);
+    db.prepare(`
+      UPDATE scenes
+      SET title = ?
+      WHERE project_id = ? AND scene_id = ?
+    `).run("Changed Scene", "test-novel", "sc-first");
+
+    const result = restorePlan(db, syncDir, backupDir, { includeUnchanged: false });
+
+    assert.equal(result.ok, true);
+    assert.ok(result.plan_summary.totals.unchanged > 0);
+    assert.equal(result.plan.totals.unchanged, result.plan_summary.totals.unchanged);
+    assert.equal(result.plan.changes.some(change => change.action === "unchanged"), false);
+    assert.equal(result.plan_detail_policy.include_unchanged, false);
+    assert.equal(result.plan_detail_policy.unchanged_rows_included, false);
+    assert.equal(
+      result.plan_detail_policy.omitted_unchanged_change_count,
+      result.plan_summary.totals.unchanged
+    );
+    assert.match(result.plan_detail_policy.full_plan_next_step, /include_unchanged=true/);
+    assert.ok(result.plan.changes.some(change => change.domain === "scenes" && change.action === "update"));
   }));
 
   test("plans project creation when current SQLite state is missing the project", () => withFixture(({ db, syncDir, backupDir }) => {
@@ -878,6 +909,9 @@ describe("restoreProjectFromBackup", () => {
     assert.equal(result.ok, false);
     assert.equal(result.action, "restore_refused");
     assert.deepEqual(result.diagnostics.map(diagnostic => diagnostic.type), ["project_restore_destructive_confirmation_required"]);
+    assert.deepEqual(result.blocking_requirements.map(requirement => requirement.type), ["project_restore_destructive_confirmation_required"]);
+    assert.equal(result.plan_summary.destructive_change_count, 1);
+    assert.equal(result.plan_summary.requires_destructive_confirmation, true);
     assert.equal(result.plan.destructive_change_count, 1);
     assert.equal(
       db.prepare(`SELECT COUNT(*) AS count FROM scene_tags WHERE project_id = ? AND tag = ?`).get("test-novel", "extra-current-tag").count,
@@ -893,11 +927,32 @@ describe("restoreProjectFromBackup", () => {
     assert.equal(result.ok, false);
     assert.equal(result.action, "restore_refused");
     assert.deepEqual(result.diagnostics.map(diagnostic => diagnostic.type), ["project_restore_current_snapshot_confirmation_required"]);
+    assert.deepEqual(result.blocking_requirements.map(requirement => requirement.type), ["project_restore_current_snapshot_confirmation_required"]);
+    assert.equal(result.plan_summary.requires_destructive_confirmation, false);
+    assert.equal(result.plan_summary.requires_cross_scope_confirmation, false);
     assert.equal(result.plan.totals.delete, 0);
     assert.equal(
       db.prepare(`SELECT COUNT(*) AS count FROM scenes WHERE project_id = ?`).get("test-novel").count,
       1
     );
+  }));
+
+  test("leads confirmation refusals with checksum requirement before other blockers", () => withFixture(({ db, syncDir, backupDir }) => {
+    exportBackup(db, syncDir, backupDir);
+    db.prepare(`
+      INSERT INTO scene_tags (scene_id, project_id, tag)
+      VALUES (?, ?, ?)
+    `).run("sc-first", "test-novel", "extra-current-tag");
+
+    const result = restorePlan(db, syncDir, backupDir, { dryRun: false });
+
+    assert.equal(result.ok, false);
+    assert.deepEqual(result.blocking_requirements.map(requirement => requirement.type), [
+      "project_restore_current_snapshot_confirmation_required",
+      "project_restore_destructive_confirmation_required",
+    ]);
+    assert.match(result.blocking_requirements[0].next_step, /current_snapshot_checksum/);
+    assert.equal(result.plan_summary.destructive_change_count, 1);
   }));
 
   test("refuses apply when current SQLite state changed after dry-run review", () => withFixture(({ db, syncDir, backupDir }) => {
@@ -1000,6 +1055,9 @@ describe("restoreProjectFromBackup", () => {
     assert.equal(result.ok, false);
     assert.equal(result.action, "restore_refused");
     assert.deepEqual(result.diagnostics.map(diagnostic => diagnostic.type), ["project_restore_cross_scope_confirmation_required"]);
+    assert.deepEqual(result.blocking_requirements.map(requirement => requirement.type), ["project_restore_cross_scope_confirmation_required"]);
+    assert.equal(result.plan_summary.cross_scope_change_count, 1);
+    assert.equal(result.plan_summary.requires_cross_scope_confirmation, true);
     assert.equal(result.plan.cross_scope_change_count, 1);
     assert.equal(
       db.prepare(`SELECT COUNT(*) AS count FROM universes WHERE universe_id = ?`).get("shared-universe").count,

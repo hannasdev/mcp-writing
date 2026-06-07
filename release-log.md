@@ -6,6 +6,14 @@ This complements `CHANGELOG.md`:
 - `CHANGELOG.md` is technical and release-oriented.
 - This log is plain-language and outcome-oriented.
 
+### 2026-06-07 — Make project restore plans easier to scan
+
+- What changed: `restore_project_from_backup` now returns compact `plan_summary` data, surfaces apply blockers in `blocking_requirements`, and accepts `include_unchanged=false` to suppress unchanged row details while preserving default full-plan output.
+- Why it matters: Authors, maintainers, and AI agents can see checksum, destructive, and cross-scope restore requirements quickly during recovery without losing audit detail when they need the full plan.
+- Who is affected: Authors, maintainers, and AI agents reviewing or applying project backup restores.
+- Action needed: Start with `plan_summary` and `blocking_requirements` during recovery; use `include_unchanged=false` for shorter dry-run plans, and omit it when full unchanged-row audit detail is needed.
+- PR: TBD
+
 ### 2026-06-06 — Accept unambiguous names in relationship evidence tools
 
 - What changed: `connect_character_place_evidence`, `connect_scene_character_evidence`, and `connect_scene_place_evidence` now resolve unambiguous scene titles, character names, place names, and case variants to canonical IDs before writing relationship evidence.

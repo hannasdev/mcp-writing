@@ -11,7 +11,7 @@ It supports metadata-first reasoning, explicit prose editing workflows, and revi
 
 Active initiative: [Human Input Forgiveness](docs/initiatives/active/human-input-forgiveness/prd.md).
 
-Current focus: M3 - Forgiving Relationship Evidence Inputs.
+Current focus: M4 - Restore Plan Scannability.
 
 Most recent completed initiative: [Relationship Metadata Boundary](docs/initiatives/done/relationship-metadata-boundary/prd.md).
 

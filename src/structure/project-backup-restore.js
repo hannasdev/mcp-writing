@@ -873,6 +873,79 @@ function buildRestorePlan(currentSnapshot, backupSnapshot, { projectId }) {
   };
 }
 
+function buildPlanSummary(plan) {
+  return {
+    totals: { ...plan.totals },
+    by_domain: plan.by_domain,
+    destructive_change_count: plan.destructive_change_count,
+    cross_scope_change_count: plan.cross_scope_change_count,
+    has_destructive_changes: plan.destructive_change_count > 0,
+    has_cross_scope_changes: plan.cross_scope_change_count > 0,
+    requires_destructive_confirmation: plan.destructive_change_count > 0,
+    requires_cross_scope_confirmation: plan.cross_scope_change_count > 0,
+  };
+}
+
+function buildPlanDetailPolicy({ includeUnchanged, omittedUnchangedChangeCount }) {
+  return {
+    include_unchanged: includeUnchanged,
+    unchanged_rows_included: includeUnchanged,
+    omitted_unchanged_change_count: omittedUnchangedChangeCount,
+    full_plan_available: true,
+    full_plan_next_step: includeUnchanged
+      ? "This response includes unchanged rows. Pass include_unchanged=false to suppress unchanged row details while keeping plan_summary counts."
+      : "Rerun the restore plan with include_unchanged=true or omit include_unchanged to retrieve unchanged row details.",
+  };
+}
+
+function applyPlanDetailPolicy(plan, { includeUnchanged }) {
+  const omittedUnchangedChangeCount = plan.changes.filter(change => change.action === "unchanged").length;
+  if (includeUnchanged) {
+    return {
+      plan,
+      planDetailPolicy: buildPlanDetailPolicy({
+        includeUnchanged,
+        omittedUnchangedChangeCount: 0,
+      }),
+    };
+  }
+
+  return {
+    plan: {
+      ...plan,
+      changes: plan.changes.filter(change => change.action !== "unchanged"),
+    },
+    planDetailPolicy: buildPlanDetailPolicy({
+      includeUnchanged,
+      omittedUnchangedChangeCount,
+    }),
+  };
+}
+
+const BLOCKING_REQUIREMENT_PRIORITY = new Map([
+  ["project_restore_current_snapshot_confirmation_required", 0],
+  ["project_restore_current_snapshot_changed", 1],
+  ["project_restore_destructive_confirmation_required", 2],
+  ["project_restore_cross_scope_confirmation_required", 3],
+]);
+
+function buildBlockingRequirements(diagnostics) {
+  return [...diagnostics]
+    .sort((left, right) => {
+      const priorityDelta =
+        (BLOCKING_REQUIREMENT_PRIORITY.get(left.type) ?? 99) -
+        (BLOCKING_REQUIREMENT_PRIORITY.get(right.type) ?? 99);
+      if (priorityDelta !== 0) return priorityDelta;
+      return left.type.localeCompare(right.type);
+    })
+    .map(diagnostic => ({
+      type: diagnostic.type,
+      message: diagnostic.message,
+      next_step: diagnostic.next_step ?? null,
+      details: diagnostic.details,
+    }));
+}
+
 function placeholders(values) {
   return values.map(() => "?").join(",") || "NULL";
 }
@@ -1059,6 +1132,7 @@ export function restoreProjectFromBackup(db, {
   confirmDestructive = false,
   confirmCrossScope = false,
   expectedCurrentSnapshotChecksum = null,
+  includeUnchanged = true,
   applicationVersion = "0.0.0",
 } = {}) {
   const resolvedBackupDir = resolveBackupDir(backupPath ?? path.join(syncDir, "project-backups", projectId));
@@ -1150,6 +1224,10 @@ export function restoreProjectFromBackup(db, {
   }
 
   const plan = buildRestorePlan(current.snapshot, snapshot, { projectId });
+  const planSummary = buildPlanSummary(plan);
+  const { plan: responsePlan, planDetailPolicy } = applyPlanDetailPolicy(plan, {
+    includeUnchanged: includeUnchanged !== false,
+  });
   const applyDiagnostics = [];
   if (dryRun === false) {
     if (typeof expectedCurrentSnapshotChecksum !== "string" || expectedCurrentSnapshotChecksum === "") {
@@ -1222,8 +1300,11 @@ export function restoreProjectFromBackup(db, {
       dry_run: Boolean(dryRun),
       project_id: projectId,
       backup_dir: resolvedBackupDir,
+      blocking_requirements: buildBlockingRequirements(applyDiagnostics),
       diagnostics: applyDiagnostics,
-      plan,
+      plan_summary: planSummary,
+      plan_detail_policy: planDetailPolicy,
+      plan: responsePlan,
       next_step: "Resolve confirmation requirements before applying this trusted backup.",
     };
   }
@@ -1259,7 +1340,9 @@ export function restoreProjectFromBackup(db, {
           },
           { severity: "error", nextStep: "Review the database error and retry after resolving conflicts." }
         )],
-        plan,
+        plan_summary: planSummary,
+        plan_detail_policy: planDetailPolicy,
+        plan: responsePlan,
         next_step: "Resolve restore write diagnostics before retrying.",
       };
     }
@@ -1279,7 +1362,9 @@ export function restoreProjectFromBackup(db, {
     },
     current_snapshot_checksum: current.checksum,
     backup_snapshot_checksum: manifest.checksums.canonical_snapshot_sha256,
-    plan,
+    plan_summary: planSummary,
+    plan_detail_policy: planDetailPolicy,
+    plan: responsePlan,
     applied: dryRun ? null : {
       restored: true,
       destructive_confirmed: Boolean(confirmDestructive),

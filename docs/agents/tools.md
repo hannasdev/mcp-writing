@@ -154,7 +154,7 @@ Explicitly restore canonical SQLite chapter, scene-placement, and epigraph struc
 
 ## restore_project_from_backup
 
-Explicitly restore a project from a trusted generated project backup bundle. Defaults to dry-run planning; dry_run=false applies canonical SQLite changes transactionally after the reviewed current snapshot checksum and required destructive or cross-scope confirmations are provided.
+Explicitly restore a project from a trusted generated project backup bundle. Defaults to dry-run planning; dry_run=false applies canonical SQLite changes transactionally after the reviewed current snapshot checksum and required destructive or cross-scope confirmations are provided. Responses include compact plan_summary and blocking_requirements for confirmation failures; include_unchanged=false suppresses unchanged row details while preserving summary counts.
 
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |
@@ -164,6 +164,7 @@ Explicitly restore a project from a trusted generated project backup bundle. Def
 | `confirm_destructive` | `boolean` | No | Required with dry_run=false when the restore plan includes delete candidates. |
 | `confirm_cross_scope` | `boolean` | No | Required with dry_run=false when the restore plan changes universe-scoped records. |
 | `expected_current_snapshot_checksum` | `string` | No | Required with dry_run=false; pass the current_snapshot_checksum returned by the reviewed dry-run plan to guard against state changes before apply. |
+| `include_unchanged` | `boolean` | No | If false, suppress unchanged rows from plan.changes while preserving plan_summary counts. Defaults to true for compatibility. |
 
 ---
 
