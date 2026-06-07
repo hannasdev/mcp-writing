@@ -2,7 +2,7 @@
 
 **Status:** Active
 
-Current implementation target: M3 - Forgiving Relationship Evidence Inputs.
+Current implementation target: M4 - Restore Plan Scannability.
 
 Created: 2026-06-06.
 

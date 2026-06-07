@@ -7,6 +7,10 @@ import yaml from "js-yaml";
 import { spawnServer, waitForServer, waitForExit, connectClient } from "../helpers/server.js";
 import { copyDirSync, createScrivenerDraftFixture, createScrivenerProjectBundleFixture } from "../helpers/fixtures.js";
 import { createTestContext } from "../helpers/server.js";
+import {
+  computeProjectBackupBundleChecksum,
+  computeProjectBackupSnapshotChecksum,
+} from "../../structure/project-backup.js";
 
 const ctx = createTestContext(3079, 3078);
 let writeSyncDir, readSyncDir;
@@ -30,6 +34,30 @@ after(async () => {
 const callTool = (n, a) => ctx.callTool(n, a);
 const callWriteTool = (n, a) => ctx.callWriteTool(n, a);
 const waitForAsyncJob = (id, t) => ctx.waitForAsyncJob(id, t);
+
+function rewriteBackupSnapshotWithValidChecksums(relativeBackupDir, snapshot) {
+  const backupDir = path.join(writeSyncDir, ...relativeBackupDir.split("/"));
+  const manifestPath = path.join(backupDir, "manifest.json");
+  const snapshotPath = path.join(backupDir, "canonical.snapshot.json");
+  const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+  const nextManifestBase = {
+    ...manifest,
+    checksums: {
+      ...manifest.checksums,
+      canonical_snapshot_sha256: computeProjectBackupSnapshotChecksum(snapshot),
+    },
+  };
+  const nextManifest = {
+    ...nextManifestBase,
+    checksums: {
+      ...nextManifestBase.checksums,
+      bundle_sha256: computeProjectBackupBundleChecksum({ manifest: nextManifestBase, snapshot }),
+    },
+  };
+  fs.writeFileSync(snapshotPath, `${JSON.stringify(snapshot, null, 2)}\n`, "utf8");
+  fs.writeFileSync(manifestPath, `${JSON.stringify(nextManifest, null, 2)}\n`, "utf8");
+}
+
 describe("sync tool", () => {
   test("returns scene indexed count after initial sync", async () => {
     const text = await callTool("sync");
@@ -251,6 +279,9 @@ describe("sync tool", () => {
     assert.equal(parsed.action, "planned");
     assert.equal(parsed.dry_run, true);
     assert.equal(parsed.plan.destructive_change_count >= 1, true);
+    assert.equal(parsed.plan_summary.destructive_change_count >= 1, true);
+    assert.equal(parsed.plan_detail_policy.include_unchanged, true);
+    assert.ok(parsed.plan.changes.some(change => change.action === "unchanged"));
     assert.ok(parsed.plan.changes.some(change => (
       change.domain === "chapters" &&
       change.action === "delete" &&
@@ -262,6 +293,141 @@ describe("sync tool", () => {
     });
     const chapters = JSON.parse(chaptersText);
     assert.ok(chapters.results.some(chapter => chapter.chapter_id === "ch-100-restore-dry-run-extra"));
+  });
+
+  test("restore_project_from_backup can suppress unchanged plan rows", async () => {
+    await callWriteTool("export_project_backup", {
+      project_id: "test-novel",
+      output_dir: "compact-restore-backups/test-novel",
+    });
+
+    await callWriteTool("create_chapter", {
+      project_id: "test-novel",
+      title: "Restore Compact Extra Chapter",
+      sort_index: 102,
+      chapter_id: "ch-102-restore-compact-extra",
+    });
+
+    const text = await callWriteTool("restore_project_from_backup", {
+      project_id: "test-novel",
+      backup_path: "compact-restore-backups/test-novel",
+      include_unchanged: false,
+    });
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.plan_summary.totals.unchanged > 0, true);
+    assert.equal(parsed.plan.totals.unchanged, parsed.plan_summary.totals.unchanged);
+    assert.equal(parsed.plan.changes.some(change => change.action === "unchanged"), false);
+    assert.equal(parsed.plan_detail_policy.include_unchanged, false);
+    assert.equal(
+      parsed.plan_detail_policy.omitted_unchanged_change_count,
+      parsed.plan_summary.totals.unchanged
+    );
+    assert.ok(parsed.plan.changes.some(change => (
+      change.domain === "chapters" &&
+      change.action === "delete" &&
+      change.identity.chapter_id === "ch-102-restore-compact-extra"
+    )));
+  });
+
+  test("restore_project_from_backup surfaces checksum and destructive blockers first", async () => {
+    await callWriteTool("export_project_backup", {
+      project_id: "test-novel",
+      output_dir: "refusal-backups/test-novel",
+    });
+
+    await callWriteTool("create_chapter", {
+      project_id: "test-novel",
+      title: "Restore Refusal Extra Chapter",
+      sort_index: 103,
+      chapter_id: "ch-103-restore-refusal-extra",
+    });
+
+    const missingChecksumText = await callWriteTool("restore_project_from_backup", {
+      project_id: "test-novel",
+      backup_path: "refusal-backups/test-novel",
+      dry_run: false,
+    });
+    const missingChecksum = JSON.parse(missingChecksumText);
+
+    assert.equal(missingChecksum.ok, false);
+    assert.deepEqual(missingChecksum.blocking_requirements.map(requirement => requirement.type), [
+      "project_restore_current_snapshot_confirmation_required",
+      "project_restore_destructive_confirmation_required",
+    ]);
+    assert.equal(missingChecksum.plan_summary.requires_destructive_confirmation, true);
+    assert.equal(missingChecksum.plan_summary.destructive_change_count >= 1, true);
+
+    const reviewedText = await callWriteTool("restore_project_from_backup", {
+      project_id: "test-novel",
+      backup_path: "refusal-backups/test-novel",
+    });
+    const reviewed = JSON.parse(reviewedText);
+
+    await callWriteTool("create_chapter", {
+      project_id: "test-novel",
+      title: "Restore Refusal Changed Chapter",
+      sort_index: 104,
+      chapter_id: "ch-104-restore-refusal-changed",
+    });
+
+    const changedChecksumText = await callWriteTool("restore_project_from_backup", {
+      project_id: "test-novel",
+      backup_path: "refusal-backups/test-novel",
+      dry_run: false,
+      confirm_destructive: true,
+      expected_current_snapshot_checksum: reviewed.current_snapshot_checksum,
+    });
+    const changedChecksum = JSON.parse(changedChecksumText);
+
+    assert.equal(changedChecksum.ok, false);
+    assert.equal(changedChecksum.blocking_requirements[0].type, "project_restore_current_snapshot_changed");
+    assert.equal(
+      changedChecksum.blocking_requirements[0].details.expected_current_snapshot_checksum,
+      reviewed.current_snapshot_checksum
+    );
+  });
+
+  test("restore_project_from_backup surfaces cross-scope blockers", async () => {
+    await callWriteTool("export_project_backup", {
+      project_id: "test-novel",
+      output_dir: "cross-scope-restore-backups/test-novel",
+    });
+    const snapshotPath = path.join(writeSyncDir, "cross-scope-restore-backups", "test-novel", "canonical.snapshot.json");
+    const snapshot = JSON.parse(fs.readFileSync(snapshotPath, "utf8"));
+    rewriteBackupSnapshotWithValidChecksums("cross-scope-restore-backups/test-novel", {
+      ...snapshot,
+      project: {
+        ...snapshot.project,
+        universe_id: "shared-restore-universe",
+      },
+      universe: {
+        universe_id: "shared-restore-universe",
+        name: "Shared Restore Universe",
+      },
+    });
+
+    const reviewedText = await callWriteTool("restore_project_from_backup", {
+      project_id: "test-novel",
+      backup_path: "cross-scope-restore-backups/test-novel",
+    });
+    const reviewed = JSON.parse(reviewedText);
+
+    const text = await callWriteTool("restore_project_from_backup", {
+      project_id: "test-novel",
+      backup_path: "cross-scope-restore-backups/test-novel",
+      dry_run: false,
+      expected_current_snapshot_checksum: reviewed.current_snapshot_checksum,
+    });
+    const parsed = JSON.parse(text);
+
+    assert.equal(parsed.ok, false);
+    assert.deepEqual(parsed.blocking_requirements.map(requirement => requirement.type), [
+      "project_restore_cross_scope_confirmation_required",
+    ]);
+    assert.equal(parsed.plan_summary.requires_cross_scope_confirmation, true);
+    assert.equal(parsed.plan_summary.cross_scope_change_count >= 1, true);
   });
 
   test("restore_project_from_backup applies confirmed restore plans transactionally", async () => {
@@ -296,6 +462,7 @@ describe("sync tool", () => {
     assert.equal(parsed.action, "restored");
     assert.equal(parsed.dry_run, false);
     assert.equal(parsed.applied.restored, true);
+    assert.equal(parsed.plan_summary.destructive_change_count >= 1, true);
     assert.ok(parsed.plan.changes.some(change => (
       change.domain === "chapters" &&
       change.action === "delete" &&
