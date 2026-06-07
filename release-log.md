@@ -12,7 +12,7 @@ This complements `CHANGELOG.md`:
 - Why it matters: Authors, maintainers, and AI agents get one durable explanation of what became more forgiving, what stayed canonical, and what remains deferred to future semantic search work.
 - Who is affected: Authors, maintainers, and AI agents using human-shaped inputs, metadata search, workflow discovery, relationship evidence tools, or backup restore recovery flows.
 - Action needed: Continue preferring canonical IDs when available; treat `resolved_from`, `outcome`, `blocking_requirements`, and keyword-search `next_step` fields as client-facing guidance, and keep semantic/prose search expectations with the Embedding-Based Search backlog.
-- PR: Pending
+- PR: [#240](https://github.com/hannasdev/mcp-writing/pull/240)
 
 ### 2026-06-07 — Resolve common scene vocabulary variants
 

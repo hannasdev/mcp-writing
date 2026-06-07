@@ -310,7 +310,7 @@ Explicit non-goals:
 
 ## M6 - Documentation, Release Notes, and Feedback Replay
 
-Status: Completed.
+Status: Completed in [PR #240](https://github.com/hannasdev/mcp-writing/pull/240).
 
 Goal: make the new UX contract durable and verify it against the original live
 testing scenarios.
