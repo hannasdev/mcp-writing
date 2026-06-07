@@ -310,7 +310,7 @@ Explicit non-goals:
 
 ## M6 - Documentation, Release Notes, and Feedback Replay
 
-Status: Implemented on branch.
+Status: Completed.
 
 Goal: make the new UX contract durable and verify it against the original live
 testing scenarios.
