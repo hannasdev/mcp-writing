@@ -10,6 +10,7 @@ import {
   resolvePlaceTargetForProject,
   resolveSceneTarget,
 } from "../core/canonical-target-resolution.js";
+import { buildFreeformFieldSuggestions } from "../core/vocabulary-resolution.js";
 import {
   FILESYSTEM_ARTIFACT_CLASSES,
   assertRegularFileReadTarget,
@@ -133,6 +134,24 @@ function buildRelationshipMetadataBoundaryDetails({ projectId, sceneId, blockedF
     discovery_workflows: ["describe_workflows", "find_scenes", "list_characters", "list_places"],
     next_step: "Use find_scenes, list_characters, and list_places to identify stable IDs. Use connect_character_place_evidence when the scene proves paired sheet-backed character/place evidence, connect_scene_character_evidence for character-only evidence, connect_scene_place_evidence for place-only evidence, and audit_relationship_metadata to review legacy sidecar/frontmatter relationship fields.",
   };
+}
+
+function selectProjectSceneTagVocabulary(db, { projectId }) {
+  return db.prepare(`
+    SELECT DISTINCT tag
+    FROM scene_tags
+    WHERE project_id = ? AND tag IS NOT NULL AND tag != ''
+    ORDER BY tag COLLATE NOCASE, tag
+  `).all(projectId).map(row => row.tag);
+}
+
+function selectProjectSceneBeatVocabulary(db, { projectId }) {
+  return db.prepare(`
+    SELECT DISTINCT save_the_cat_beat AS beat
+    FROM scenes
+    WHERE project_id = ? AND save_the_cat_beat IS NOT NULL AND save_the_cat_beat != ''
+    ORDER BY save_the_cat_beat COLLATE NOCASE, save_the_cat_beat
+  `).all(projectId).map(row => row.beat);
 }
 
 function alreadyLinkedRelationshipNextStep({ entityKind }) {
@@ -2636,7 +2655,7 @@ export function registerMetadataTools(s, {
   // ---- update_scene_metadata -----------------------------------------------
   s.tool(
     "update_scene_metadata",
-    "Update one or more non-structural, non-relationship metadata fields for a scene. Writes only supplied allowed fields to the .meta.yaml sidecar and preserves existing structural compatibility fields; it never modifies prose, mirrors path-derived structure, or changes scene character/place relationship authority. Structural fields (part, chapter, chapter_id, chapter_title, timeline_position) are rejected here; use list_chapters plus assign_scene_to_chapter, move_scene, rename_chapter, or reorder_chapter for structure changes. Relationship fields (characters, places) are rejected here; use discovery workflows plus connect_character_place_evidence when evidence is paired, connect_scene_character_evidence for character-only evidence, connect_scene_place_evidence for place-only evidence, and audit_relationship_metadata for legacy sidecar/frontmatter relationship review. Allowed changes are immediately reflected in the index. Only available when the sync dir is writable.",
+    "Update one or more non-structural, non-relationship metadata fields for a scene. Writes only supplied allowed fields to the .meta.yaml sidecar and preserves existing structural compatibility fields; it never modifies prose, mirrors path-derived structure, or changes scene character/place relationship authority. Structural fields (part, chapter, chapter_id, chapter_title, timeline_position) are rejected here; use list_chapters plus assign_scene_to_chapter, move_scene, rename_chapter, or reorder_chapter for structure changes. Relationship fields (characters, places) are rejected here; use discovery workflows plus connect_character_place_evidence when evidence is paired, connect_scene_character_evidence for character-only evidence, connect_scene_place_evidence for place-only evidence, and audit_relationship_metadata for legacy sidecar/frontmatter relationship review. Tags and Save the Cat beat remain freeform; responses may include field_suggestions when supplied values resemble existing vocabulary, but supplied casing/text is preserved. Allowed changes are immediately reflected in the index. Only available when the sync dir is writable.",
     {
       scene_id:   z.string().describe("The scene_id to update (e.g. 'sc-011-sebastian')."),
       project_id: z.string().describe("Project the scene belongs to (e.g. 'the-lamb')."),
@@ -2644,7 +2663,7 @@ export function registerMetadataTools(s, {
         title:             z.string().optional(),
         logline:           z.string().optional(),
         status:            z.string().optional().describe("Workflow status (e.g. 'draft', 'revision', 'complete'). Free text — no fixed vocabulary."),
-        save_the_cat_beat: z.string().optional(),
+        save_the_cat_beat: z.string().optional().describe("Freeform Save the Cat beat. Suggestions may be returned when the value resembles existing indexed beats, but the supplied value is preserved."),
         pov:               z.string().optional(),
         part:              z.number().int().optional().describe("Rejected by update_scene_metadata. Structural placement must use explicit structure workflows."),
         chapter:           z.number().int().optional().describe("Rejected by update_scene_metadata. Use assign_scene_to_chapter or move_scene with canonical chapter_id."),
@@ -2652,7 +2671,7 @@ export function registerMetadataTools(s, {
         chapter_title:     z.string().nullable().optional().describe("Rejected by update_scene_metadata. Use rename_chapter for canonical chapter title changes."),
         timeline_position: z.number().int().optional().describe("Rejected by update_scene_metadata. Use move_scene for ordering changes."),
         story_time:        z.string().optional(),
-        tags:              z.array(z.string()).optional(),
+        tags:              z.array(z.string()).optional().describe("Freeform scene tags. Suggestions may be returned when supplied values differ only by case from existing tags, but supplied casing is preserved."),
         characters:        z.array(z.string()).optional().describe("Rejected by update_scene_metadata. Use find_scenes, list_characters, list_places, connect_character_place_evidence when evidence is paired, connect_scene_character_evidence for character-only evidence, and audit_relationship_metadata for compatibility review."),
         places:            z.array(z.string()).optional().describe("Rejected by update_scene_metadata. Use find_scenes, list_characters, list_places, connect_character_place_evidence when evidence is paired, connect_scene_place_evidence for place-only evidence, and audit_relationship_metadata for compatibility review."),
       }).describe("Fields to update. Only supplied keys are changed."),
@@ -2693,6 +2712,13 @@ export function registerMetadataTools(s, {
       }
       try {
         const relationshipSnapshot = querySceneRelationshipSnapshot(db, { sceneId: scene_id, projectId: project_id });
+        const fieldSuggestions = buildFreeformFieldSuggestions({
+          fields,
+          vocabulary: {
+            tags: selectProjectSceneTagVocabulary(db, { projectId: project_id }),
+            beats: selectProjectSceneBeatVocabulary(db, { projectId: project_id }),
+          },
+        });
         const { sourceMeta } = readSourceMeta(scene.file_path, SYNC_DIR, { writable: true });
         const updated = { ...sourceMeta, ...fields };
         writeMeta(scene.file_path, updated, { syncDir: SYNC_DIR });
@@ -2751,6 +2777,7 @@ export function registerMetadataTools(s, {
           message: `Updated metadata for scene '${scene_id}'.`,
           scene_id,
           project_id,
+          ...(fieldSuggestions ? { field_suggestions: fieldSuggestions } : {}),
           ...backupMutationFields(backupResult),
         });
       } catch (err) {

@@ -39,6 +39,154 @@ describe("search tools integration suite", { concurrency: 1 }, () => {
     assert.equal(parsed.total_count, 3);
   });
 
+  test("resolves project-scoped character and POV filters from human-shaped input", async () => {
+    await callWriteTool("update_scene_metadata", {
+      scene_id: "sc-001",
+      project_id: "test-novel",
+      fields: { pov: "elena" },
+    });
+
+    const characterText = await callWriteTool("find_scenes", {
+      project_id: "test-novel",
+      character: "Elena Voss",
+      page_size: 200,
+    });
+    const characterParsed = JSON.parse(characterText);
+    assert.equal(characterParsed.total_count >= 3, true);
+    assert.deepEqual(characterParsed.resolved_filters.character, {
+      input: "Elena Voss",
+      matched_field: "name",
+      match_type: "case_insensitive_name",
+      id: "elena",
+    });
+
+    const povText = await callWriteTool("find_scenes", {
+      project_id: "test-novel",
+      pov: "ELENA VOSS",
+    });
+    const povParsed = JSON.parse(povText);
+    assert.equal(povParsed.total_count >= 1, true);
+    assert.ok(povParsed.results.every(row => row.pov === "elena"));
+    assert.ok(povParsed.results.some(row => row.scene_id === "sc-001"));
+    assert.deepEqual(povParsed.resolved_filters.pov, {
+      input: "ELENA VOSS",
+      matched_field: "name",
+      match_type: "case_insensitive_name",
+      id: "elena",
+    });
+  });
+
+  test("preserves project-scoped indexed character and POV ID filters without sheet rows", async () => {
+    const sceneDir = path.join(writeSyncDir, "projects", "test-novel", "scenes");
+    fs.mkdirSync(sceneDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(sceneDir, "sc-m5-orphan-indexed-character.md"),
+      [
+        "---",
+        "scene_id: sc-m5-orphan-indexed-character",
+        "title: M5 Orphan Indexed Character",
+        "characters:",
+        "  - m5-orphan-character",
+        "pov: m5-orphan-pov",
+        "---",
+        "Orphan indexed ID prose.",
+      ].join("\n"),
+      "utf8"
+    );
+    await callWriteTool("sync");
+
+    const characterText = await callWriteTool("find_scenes", {
+      project_id: "test-novel",
+      character: "M5-ORPHAN-CHARACTER",
+    });
+    const characterParsed = JSON.parse(characterText);
+    assert.equal(characterParsed.total_count, 1);
+    assert.equal(characterParsed.results[0].scene_id, "sc-m5-orphan-indexed-character");
+    assert.deepEqual(characterParsed.resolved_filters.character, {
+      input: "M5-ORPHAN-CHARACTER",
+      matched_field: "character_id",
+      match_type: "case_insensitive_id",
+      id: "m5-orphan-character",
+    });
+
+    const povText = await callWriteTool("find_scenes", {
+      project_id: "test-novel",
+      pov: "M5-ORPHAN-POV",
+    });
+    const povParsed = JSON.parse(povText);
+    assert.equal(povParsed.total_count, 1);
+    assert.equal(povParsed.results[0].scene_id, "sc-m5-orphan-indexed-character");
+    assert.deepEqual(povParsed.resolved_filters.pov, {
+      input: "M5-ORPHAN-POV",
+      matched_field: "character_id",
+      match_type: "case_insensitive_id",
+      id: "m5-orphan-pov",
+    });
+  });
+
+  test("returns direct character and POV resolution failure envelopes for ambiguous and missing names", async () => {
+    const characterDir = path.join(writeSyncDir, "projects", "test-novel", "world", "characters");
+    fs.mkdirSync(characterDir, { recursive: true });
+    for (const id of ["m5-ambiguous-a", "m5-ambiguous-b"]) {
+      fs.writeFileSync(
+        path.join(characterDir, `${id}.md`),
+        [
+          "---",
+          `character_id: ${id}`,
+          "name: M5 Ambiguous Alias",
+          "---",
+          "Ambiguous character prose.",
+        ].join("\n"),
+        "utf8"
+      );
+    }
+    await callWriteTool("sync");
+
+    const ambiguousCharacterText = await callWriteTool("find_scenes", {
+      project_id: "test-novel",
+      character: "M5 Ambiguous Alias",
+    });
+    const ambiguousCharacter = JSON.parse(ambiguousCharacterText);
+    assert.equal(ambiguousCharacter.ok, false);
+    assert.equal(ambiguousCharacter.error.code, "AMBIGUOUS_TARGET");
+    assert.equal(ambiguousCharacter.error.details.argument, "character");
+    assert.equal(ambiguousCharacter.error.details.project_id, "test-novel");
+    assert.equal(ambiguousCharacter.error.details.candidate_matches.length, 2);
+
+    const ambiguousPovText = await callWriteTool("find_scenes", {
+      project_id: "test-novel",
+      pov: "M5 Ambiguous Alias",
+    });
+    const ambiguousPov = JSON.parse(ambiguousPovText);
+    assert.equal(ambiguousPov.ok, false);
+    assert.equal(ambiguousPov.error.code, "AMBIGUOUS_TARGET");
+    assert.equal(ambiguousPov.error.details.argument, "pov");
+    assert.equal(ambiguousPov.error.details.project_id, "test-novel");
+    assert.equal(ambiguousPov.error.details.candidate_matches.length, 2);
+
+    const missingCharacterText = await callWriteTool("find_scenes", {
+      project_id: "test-novel",
+      character: "M5 Missing Character",
+    });
+    const missingCharacter = JSON.parse(missingCharacterText);
+    assert.equal(missingCharacter.ok, false);
+    assert.equal(missingCharacter.error.code, "NOT_FOUND");
+    assert.equal(missingCharacter.error.details.argument, "character");
+    assert.equal(missingCharacter.error.details.project_id, "test-novel");
+    assert.match(missingCharacter.error.details.next_step, /list_characters/);
+
+    const missingPovText = await callWriteTool("find_scenes", {
+      project_id: "test-novel",
+      pov: "M5 Missing POV",
+    });
+    const missingPov = JSON.parse(missingPovText);
+    assert.equal(missingPov.ok, false);
+    assert.equal(missingPov.error.code, "NOT_FOUND");
+    assert.equal(missingPov.error.details.argument, "pov");
+    assert.equal(missingPov.error.details.project_id, "test-novel");
+    assert.match(missingPov.error.details.next_step, /list_characters/);
+  });
+
   test("filters by character: marcus appears in 2 scenes", async () => {
     const text = await callTool("find_scenes", { character: "marcus" });
     assert.equal((text.match(/"scene_id"/g) ?? []).length, 2);
@@ -49,6 +197,93 @@ describe("search tools integration suite", { concurrency: 1 }, () => {
     assert.ok(text.includes("sc-003"));
     assert.ok(!text.includes("sc-001"));
     assert.ok(!text.includes("sc-002"));
+  });
+
+  test("matches tag, beat, and chapter_id filters case-insensitively", async () => {
+    const chaptersText = await callWriteTool("list_chapters", { project_id: "test-novel" });
+    const chapters = JSON.parse(chaptersText);
+    const firstChapterId = chapters.results.find(row => row.sort_index === 1).chapter_id;
+
+    const tagText = await callTool("find_scenes", { tag: "Harbor" });
+    const tagParsed = JSON.parse(tagText);
+    assert.equal(tagParsed.total_count >= 2, true);
+    assert.deepEqual(tagParsed.resolved_filters.tag, {
+      input: "Harbor",
+      matched_field: "tag",
+      match_type: "case_insensitive_value",
+      value: "harbor",
+    });
+
+    const beatText = await callTool("find_scenes", { beat: "catalyst" });
+    const beatParsed = JSON.parse(beatText);
+    assert.equal(beatParsed.total_count, 1);
+    assert.equal(beatParsed.results[0].scene_id, "sc-003");
+    assert.deepEqual(beatParsed.resolved_filters.beat, {
+      input: "catalyst",
+      matched_field: "save_the_cat_beat",
+      match_type: "case_insensitive_value",
+      value: "Catalyst",
+    });
+
+    const chapterText = await callWriteTool("find_scenes", {
+      project_id: "test-novel",
+      chapter_id: firstChapterId.toUpperCase(),
+    });
+    const chapterParsed = JSON.parse(chapterText);
+    assert.equal(chapterParsed.total_count >= 2, true);
+    assert.deepEqual(chapterParsed.resolved_filters.chapter_id, {
+      input: firstChapterId.toUpperCase(),
+      matched_field: "chapter_id",
+      match_type: "case_insensitive_id",
+      id: firstChapterId,
+    });
+  });
+
+  test("does not report one resolved tag when multiple authored case variants exist", async () => {
+    const sceneDir = path.join(writeSyncDir, "projects", "test-novel", "scenes");
+    fs.mkdirSync(sceneDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(sceneDir, "sc-m5-tag-case-variant.md"),
+      [
+        "---",
+        "scene_id: sc-m5-tag-case-variant",
+        "title: M5 Tag Case Variant",
+        "tags:",
+        "  - Harbor",
+        "---",
+        "Tag case variant prose.",
+      ].join("\n"),
+      "utf8"
+    );
+    await callWriteTool("sync");
+
+    const tagText = await callWriteTool("find_scenes", {
+      project_id: "test-novel",
+      tag: "HARBOR",
+      page_size: 200,
+    });
+    const tagParsed = JSON.parse(tagText);
+    assert.ok(tagParsed.results.some(row => row.scene_id === "sc-001"));
+    assert.ok(tagParsed.results.some(row => row.scene_id === "sc-m5-tag-case-variant"));
+    assert.equal(tagParsed.resolved_filters?.tag, undefined);
+  });
+
+  test("returns vocabulary suggestions without reading prose when structured filters miss", async () => {
+    const text = await callTool("find_scenes", {
+      project_id: "test-novel",
+      tag: "harbur",
+    });
+    const parsed = JSON.parse(text);
+    assert.equal(parsed.ok, false);
+    assert.equal(parsed.error.code, "NO_RESULTS");
+    assert.equal(parsed.error.details.lookup_kind, "scene_metadata_filters");
+    assert.ok(parsed.error.details.candidate_matches.some(candidate => (
+      candidate.target_kind === "tag" &&
+      candidate.value === "harbor" &&
+      candidate.match_type === "near_match_suggestion"
+    )));
+    assert.match(parsed.error.details.next_step, /Broaden filters/);
+    assert.doesNotMatch(parsed.error.details.next_step, /prose/i);
   });
 
   test("filters by chapter 1 returns 2 scenes", async () => {

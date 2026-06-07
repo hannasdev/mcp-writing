@@ -2,7 +2,7 @@
 
 **Status:** Active
 
-Current implementation target: M4 - Restore Plan Scannability.
+Current implementation target: M5 - Extended Vocabulary Resolution.
 
 Created: 2026-06-06.
 

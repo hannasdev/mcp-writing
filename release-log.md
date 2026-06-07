@@ -6,6 +6,14 @@ This complements `CHANGELOG.md`:
 - `CHANGELOG.md` is technical and release-oriented.
 - This log is plain-language and outcome-oriented.
 
+### 2026-06-07 — Resolve common scene vocabulary variants
+
+- What changed: `find_scenes` now accepts unambiguous project-scoped character names for `character` and `pov`, matches tag, beat, and `chapter_id` case variants, and returns candidate suggestions for near-miss tag or beat filters. `update_scene_metadata` preserves freeform tag and beat text while returning advisory suggestions when supplied values resemble existing vocabulary.
+- Why it matters: Authors and AI agents can use common human-shaped story vocabulary without first doing exact casing or ID lookup work, while freeform editorial fields stay under author control.
+- Who is affected: Authors, maintainers, and AI agents using `find_scenes` filters or updating scene tags and Save the Cat beats.
+- Action needed: Prefer canonical IDs when available; use project_id with character-backed `find_scenes` filters for name resolution, and treat tag/beat suggestions as guidance rather than automatic rewrites.
+- PR: TBD
+
 ### 2026-06-07 — Make project restore plans easier to scan
 
 - What changed: `restore_project_from_backup` now returns compact `plan_summary` data, surfaces apply blockers in `blocking_requirements`, and accepts `include_unchanged=false` to suppress unchanged row details while preserving default full-plan output.
