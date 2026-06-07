@@ -12,7 +12,7 @@ This complements `CHANGELOG.md`:
 - Why it matters: Authors and AI agents can use common human-shaped story vocabulary without first doing exact casing or ID lookup work, while freeform editorial fields stay under author control.
 - Who is affected: Authors, maintainers, and AI agents using `find_scenes` filters or updating scene tags and Save the Cat beats.
 - Action needed: Prefer canonical IDs when available; use project_id with character-backed `find_scenes` filters for name resolution, and treat tag/beat suggestions as guidance rather than automatic rewrites.
-- PR: TBD
+- PR: https://github.com/hannasdev/mcp-writing/pull/239
 
 ### 2026-06-07 — Make project restore plans easier to scan
 
