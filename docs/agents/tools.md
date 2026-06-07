@@ -277,18 +277,18 @@ Re-derive lightweight scene metadata from current prose (logline and character m
 
 ## find_scenes
 
-Find scenes by filtering on character, Save the Cat beat, tags, canonical chapter identity, numeric chapter alias, or POV. Returns ordered scene metadata only — no prose. Most filters are optional and combinable. `chapter_id` requires `project_id`; numeric `chapter` is a compatibility alias for read scopes only, resolved through canonical chapter identity, and must agree with `chapter_id` when both are provided. Supports pagination via page/page_size and auto-paginates large result sets with total_count. Warns if any matching scenes have stale metadata. Response shape note: always returns a structured envelope (`results`, `total_count`, with pagination fields when paging is active).
+Find scenes by filtering on character, Save the Cat beat, tags, canonical chapter identity, numeric chapter alias, or POV. Returns ordered scene metadata only — no prose. Most filters are optional and combinable. `character` and `pov` prefer character_id values and may resolve unambiguous project-scoped character names when project_id is provided. `tag` and `beat` match case-insensitively when unambiguous; near matches are suggestion-only. `chapter_id` requires `project_id` and accepts exact canonical IDs or unambiguous case variants; ambiguous case variants return candidate IDs. Numeric `chapter` is a compatibility alias for read scopes only, resolved through canonical chapter identity, and must agree with `chapter_id` when both are provided. Supports pagination via page/page_size and auto-paginates large result sets with total_count. Warns if any matching scenes have stale metadata. Response shape note: always returns a structured envelope (`results`, `total_count`, with pagination fields when paging is active).
 
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |
 | `project_id` | `string` | No | Project ID (e.g. 'the-lamb'). Use to scope results to one project. |
-| `character` | `string` | No | A character_id (e.g. 'char-mira-nystrom'). Returns only scenes that character appears in. Use list_characters first to find valid IDs. |
-| `beat` | `string` | No | Save the Cat beat name (e.g. 'Opening Image'). Exact match. |
-| `tag` | `string` | No | Scene tag to filter by. Exact match. |
+| `character` | `string` | No | A character_id (e.g. 'char-mira-nystrom'), or an unambiguous project-scoped character name when project_id is provided. Returns only scenes that character appears in. Use list_characters first to find valid IDs. |
+| `beat` | `string` | No | Save the Cat beat name (e.g. 'Opening Image'). Matches existing indexed beat values case-insensitively; near matches are suggestions only. |
+| `tag` | `string` | No | Scene tag to filter by. Matches existing indexed tag values case-insensitively; near matches are suggestions only. |
 | `part` | `integer` | No | Part number (integer, e.g. 1). Chapters are numbered globally across the whole project. |
 | `chapter` | `integer` | No | Read-scope compatibility alias resolved from canonical chapter sort order. Not a structural mutation target. |
-| `chapter_id` | `string` | No | Canonical chapter identifier. Requires project_id. Use list_chapters to find valid values. |
-| `pov` | `string` | No | POV character_id. Use list_characters first to find valid IDs. |
+| `chapter_id` | `string` | No | Canonical chapter identifier. Requires project_id. Case variants of existing chapter_id values are accepted. Use list_chapters to find valid values. |
+| `pov` | `string` | No | POV character_id, or an unambiguous project-scoped character name when project_id is provided. Use list_characters first to find valid IDs. |
 | `page` | `integer` | No | Optional page number for paginated responses (1-based). |
 | `page_size` | `integer` | No | Optional page size for paginated responses (default: 20, max: 200). |
 
@@ -721,7 +721,7 @@ Assign a scene to a canonical chapter through the explicit structure workflow. W
 
 ## update_scene_metadata
 
-Update one or more non-structural, non-relationship metadata fields for a scene. Writes only supplied allowed fields to the .meta.yaml sidecar and preserves existing structural compatibility fields; it never modifies prose, mirrors path-derived structure, or changes scene character/place relationship authority. Structural fields (part, chapter, chapter_id, chapter_title, timeline_position) are rejected here; use list_chapters plus assign_scene_to_chapter, move_scene, rename_chapter, or reorder_chapter for structure changes. Relationship fields (characters, places) are rejected here; use discovery workflows plus connect_character_place_evidence when evidence is paired, connect_scene_character_evidence for character-only evidence, connect_scene_place_evidence for place-only evidence, and audit_relationship_metadata for legacy sidecar/frontmatter relationship review. Allowed changes are immediately reflected in the index. Only available when the sync dir is writable.
+Update one or more non-structural, non-relationship metadata fields for a scene. Writes only supplied allowed fields to the .meta.yaml sidecar and preserves existing structural compatibility fields; it never modifies prose, mirrors path-derived structure, or changes scene character/place relationship authority. Structural fields (part, chapter, chapter_id, chapter_title, timeline_position) are rejected here; use list_chapters plus assign_scene_to_chapter, move_scene, rename_chapter, or reorder_chapter for structure changes. Relationship fields (characters, places) are rejected here; use discovery workflows plus connect_character_place_evidence when evidence is paired, connect_scene_character_evidence for character-only evidence, connect_scene_place_evidence for place-only evidence, and audit_relationship_metadata for legacy sidecar/frontmatter relationship review. Tags and Save the Cat beat remain freeform; responses may include field_suggestions when supplied values resemble existing vocabulary, but supplied casing/text is preserved. Allowed changes are immediately reflected in the index. Only available when the sync dir is writable.
 
 | Parameter | Type | Required | Description |
 | --- | --- | :---: | --- |

@@ -145,6 +145,73 @@ describe("update_scene_metadata tool", () => {
     assert.notEqual(sidecar.chapter_title, "Chapter 8");
   });
 
+  test("returns freeform vocabulary suggestions without rewriting supplied tags or beat", async () => {
+    await callWriteTool("sync");
+    const sceneDir = path.join(writeSyncDir, "projects", "test-novel", "scenes");
+    fs.mkdirSync(sceneDir, { recursive: true });
+    const scenePath = path.join(sceneDir, "sc-m5-vocabulary-freeform.md");
+    const sidecarFile = path.join(sceneDir, "sc-m5-vocabulary-freeform.meta.yaml");
+    fs.writeFileSync(
+      scenePath,
+      "---\nscene_id: sc-m5-vocabulary-freeform\ntitle: M5 Vocabulary Freeform\n---\nVocabulary prose.",
+      "utf8"
+    );
+
+    await callWriteTool("sync");
+
+    const updateText = await callWriteTool("update_scene_metadata", {
+      scene_id: "sc-m5-vocabulary-freeform",
+      project_id: "test-novel",
+      fields: {
+        tags: ["Harbor"],
+        save_the_cat_beat: "Catalst",
+      },
+    });
+    const updateParsed = JSON.parse(updateText);
+    assert.equal(updateParsed.ok, true, updateText);
+    assert.equal(updateParsed.field_suggestions.tags[0].input, "Harbor");
+    assert.equal(updateParsed.field_suggestions.tags[0].existing_value, "harbor");
+    assert.match(updateParsed.field_suggestions.tags[0].note, /supplied casing was preserved/);
+    assert.equal(updateParsed.field_suggestions.save_the_cat_beat[0].input, "Catalst");
+    assert.equal(updateParsed.field_suggestions.save_the_cat_beat[0].suggested_value, "Catalyst");
+    assert.match(updateParsed.field_suggestions.save_the_cat_beat[0].note, /Beat remains freeform/);
+
+    const sidecar = yaml.load(fs.readFileSync(sidecarFile, "utf8"));
+    assert.deepEqual(sidecar.tags, ["Harbor"]);
+    assert.equal(sidecar.save_the_cat_beat, "Catalst");
+  });
+
+  test("skips freeform vocabulary suggestions for empty tag and beat updates", async () => {
+    await callWriteTool("sync");
+    const sceneDir = path.join(writeSyncDir, "projects", "test-novel", "scenes");
+    fs.mkdirSync(sceneDir, { recursive: true });
+    const scenePath = path.join(sceneDir, "sc-m5-empty-vocabulary-freeform.md");
+    const sidecarFile = path.join(sceneDir, "sc-m5-empty-vocabulary-freeform.meta.yaml");
+    fs.writeFileSync(
+      scenePath,
+      "---\nscene_id: sc-m5-empty-vocabulary-freeform\ntitle: M5 Empty Vocabulary Freeform\n---\nEmpty vocabulary prose.",
+      "utf8"
+    );
+
+    await callWriteTool("sync");
+
+    const updateText = await callWriteTool("update_scene_metadata", {
+      scene_id: "sc-m5-empty-vocabulary-freeform",
+      project_id: "test-novel",
+      fields: {
+        tags: [],
+        save_the_cat_beat: "   ",
+      },
+    });
+    const updateParsed = JSON.parse(updateText);
+    assert.equal(updateParsed.ok, true, updateText);
+    assert.equal(updateParsed.field_suggestions, undefined);
+
+    const sidecar = yaml.load(fs.readFileSync(sidecarFile, "utf8"));
+    assert.deepEqual(sidecar.tags, []);
+    assert.equal(sidecar.save_the_cat_beat, "   ");
+  });
+
   test("rejects characters and places updates before sidecar writes or relationship reindexing", async () => {
     const sceneDir = path.join(writeSyncDir, "projects", "test-novel", "scenes");
     fs.mkdirSync(sceneDir, { recursive: true });

@@ -129,7 +129,7 @@ const totalCount = parsed.total_count ?? items.length;
 Goal: catch inconsistencies before sharing pages.
 
 1. Run `sync` after your latest writing session.
-2. Ask `find_scenes` for scenes involving a specific character or tag (for example, all scenes tagged `injury` or `promise`).
+2. Ask `find_scenes` for scenes involving a specific character or tag (for example, all scenes tagged `injury` or `promise`). Canonical IDs remain preferred, but character/POV filters can resolve unambiguous project-scoped character names, tag and beat filters can suggest near matches, and `chapter_id` accepts exact IDs or unambiguous case variants.
 3. Use `get_arc` to review that character's ordered progression across the manuscript.
 4. Load only the suspect scenes with `get_scene_prose`.
 5. Attach follow-up notes with `flag_scene` where continuity needs a fix.
@@ -152,7 +152,7 @@ Outcome: subplot structure stays visible and auditable, which reduces dropped th
 Goal: keep indexes accurate without manually re-tagging everything.
 
 1. After rewriting scenes, call `enrich_scene` to re-derive lightweight metadata from current prose.
-2. Use `update_scene_metadata` for intentional editorial fields (for example, beat, POV, status, and tags). It rejects scene `characters` and `places`; use `connect_character_place_evidence` when a scene proves paired sheet-backed character/place evidence, `connect_scene_character_evidence` for character-only evidence, and `connect_scene_place_evidence` for place-only evidence. Those relationship evidence tools prefer canonical IDs but also accept unambiguous scene titles, character names, place names, and case variants; ambiguous or suggested-only matches fail without mutating state. Use `audit_relationship_metadata` for retained sidecar/frontmatter relationship fields. Use `list_chapters` plus `assign_scene_to_chapter` or `move_scene` for chapter placement and ordering.
+2. Use `update_scene_metadata` for intentional editorial fields (for example, beat, POV, status, and tags). Tags and beats remain freeform; the tool preserves supplied text while returning suggestions when a value resembles existing vocabulary. It rejects scene `characters` and `places`; use `connect_character_place_evidence` when a scene proves paired sheet-backed character/place evidence, `connect_scene_character_evidence` for character-only evidence, and `connect_scene_place_evidence` for place-only evidence. Those relationship evidence tools prefer canonical IDs but also accept unambiguous scene titles, character names, place names, and case variants; ambiguous or suggested-only matches fail without mutating state. Use `audit_relationship_metadata` for retained sidecar/frontmatter relationship fields. Use `list_chapters` plus `assign_scene_to_chapter` or `move_scene` for chapter placement and ordering.
 3. Use `search_metadata` for keyword/FTS metadata searches across indexed titles, loglines, tags, characters, places, and versions, and use `find_scenes` to verify scenes are discoverable under structured filters. After identifying likely scenes, use `get_scene_prose` for prose context.
 
 Outcome: your AI assistant can reliably find the right scenes without drifting from the manuscript.

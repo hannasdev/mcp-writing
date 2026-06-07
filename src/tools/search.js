@@ -7,6 +7,15 @@ import {
   upsertExplicitReferenceLinkRow,
 } from "./reference-link-persistence.js";
 import { resolveValidatedChapterFilter } from "../core/chapter-resolution.js";
+import { resolveCharacterTargetForProject } from "../core/canonical-target-resolution.js";
+import {
+  buildVocabularyNoResultsDetails,
+  resolveVocabularyValue,
+  selectSceneBeatCaseVariants,
+  selectSceneBeatVocabulary,
+  selectSceneTagCaseVariants,
+  selectSceneTagVocabulary,
+} from "../core/vocabulary-resolution.js";
 import {
   createToolActor,
   refreshProjectBackupAfterMutation,
@@ -62,6 +71,141 @@ function selectApplyCandidates(enrichedCandidates, selectedDocIds, maxApply) {
   return uniqueCandidates.slice(0, maxApply ?? uniqueCandidates.length);
 }
 
+function resolveCaseInsensitiveChapterId(db, { projectId, chapterId }) {
+  if (!projectId || !chapterId) return { chapterId, resolvedFrom: undefined };
+  const rows = db.prepare(`
+    SELECT chapter_id, title
+    FROM chapters
+    WHERE project_id = ? AND lower(chapter_id) = lower(?)
+    ORDER BY chapter_id
+  `).all(projectId, chapterId);
+  const exactMatch = rows.find(row => row.chapter_id === chapterId);
+  if (exactMatch) {
+    return { chapterId, resolvedFrom: undefined };
+  }
+  if (rows.length > 1) {
+    return {
+      error: {
+        code: "AMBIGUOUS_TARGET",
+        message: `Chapter ID '${chapterId}' resolves to multiple case variants in project '${projectId}'. Use an exact canonical chapter_id.`,
+        details: {
+          lookup_kind: "chapter",
+          target_kind: "chapter",
+          input: chapterId,
+          project_id: projectId,
+          candidate_matches: rows.map(row => ({
+            target_kind: "chapter",
+            id: row.chapter_id,
+            label: row.title || row.chapter_id,
+            matched_field: "chapter_id",
+            match_type: "case_insensitive_id",
+            project_id: projectId,
+          })),
+          next_step: "Use list_chapters to inspect exact chapter_id values, then retry with the intended canonical chapter_id casing.",
+        },
+      },
+    };
+  }
+  if (rows.length !== 1) return { chapterId, resolvedFrom: undefined };
+  return {
+    chapterId: rows[0].chapter_id,
+    resolvedFrom: {
+      chapter_id: {
+        input: chapterId,
+        matched_field: "chapter_id",
+        match_type: "case_insensitive_id",
+        id: rows[0].chapter_id,
+      },
+    },
+  };
+}
+
+function buildIndexedSceneCharacterResolution(rows, { input, argumentName }) {
+  if (rows.length === 0) return undefined;
+  if (rows.length === 1 && rows[0].value !== input) {
+    return {
+      value: rows[0].value,
+      resolved_from: {
+        [argumentName]: {
+          input,
+          matched_field: "character_id",
+          match_type: "case_insensitive_id",
+          id: rows[0].value,
+        },
+      },
+    };
+  }
+  return { value: input, values: rows.map(row => row.value), resolved_from: undefined };
+}
+
+function resolveIndexedSceneCharacterId(db, { projectId, input, argumentName }) {
+  if (!projectId || !input) return undefined;
+  const rows = db.prepare(`
+    SELECT DISTINCT character_id AS value
+    FROM scene_characters
+    WHERE project_id = ? AND character_id IS NOT NULL AND character_id != ''
+      AND lower(character_id) = lower(?)
+    ORDER BY character_id
+  `).all(projectId, input);
+  return buildIndexedSceneCharacterResolution(rows, { input, argumentName });
+}
+
+function resolveIndexedScenePovId(db, { projectId, input, argumentName }) {
+  if (!projectId || !input) return undefined;
+  const rows = db.prepare(`
+    SELECT DISTINCT pov AS value
+    FROM scenes
+    WHERE project_id = ? AND pov IS NOT NULL AND pov != ''
+      AND lower(pov) = lower(?)
+    ORDER BY pov
+  `).all(projectId, input);
+  return buildIndexedSceneCharacterResolution(rows, { input, argumentName });
+}
+
+function mapCharacterResolutionError(errorResponse, resolution, { argumentName, input, projectId }) {
+  return errorResponse(resolution.error.code, resolution.error.message, {
+    ...(resolution.error.details ?? {}),
+    argument: argumentName,
+    input,
+    project_id: projectId,
+  });
+}
+
+function mergeResolvedFilters(...filters) {
+  const merged = {};
+  for (const filter of filters) {
+    if (filter) Object.assign(merged, filter);
+  }
+  return Object.keys(merged).length > 0 ? merged : undefined;
+}
+
+function valuesForVocabularyResolution(resolution, fallback) {
+  if (!resolution.ok) return [fallback];
+  if (Array.isArray(resolution.case_variants) && resolution.case_variants.length > 0) {
+    return resolution.case_variants.map(candidate => candidate.value);
+  }
+  return [resolution.value];
+}
+
+function valuesForIndexedResolution(resolution, fallback) {
+  if (Array.isArray(resolution?.values) && resolution.values.length > 0) {
+    return resolution.values;
+  }
+  if (resolution?.value) return [resolution.value];
+  return fallback ? [fallback] : [];
+}
+
+function addExactValueCondition({ conditions, params, column, values }) {
+  if (!Array.isArray(values) || values.length === 0) return;
+  if (values.length === 1) {
+    conditions.push(`${column} = ?`);
+    params.push(values[0]);
+    return;
+  }
+  conditions.push(`${column} IN (${values.map(() => "?").join(", ")})`);
+  params.push(...values);
+}
+
 export function registerSearchTools(s, {
   db,
   SYNC_DIR,
@@ -79,16 +223,16 @@ export function registerSearchTools(s, {
   // ---- find_scenes ---------------------------------------------------------
   s.tool(
     "find_scenes",
-    "Find scenes by filtering on character, Save the Cat beat, tags, canonical chapter identity, numeric chapter alias, or POV. Returns ordered scene metadata only — no prose. Most filters are optional and combinable. `chapter_id` requires `project_id`; numeric `chapter` is a compatibility alias for read scopes only, resolved through canonical chapter identity, and must agree with `chapter_id` when both are provided. Supports pagination via page/page_size and auto-paginates large result sets with total_count. Warns if any matching scenes have stale metadata. Response shape note: always returns a structured envelope (`results`, `total_count`, with pagination fields when paging is active).",
+    "Find scenes by filtering on character, Save the Cat beat, tags, canonical chapter identity, numeric chapter alias, or POV. Returns ordered scene metadata only — no prose. Most filters are optional and combinable. `character` and `pov` prefer character_id values and may resolve unambiguous project-scoped character names when project_id is provided. `tag` and `beat` match case-insensitively when unambiguous; near matches are suggestion-only. `chapter_id` requires `project_id` and accepts exact canonical IDs or unambiguous case variants; ambiguous case variants return candidate IDs. Numeric `chapter` is a compatibility alias for read scopes only, resolved through canonical chapter identity, and must agree with `chapter_id` when both are provided. Supports pagination via page/page_size and auto-paginates large result sets with total_count. Warns if any matching scenes have stale metadata. Response shape note: always returns a structured envelope (`results`, `total_count`, with pagination fields when paging is active).",
     {
       project_id: z.string().optional().describe("Project ID (e.g. 'the-lamb'). Use to scope results to one project."),
-      character:  z.string().optional().describe("A character_id (e.g. 'char-mira-nystrom'). Returns only scenes that character appears in. Use list_characters first to find valid IDs."),
-      beat:       z.string().optional().describe("Save the Cat beat name (e.g. 'Opening Image'). Exact match."),
-      tag:        z.string().optional().describe("Scene tag to filter by. Exact match."),
+      character:  z.string().optional().describe("A character_id (e.g. 'char-mira-nystrom'), or an unambiguous project-scoped character name when project_id is provided. Returns only scenes that character appears in. Use list_characters first to find valid IDs."),
+      beat:       z.string().optional().describe("Save the Cat beat name (e.g. 'Opening Image'). Matches existing indexed beat values case-insensitively; near matches are suggestions only."),
+      tag:        z.string().optional().describe("Scene tag to filter by. Matches existing indexed tag values case-insensitively; near matches are suggestions only."),
       part:       z.number().int().optional().describe("Part number (integer, e.g. 1). Chapters are numbered globally across the whole project."),
       chapter:    z.number().int().optional().describe("Read-scope compatibility alias resolved from canonical chapter sort order. Not a structural mutation target."),
-      chapter_id: z.string().optional().describe("Canonical chapter identifier. Requires project_id. Use list_chapters to find valid values."),
-      pov:        z.string().optional().describe("POV character_id. Use list_characters first to find valid IDs."),
+      chapter_id: z.string().optional().describe("Canonical chapter identifier. Requires project_id. Case variants of existing chapter_id values are accepted. Use list_chapters to find valid values."),
+      pov:        z.string().optional().describe("POV character_id, or an unambiguous project-scoped character name when project_id is provided. Use list_characters first to find valid IDs."),
       page:       z.number().int().min(1).optional().describe("Optional page number for paginated responses (1-based)."),
       page_size:  z.number().int().min(1).max(200).optional().describe("Optional page size for paginated responses (default: 20, max: 200)."),
     },
@@ -100,8 +244,143 @@ export function registerSearchTools(s, {
           { chapter_id }
         );
       }
-      const resolvedChapterFilter = project_id && (chapter_id || chapter != null)
-        ? resolveValidatedChapterFilter(db, { projectId: project_id, chapterNumber: chapter, chapterId: chapter_id })
+      const resolvedFilters = {};
+      const vocabularySuggestions = [];
+
+      let resolvedCharacter = character;
+      let resolvedCharacterValues = character ? [character] : [];
+      if (project_id && character) {
+        const indexedResolution = resolveIndexedSceneCharacterId(db, {
+          projectId: project_id,
+          input: character,
+          argumentName: "character",
+        });
+        if (indexedResolution) {
+          resolvedCharacter = indexedResolution.value;
+          resolvedCharacterValues = valuesForIndexedResolution(indexedResolution, character);
+          if (indexedResolution.resolved_from?.character) {
+            resolvedFilters.character = indexedResolution.resolved_from.character;
+          }
+        } else {
+          const resolution = resolveCharacterTargetForProject(db, {
+            projectId: project_id,
+            input: character,
+            argumentName: "character",
+          });
+          if (!resolution.ok) {
+            return mapCharacterResolutionError(errorResponse, resolution, {
+              argumentName: "character",
+              input: character,
+              projectId: project_id,
+            });
+          }
+          resolvedCharacter = resolution.character_id;
+          resolvedCharacterValues = [resolution.character_id];
+          if (resolution.resolved_from?.character) {
+            resolvedFilters.character = resolution.resolved_from.character;
+          }
+        }
+      }
+
+      let resolvedPov = pov;
+      let resolvedPovValues = pov ? [pov] : [];
+      if (project_id && pov) {
+        const indexedResolution = resolveIndexedScenePovId(db, {
+          projectId: project_id,
+          input: pov,
+          argumentName: "pov",
+        });
+        if (indexedResolution) {
+          resolvedPov = indexedResolution.value;
+          resolvedPovValues = valuesForIndexedResolution(indexedResolution, pov);
+          if (indexedResolution.resolved_from?.pov) {
+            resolvedFilters.pov = indexedResolution.resolved_from.pov;
+          }
+        } else {
+          const resolution = resolveCharacterTargetForProject(db, {
+            projectId: project_id,
+            input: pov,
+            argumentName: "pov",
+          });
+          if (!resolution.ok) {
+            return mapCharacterResolutionError(errorResponse, resolution, {
+              argumentName: "pov",
+              input: pov,
+              projectId: project_id,
+            });
+          }
+          resolvedPov = resolution.character_id;
+          resolvedPovValues = [resolution.character_id];
+          if (resolution.resolved_from?.pov) {
+            resolvedFilters.pov = resolution.resolved_from.pov;
+          }
+        }
+      }
+
+      let resolvedTag = tag;
+      let resolvedTagValues = tag ? [tag] : [];
+      if (tag) {
+        const tagCaseVariants = selectSceneTagCaseVariants(db, { projectId: project_id, input: tag });
+        const resolution = resolveVocabularyValue({
+          input: tag,
+          values: tagCaseVariants.length > 0
+            ? tagCaseVariants
+            : selectSceneTagVocabulary(db, { projectId: project_id }),
+          targetKind: "tag",
+          matchedField: "tag",
+        });
+        if (resolution.ok) {
+          resolvedTag = resolution.value;
+          resolvedTagValues = valuesForVocabularyResolution(resolution, tag);
+          if (resolution.resolved_from) resolvedFilters.tag = resolution.resolved_from;
+        } else if (resolution.candidate_matches.length > 0) {
+          vocabularySuggestions.push({
+            filter: "tag",
+            input: tag,
+            candidate_matches: resolution.candidate_matches,
+          });
+        }
+      }
+
+      let resolvedBeat = beat;
+      let resolvedBeatValues = beat ? [beat] : [];
+      if (beat) {
+        const beatCaseVariants = selectSceneBeatCaseVariants(db, { projectId: project_id, input: beat });
+        const resolution = resolveVocabularyValue({
+          input: beat,
+          values: beatCaseVariants.length > 0
+            ? beatCaseVariants
+            : selectSceneBeatVocabulary(db, { projectId: project_id }),
+          targetKind: "beat",
+          matchedField: "save_the_cat_beat",
+        });
+        if (resolution.ok) {
+          resolvedBeat = resolution.value;
+          resolvedBeatValues = valuesForVocabularyResolution(resolution, beat);
+          if (resolution.resolved_from) resolvedFilters.beat = resolution.resolved_from;
+        } else if (resolution.candidate_matches.length > 0) {
+          vocabularySuggestions.push({
+            filter: "beat",
+            input: beat,
+            candidate_matches: resolution.candidate_matches,
+          });
+        }
+      }
+
+      const chapterResolution = resolveCaseInsensitiveChapterId(db, { projectId: project_id, chapterId: chapter_id });
+      if (chapterResolution.error) {
+        return errorResponse(
+          chapterResolution.error.code,
+          chapterResolution.error.message,
+          chapterResolution.error.details
+        );
+      }
+      if (chapterResolution.resolvedFrom?.chapter_id) {
+        resolvedFilters.chapter_id = chapterResolution.resolvedFrom.chapter_id;
+      }
+
+      const resolvedChapterFilter = project_id && (chapterResolution.chapterId || chapter != null)
+        ? resolveValidatedChapterFilter(db, { projectId: project_id, chapterNumber: chapter, chapterId: chapterResolution.chapterId })
         : { chapter: null };
       if (resolvedChapterFilter.error) {
         return errorResponse(
@@ -126,16 +405,33 @@ export function registerSearchTools(s, {
       const conditions = [];
       const params = [];
 
-      if (character) {
-        joins.push(`JOIN scene_characters sc ON sc.scene_id = s.scene_id AND sc.project_id = s.project_id AND sc.character_id = ?`);
-        params.push(character);
+      if (resolvedCharacter) {
+        if (resolvedCharacterValues.length === 1) {
+          joins.push(`JOIN scene_characters sc ON sc.scene_id = s.scene_id AND sc.project_id = s.project_id AND sc.character_id = ?`);
+          params.push(resolvedCharacterValues[0]);
+        } else {
+          joins.push(`JOIN scene_characters sc ON sc.scene_id = s.scene_id AND sc.project_id = s.project_id AND sc.character_id IN (${resolvedCharacterValues.map(() => "?").join(", ")})`);
+          params.push(...resolvedCharacterValues);
+        }
       }
-      if (tag) {
-        joins.push(`JOIN scene_tags st ON st.scene_id = s.scene_id AND st.project_id = s.project_id AND st.tag = ?`);
-        params.push(tag);
+      if (resolvedTag) {
+        if (resolvedTagValues.length === 1) {
+          joins.push(`JOIN scene_tags st ON st.scene_id = s.scene_id AND st.project_id = s.project_id AND st.tag = ?`);
+          params.push(resolvedTagValues[0]);
+        } else {
+          joins.push(`JOIN scene_tags st ON st.scene_id = s.scene_id AND st.project_id = s.project_id AND st.tag IN (${resolvedTagValues.map(() => "?").join(", ")})`);
+          params.push(...resolvedTagValues);
+        }
       }
       if (project_id)  { conditions.push(`s.project_id = ?`);        params.push(project_id); }
-      if (beat)        { conditions.push(`s.save_the_cat_beat = ?`);  params.push(beat); }
+      if (resolvedBeat) {
+        addExactValueCondition({
+          conditions,
+          params,
+          column: "s.save_the_cat_beat",
+          values: resolvedBeatValues,
+        });
+      }
       if (part)        { conditions.push(`s.part = ?`);               params.push(part); }
       if (resolvedChapterFilter.chapter) {
         conditions.push(`s.chapter_id = ?`);
@@ -144,7 +440,14 @@ export function registerSearchTools(s, {
         conditions.push(`s.chapter = ?`);
         params.push(chapter);
       }
-      if (pov)         { conditions.push(`s.pov = ?`);                params.push(pov); }
+      if (resolvedPov) {
+        addExactValueCondition({
+          conditions,
+          params,
+          column: "s.pov",
+          values: resolvedPovValues,
+        });
+      }
 
       if (joins.length)      query += " " + joins.join(" ");
       if (conditions.length) query += " WHERE " + conditions.join(" AND ");
@@ -152,7 +455,24 @@ export function registerSearchTools(s, {
 
       const rows = db.prepare(query).all(...params);
       if (rows.length === 0) {
-        return errorResponse("NO_RESULTS", "No scenes match the given filters. Hint: broaden filters or call search_metadata with a keyword first.");
+        return errorResponse(
+          "NO_RESULTS",
+          "No scenes match the given filters. Hint: broaden filters, choose a suggested candidate, or call search_metadata with a keyword first.",
+          buildVocabularyNoResultsDetails({
+            filters: {
+              project_id: project_id ?? null,
+              character: character ?? null,
+              beat: beat ?? null,
+              tag: tag ?? null,
+              part: part ?? null,
+              chapter: chapter ?? null,
+              chapter_id: chapter_id ?? null,
+              pov: pov ?? null,
+            },
+            resolvedFilters: mergeResolvedFilters(resolvedFilters),
+            suggestions: vocabularySuggestions,
+          })
+        );
       }
 
       const staleCount = rows.filter(r => r.metadata_stale).length;
@@ -171,6 +491,7 @@ export function registerSearchTools(s, {
             results: paged.rows,
             ...paged.meta,
             warning,
+            resolved_filters: mergeResolvedFilters(resolvedFilters),
             next_step: staleCount > 0
               ? "Touch stale scenes as you work and run enrich_scene(scene_id, project_id) to recover metadata parity incrementally."
               : undefined,
@@ -179,6 +500,7 @@ export function registerSearchTools(s, {
             results: rows,
             total_count: rows.length,
             warning,
+            resolved_filters: mergeResolvedFilters(resolvedFilters),
             next_step: staleCount > 0
               ? "Touch stale scenes as you work and run enrich_scene(scene_id, project_id) to recover metadata parity incrementally."
               : undefined,
