@@ -277,6 +277,35 @@ describe("search tools integration suite", { concurrency: 1 }, () => {
     });
   });
 
+  test("rejects ambiguous chapter_id case variants before filtering scenes", async () => {
+    await callWriteTool("create_chapter", {
+      project_id: "test-novel",
+      chapter_id: "ch-m5-ambiguous-case",
+      title: "M5 Ambiguous Case Lower",
+      sort_index: 97,
+    });
+    await callWriteTool("create_chapter", {
+      project_id: "test-novel",
+      chapter_id: "CH-M5-AMBIGUOUS-CASE",
+      title: "M5 Ambiguous Case Upper",
+      sort_index: 98,
+    });
+
+    const text = await callWriteTool("find_scenes", {
+      project_id: "test-novel",
+      chapter_id: "Ch-M5-Ambiguous-Case",
+    });
+    const parsed = JSON.parse(text);
+    assert.equal(parsed.ok, false);
+    assert.equal(parsed.error.code, "AMBIGUOUS_TARGET");
+    assert.equal(parsed.error.details.lookup_kind, "chapter");
+    assert.deepEqual(
+      parsed.error.details.candidate_matches.map(candidate => candidate.id),
+      ["CH-M5-AMBIGUOUS-CASE", "ch-m5-ambiguous-case"]
+    );
+    assert.match(parsed.error.details.next_step, /list_chapters/);
+  });
+
   test("does not report one resolved tag when multiple authored case variants exist", async () => {
     const sceneDir = path.join(writeSyncDir, "projects", "test-novel", "scenes");
     fs.mkdirSync(sceneDir, { recursive: true });

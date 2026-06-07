@@ -2698,13 +2698,17 @@ export function registerMetadataTools(s, {
       }
       try {
         const relationshipSnapshot = querySceneRelationshipSnapshot(db, { sceneId: scene_id, projectId: project_id });
-        const fieldSuggestions = buildFreeformFieldSuggestions({
-          fields,
-          vocabulary: {
-            tags: selectSceneTagVocabulary(db, { projectId: project_id }),
-            beats: selectSceneBeatVocabulary(db, { projectId: project_id }),
-          },
-        });
+        const needsTagSuggestions = Array.isArray(fields.tags);
+        const needsBeatSuggestions = typeof fields.save_the_cat_beat === "string";
+        const fieldSuggestions = needsTagSuggestions || needsBeatSuggestions
+          ? buildFreeformFieldSuggestions({
+              fields,
+              vocabulary: {
+                ...(needsTagSuggestions ? { tags: selectSceneTagVocabulary(db, { projectId: project_id }) } : {}),
+                ...(needsBeatSuggestions ? { beats: selectSceneBeatVocabulary(db, { projectId: project_id }) } : {}),
+              },
+            })
+          : undefined;
         const { sourceMeta } = readSourceMeta(scene.file_path, SYNC_DIR, { writable: true });
         const updated = { ...sourceMeta, ...fields };
         writeMeta(scene.file_path, updated, { syncDir: SYNC_DIR });

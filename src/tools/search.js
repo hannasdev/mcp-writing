@@ -74,14 +74,39 @@ function selectApplyCandidates(enrichedCandidates, selectedDocIds, maxApply) {
 function resolveCaseInsensitiveChapterId(db, { projectId, chapterId }) {
   if (!projectId || !chapterId) return { chapterId, resolvedFrom: undefined };
   const rows = db.prepare(`
-    SELECT chapter_id
+    SELECT chapter_id, title
     FROM chapters
     WHERE project_id = ? AND lower(chapter_id) = lower(?)
     ORDER BY chapter_id
   `).all(projectId, chapterId);
-  if (rows.length !== 1 || rows[0].chapter_id === chapterId) {
+  const exactMatch = rows.find(row => row.chapter_id === chapterId);
+  if (exactMatch) {
     return { chapterId, resolvedFrom: undefined };
   }
+  if (rows.length > 1) {
+    return {
+      error: {
+        code: "AMBIGUOUS_TARGET",
+        message: `Chapter ID '${chapterId}' resolves to multiple case variants in project '${projectId}'. Use an exact canonical chapter_id.`,
+        details: {
+          lookup_kind: "chapter",
+          target_kind: "chapter",
+          input: chapterId,
+          project_id: projectId,
+          candidate_matches: rows.map(row => ({
+            target_kind: "chapter",
+            id: row.chapter_id,
+            label: row.title || row.chapter_id,
+            matched_field: "chapter_id",
+            match_type: "case_insensitive_id",
+            project_id: projectId,
+          })),
+          next_step: "Use list_chapters to inspect exact chapter_id values, then retry with the intended canonical chapter_id casing.",
+        },
+      },
+    };
+  }
+  if (rows.length !== 1) return { chapterId, resolvedFrom: undefined };
   return {
     chapterId: rows[0].chapter_id,
     resolvedFrom: {
@@ -343,6 +368,13 @@ export function registerSearchTools(s, {
       }
 
       const chapterResolution = resolveCaseInsensitiveChapterId(db, { projectId: project_id, chapterId: chapter_id });
+      if (chapterResolution.error) {
+        return errorResponse(
+          chapterResolution.error.code,
+          chapterResolution.error.message,
+          chapterResolution.error.details
+        );
+      }
       if (chapterResolution.resolvedFrom?.chapter_id) {
         resolvedFilters.chapter_id = chapterResolution.resolvedFrom.chapter_id;
       }
