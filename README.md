@@ -129,7 +129,7 @@ const totalCount = parsed.total_count ?? items.length;
 Goal: catch inconsistencies before sharing pages.
 
 1. Run `sync` after your latest writing session.
-2. Ask `find_scenes` for scenes involving a specific character or tag (for example, all scenes tagged `injury` or `promise`). Canonical IDs remain preferred, but character/POV filters can resolve unambiguous project-scoped character names, and tag, beat, and `chapter_id` filters accept case variants or return candidate suggestions.
+2. Ask `find_scenes` for scenes involving a specific character or tag (for example, all scenes tagged `injury` or `promise`). Canonical IDs remain preferred, but character/POV filters can resolve unambiguous project-scoped character names, tag and beat filters can suggest near matches, and `chapter_id` accepts exact IDs or unambiguous case variants.
 3. Use `get_arc` to review that character's ordered progression across the manuscript.
 4. Load only the suspect scenes with `get_scene_prose`.
 5. Attach follow-up notes with `flag_scene` where continuity needs a fix.

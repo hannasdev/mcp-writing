@@ -2699,9 +2699,9 @@ export function registerMetadataTools(s, {
       try {
         const relationshipSnapshot = querySceneRelationshipSnapshot(db, { sceneId: scene_id, projectId: project_id });
         const needsTagSuggestions = Array.isArray(fields.tags)
-          && fields.tags.some(tag => typeof tag === "string" && tag.trim());
+          && fields.tags.some(tag => typeof tag === "string" && Boolean(tag.trim()));
         const needsBeatSuggestions = typeof fields.save_the_cat_beat === "string"
-          && fields.save_the_cat_beat.trim();
+          && Boolean(fields.save_the_cat_beat.trim());
         const fieldSuggestions = needsTagSuggestions || needsBeatSuggestions
           ? buildFreeformFieldSuggestions({
               fields,
