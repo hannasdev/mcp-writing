@@ -12,7 +12,7 @@ This complements `CHANGELOG.md`:
 - Why it matters: Authors, maintainers, and AI agents can see checksum, destructive, and cross-scope restore requirements quickly during recovery without losing audit detail when they need the full plan.
 - Who is affected: Authors, maintainers, and AI agents reviewing or applying project backup restores.
 - Action needed: Start with `plan_summary` and `blocking_requirements` during recovery; use `include_unchanged=false` for shorter dry-run plans, and omit it when full unchanged-row audit detail is needed.
-- PR: TBD
+- PR: [#238](https://github.com/hannasdev/mcp-writing/pull/238)
 
 ### 2026-06-06 — Accept unambiguous names in relationship evidence tools
 
