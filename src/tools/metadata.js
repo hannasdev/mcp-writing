@@ -2698,8 +2698,10 @@ export function registerMetadataTools(s, {
       }
       try {
         const relationshipSnapshot = querySceneRelationshipSnapshot(db, { sceneId: scene_id, projectId: project_id });
-        const needsTagSuggestions = Array.isArray(fields.tags);
-        const needsBeatSuggestions = typeof fields.save_the_cat_beat === "string";
+        const needsTagSuggestions = Array.isArray(fields.tags)
+          && fields.tags.some(tag => typeof tag === "string" && tag.trim());
+        const needsBeatSuggestions = typeof fields.save_the_cat_beat === "string"
+          && fields.save_the_cat_beat.trim();
         const fieldSuggestions = needsTagSuggestions || needsBeatSuggestions
           ? buildFreeformFieldSuggestions({
               fields,
