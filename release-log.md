@@ -6,6 +6,14 @@ This complements `CHANGELOG.md`:
 - `CHANGELOG.md` is technical and release-oriented.
 - This log is plain-language and outcome-oriented.
 
+### 2026-06-07 — Document Human Input Forgiveness replay and rollout
+
+- What changed: Added a user-facing canonical ID and forgiving-input contract note, audited generated tool reference coverage, and recorded temp-fixture replay evidence for the original Human Input Forgiveness feedback scenarios.
+- Why it matters: Authors, maintainers, and AI agents get one durable explanation of what became more forgiving, what stayed canonical, and what remains deferred to future semantic search work.
+- Who is affected: Authors, maintainers, and AI agents using human-shaped inputs, metadata search, workflow discovery, relationship evidence tools, or backup restore recovery flows.
+- Action needed: Continue preferring canonical IDs when available; treat `resolved_from`, `outcome`, `blocking_requirements`, and keyword-search `next_step` fields as client-facing guidance, and keep semantic/prose search expectations with the Embedding-Based Search backlog.
+- PR: [#240](https://github.com/hannasdev/mcp-writing/pull/240)
+
 ### 2026-06-07 — Resolve common scene vocabulary variants
 
 - What changed: `find_scenes` now accepts unambiguous project-scoped character names for `character` and `pov`, matches tag, beat, and `chapter_id` case variants, and returns candidate suggestions for near-miss tag or beat filters. `update_scene_metadata` preserves freeform tag and beat text while returning advisory suggestions when supplied values resemble existing vocabulary.

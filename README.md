@@ -28,7 +28,7 @@ Instead of feeding an entire manuscript to an AI and hoping it fits in the conte
 
 **Current status:**
 - **Core platform complete:** Metadata-first analysis, SQLite-canonical structural and relationship metadata, compatibility sidecar maintenance, AI-assisted prose editing with confirmation + git history, review bundles, and Scrivener Direct extraction are all implemented.
-- **Recently completed:** Relationship Metadata Boundary closed the sidecar-first scene relationship mutation path, added SQLite-first paired and one-sided evidence workflows, and preserved legacy sidecar/frontmatter compatibility for sync and import.
+- **Recently completed:** Human Input Forgiveness made selected request-boundary inputs more forgiving, clarified keyword metadata search boundaries, and recorded temp-fixture replay validation while preserving stable canonical IDs.
 - **Active development:** No initiative is currently selected.
 - **Deferred backlog:** OpenClaw integration, client-agnostic setup, divisions, and embeddings search.
 - **Ideas and open questions:** tracked separately so future exploration does not distort the active roadmap.
@@ -121,6 +121,16 @@ if (parsed.ok === false) throw new Error(parsed.error?.message ?? "tool error");
 const items = parsed.results ?? [];
 const totalCount = parsed.total_count ?? items.length;
 ```
+
+## Canonical IDs and forgiving inputs
+
+Stable IDs remain the canonical identity for projects, chapters, scenes, characters, places, and relationship writes. When you already know the ID, pass it exactly.
+
+Some request-boundary fields now accept unambiguous human-shaped inputs, such as scene titles, character names, place names, or case variants. Successful tools still write and return canonical IDs, with `resolved_from` details when the input was resolved from a non-canonical value. Ambiguous matches, near matches, or suggested-only values fail or return advisory suggestions without mutating canonical state.
+
+Tags and Save the Cat beats remain freeform editorial vocabulary. `find_scenes` can match existing tag and beat casing variants, and metadata updates can suggest nearby existing vocabulary, but supplied tag and beat text is preserved unless you intentionally change it.
+
+`search_metadata` is keyword/FTS metadata search over indexed titles, loglines, tags, characters, places, and versions. It is not semantic search and does not search prose text; use `get_scene_prose` after metadata search or structured filters identify likely scenes. Semantic/prose search remains deferred to the Embedding-Based Search backlog.
 
 ## Usage scenarios
 
