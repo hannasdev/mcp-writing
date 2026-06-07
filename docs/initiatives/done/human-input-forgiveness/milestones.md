@@ -1,8 +1,8 @@
 # Human Input Forgiveness - Milestones
 
-**Status:** Active
+**Status:** Done
 
-Current implementation target: M6 - Documentation, Release Notes, and Feedback Replay.
+Current focus: None - initiative closed.
 
 Created: 2026-06-06.
 
@@ -309,6 +309,8 @@ Explicit non-goals:
 - No hidden canonical relationship mutation through tags or freeform metadata.
 
 ## M6 - Documentation, Release Notes, and Feedback Replay
+
+Status: Implemented on branch.
 
 Goal: make the new UX contract durable and verify it against the original live
 testing scenarios.

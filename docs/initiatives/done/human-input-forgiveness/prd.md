@@ -1,6 +1,8 @@
 # PRD: Human Input Forgiveness
 
-**Status:** Active
+**Status:** Done
+
+Completed: 2026-06-07.
 
 Created: 2026-06-06.
 

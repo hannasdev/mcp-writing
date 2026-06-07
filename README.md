@@ -28,8 +28,8 @@ Instead of feeding an entire manuscript to an AI and hoping it fits in the conte
 
 **Current status:**
 - **Core platform complete:** Metadata-first analysis, SQLite-canonical structural and relationship metadata, compatibility sidecar maintenance, AI-assisted prose editing with confirmation + git history, review bundles, and Scrivener Direct extraction are all implemented.
-- **Recently completed:** Relationship Metadata Boundary closed the sidecar-first scene relationship mutation path, added SQLite-first paired and one-sided evidence workflows, and preserved legacy sidecar/frontmatter compatibility for sync and import.
-- **Active development:** Human Input Forgiveness is closing with documentation, release-log, and temp-fixture replay validation.
+- **Recently completed:** Human Input Forgiveness made selected request-boundary inputs more forgiving, clarified keyword metadata search boundaries, and recorded temp-fixture replay validation while preserving stable canonical IDs.
+- **Active development:** No initiative is currently selected.
 - **Deferred backlog:** OpenClaw integration, client-agnostic setup, divisions, and embeddings search.
 - **Ideas and open questions:** tracked separately so future exploration does not distort the active roadmap.
 

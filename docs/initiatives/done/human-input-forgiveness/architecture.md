@@ -1,6 +1,6 @@
 # Human Input Forgiveness - Architecture Notes
 
-**Status:** Active
+**Status:** Done
 
 Created: 2026-06-06.
 
