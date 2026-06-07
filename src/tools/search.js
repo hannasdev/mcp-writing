@@ -11,6 +11,10 @@ import { resolveCharacterTargetForProject } from "../core/canonical-target-resol
 import {
   buildVocabularyNoResultsDetails,
   resolveVocabularyValue,
+  selectSceneBeatCaseVariants,
+  selectSceneBeatVocabulary,
+  selectSceneTagCaseVariants,
+  selectSceneTagVocabulary,
 } from "../core/vocabulary-resolution.js";
 import {
   createToolActor,
@@ -67,40 +71,6 @@ function selectApplyCandidates(enrichedCandidates, selectedDocIds, maxApply) {
   return uniqueCandidates.slice(0, maxApply ?? uniqueCandidates.length);
 }
 
-function selectSceneTagVocabulary(db, { projectId } = {}) {
-  const rows = projectId
-    ? db.prepare(`
-      SELECT DISTINCT tag
-      FROM scene_tags
-      WHERE project_id = ? AND tag IS NOT NULL AND tag != ''
-      ORDER BY tag COLLATE NOCASE, tag
-    `).all(projectId)
-    : db.prepare(`
-      SELECT DISTINCT tag
-      FROM scene_tags
-      WHERE tag IS NOT NULL AND tag != ''
-      ORDER BY tag COLLATE NOCASE, tag
-    `).all();
-  return rows.map(row => row.tag);
-}
-
-function selectSceneBeatVocabulary(db, { projectId } = {}) {
-  const rows = projectId
-    ? db.prepare(`
-      SELECT DISTINCT save_the_cat_beat AS beat
-      FROM scenes
-      WHERE project_id = ? AND save_the_cat_beat IS NOT NULL AND save_the_cat_beat != ''
-      ORDER BY save_the_cat_beat COLLATE NOCASE, save_the_cat_beat
-    `).all(projectId)
-    : db.prepare(`
-      SELECT DISTINCT save_the_cat_beat AS beat
-      FROM scenes
-      WHERE save_the_cat_beat IS NOT NULL AND save_the_cat_beat != ''
-      ORDER BY save_the_cat_beat COLLATE NOCASE, save_the_cat_beat
-    `).all();
-  return rows.map(row => row.beat);
-}
-
 function resolveCaseInsensitiveChapterId(db, { projectId, chapterId }) {
   if (!projectId || !chapterId) return { chapterId, resolvedFrom: undefined };
   const rows = db.prepare(`
@@ -140,7 +110,7 @@ function buildIndexedSceneCharacterResolution(rows, { input, argumentName }) {
       },
     };
   }
-  return { value: input, resolved_from: undefined };
+  return { value: input, values: rows.map(row => row.value), resolved_from: undefined };
 }
 
 function resolveIndexedSceneCharacterId(db, { projectId, input, argumentName }) {
@@ -190,6 +160,14 @@ function valuesForVocabularyResolution(resolution, fallback) {
     return resolution.case_variants.map(candidate => candidate.value);
   }
   return [resolution.value];
+}
+
+function valuesForIndexedResolution(resolution, fallback) {
+  if (Array.isArray(resolution?.values) && resolution.values.length > 0) {
+    return resolution.values;
+  }
+  if (resolution?.value) return [resolution.value];
+  return fallback ? [fallback] : [];
 }
 
 function addExactValueCondition({ conditions, params, column, values }) {
@@ -245,6 +223,7 @@ export function registerSearchTools(s, {
       const vocabularySuggestions = [];
 
       let resolvedCharacter = character;
+      let resolvedCharacterValues = character ? [character] : [];
       if (project_id && character) {
         const indexedResolution = resolveIndexedSceneCharacterId(db, {
           projectId: project_id,
@@ -253,6 +232,7 @@ export function registerSearchTools(s, {
         });
         if (indexedResolution) {
           resolvedCharacter = indexedResolution.value;
+          resolvedCharacterValues = valuesForIndexedResolution(indexedResolution, character);
           if (indexedResolution.resolved_from?.character) {
             resolvedFilters.character = indexedResolution.resolved_from.character;
           }
@@ -270,6 +250,7 @@ export function registerSearchTools(s, {
             });
           }
           resolvedCharacter = resolution.character_id;
+          resolvedCharacterValues = [resolution.character_id];
           if (resolution.resolved_from?.character) {
             resolvedFilters.character = resolution.resolved_from.character;
           }
@@ -277,6 +258,7 @@ export function registerSearchTools(s, {
       }
 
       let resolvedPov = pov;
+      let resolvedPovValues = pov ? [pov] : [];
       if (project_id && pov) {
         const indexedResolution = resolveIndexedScenePovId(db, {
           projectId: project_id,
@@ -285,6 +267,7 @@ export function registerSearchTools(s, {
         });
         if (indexedResolution) {
           resolvedPov = indexedResolution.value;
+          resolvedPovValues = valuesForIndexedResolution(indexedResolution, pov);
           if (indexedResolution.resolved_from?.pov) {
             resolvedFilters.pov = indexedResolution.resolved_from.pov;
           }
@@ -302,6 +285,7 @@ export function registerSearchTools(s, {
             });
           }
           resolvedPov = resolution.character_id;
+          resolvedPovValues = [resolution.character_id];
           if (resolution.resolved_from?.pov) {
             resolvedFilters.pov = resolution.resolved_from.pov;
           }
@@ -311,9 +295,12 @@ export function registerSearchTools(s, {
       let resolvedTag = tag;
       let resolvedTagValues = tag ? [tag] : [];
       if (tag) {
+        const tagCaseVariants = selectSceneTagCaseVariants(db, { projectId: project_id, input: tag });
         const resolution = resolveVocabularyValue({
           input: tag,
-          values: selectSceneTagVocabulary(db, { projectId: project_id }),
+          values: tagCaseVariants.length > 0
+            ? tagCaseVariants
+            : selectSceneTagVocabulary(db, { projectId: project_id }),
           targetKind: "tag",
           matchedField: "tag",
         });
@@ -333,9 +320,12 @@ export function registerSearchTools(s, {
       let resolvedBeat = beat;
       let resolvedBeatValues = beat ? [beat] : [];
       if (beat) {
+        const beatCaseVariants = selectSceneBeatCaseVariants(db, { projectId: project_id, input: beat });
         const resolution = resolveVocabularyValue({
           input: beat,
-          values: selectSceneBeatVocabulary(db, { projectId: project_id }),
+          values: beatCaseVariants.length > 0
+            ? beatCaseVariants
+            : selectSceneBeatVocabulary(db, { projectId: project_id }),
           targetKind: "beat",
           matchedField: "save_the_cat_beat",
         });
@@ -384,8 +374,13 @@ export function registerSearchTools(s, {
       const params = [];
 
       if (resolvedCharacter) {
-        joins.push(`JOIN scene_characters sc ON sc.scene_id = s.scene_id AND sc.project_id = s.project_id AND sc.character_id = ?`);
-        params.push(resolvedCharacter);
+        if (resolvedCharacterValues.length === 1) {
+          joins.push(`JOIN scene_characters sc ON sc.scene_id = s.scene_id AND sc.project_id = s.project_id AND sc.character_id = ?`);
+          params.push(resolvedCharacterValues[0]);
+        } else {
+          joins.push(`JOIN scene_characters sc ON sc.scene_id = s.scene_id AND sc.project_id = s.project_id AND sc.character_id IN (${resolvedCharacterValues.map(() => "?").join(", ")})`);
+          params.push(...resolvedCharacterValues);
+        }
       }
       if (resolvedTag) {
         if (resolvedTagValues.length === 1) {
@@ -413,7 +408,14 @@ export function registerSearchTools(s, {
         conditions.push(`s.chapter = ?`);
         params.push(chapter);
       }
-      if (resolvedPov) { conditions.push(`s.pov = ?`);  params.push(resolvedPov); }
+      if (resolvedPov) {
+        addExactValueCondition({
+          conditions,
+          params,
+          column: "s.pov",
+          values: resolvedPovValues,
+        });
+      }
 
       if (joins.length)      query += " " + joins.join(" ");
       if (conditions.length) query += " WHERE " + conditions.join(" AND ");

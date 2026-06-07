@@ -1,8 +1,10 @@
+import { isNearMatch, normalizeMatchValue } from "./match-utils.js";
+
 const DEFAULT_VOCABULARY_CANDIDATE_LIMIT = 5;
 const HARD_VOCABULARY_CANDIDATE_LIMIT = 10;
 
 function normalizeVocabularyValue(value) {
-  return String(value ?? "").trim().toLowerCase();
+  return normalizeMatchValue(value);
 }
 
 function clampCandidateLimit(candidateLimit) {
@@ -10,44 +12,6 @@ function clampCandidateLimit(candidateLimit) {
     return DEFAULT_VOCABULARY_CANDIDATE_LIMIT;
   }
   return Math.min(candidateLimit, HARD_VOCABULARY_CANDIDATE_LIMIT);
-}
-
-function levenshteinDistance(left, right) {
-  if (left === right) return 0;
-  if (left.length === 0) return right.length;
-  if (right.length === 0) return left.length;
-
-  const previous = Array.from({ length: right.length + 1 }, (_, index) => index);
-  const current = Array.from({ length: right.length + 1 }, () => 0);
-
-  for (let leftIndex = 1; leftIndex <= left.length; leftIndex += 1) {
-    current[0] = leftIndex;
-    for (let rightIndex = 1; rightIndex <= right.length; rightIndex += 1) {
-      const cost = left[leftIndex - 1] === right[rightIndex - 1] ? 0 : 1;
-      current[rightIndex] = Math.min(
-        current[rightIndex - 1] + 1,
-        previous[rightIndex] + 1,
-        previous[rightIndex - 1] + cost
-      );
-    }
-    for (let index = 0; index < previous.length; index += 1) {
-      previous[index] = current[index];
-    }
-  }
-
-  return previous[right.length];
-}
-
-function isNearVocabularyMatch(input, value) {
-  const normalizedInput = normalizeVocabularyValue(input);
-  const normalizedValue = normalizeVocabularyValue(value);
-  if (!normalizedInput || !normalizedValue) return false;
-  if (normalizedInput.length < 3 || normalizedValue.length < 3) return false;
-  if (normalizedValue.includes(normalizedInput) || normalizedInput.includes(normalizedValue)) return true;
-
-  const distance = levenshteinDistance(normalizedInput, normalizedValue);
-  const threshold = Math.max(1, Math.floor(Math.max(normalizedInput.length, normalizedValue.length) / 4));
-  return distance <= threshold;
 }
 
 function cleanVocabularyValues(values) {
@@ -140,7 +104,7 @@ export function resolveVocabularyValue({
   }
 
   const suggestions = vocabularyValues
-    .filter(value => isNearVocabularyMatch(input, value))
+    .filter(value => isNearMatch(input, value))
     .map(value => formatVocabularyCandidate({
       targetKind,
       value,
@@ -154,6 +118,80 @@ export function resolveVocabularyValue({
     target_kind: targetKind,
     candidate_matches: capVocabularyCandidates(suggestions, candidateLimit),
   };
+}
+
+export function selectSceneTagVocabulary(db, { projectId } = {}) {
+  const rows = projectId
+    ? db.prepare(`
+      SELECT DISTINCT tag
+      FROM scene_tags
+      WHERE project_id = ? AND tag IS NOT NULL AND tag != ''
+      ORDER BY tag COLLATE NOCASE, tag
+    `).all(projectId)
+    : db.prepare(`
+      SELECT DISTINCT tag
+      FROM scene_tags
+      WHERE tag IS NOT NULL AND tag != ''
+      ORDER BY tag COLLATE NOCASE, tag
+    `).all();
+  return rows.map(row => row.tag);
+}
+
+export function selectSceneBeatVocabulary(db, { projectId } = {}) {
+  const rows = projectId
+    ? db.prepare(`
+      SELECT DISTINCT save_the_cat_beat AS beat
+      FROM scenes
+      WHERE project_id = ? AND save_the_cat_beat IS NOT NULL AND save_the_cat_beat != ''
+      ORDER BY save_the_cat_beat COLLATE NOCASE, save_the_cat_beat
+    `).all(projectId)
+    : db.prepare(`
+      SELECT DISTINCT save_the_cat_beat AS beat
+      FROM scenes
+      WHERE save_the_cat_beat IS NOT NULL AND save_the_cat_beat != ''
+      ORDER BY save_the_cat_beat COLLATE NOCASE, save_the_cat_beat
+    `).all();
+  return rows.map(row => row.beat);
+}
+
+export function selectSceneTagCaseVariants(db, { projectId, input } = {}) {
+  if (!input) return [];
+  const rows = projectId
+    ? db.prepare(`
+      SELECT DISTINCT tag
+      FROM scene_tags
+      WHERE project_id = ? AND tag IS NOT NULL AND tag != ''
+        AND lower(tag) = lower(?)
+      ORDER BY tag COLLATE NOCASE, tag
+    `).all(projectId, input)
+    : db.prepare(`
+      SELECT DISTINCT tag
+      FROM scene_tags
+      WHERE tag IS NOT NULL AND tag != ''
+        AND lower(tag) = lower(?)
+      ORDER BY tag COLLATE NOCASE, tag
+    `).all(input);
+  return rows.map(row => row.tag);
+}
+
+export function selectSceneBeatCaseVariants(db, { projectId, input } = {}) {
+  if (!input) return [];
+  const rows = projectId
+    ? db.prepare(`
+      SELECT DISTINCT save_the_cat_beat AS beat
+      FROM scenes
+      WHERE project_id = ? AND save_the_cat_beat IS NOT NULL AND save_the_cat_beat != ''
+        AND lower(save_the_cat_beat) = lower(?)
+      ORDER BY save_the_cat_beat COLLATE NOCASE, save_the_cat_beat
+    `).all(projectId, input)
+    : db.prepare(`
+      SELECT DISTINCT save_the_cat_beat AS beat
+      FROM scenes
+      WHERE save_the_cat_beat IS NOT NULL AND save_the_cat_beat != ''
+        AND lower(save_the_cat_beat) = lower(?)
+      ORDER BY save_the_cat_beat COLLATE NOCASE, save_the_cat_beat
+    `).all(input);
+  return rows.map(row => row.beat);
 }
 
 export function buildVocabularyNoResultsDetails({

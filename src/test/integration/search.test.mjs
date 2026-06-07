@@ -122,6 +122,44 @@ describe("search tools integration suite", { concurrency: 1 }, () => {
       match_type: "case_insensitive_id",
       id: "m5-orphan-pov",
     });
+
+    fs.writeFileSync(
+      path.join(sceneDir, "sc-m5-orphan-indexed-character-variant.md"),
+      [
+        "---",
+        "scene_id: sc-m5-orphan-indexed-character-variant",
+        "title: M5 Orphan Indexed Character Variant",
+        "characters:",
+        "  - M5-ORPHAN-CHARACTER",
+        "pov: M5-ORPHAN-POV",
+        "---",
+        "Orphan indexed ID case variant prose.",
+      ].join("\n"),
+      "utf8"
+    );
+    await callWriteTool("sync");
+
+    const variantCharacterText = await callWriteTool("find_scenes", {
+      project_id: "test-novel",
+      character: "m5-orphan-character",
+      page_size: 200,
+    });
+    const variantCharacterParsed = JSON.parse(variantCharacterText);
+    assert.equal(variantCharacterParsed.total_count, 2);
+    assert.ok(variantCharacterParsed.results.some(row => row.scene_id === "sc-m5-orphan-indexed-character"));
+    assert.ok(variantCharacterParsed.results.some(row => row.scene_id === "sc-m5-orphan-indexed-character-variant"));
+    assert.equal(variantCharacterParsed.resolved_filters?.character, undefined);
+
+    const variantPovText = await callWriteTool("find_scenes", {
+      project_id: "test-novel",
+      pov: "m5-orphan-pov",
+      page_size: 200,
+    });
+    const variantPovParsed = JSON.parse(variantPovText);
+    assert.equal(variantPovParsed.total_count, 2);
+    assert.ok(variantPovParsed.results.some(row => row.scene_id === "sc-m5-orphan-indexed-character"));
+    assert.ok(variantPovParsed.results.some(row => row.scene_id === "sc-m5-orphan-indexed-character-variant"));
+    assert.equal(variantPovParsed.resolved_filters?.pov, undefined);
   });
 
   test("returns direct character and POV resolution failure envelopes for ambiguous and missing names", async () => {

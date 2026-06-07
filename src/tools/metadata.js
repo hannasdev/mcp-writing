@@ -10,7 +10,11 @@ import {
   resolvePlaceTargetForProject,
   resolveSceneTarget,
 } from "../core/canonical-target-resolution.js";
-import { buildFreeformFieldSuggestions } from "../core/vocabulary-resolution.js";
+import {
+  buildFreeformFieldSuggestions,
+  selectSceneBeatVocabulary,
+  selectSceneTagVocabulary,
+} from "../core/vocabulary-resolution.js";
 import {
   FILESYSTEM_ARTIFACT_CLASSES,
   assertRegularFileReadTarget,
@@ -134,24 +138,6 @@ function buildRelationshipMetadataBoundaryDetails({ projectId, sceneId, blockedF
     discovery_workflows: ["describe_workflows", "find_scenes", "list_characters", "list_places"],
     next_step: "Use find_scenes, list_characters, and list_places to identify stable IDs. Use connect_character_place_evidence when the scene proves paired sheet-backed character/place evidence, connect_scene_character_evidence for character-only evidence, connect_scene_place_evidence for place-only evidence, and audit_relationship_metadata to review legacy sidecar/frontmatter relationship fields.",
   };
-}
-
-function selectProjectSceneTagVocabulary(db, { projectId }) {
-  return db.prepare(`
-    SELECT DISTINCT tag
-    FROM scene_tags
-    WHERE project_id = ? AND tag IS NOT NULL AND tag != ''
-    ORDER BY tag COLLATE NOCASE, tag
-  `).all(projectId).map(row => row.tag);
-}
-
-function selectProjectSceneBeatVocabulary(db, { projectId }) {
-  return db.prepare(`
-    SELECT DISTINCT save_the_cat_beat AS beat
-    FROM scenes
-    WHERE project_id = ? AND save_the_cat_beat IS NOT NULL AND save_the_cat_beat != ''
-    ORDER BY save_the_cat_beat COLLATE NOCASE, save_the_cat_beat
-  `).all(projectId).map(row => row.beat);
 }
 
 function alreadyLinkedRelationshipNextStep({ entityKind }) {
@@ -2715,8 +2701,8 @@ export function registerMetadataTools(s, {
         const fieldSuggestions = buildFreeformFieldSuggestions({
           fields,
           vocabulary: {
-            tags: selectProjectSceneTagVocabulary(db, { projectId: project_id }),
-            beats: selectProjectSceneBeatVocabulary(db, { projectId: project_id }),
+            tags: selectSceneTagVocabulary(db, { projectId: project_id }),
+            beats: selectSceneBeatVocabulary(db, { projectId: project_id }),
           },
         });
         const { sourceMeta } = readSourceMeta(scene.file_path, SYNC_DIR, { writable: true });

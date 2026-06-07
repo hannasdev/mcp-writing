@@ -1,3 +1,5 @@
+import { isNearMatch, normalizeMatchValue } from "./match-utils.js";
+
 const DEFAULT_CANDIDATE_LIMIT = 5;
 const HARD_CANDIDATE_LIMIT = 10;
 
@@ -8,10 +10,6 @@ const MATCH_GROUP_ORDER = new Map([
   ["case_insensitive_title", 2],
   ["near_match_suggestion", 3],
 ]);
-
-function normalizeValue(value) {
-  return String(value ?? "").trim().toLowerCase();
-}
 
 function clampCandidateLimit(candidateLimit) {
   if (!Number.isInteger(candidateLimit) || candidateLimit <= 0) {
@@ -24,50 +22,12 @@ function getProjectUniverseId(db, projectId) {
   return db.prepare(`SELECT universe_id FROM projects WHERE project_id = ?`).get(projectId)?.universe_id ?? null;
 }
 
-function levenshteinDistance(left, right) {
-  if (left === right) return 0;
-  if (left.length === 0) return right.length;
-  if (right.length === 0) return left.length;
-
-  const previous = Array.from({ length: right.length + 1 }, (_, index) => index);
-  const current = Array.from({ length: right.length + 1 }, () => 0);
-
-  for (let leftIndex = 1; leftIndex <= left.length; leftIndex += 1) {
-    current[0] = leftIndex;
-    for (let rightIndex = 1; rightIndex <= right.length; rightIndex += 1) {
-      const cost = left[leftIndex - 1] === right[rightIndex - 1] ? 0 : 1;
-      current[rightIndex] = Math.min(
-        current[rightIndex - 1] + 1,
-        previous[rightIndex] + 1,
-        previous[rightIndex - 1] + cost
-      );
-    }
-    for (let index = 0; index < previous.length; index += 1) {
-      previous[index] = current[index];
-    }
-  }
-
-  return previous[right.length];
-}
-
-function isNearMatch(input, value) {
-  const normalizedInput = normalizeValue(input);
-  const normalizedValue = normalizeValue(value);
-  if (!normalizedInput || !normalizedValue) return false;
-  if (normalizedInput.length < 3 || normalizedValue.length < 3) return false;
-  if (normalizedValue.includes(normalizedInput) || normalizedInput.includes(normalizedValue)) return true;
-
-  const distance = levenshteinDistance(normalizedInput, normalizedValue);
-  const threshold = Math.max(1, Math.floor(Math.max(normalizedInput.length, normalizedValue.length) / 4));
-  return distance <= threshold;
-}
-
 function sortCandidates(candidates) {
   return [...candidates].sort((left, right) => {
     const groupDelta = (MATCH_GROUP_ORDER.get(left.match_type) ?? 99) - (MATCH_GROUP_ORDER.get(right.match_type) ?? 99);
     if (groupDelta !== 0) return groupDelta;
 
-    const labelDelta = normalizeValue(left.label).localeCompare(normalizeValue(right.label));
+    const labelDelta = normalizeMatchValue(left.label).localeCompare(normalizeMatchValue(right.label));
     if (labelDelta !== 0) return labelDelta;
 
     return left.id.localeCompare(right.id);
@@ -210,7 +170,7 @@ function resolveFromRows({
   candidateLimit,
   formatCandidate,
 }) {
-  const normalizedInput = normalizeValue(input);
+  const normalizedInput = normalizeMatchValue(input);
   if (!normalizedInput) {
     return buildResolutionFailure({
       targetKind,
@@ -236,7 +196,7 @@ function resolveFromRows({
     });
   }
 
-  const caseInsensitiveIdRows = rows.filter(row => normalizeValue(row[idField]) === normalizedInput);
+  const caseInsensitiveIdRows = rows.filter(row => normalizeMatchValue(row[idField]) === normalizedInput);
   if (caseInsensitiveIdRows.length === 1) {
     const candidate = formatCandidate(caseInsensitiveIdRows[0], { matchedField: idField, matchType: "case_insensitive_id" });
     return buildSuccess({
@@ -263,7 +223,7 @@ function resolveFromRows({
     });
   }
 
-  const caseInsensitiveNameRows = rows.filter(row => normalizeValue(row[nameField]) === normalizedInput);
+  const caseInsensitiveNameRows = rows.filter(row => normalizeMatchValue(row[nameField]) === normalizedInput);
   if (caseInsensitiveNameRows.length === 1) {
     const candidate = formatCandidate(caseInsensitiveNameRows[0], { matchedField: nameField, matchType: nameMatchType });
     return buildSuccess({
