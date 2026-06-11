@@ -39,6 +39,7 @@ test("CLI wrapper serves MCP over stdio by default", async () => {
 
     assert.equal(payload.sync_dir, syncDir, `CLI wrapper should initialize successfully. stderr:\n${stderr}`);
     assert.equal(payload.db_path, ":memory:");
+    assert.equal(payload.transport, "stdio");
   } finally {
     await client.close().catch(() => {});
     fs.rmSync(syncDir, { recursive: true, force: true });

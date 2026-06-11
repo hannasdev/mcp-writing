@@ -60,14 +60,22 @@ export function registerSyncTools(s, {
     }
     if (result.sidecarsMigrated) parts.push(`${result.sidecarsMigrated} sidecar(s) auto-generated from frontmatter.`);
     if (result.skipped) {
-      parts.push(`${result.skipped} file(s) skipped (no scene_id).`);
-      parts.push(`Tip: for raw Scrivener Draft exports, run src/scripts/import.js first, then run sync again.`);
+      parts.push(`${result.skipped} non-manuscript file(s) ignored because they did not declare scene_id.`);
+      parts.push(`Tip: if these are raw Scrivener Draft scene exports, run src/scripts/import.js first, then run sync again.`);
     }
     const summary = result.warningSummary;
     const summaryEntries = Object.entries(summary);
     if (summaryEntries.length) {
-      const lines = summaryEntries.map(([type, entry]) => `- ${type}: ${entry.count} (e.g. ${entry.examples[0]})`);
-      parts.push(`\n⚠️ Warning summary:\n` + lines.join("\n"));
+      const infoEntries = summaryEntries.filter(([, entry]) => entry.severity === "info");
+      const warningEntries = summaryEntries.filter(([, entry]) => entry.severity !== "info");
+      if (infoEntries.length) {
+        const lines = infoEntries.map(([type, entry]) => `- ${entry.label ?? type}: ${entry.count} (e.g. ${entry.examples[0]})`);
+        parts.push(`\nIgnored file summary:\n` + lines.join("\n"));
+      }
+      if (warningEntries.length) {
+        const lines = warningEntries.map(([type, entry]) => `- ${entry.label ?? type}: ${entry.count} (e.g. ${entry.examples[0]})`);
+        parts.push(`\nWarning summary:\n` + lines.join("\n"));
+      }
     }
     return { content: [{ type: "text", text: parts.join(" ") }] };
   });

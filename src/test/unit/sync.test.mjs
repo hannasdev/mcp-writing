@@ -799,14 +799,20 @@ describe("warning summary", () => {
       nested_mirror: {
         count: 1,
         examples: ["Ignored nested mirror path: projects/test-novel/scenes/projects/test-novel/scenes/sc-001.md"],
+        severity: "warning",
+        label: "Ignored nested mirror path",
       },
       chapter_structure: {
         count: 1,
         examples: ["Scene references unknown chapter_id 'ch-99-missing': projects/test-novel/scenes/sc-001.md"],
+        severity: "warning",
+        label: "Chapter structure",
       },
       other: {
         count: 1,
         examples: ["Something uncategorized happened"],
+        severity: "warning",
+        label: "other",
       },
     });
   });
@@ -2252,7 +2258,7 @@ describe("syncAll", () => {
     fs.rmSync(dir, { recursive: true });
   });
 
-  test("skips files without scene_id", () => {
+  test("classifies files without scene_id as ignored non-manuscript files", () => {
     const dir = makeTempSync();
     const db = openDb(":memory:");
     // A file with no scene_id in frontmatter
@@ -2260,8 +2266,15 @@ describe("syncAll", () => {
       path.join(dir, "projects", "test-novel", "scenes", "notes.md"),
       "---\ntitle: Just a note\n---\nSome text."
     );
-    const result = syncAll(db, dir, { quiet: true });
+    const result = syncAll(db, dir, { quiet: false });
     assert.equal(result.indexed, 0);
+    assert.equal(result.skipped, 1);
+    assert.equal(result.warningSummary.no_scene_id.severity, "info");
+    assert.equal(result.warningSummary.no_scene_id.label, "Ignored non-manuscript files");
+    assert.equal(
+      result.warningSummary.no_scene_id.examples[0],
+      "Ignored non-manuscript file (no scene_id): projects/test-novel/scenes/notes.md"
+    );
 
     db.close();
     fs.rmSync(dir, { recursive: true });

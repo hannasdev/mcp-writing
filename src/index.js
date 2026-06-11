@@ -134,7 +134,10 @@ function paginateRows(rows, { page, pageSize, forcePagination = false }) {
 }
 
 function jsonResponse(payload) {
-  return { content: [{ type: "text", text: JSON.stringify(payload, null, 2) }] };
+  return {
+    content: [{ type: "text", text: JSON.stringify(payload, null, 2) }],
+    ...(payload?.ok === false ? { isError: true } : {}),
+  };
 }
 
 function errorResponse(code, message, details) {
@@ -612,6 +615,7 @@ function createMcpServer() {
     async () => {
       return jsonResponse({
         server_version: MCP_SERVER_VERSION,
+        transport: MCP_TRANSPORT === "stdio" ? "stdio" : "http",
         sync_dir: SYNC_DIR_ABS,
         db_path: DB_PATH_DISPLAY,
         db_migration_warnings: DB_STARTUP_WARNINGS,

@@ -422,6 +422,7 @@ describe("one-sided scene evidence tools", () => {
     assert.equal(missingCharacter.error.details.lookup_kind, "character");
     assert.equal(missingCharacter.error.details.input, "Elena Vosz");
     assert.equal(missingCharacter.error.details.scene_id, "sc-001");
+    assert.equal(missingCharacter.error.details.suggestions_available, true);
     assert.ok(missingCharacter.error.details.candidate_matches.some(candidate => candidate.id === "elena"));
     assert.match(missingCharacter.error.details.next_step, /list_characters/);
 
@@ -436,6 +437,7 @@ describe("one-sided scene evidence tools", () => {
     assert.equal(missingPlace.error.details.lookup_kind, "place");
     assert.equal(missingPlace.error.details.input, "The Harbor Distrikt");
     assert.equal(missingPlace.error.details.scene_id, "sc-001");
+    assert.equal(missingPlace.error.details.suggestions_available, true);
     assert.ok(missingPlace.error.details.candidate_matches.some(candidate => candidate.id === "harbor-district"));
     assert.match(missingPlace.error.details.next_step, /list_places/);
   });

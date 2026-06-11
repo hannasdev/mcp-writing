@@ -1601,9 +1601,9 @@ describe("sync warning_summary", () => {
     const text = await callWriteTool("sync");
 
     assert.match(text, /Warning summary:/);
-    assert.match(text, /missing_canonical_scene: 1/);
-    assert.match(text, /missing_canonical_chapter: 1/);
-    assert.match(text, /missing_canonical_epigraph: 1/);
+    assert.match(text, /Missing canonical scene: 1/);
+    assert.match(text, /Missing canonical chapter: 1/);
+    assert.match(text, /Missing canonical epigraph: 1/);
   });
 });
 
