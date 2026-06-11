@@ -12,6 +12,7 @@ This complements `CHANGELOG.md`:
 - Why it matters: Authors and AI agents can trust the MCP error flag, distinguish hard misses from retryable suggested targets, see interpreted inputs explicitly, and avoid Docker/SSE versus stdio confusion during smoke tests.
 - Who is affected: Authors, maintainers, and AI agents using MCP clients, forgiving lookup paths, sync summaries, `find_scenes`, or runtime diagnostics.
 - Action needed: Treat `isError` as authoritative for `ok: false` tool envelopes, inspect `suggestions_available` before retrying with a canonical ID, and use `get_runtime_config.transport` to confirm the connected server mode.
+- PR: [#242](https://github.com/hannasdev/mcp-writing/pull/242)
 
 ### 2026-06-07 — Document Human Input Forgiveness replay and rollout
 
