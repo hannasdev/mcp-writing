@@ -1688,7 +1688,7 @@ export function observeOrphanedSidecars(syncDir, { indexedSceneIds = new Set() }
 }
 
 const WARNING_TYPE_LABELS = {
-  no_scene_id: "Skipped (no scene_id)",
+  no_scene_id: "Ignored non-manuscript files",
   duplicate_scene_id: "Duplicate scene_id",
   path_metadata_mismatch: "Path/metadata mismatch",
   chapter_structure: "Chapter structure",
@@ -1703,7 +1703,7 @@ const WARNING_TYPE_LABELS = {
 };
 
 const WARNING_PATTERNS = [
-  { type: "no_scene_id",            re: /^Skipped \(no scene_id\):/  },
+  { type: "no_scene_id",            re: /^Ignored non-manuscript file \(no scene_id\):/  },
   { type: "duplicate_scene_id",     re: /^Duplicate scene_id/        },
   { type: "path_metadata_mismatch", re: /^Path\/metadata mismatch/   },
   { type: "chapter_structure",      re: /^(Chapter structure warning|Epigraph requires explicit chapter linkage|Epigraph references unknown chapter_id|Scene references unknown chapter_id|Ambiguous chapter linkage|Epigraph identity conflict|Managed structure sync ignored|Managed structure sync preserved canonical epigraph)/ },
@@ -1718,6 +1718,7 @@ const WARNING_PATTERNS = [
 ];
 
 const MAX_WARNING_EXAMPLES = 5;
+const INFO_WARNING_TYPES = new Set(["no_scene_id"]);
 
 export function buildWarningSummary(warnings) {
   const summary = {};
@@ -1725,7 +1726,14 @@ export function buildWarningSummary(warnings) {
     const firstLine = w.split("\n")[0];
     const match = WARNING_PATTERNS.find(p => p.re.test(firstLine));
     const type = match?.type ?? "other";
-    if (!summary[type]) summary[type] = { count: 0, examples: [] };
+    if (!summary[type]) {
+      summary[type] = {
+        count: 0,
+        examples: [],
+        severity: INFO_WARNING_TYPES.has(type) ? "info" : "warning",
+        label: WARNING_TYPE_LABELS[type] ?? type,
+      };
+    }
     summary[type].count++;
     if (summary[type].examples.length < MAX_WARNING_EXAMPLES) {
       summary[type].examples.push(firstLine);
@@ -1799,7 +1807,7 @@ export function syncAll(db, syncDir, { quiet = false, writable = false, relation
 
       if (!meta.scene_id && !chapterStructure.isEpigraph) {
         skipped++;
-        if (!quiet) warnings.push(`Skipped (no scene_id): ${structureObservation.relativePath}`);
+        if (!quiet) warnings.push(`Ignored non-manuscript file (no scene_id): ${structureObservation.relativePath}`);
         continue;
       }
 
@@ -1921,12 +1929,13 @@ export function syncAll(db, syncDir, { quiet = false, writable = false, relation
       `[mcp-writing] Sync complete: ${indexed} scenes indexed, ${staleMarked} scenes marked stale` +
       (epigraphsIndexed ? `, ${epigraphsIndexed} epigraphs indexed, ${epigraphsStaleMarked} epigraphs marked stale` : "") +
       (sidecarsMigrated ? `, ${sidecarsMigrated} sidecars auto-generated` : "") +
-      (skipped ? `, ${skipped} files skipped` : "") + "\n"
+      (skipped ? `, ${skipped} non-manuscript file(s) ignored` : "") + "\n"
     );
     for (const [type, entry] of Object.entries(warningSummary)) {
       const count = entry.count;
       const label = WARNING_TYPE_LABELS[type] ?? type;
-      process.stderr.write(`[mcp-writing] WARNING: ${label}: ${count} file(s). First example: ${entry.examples[0]}\n`);
+      const level = entry.severity === "info" ? "INFO" : "WARNING";
+      process.stderr.write(`[mcp-writing] ${level}: ${label}: ${count} file(s). First example: ${entry.examples[0]}\n`);
     }
   }
   return {

@@ -114,6 +114,7 @@ function buildResolutionFailure({ targetKind, input, projectId, universeId, cand
     input,
     project_id: projectId,
     ...(universeId !== undefined ? { universe_id: universeId } : {}),
+    suggestions_available: cappedCandidates.length > 0,
     candidate_matches: cappedCandidates,
     next_step: nextStepForTargetKind(targetKind),
   };

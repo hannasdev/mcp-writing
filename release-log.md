@@ -6,6 +6,13 @@ This complements `CHANGELOG.md`:
 - `CHANGELOG.md` is technical and release-oriented.
 - This log is plain-language and outcome-oriented.
 
+### 2026-06-11 — Tighten MCP response contract feedback
+
+- What changed: MCP tool responses now set `isError: true` whenever the JSON envelope reports `ok: false`; suggestion-bearing target misses expose `suggestions_available`; `find_scenes` returns `resolved_from` for non-canonical read filters; `sync` classifies no-`scene_id` files as ignored non-manuscript files; and `get_runtime_config` reports the active transport.
+- Why it matters: Authors and AI agents can trust the MCP error flag, distinguish hard misses from retryable suggested targets, see interpreted inputs explicitly, and avoid Docker/SSE versus stdio confusion during smoke tests.
+- Who is affected: Authors, maintainers, and AI agents using MCP clients, forgiving lookup paths, sync summaries, `find_scenes`, or runtime diagnostics.
+- Action needed: Treat `isError` as authoritative for `ok: false` tool envelopes, inspect `suggestions_available` before retrying with a canonical ID, and use `get_runtime_config.transport` to confirm the connected server mode.
+
 ### 2026-06-07 — Document Human Input Forgiveness replay and rollout
 
 - What changed: Added a user-facing canonical ID and forgiving-input contract note, audited generated tool reference coverage, and recorded temp-fixture replay evidence for the original Human Input Forgiveness feedback scenarios.

@@ -40,6 +40,7 @@ describe("get_runtime_config tool", () => {
     assert.equal(parsed.sync_dir, readSyncDir);
     assert.equal(parsed.db_path, ":memory:");
     assert.equal(parsed.http_port, READ_PORT);
+    assert.equal(parsed.transport, "http");
 
     assert.equal(typeof parsed.sync_dir_writable, "boolean");
     assert.equal(typeof parsed.git_available, "boolean");
@@ -313,6 +314,15 @@ describe("error envelope consistency", () => {
       assert.equal(typeof parsed.error.message, "string");
       assert.ok(parsed.error.message.length > 0);
     }
+  });
+
+  test("sets MCP isError when JSON payload reports ok false", async () => {
+    const result = await ctx.callToolResult("get_scene_prose", { scene_id: "sc-999" });
+    const parsed = JSON.parse(result.content?.[0]?.text ?? "{}");
+
+    assert.equal(result.isError, true);
+    assert.equal(parsed.ok, false);
+    assert.equal(parsed.error.code, "NOT_FOUND");
   });
 });
 

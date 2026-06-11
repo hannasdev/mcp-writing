@@ -59,6 +59,12 @@ describe("search tools integration suite", { concurrency: 1 }, () => {
       match_type: "case_insensitive_name",
       id: "elena",
     });
+    assert.deepEqual(characterParsed.resolved_from.character, {
+      input: "Elena Voss",
+      matched_field: "name",
+      match_type: "case_insensitive_name",
+      id: "elena",
+    });
 
     const povText = await callWriteTool("find_scenes", {
       project_id: "test-novel",
@@ -223,6 +229,16 @@ describe("search tools integration suite", { concurrency: 1 }, () => {
     assert.equal(missingPov.error.details.argument, "pov");
     assert.equal(missingPov.error.details.project_id, "test-novel");
     assert.match(missingPov.error.details.next_step, /list_characters/);
+
+    const suggestedCharacterText = await callWriteTool("find_scenes", {
+      project_id: "test-novel",
+      character: "Elena Vosz",
+    });
+    const suggestedCharacter = JSON.parse(suggestedCharacterText);
+    assert.equal(suggestedCharacter.ok, false);
+    assert.equal(suggestedCharacter.error.code, "NOT_FOUND");
+    assert.equal(suggestedCharacter.error.details.suggestions_available, true);
+    assert.ok(suggestedCharacter.error.details.candidate_matches.some(candidate => candidate.id === "elena"));
   });
 
   test("filters by character: marcus appears in 2 scenes", async () => {

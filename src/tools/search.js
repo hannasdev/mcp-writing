@@ -485,13 +485,15 @@ export function registerSearchTools(s, {
         pageSize: page_size,
         forcePagination: rows.length > DEFAULT_METADATA_PAGE_SIZE,
       });
+      const resolvedFrom = mergeResolvedFilters(resolvedFilters);
 
       const payload = paged.paginated
         ? {
             results: paged.rows,
             ...paged.meta,
             warning,
-            resolved_filters: mergeResolvedFilters(resolvedFilters),
+            resolved_filters: resolvedFrom,
+            resolved_from: resolvedFrom,
             next_step: staleCount > 0
               ? "Touch stale scenes as you work and run enrich_scene(scene_id, project_id) to recover metadata parity incrementally."
               : undefined,
@@ -500,7 +502,8 @@ export function registerSearchTools(s, {
             results: rows,
             total_count: rows.length,
             warning,
-            resolved_filters: mergeResolvedFilters(resolvedFilters),
+            resolved_filters: resolvedFrom,
+            resolved_from: resolvedFrom,
             next_step: staleCount > 0
               ? "Touch stale scenes as you work and run enrich_scene(scene_id, project_id) to recover metadata parity incrementally."
               : undefined,
