@@ -20,6 +20,13 @@ jobs:
         uses: actions/github-script@v8
         with:
           script: |
+            const prAuthor = context.payload.pull_request.user?.login;
+
+            if (prAuthor === "dependabot[bot]") {
+              core.notice("Skipping PR template validation for Dependabot-generated dependency update.");
+              return;
+            }
+
             const body = context.payload.pull_request.body || "";
             const requiredSections = [
               "## Summary",
